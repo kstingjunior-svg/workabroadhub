@@ -1370,3 +1370,8 @@ process.on("uncaughtException", (err: Error) => {
   // Replit restart the process automatically.
   process.exit(1);
 });
+const PORT = process.env.PORT || 10000;
+
+app.listen(PORT, () => {
+  console.log("🚀 Server running on port " + PORT);
+});
