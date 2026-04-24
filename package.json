@@ -2,15 +2,10 @@
   "name": "rest-express",
   "version": "1.0.0",
   "type": "commonjs",
-  "license": "MIT",
   "scripts": {
-    "clean": "rm -rf dist",
     "start": "node server.js"
   },
   "dependencies": {
-    "express": "^4.21.2",
-    "cors": "^2.8.6",
-    "compression": "^1.8.1",
-    "helmet": "^8.1.0"
+    "express": "^4.18.2"
   }
 }
