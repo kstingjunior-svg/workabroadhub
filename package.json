@@ -5,7 +5,7 @@
   "license": "MIT",
   "scripts": {
     "dev": "NODE_ENV=development tsx server/index.ts",
-    "build": "esbuild server/index.ts --bundle --platform=node --format=esm --outfile=dist/index.js --packages=external --alias:@shared=./shared",
+    "build": "esbuild server-prod.ts --bundle --platform=node --format=esm --outfile=dist/index.js --packages=external",
     "start": "NODE_ENV=production node dist/index.js",
     "check": "tsc --noEmit",
     "db:push": "drizzle-kit push"
