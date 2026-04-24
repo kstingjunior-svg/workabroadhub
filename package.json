@@ -1,20 +1,16 @@
 {
   "name": "rest-express",
   "version": "1.0.0",
- "type": "commonjs",
+  "type": "commonjs",
   "license": "MIT",
   "scripts": {
-    "dev": "NODE_ENV=development tsx server/index.ts",
-    "build": "esbuild ./server/server-prod.ts --bundle --platform=node --format=esm --outfile=dist/index.js",
-    "start": "node dist/index.js",
-    "check": "tsc --noEmit",
-    "db:push": "drizzle-kit push"
+    "clean": "rm -rf dist",
+    "start": "node server.js"
   },
   "dependencies": {
     "express": "^4.21.2",
     "cors": "^2.8.6",
     "compression": "^1.8.1",
-    "helmet": "^8.1.0",
-    "esbuild": "^0.25.12"
+    "helmet": "^8.1.0"
   }
 }
