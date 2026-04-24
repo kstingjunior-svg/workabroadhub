@@ -8,9 +8,9 @@
   "build": "echo build skipped",
   "start": "NODE_ENV=production tsx server/index.ts",
   "check": "tsc",
-  "db:push": "drizzle-kit push"
-}
-  "dependencies": {
+ "db:push": "drizzle-kit push"
+},
+"dependencies": {
     "@elevenlabs/elevenlabs-js": "^2.42.0",
     "@hookform/resolvers": "^3.10.0",
     "@jridgewell/trace-mapping": "^0.3.25",
