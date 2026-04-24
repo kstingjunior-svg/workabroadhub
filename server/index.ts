@@ -1368,7 +1368,7 @@ process.on("uncaughtException", (err: Error) => {
   );
   // Uncaught exceptions leave the process in an unknown state — exit and let
   // Replit restart the process automatically.
-  process.exit(1);
+  // process.exit(1);
 });
 const PORT = process.env.PORT || 10000;
 
