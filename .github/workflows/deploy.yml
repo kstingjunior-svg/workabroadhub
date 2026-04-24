@@ -1,0 +1,68 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    name: Build & Deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify build passes
+        run: npm run build
+        env:
+          NODE_ENV: production
+
+      - name: Trigger Replit redeployment
+        if: ${{ secrets.REPLIT_TOKEN != '' }}
+        run: |
+          echo "Triggering Replit deployment..."
+          RESPONSE=$(curl -s -w "\n%{http_code}" \
+            -X POST https://replit.com/graphql \
+            -H "Content-Type: application/json" \
+            -H "X-Requested-With: XMLHttpRequest" \
+            -H "Referer: https://replit.com/@${{ secrets.REPLIT_USERNAME }}/workspace" \
+            -H "Cookie: connect.sid=${{ secrets.REPLIT_TOKEN }}" \
+            -d '{
+              "query": "mutation { publishAutoscaleDeployment(input: { replId: \"'"$REPL_ID"'\" }) { __typename } }"
+            }')
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+          echo "HTTP $HTTP_CODE: $BODY"
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "::warning::Deployment trigger returned HTTP $HTTP_CODE — check your REPLIT_TOKEN secret."
+            exit 1
+          fi
+          if echo "$BODY" | grep -q '"errors"'; then
+            echo "::warning::GraphQL returned errors: $BODY"
+            exit 1
+          fi
+          echo "Replit deployment triggered successfully."
+        env:
+          REPL_ID: 76d3b1a9-ecf9-4510-8744-c967abefdcd8
+
+      - name: Deployment skipped (no token configured)
+        if: ${{ secrets.REPLIT_TOKEN == '' }}
+        run: |
+          echo "::notice::Build passed. Auto-deploy skipped — REPLIT_TOKEN secret not configured."
+          echo "See the repository README or workflow comments for setup instructions."

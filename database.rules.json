@@ -1,0 +1,31 @@
+{
+  "rules": {
+    "activeVisitors":   { ".read": true,  ".write": true  },
+    "signups":          { ".read": true,  ".write": true  },
+    "agencyRatings":    { ".read": true,  ".write": true  },
+    "agencyWarnings":   { ".read": true,  ".write": true  },
+    "reportedAgencies": { ".read": true,  ".write": true  },
+    "bookings":         { ".read": true,  ".write": true  },
+    "submittedPortals": { ".read": true,  ".write": true  },
+    "successStories":   { ".read": true,  ".write": true  },
+    "public":           { ".read": true,  ".write": true  },
+    "testimonials":     { ".read": true,  ".write": true  },
+    "forum":            { ".read": true,  ".write": true  },
+    "referrals":        { ".read": true,  ".write": true  },
+    "neaAgencies":      { ".read": true,  ".write": false },
+    "documents": {
+      "$uid": {
+        ".read":  "$uid === auth.uid",
+        ".write": "$uid === auth.uid"
+      }
+    },
+    "cvAnalysis":      { ".read": false, ".write": false },
+    "revenue":         { ".read": false, ".write": false },
+    "users":           { ".read": false, ".write": false },
+    "nanjila":         { ".read": false, ".write": false },
+    "messageStatus":   { ".read": false, ".write": false },
+    "errors":          { ".read": false, ".write": false },
+    "moderationQueue": { ".read": false, ".write": false },
+    "$other":          { ".read": false, ".write": false }
+  }
+}
