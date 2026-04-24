@@ -2,21 +2,14 @@
   "compilerOptions": {
     "target": "ES2020",
     "module": "CommonJS",
-    "moduleResolution": "node",
     "outDir": "./dist",
     "rootDir": ".",
     "esModuleInterop": true,
-    "allowSyntheticDefaultImports": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": false,
-    "resolveJsonModule": true,
     "allowJs": true,
-    "noEmitOnError": false,
-    "noImplicitAny": false,
     "strict": false,
-    "noUnusedLocals": false,
-    "noUnusedParameters": false
+    "noEmitOnError": false
   },
   "include": ["server/**/*", "shared/**/*"],
-  "exclude": ["node_modules", "dist", "client"]
+  "exclude": ["node_modules", "dist"]
 }
