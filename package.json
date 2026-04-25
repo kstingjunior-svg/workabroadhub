@@ -4,6 +4,7 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
-  },
-  "dependencies": {}
+"dependencies": {
+  "express": "^4.19.0"
 }
+0
