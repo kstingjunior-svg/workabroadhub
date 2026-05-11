@@ -11,9 +11,14 @@ const router = Router();
    🔒 CHECK ACTIVE SUBSCRIPTION
 ========================= */
 async function hasActiveSubscription(userId: string) {
-  const subscription = await db.query.subscriptions.findFirst({
-    where: (s, { eq }) => eq(s.userId, userId),
-  });
+
+  const result = await db
+    .select()
+    .from(subscriptions)
+    .where(eq(subscriptions.userId, userId))
+    .limit(1);
+
+  const subscription = result[0];
 
   if (!subscription) {
     return false;
