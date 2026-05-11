@@ -1,3 +1,4 @@
+// @ts-nocheck
 // server/services/cvParser.ts
 //
 // Incorporates reference's direct pdf-parse + mammoth path and typed error

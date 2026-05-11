@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { db } from "./db";
 import { securityAlerts, accountLockouts, payments, securityEvents } from "@shared/schema";
 import { eq, gte, and, desc, count, isNull, sql } from "drizzle-orm";

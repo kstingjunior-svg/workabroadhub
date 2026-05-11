@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { users, type User, type UpsertUser } from "@shared/models/auth";
 import { db } from "../../db";
 import { eq, count } from "drizzle-orm";

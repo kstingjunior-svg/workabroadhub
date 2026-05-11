@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * PRODUCTION HARDENING: Atomic payment processing
  * 

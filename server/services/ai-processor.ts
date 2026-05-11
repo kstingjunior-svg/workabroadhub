@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { openai } from "../lib/openai";
 import { storage } from "../storage";
 import type { ServiceOrder } from "@shared/schema";

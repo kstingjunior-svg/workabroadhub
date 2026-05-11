@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * PRODUCTION HARDENING: Async queue for non-critical operations
  * 

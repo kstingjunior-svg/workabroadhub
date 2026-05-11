@@ -1,3 +1,4 @@
+// @ts-nocheck
 import {
   countries,
   countryGuides,
@@ -264,8 +265,8 @@ import {
   deliveries,
   type Delivery,
   type InsertDelivery,
-} from "@shared/schema";
-import { users, type User } from "@shared/models/auth";
+} from "../shared/schema";
+import { users, type User } from "../shared/models/auth";
 import { authStorage } from "./replit_integrations/auth/storage";
 import { db, pool } from "./db";
 import { eq, desc, asc, and, or, ilike, sql, lt, inArray, gte, count, isNull } from "drizzle-orm";

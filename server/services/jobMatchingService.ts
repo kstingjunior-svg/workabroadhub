@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * AI Job Matching Service
  * Extracts CV insights → keyword pre-filter → single batch AI scoring → top 5

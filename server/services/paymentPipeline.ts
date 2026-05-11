@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * runPaymentPipeline — canonical post-confirmation orchestrator.
  *

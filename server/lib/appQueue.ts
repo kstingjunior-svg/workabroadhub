@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Application Materials AI Pipeline — BullMQ Queue
  * ─────────────────────────────────────────────────

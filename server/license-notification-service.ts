@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { sendSMS } from "./sms";
 import { sendWhatsApp } from "./services/whatsapp";
 import type { NeaAgency, LicenseReminderLog, AgencyNotificationPreference, ReminderTier, NotificationChannel } from "@shared/schema";

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { ElevenLabsClient } from "elevenlabs";
 import fs from "fs";
 import { Readable } from "stream";

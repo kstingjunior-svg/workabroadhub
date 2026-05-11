@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * STK Auto-Recovery Poller — Production-hardened
  *

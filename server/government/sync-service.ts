@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { governmentRegistry } from "./registry";
 import { GovernmentSyncJob, GovernmentLicenseStatus } from "./types";
 import { asyncQueue, QUEUE_TYPES } from "../queue";

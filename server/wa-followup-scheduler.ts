@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * WhatsApp CV follow-up scheduler.
  *

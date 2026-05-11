@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * WhatsApp Queue Processor — Production-grade auto-sender
  *

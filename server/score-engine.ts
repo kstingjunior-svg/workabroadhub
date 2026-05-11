@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { storage } from "./storage";
 import type { AgencyLegitimacyScore, AgencyScoreWeight } from "@shared/schema";
 

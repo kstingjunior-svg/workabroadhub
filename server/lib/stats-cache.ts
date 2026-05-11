@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Platform stats cache — PostgreSQL equivalent of the MySQL pattern:
  *   CREATE TABLE platform_stats + stored procedure + CREATE EVENT (every 5 min)

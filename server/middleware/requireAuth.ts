@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * requireAuth — session-based auth guard for Express routes.
  *

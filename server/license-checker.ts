@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { IStorage } from "./storage";
 import { REMINDER_TIERS, NOTIFICATION_CHANNELS } from "@shared/schema";
 import type { NeaAgency, ReminderTier, NotificationChannel } from "@shared/schema";

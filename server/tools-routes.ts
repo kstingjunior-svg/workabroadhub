@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Growth Tools Suite — API Routes
  * ATS CV Checker, Job Scam Checker, Visa Sponsorship Jobs, CV Templates

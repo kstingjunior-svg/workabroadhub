@@ -2,14 +2,13 @@ import axios from "axios";
 import moment from "moment";
 import { mpesaCircuitBreaker, mpesaB2CCircuitBreaker, CircuitBreakerOpenError } from "./circuit-breaker";
 
-const MPESA_BASE_URL = process.env.MPESA_ENV === "sandbox"
-  ? "https://sandbox.safaricom.co.ke"
-  : "https://api.safaricom.co.ke";
-
+const MPESA_BASE_URL = "https://sandbox.safaricom.co.ke";
 export function getCallbackBaseUrl(): string {
-  // APP_URL takes top priority (production custom domain e.g. https://workabroadhub.tech)
+  if (process.env.MPESA_CALLBACK_URL) {
+    const url = new URL(process.env.MPESA_CALLBACK_URL);
+    return `${url.protocol}//${url.host}`;
+  }
   if (process.env.APP_URL) return process.env.APP_URL;
-  // Fall back to Replit-managed domain (dev/preview environments)
   const domains = process.env.REPLIT_DOMAINS?.split(",")[0];
   if (domains) return `https://${domains}`;
   return "https://localhost:5000";

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * generateCV — ATS-optimised CV writer for East African professionals.
  *

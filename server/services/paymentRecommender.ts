@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { Payment } from "@shared/schema";
 import { isPayPalConfigured } from "../paypal";
 

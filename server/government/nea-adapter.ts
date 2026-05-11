@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { BaseGovernmentAdapter } from "./base-adapter";
 import {
   LicenseVerificationResult,

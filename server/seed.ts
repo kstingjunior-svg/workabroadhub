@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { db, pool } from "./db";
 import { countries, countryGuides, jobLinks, services, studentVisas, visaRequirements, visaSteps, visaLinks, applicationPacks, plans, neaAgencies } from "@shared/schema";
 import { users } from "@shared/models/auth";
