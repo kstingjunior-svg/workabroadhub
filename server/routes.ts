@@ -6,7 +6,12 @@ import { eq } from "drizzle-orm";
 import { stkPush } from "./mpesa";
 
 const router = Router();
-
+router.get("/ping", (req, res) => {
+  res.json({
+    success: true,
+    message: "pong"
+  });
+});
 /* =========================
    🔒 CHECK ACTIVE SUBSCRIPTION
 ========================= */
