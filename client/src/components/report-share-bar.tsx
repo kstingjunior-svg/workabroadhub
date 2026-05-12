@@ -4,7 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
 import { Copy, Check, Share2, ExternalLink } from "lucide-react";
-import { SiWhatsapp, SiFacebook, SiLinkedin } from "react-icons/si";
+import { SiWhatsapp, SiFacebook } from "react-icons/si";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
