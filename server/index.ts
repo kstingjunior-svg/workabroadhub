@@ -1,16 +1,19 @@
-
 import 'dotenv/config';
 // @ts-nocheck
 
 import express from "express";
-import path from "path";
 import router from "./routes";
 import { createServer } from "http";
 import { initSocketIO } from "./socket";
+
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import cors from "cors";
 import compression from "compression";
+
+import path from "path";
+import fs from "fs";
+
 import { applyDdosProtection } from "./middleware/ddos-protection";
 
 // =======================
@@ -51,7 +54,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(compression());
 
 // =======================
-// 🛡️ DDoS PROTECTION
+// 🛡️ OPTIONAL DDOS
 // =======================
 
 try {
@@ -73,7 +76,7 @@ app.use(router);
 app.get("/premium-test", (_req, res) => {
   res.json({
     success: true,
-    message: "🔥 Premium route works",
+    message: "🔥 Premium route works"
   });
 });
 
@@ -81,13 +84,24 @@ app.get("/premium-test", (_req, res) => {
 // 🌍 SERVE FRONTEND
 // =======================
 
-const __dirname = path.resolve();
+const distPath = path.join(process.cwd(), "dist", "public");
 
-app.use(express.static(path.join(__dirname, "dist")));
+if (fs.existsSync(distPath)) {
+  console.log("✅ Frontend found:", distPath);
 
-app.get("*", (_req, res) => {
-  res.sendFile(path.join(__dirname, "dist", "index.html"));
-});
+  app.use(express.static(distPath));
+
+  app.get("*", (_req, res) => {
+    res.sendFile(path.join(distPath, "index.html"));
+  });
+
+} else {
+  console.error("❌ Frontend build folder NOT found:", distPath);
+
+  app.get("/", (_req, res) => {
+    res.send("Frontend build not found");
+  });
+}
 
 // =======================
 // 🚀 START SERVER
