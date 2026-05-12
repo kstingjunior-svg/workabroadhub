@@ -5,6 +5,7 @@ import {
   integer,
   timestamp,
   boolean,
+  uuid,
 } from "drizzle-orm/pg-core";
 
 /* =========================
@@ -83,4 +84,28 @@ export const payments = pgTable("payments", {
   callbackReceivedAt: timestamp("callback_received_at"),
 
   createdAt: timestamp("created_at").defaultNow(),
+});
+export const subscriptions = pgTable("subscriptions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+
+  userId: uuid("user_id")
+    .notNull(),
+
+  status: text("status")
+    .notNull()
+    .default("active"),
+
+  plan: text("plan")
+    .notNull()
+    .default("pro"),
+
+  expiresAt: timestamp("expires_at")
+    .notNull(),
+
+  createdAt: timestamp("created_at")
+    .defaultNow()
+    .notNull(),
+
+  updatedAt: timestamp("updated_at")
+    .defaultNow()
 });
