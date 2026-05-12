@@ -1,7 +1,9 @@
 
 import 'dotenv/config';
 // @ts-nocheck
+
 import express from "express";
+import path from "path";
 import router from "./routes";
 import { createServer } from "http";
 import { initSocketIO } from "./socket";
@@ -10,61 +12,89 @@ import rateLimit from "express-rate-limit";
 import cors from "cors";
 import compression from "compression";
 import { applyDdosProtection } from "./middleware/ddos-protection";
+
 // =======================
 // 🚀 CREATE APP + SERVER
 // =======================
+
 const app = express();
 const httpServer = createServer(app);
+
 initSocketIO(httpServer);
+
 // =======================
-// 🌐 CORS (SAFE + SIMPLE)
+// 🌐 CORS
 // =======================
+
 app.use(cors({
-  origin: true, // allow all for now (important for M-Pesa callback)
+  origin: true,
   credentials: true,
 }));
+
 // =======================
 // 🔐 SECURITY
 // =======================
+
 app.use(helmet());
-// ⚠️ DO NOT BLOCK CALLBACKS
+
 app.use(rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10000, // increased (avoid blocking Safaricom)
+  max: 10000,
 }));
+
 // =======================
-// 🔥 BODY PARSER (CRITICAL)
+// 🔥 BODY PARSER
 // =======================
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(compression());
-// ⚠️ OPTIONAL (disable if causing issues)
+
+// =======================
+// 🛡️ DDoS PROTECTION
+// =======================
+
 try {
   app.use(applyDdosProtection);
 } catch (e) {
   console.warn("⚠️ DDoS protection skipped");
 }
+
+// =======================
+// ✅ API ROUTES
+// =======================
+
+app.use(router);
+
 // =======================
 // 🧪 TEST ROUTE
 // =======================
-app.get("/", (req, res) => {
-  res.send("Server is running 🚀");
-});
-// =======================
-// ✅ ROUTES (VERY IMPORTANT)
-// =======================
-app.use(router);
 
 app.get("/premium-test", (_req, res) => {
   res.json({
     success: true,
-    message: "🔥 Premium route works"
+    message: "🔥 Premium route works",
   });
 });
+
+// =======================
+// 🌍 SERVE FRONTEND
+// =======================
+
+const __dirname = path.resolve();
+
+app.use(express.static(path.join(__dirname, "dist")));
+
+app.get("*", (_req, res) => {
+  res.sendFile(path.join(__dirname, "dist", "index.html"));
+});
+
 // =======================
 // 🚀 START SERVER
 // =======================
+
 const PORT = process.env.PORT || 10001;
+
 httpServer.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
