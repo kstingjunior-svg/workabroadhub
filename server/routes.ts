@@ -1,4 +1,3 @@
-
 import { Router } from "express";
 import { db } from "./db";
 import { payments, subscriptions } from "../shared/schema";
@@ -6,12 +5,17 @@ import { eq } from "drizzle-orm";
 import { stkPush } from "./mpesa";
 
 const router = Router();
+
+/* =========================
+   🏓 PING TEST
+========================= */
 router.get("/ping", (req, res) => {
   res.json({
     success: true,
     message: "pong"
   });
 });
+
 /* =========================
    🔒 CHECK ACTIVE SUBSCRIPTION
 ========================= */
@@ -41,6 +45,32 @@ async function hasActiveSubscription(userId: string) {
 }
 
 /* =========================
+   👑 PREMIUM STATUS
+========================= */
+router.get("/api/premium/status", async (req, res) => {
+  try {
+
+    // TEMP TEST USER
+    const userId =
+      "00000000-0000-0000-0000-000000000001";
+
+    const allowed =
+      await hasActiveSubscription(userId);
+
+    return res.json({
+      premium: allowed
+    });
+
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      error: "Server error"
+    });
+  }
+});
+
+/* =========================
    🚀 INITIATE PAYMENT
 ========================= */
 router.post("/api/mpesa/pay", async (req, res) => {
@@ -57,7 +87,6 @@ router.post("/api/mpesa/pay", async (req, res) => {
     phone = phone.replace(/^0/, "254");
 
     // 🔥 TEMP TEST USER
-    // Replace with real authenticated user later
     const userId = "00000000-0000-0000-0000-000000000001";
 
     console.log("📩 Incoming payment:", { phone, amount });
@@ -71,7 +100,6 @@ router.post("/api/mpesa/pay", async (req, res) => {
     const merchantRequestId = stkResponse?.MerchantRequestID;
 
     if (!checkoutRequestId) {
-      console.log("❌ Missing CheckoutRequestID");
 
       return res.status(500).json({
         error: "Invalid STK response",
@@ -99,7 +127,12 @@ router.post("/api/mpesa/pay", async (req, res) => {
     });
 
   } catch (error: any) {
-    console.log("🔥 SAFARICOM ERROR RESPONSE:", error?.response?.data);
+
+    console.log(
+      "🔥 SAFARICOM ERROR RESPONSE:",
+      error?.response?.data
+    );
+
     console.error("❌ STK ERROR:", error);
 
     return res.status(500).json({
@@ -114,11 +147,16 @@ router.post("/api/mpesa/pay", async (req, res) => {
 ========================= */
 router.post("/api/mpesa/callback", async (req, res) => {
   try {
-    console.log("📥 CALLBACK RECEIVED:", JSON.stringify(req.body));
+
+    console.log(
+      "📥 CALLBACK RECEIVED:",
+      JSON.stringify(req.body)
+    );
 
     const stk = req.body?.Body?.stkCallback;
 
     if (!stk) {
+
       console.log("❌ Invalid callback structure");
 
       return res.json({
@@ -131,6 +169,7 @@ router.post("/api/mpesa/callback", async (req, res) => {
     const merchantRequestId = stk.MerchantRequestID;
 
     if (!checkoutRequestId) {
+
       console.log("❌ Missing checkoutRequestId");
 
       return res.json({
@@ -139,13 +178,21 @@ router.post("/api/mpesa/callback", async (req, res) => {
     }
 
     // 🔍 FIND PAYMENT
-    const payment = await db.query.payments.findFirst({
-      where: (p, { eq }) =>
-        eq(p.checkoutRequestId, checkoutRequestId),
-    });
+    const payment =
+      await db.query.payments.findFirst({
+        where: (p, { eq }) =>
+          eq(
+            p.checkoutRequestId,
+            checkoutRequestId
+          ),
+      });
 
     if (!payment) {
-      console.log("❌ Payment not found:", checkoutRequestId);
+
+      console.log(
+        "❌ Payment not found:",
+        checkoutRequestId
+      );
 
       return res.json({
         ok: true,
@@ -154,7 +201,11 @@ router.post("/api/mpesa/callback", async (req, res) => {
 
     // 🛑 PREVENT DOUBLE PROCESSING
     if (payment.status === "completed") {
-      console.log("⚠️ Already processed:", checkoutRequestId);
+
+      console.log(
+        "⚠️ Already processed:",
+        checkoutRequestId
+      );
 
       return res.json({
         ok: true,
@@ -163,6 +214,7 @@ router.post("/api/mpesa/callback", async (req, res) => {
 
     // ❌ FAILED PAYMENT
     if (resultCode !== 0) {
+
       await db.update(payments)
         .set({
           status: "failed",
@@ -171,7 +223,10 @@ router.post("/api/mpesa/callback", async (req, res) => {
         })
         .where(eq(payments.id, payment.id));
 
-      console.log("❌ PAYMENT FAILED:", checkoutRequestId);
+      console.log(
+        "❌ PAYMENT FAILED:",
+        checkoutRequestId
+      );
 
       return res.json({
         ok: true,
@@ -179,11 +234,13 @@ router.post("/api/mpesa/callback", async (req, res) => {
     }
 
     // ✅ SUCCESS PAYMENT
-    const metadata = stk.CallbackMetadata?.Item || [];
+    const metadata =
+      stk.CallbackMetadata?.Item || [];
 
     const mpesaCode =
       metadata.find(
-        (i: any) => i.Name === "MpesaReceiptNumber"
+        (i: any) =>
+          i.Name === "MpesaReceiptNumber"
       )?.Value || null;
 
     // 🔥 UPDATE PAYMENT
@@ -196,13 +253,19 @@ router.post("/api/mpesa/callback", async (req, res) => {
       })
       .where(eq(payments.id, payment.id));
 
-    console.log("✅ PAYMENT SUCCESS:", mpesaCode);
+    console.log(
+      "✅ PAYMENT SUCCESS:",
+      mpesaCode
+    );
 
     /* =========================
        🔥 ACTIVATE SUBSCRIPTION
     ========================= */
     const expires = new Date();
-    expires.setFullYear(expires.getFullYear() + 1);
+
+    expires.setFullYear(
+      expires.getFullYear() + 1
+    );
 
     const existingSub =
       await db.query.subscriptions.findFirst({
@@ -219,7 +282,10 @@ router.post("/api/mpesa/callback", async (req, res) => {
           updatedAt: new Date(),
         })
         .where(
-          eq(subscriptions.userId, payment.userId)
+          eq(
+            subscriptions.userId,
+            payment.userId
+          )
         );
 
     } else {
@@ -231,46 +297,26 @@ router.post("/api/mpesa/callback", async (req, res) => {
         expiresAt: expires,
         createdAt: new Date(),
       });
-
     }
 
-    console.log("🔥 USER UPGRADED:", payment.userId);
+    console.log(
+      "🔥 USER UPGRADED:",
+      payment.userId
+    );
 
     return res.json({
       ok: true,
     });
 
   } catch (error) {
-    console.error("❌ CALLBACK ERROR:", error);
+
+    console.error(
+      "❌ CALLBACK ERROR:",
+      error
+    );
 
     return res.json({
       ok: true,
-    });
-  }
-});
-
-/* =========================
-   👑 PREMIUM STATUS
-========================= */
-router.get("/api/premium/status", async (req, res) => {
-  try {
-
-    // TEMP TEST USER
-    const userId =
-      "00000000-0000-0000-0000-000000000001";
-
-    const allowed =
-      await hasActiveSubscription(userId);
-
-    return res.json({
-      premium: allowed
-    });
-
-  } catch (error) {
-    console.error(error);
-
-    return res.status(500).json({
-      error: "Server error"
     });
   }
 });
