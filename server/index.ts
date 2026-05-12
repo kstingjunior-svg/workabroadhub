@@ -54,6 +54,13 @@ app.get("/", (req, res) => {
 // ✅ ROUTES (VERY IMPORTANT)
 // =======================
 app.use(router);
+
+app.get("/premium-test", (_req, res) => {
+  res.json({
+    success: true,
+    message: "🔥 Premium route works"
+  });
+});
 // =======================
 // 🚀 START SERVER
 // =======================
