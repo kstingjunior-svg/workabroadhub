@@ -1,0 +1,66 @@
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
+
+interface PremiumState {
+  isPremium: boolean;
+  loading: boolean;
+  error: string | null;
+}
+
+export function usePremium(): PremiumState {
+  const [isPremium, setIsPremium] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function checkPremium() {
+      try {
+        setLoading(true);
+
+        // Get the current logged-in user's session token
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        if (!session?.access_token) {
+          // Not logged in — not premium
+          setIsPremium(false);
+          return;
+        }
+
+        const res = await fetch("https://workabroadhub.onrender.com/api/premium/status", {
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
+        });
+
+        if (!res.ok) {
+          setIsPremium(false);
+          return;
+        }
+
+        const data = await res.json();
+        setIsPremium(data.premium === true);
+      } catch (err: any) {
+        console.error("usePremium error:", err);
+        setError(err.message);
+        setIsPremium(false);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    checkPremium();
+
+    // Re-check whenever auth state changes (login/logout)
+    const { data: listener } = supabase.auth.onAuthStateChange(() => {
+      checkPremium();
+    });
+
+    return () => {
+      listener.subscription.unsubscribe();
+    };
+  }, []);
+
+  return { isPremium, loading, error };
+}
