@@ -50,7 +50,6 @@ async function hasActiveSubscription(userId: string) {
 router.get("/api/premium/status", async (req, res) => {
   try {
 
-    // TEMP TEST USER
     const userId =
       "00000000-0000-0000-0000-000000000001";
 
@@ -61,11 +60,15 @@ router.get("/api/premium/status", async (req, res) => {
       premium: allowed
     });
 
-  } catch (error) {
-    console.error(error);
+  } catch (error: any) {
+
+    console.error(
+      "PREMIUM STATUS ERROR:",
+      error.message
+    );
 
     return res.status(500).json({
-      error: "Server error"
+      error: error.message
     });
   }
 });
@@ -267,26 +270,19 @@ router.post("/api/mpesa/callback", async (req, res) => {
       expires.getFullYear() + 1
     );
 
-    const existingSub =
-      await db.query.subscriptions.findFirst({
-        where: (s, { eq }) =>
-          eq(s.userId, payment.userId),
-      });
+    const existingSubResult = await db
+  .select()
+  .from(subscriptions)
+  .where(eq(subscriptions.userId, payment.userId))
+  .limit(1);
 
-    if (existingSub) {
+const existingSubResult = await db
+  .select()
+  .from(subscriptions)
+  .where(eq(subscriptions.userId, payment.userId))
+  .limit(1);
 
-      await db.update(subscriptions)
-        .set({
-          status: "active",
-          expiresAt: expires,
-          updatedAt: new Date(),
-        })
-        .where(
-          eq(
-            subscriptions.userId,
-            payment.userId
-          )
-        );
+const existingSub = existingSubResult[0];
 
     } else {
 
