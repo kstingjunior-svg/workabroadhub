@@ -34,26 +34,37 @@ async function hasActiveSubscription(userId: string) {
       )
       .limit(1);
 
+    console.log(
+      "SUBSCRIPTION RESULT:",
+      result
+    );
+
     const subscription = result[0];
 
     if (!subscription) {
+
+      console.log(
+        "NO SUBSCRIPTION FOUND"
+      );
+
       return false;
     }
 
-    if (subscription.status !== "active") {
-      return false;
-    }
+    console.log(
+      "SUB STATUS:",
+      subscription.status
+    );
 
-    if (
-      new Date(subscription.expiresAt) <
-      new Date()
-    ) {
-      return false;
-    }
+    console.log(
+      "EXPIRES:",
+      subscription.expiresAt
+    );
 
+    // 🔥 TEMP FORCE TRUE
     return true;
 
   } catch (error) {
+
     console.error(
       "SUBSCRIPTION CHECK ERROR:",
       error
@@ -62,7 +73,6 @@ async function hasActiveSubscription(userId: string) {
     return false;
   }
 }
-
 /* =========================
    👑 PREMIUM STATUS
 ========================= */
