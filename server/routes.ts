@@ -250,34 +250,27 @@ router.post("/api/mpesa/callback", async (req, res) => {
 });
 
 /* =========================
-   🔒 PREMIUM TEST ROUTE
+   👑 PREMIUM STATUS
 ========================= */
-router.get("/api/premium/test", async (req, res) => {
+router.get("/api/premium/status", async (req, res) => {
   try {
 
-    // 🔥 TEMP TEST USER
+    // TEMP TEST USER
     const userId =
       "00000000-0000-0000-0000-000000000001";
 
     const allowed =
       await hasActiveSubscription(userId);
 
-    if (!allowed) {
-      return res.status(403).json({
-        error: "Premium subscription required",
-      });
-    }
-
     return res.json({
-      success: true,
-      message: "🔥 Premium access granted",
+      premium: allowed
     });
 
   } catch (error) {
     console.error(error);
 
     return res.status(500).json({
-      error: "Server error",
+      error: "Server error"
     });
   }
 });
