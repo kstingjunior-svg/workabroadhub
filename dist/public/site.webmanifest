@@ -1,0 +1,137 @@
+{
+  "id": "tech.workabroadhub.app",
+  "name": "WorkAbroad Hub",
+  "short_name": "WorkAbroad",
+  "description": "Kenya's leading platform for verified overseas employment and career consultation. Find legitimate jobs in UK, Canada, UAE & more — scam-free.",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "orientation": "portrait",
+  "lang": "en-KE",
+  "dir": "ltr",
+  "categories": ["business", "productivity", "education"],
+  "iarc_rating_id": "",
+  "icons": [
+    {
+      "src": "/favicon-16x16.png",
+      "sizes": "16x16",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon-32x32.png",
+      "sizes": "32x32",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/logo.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/logo.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshots/privacy.jpg",
+      "sizes": "1280x720",
+      "type": "image/jpeg",
+      "form_factor": "wide",
+      "label": "Privacy Policy — WorkAbroad Hub"
+    },
+    {
+      "src": "/screenshots/terms.jpg",
+      "sizes": "1280x720",
+      "type": "image/jpeg",
+      "form_factor": "wide",
+      "label": "Terms of Service — WorkAbroad Hub"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Find Jobs",
+      "short_name": "Jobs",
+      "description": "Browse verified overseas jobs",
+      "url": "/tools/visa-sponsorship-jobs?source=shortcut",
+      "icons": [{ "src": "/favicon.png", "sizes": "512x512" }]
+    },
+    {
+      "name": "Verify Agency",
+      "short_name": "Verify",
+      "description": "Check if a recruitment agency is NEA-licensed",
+      "url": "/nea-agencies?source=shortcut",
+      "icons": [{ "src": "/favicon.png", "sizes": "512x512" }]
+    },
+    {
+      "name": "Pricing",
+      "short_name": "Plans",
+      "description": "View subscription plans",
+      "url": "/pricing?source=shortcut",
+      "icons": [{ "src": "/favicon.png", "sizes": "512x512" }]
+    }
+  ],
+  "launch_handler": {
+    "client_mode": ["focus-existing", "auto"]
+  },
+  "share_target": {
+    "action": "/tools/job-scam-checker",
+    "method": "GET",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  },
+  "file_handlers": [
+    {
+      "action": "/tools/ats-cv-checker",
+      "accept": {
+        "application/pdf": [".pdf"],
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"],
+        "application/msword": [".doc"]
+      },
+      "icons": [{ "src": "/favicon.png", "sizes": "512x512" }],
+      "launch_type": "single-client"
+    }
+  ],
+  "protocol_handlers": [
+    {
+      "protocol": "web+workabroadhub",
+      "url": "/?source=protocol&q=%s"
+    }
+  ],
+  "related_applications": [
+    {
+      "platform": "play",
+      "url": "https://play.google.com/store/apps/details?id=tech.workabroadhub.app",
+      "id": "tech.workabroadhub.app"
+    },
+    {
+      "platform": "webapp",
+      "url": "https://workabroadhub.tech/site.webmanifest"
+    }
+  ],
+  "prefer_related_applications": false,
+  "scope_extensions": [
+    { "origin": "https://work-abroad-hub.replit.app" },
+    { "origin": "https://workabroadhub.tech" }
+  ],
+  "edge_side_panel": {
+    "preferred_width": 400
+  }
+}

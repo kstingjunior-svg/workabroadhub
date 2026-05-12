@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Offline — WorkAbroad Hub</title>
+  <meta name="theme-color" content="#2563eb" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f8fafc;
+      color: #1e293b;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      text-align: center;
+    }
+    .logo {
+      width: 80px;
+      height: 80px;
+      border-radius: 20px;
+      margin-bottom: 24px;
+      box-shadow: 0 4px 24px rgba(37,99,235,0.15);
+    }
+    h1 { font-size: 1.5rem; font-weight: 700; margin-bottom: 8px; color: #1e293b; }
+    p { color: #64748b; font-size: 1rem; margin-bottom: 28px; max-width: 340px; line-height: 1.6; }
+    .btn {
+      background: #2563eb;
+      color: white;
+      border: none;
+      padding: 14px 32px;
+      border-radius: 12px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-block;
+      margin-bottom: 12px;
+      transition: background 0.2s;
+    }
+    .btn:hover { background: #1d4ed8; }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #dbeafe;
+      color: #1d4ed8;
+      border-radius: 999px;
+      padding: 4px 14px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      margin-bottom: 20px;
+      letter-spacing: 0.05em;
+    }
+    .dot { width: 7px; height: 7px; background: #2563eb; border-radius: 50%; animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  </style>
+</head>
+<body>
+  <img src="/logo.png" alt="WorkAbroad Hub" class="logo" />
+  <div class="pill">
+    <span class="dot"></span>
+    No Internet Connection
+  </div>
+  <h1>You're currently offline</h1>
+  <p>
+    WorkAbroad Hub needs an internet connection to load jobs and services.
+    Please check your connection and try again.
+  </p>
+  <button class="btn" onclick="window.location.reload()">Try Again</button>
+  <p style="font-size:0.8rem; color:#94a3b8; margin-top:16px;">
+    Some pages may be available from cache — try navigating back to the home page.
+  </p>
+  <a href="/" class="btn" style="background:#f1f5f9;color:#475569;margin-top:8px;">Go to Home</a>
+</body>
+</html>

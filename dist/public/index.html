@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+
+    <!-- Cache-busting: tell every browser and proxy never to cache the HTML shell.
+         Vite fingerprints JS/CSS assets (e.g. /assets/main-Ab3kQ9.js) so those
+         are safe to cache forever; only this file needs to stay fresh. -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma"        content="no-cache" />
+    <meta http-equiv="Expires"       content="0" />
+    <meta name="version"             content="2026.04.14.003" />
+
+    <!-- Version-check: detects when a new build is deployed and offers a reload.
+         Works by comparing the content-hash that Vite embeds in the main bundle's
+         filename (e.g. "/assets/main-Ab3kQ9.js") between page loads.
+         - Reads the hash stored in sessionStorage from the previous load.
+         - Extracts the hash from the first <script type="module"> src it finds.
+         - If they differ a "New version" banner appears (no forced refresh loop). -->
+    <script>
+      (function () {
+        try {
+          var STORAGE_KEY = "wah_build_hash";
+          var RELOAD_FLAG = "wah_reloaded_once";
+
+          // Log the version tag so it's visible in DevTools → Console on every load
+          var versionMeta = document.querySelector('meta[name="version"]');
+          if (versionMeta) {
+            console.info("[WorkAbroad Hub] version " + versionMeta.getAttribute("content"));
+          }
+
+          function extractHash(src) {
+            var m = src && src.match(/\/assets\/[^-]+-([A-Za-z0-9_-]+)\./);
+            return m ? m[1] : null;
+          }
+
+          function showBanner() {
+            if (document.getElementById("wah-update-banner")) return;
+            var b = document.createElement("div");
+            b.id = "wah-update-banner";
+            b.setAttribute("style", [
+              "position:fixed;bottom:0;left:0;right:0;z-index:99999",
+              "background:#0e7490;color:#fff;font-family:sans-serif",
+              "font-size:14px;padding:10px 16px",
+              "display:flex;align-items:center;justify-content:center;gap:12px"
+            ].join(";"));
+            b.innerHTML =
+              "<span>A new version of WorkAbroad Hub is available.</span>" +
+              "<button onclick=\"sessionStorage.removeItem('" + STORAGE_KEY + "');location.reload(true)\" " +
+              "style=\"background:#fff;color:#0e7490;border:none;border-radius:4px;" +
+              "padding:4px 12px;cursor:pointer;font-weight:600\">Reload</button>" +
+              "<button onclick=\"this.parentNode.remove()\" " +
+              "style=\"background:transparent;color:#fff;border:1px solid rgba(255,255,255,0.4);" +
+              "border-radius:4px;padding:4px 10px;cursor:pointer\">Later</button>";
+            document.body ? document.body.appendChild(b) : document.addEventListener("DOMContentLoaded", function(){ document.body.appendChild(b); });
+          }
+
+          // After the page is fully parsed, inspect the injected module script
+          document.addEventListener("DOMContentLoaded", function () {
+            var scripts = document.querySelectorAll("script[type=module][src]");
+            var currentHash = null;
+            for (var i = 0; i < scripts.length; i++) {
+              currentHash = extractHash(scripts[i].getAttribute("src"));
+              if (currentHash) break;
+            }
+            if (!currentHash) return; // dev mode — src is /src/main.tsx, no hash
+
+            var storedHash = sessionStorage.getItem(STORAGE_KEY);
+            if (!storedHash) {
+              sessionStorage.setItem(STORAGE_KEY, currentHash);
+              return;
+            }
+            if (storedHash !== currentHash) {
+              // New build detected
+              if (!sessionStorage.getItem(RELOAD_FLAG)) {
+                // Attempt a silent one-time hard-reload first
+                sessionStorage.setItem(RELOAD_FLAG, "1");
+                sessionStorage.setItem(STORAGE_KEY, currentHash);
+                location.reload(true);
+              } else {
+                // Already reloaded once — show banner instead of looping
+                sessionStorage.removeItem(RELOAD_FLAG);
+                sessionStorage.setItem(STORAGE_KEY, currentHash);
+                showBanner();
+              }
+            } else {
+              sessionStorage.removeItem(RELOAD_FLAG);
+            }
+          });
+        } catch (e) { /* never break the page */ }
+      })();
+    </script>
+    
+    <!-- Primary Meta Tags -->
+    <title>WorkAbroad Hub - Find Verified Overseas Jobs in USA, Canada, UK, Australia, UAE & Europe</title>
+    <meta name="title" content="WorkAbroad Hub - Find Verified Overseas Jobs in USA, Canada, UK, Australia, UAE & Europe" />
+    <meta name="description" content="Professional career consultation service for Kenyans seeking overseas employment. Access 30+ verified job portals, get 1-on-1 WhatsApp career guidance, and verify NEA licensed agencies. Apply directly to jobs in USA, Canada, UK, Australia, UAE, and Europe. One-time fee KES 4,500." />
+    <meta name="keywords" content="overseas jobs, work abroad, jobs in USA, jobs in Canada, jobs in UK, jobs in Australia, jobs in UAE, jobs in Europe, Kenya jobs abroad, NEA licensed agencies, career consultation, visa guidance, international employment, verified job portals, M-Pesa payment" />
+    <meta name="author" content="WorkAbroad Hub" />
+    <meta name="robots" content="index, follow" />
+    <meta name="language" content="English" />
+    <meta name="theme-color" content="#2563eb" />
+
+    <!-- Google Search Console Verification -->
+    <!-- REPLACE the content value below with your actual Google Search Console verification code -->
+    <!-- To get it: search.google.com/search-console → Add Property → workabroadhub.tech → HTML Tag method -->
+    <meta name="google-site-verification" content="REPLACE_WITH_YOUR_GOOGLE_VERIFICATION_CODE" />
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://workabroadhub.tech/" />
+    <meta property="og:title" content="WorkAbroad Hub - Find Verified Overseas Jobs in USA, Canada, UK, Australia, UAE & Europe" />
+    <meta property="og:description" content="Professional career consultation service for Kenyans. Access 30+ verified job portals across 6 countries, get WhatsApp career guidance, and verify NEA agencies. Apply directly - no middlemen." />
+    <meta property="og:image" content="https://workabroadhub.tech/logo.png" />
+    <meta property="og:image:width" content="1024" />
+    <meta property="og:image:height" content="1024" />
+    <meta property="og:image:alt" content="WorkAbroad Hub - Overseas Career Consultation" />
+    <meta property="og:site_name" content="WorkAbroad Hub" />
+    <meta property="og:locale" content="en_KE" />
+    
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:url" content="https://workabroadhub.tech/" />
+    <meta property="twitter:title" content="WorkAbroad Hub - Verified Overseas Jobs for Kenyans" />
+    <meta property="twitter:description" content="Access 30+ verified job portals in USA, Canada, UK, Australia, UAE & Europe. Get career consultation and apply directly. KES 4,500 one-time fee." />
+    <meta property="twitter:image" content="https://workabroadhub.tech/logo.png" />
+    <meta property="twitter:site" content="@WorkAbroadHub" />
+    
+    <!-- PWA / Mobile App Meta Tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="WorkAbroad" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="application-name" content="WorkAbroad Hub" />
+    <meta name="msapplication-TileColor" content="#2563eb" />
+    <meta name="msapplication-TileImage" content="/logo.png" />
+    <meta name="msapplication-config" content="none" />
+    <!-- PWA install banner support -->
+    <link rel="manifest" href="/site.webmanifest" crossorigin="use-credentials" />
+    
+    <!-- Geo targeting for Kenya -->
+    <meta name="geo.region" content="KE-30" />
+    <meta name="geo.placename" content="Nairobi, Kenya" />
+    <meta name="geo.position" content="-1.292066;36.821945" />
+    <meta name="ICBM" content="-1.292066, 36.821945" />
+    
+    <!-- Canonical URL -->
+    <link rel="canonical" href="https://workabroadhub.tech/" />
+
+    <!-- Sitemap reference -->
+    <link rel="sitemap" type="application/xml" title="Sitemap" href="/sitemap.xml" />
+    
+    <!-- Favicon & Icons -->
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin="anonymous">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
+    <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;1,400&family=Architects+Daughter&family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Fira+Code:wght@300..700&family=Geist+Mono:wght@100..900&family=Geist:wght@100..900&family=IBM+Plex+Mono:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;1,100;1,200;1,300;1,400;1,500;1,600;1,700&family=IBM+Plex+Sans:ital,wght@0,100..700;1,100..700&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Lora:ital,wght@0,400..700;1,400..700&family=Merriweather:ital,opsz,wght@0,18..144,300..900;1,18..144,300..900&family=Montserrat:ital,wght@0,100..900;1,100..900&family=Open+Sans:ital,wght@0,300..800;1,300..800&family=Outfit:wght@100..900&family=Oxanium:wght@200..800&family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&family=Roboto+Mono:ital,wght@0,100..700;1,100..700&family=Roboto:ital,opsz,wght@0,8..144,100..900;1,8..144,100..900&family=Source+Code+Pro:ital,wght@0,200..900;1,200..900&family=Source+Serif+4:ital,opsz,wght@0,8..60,200..900;1,8..60,200..900&family=Space+Grotesk:wght@300..700&family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
+    
+    <!-- Organization Schema (LocalBusiness + ProfessionalService) -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": ["Organization", "LocalBusiness", "ProfessionalService"],
+          "@id": "https://workabroadhub.tech/#organization",
+          "name": "WorkAbroad Hub",
+          "legalName": "Exovia Connect",
+          "alternateName": ["WorkAbroad Hub"],
+          "description": "Professional career consultation service helping Kenyans find verified overseas employment opportunities across USA, Canada, UK, Australia, UAE, and Europe.",
+          "url": "https://workabroadhub.tech",
+          "logo": {
+            "@type": "ImageObject",
+            "url": "https://workabroadhub.tech/logo.png",
+            "width": 1024,
+            "height": 1024
+          },
+          "image": "https://workabroadhub.tech/logo.png",
+          "email": "support@workabroadhub.tech",
+          "telephone": "+254742619777",
+          "priceRange": "KES 4,500–50,000",
+          "currenciesAccepted": "KES, USD",
+          "paymentAccepted": "M-Pesa, PayPal, Credit Card",
+          "address": {
+            "@type": "PostalAddress",
+            "streetAddress": "Nairobi",
+            "addressLocality": "Nairobi",
+            "addressRegion": "Nairobi County",
+            "postalCode": "00100",
+            "addressCountry": "KE"
+          },
+          "geo": {
+            "@type": "GeoCoordinates",
+            "latitude": -1.292066,
+            "longitude": 36.821945
+          },
+          "contactPoint": [
+            {
+              "@type": "ContactPoint",
+              "telephone": "+254742619777",
+              "contactType": "customer service",
+              "email": "support@workabroadhub.tech",
+              "availableLanguage": ["English", "Swahili"],
+              "areaServed": "KE",
+              "contactOption": "TollFree"
+            },
+            {
+              "@type": "ContactPoint",
+              "contactType": "technical support",
+              "email": "support@workabroadhub.tech",
+              "availableLanguage": ["English"]
+            }
+          ],
+          "sameAs": [],
+          "areaServed": [
+            { "@type": "Country", "name": "Kenya" }
+          ],
+          "serviceArea": {
+            "@type": "Country",
+            "name": "Kenya"
+          },
+          "foundingDate": "2024",
+          "knowsAbout": [
+            "Overseas Employment",
+            "Career Consultation",
+            "Visa Guidance",
+            "NEA Agency Verification",
+            "International Job Search",
+            "CV Writing",
+            "Interview Coaching"
+          ],
+          "hasOfferCatalog": {
+            "@type": "OfferCatalog",
+            "name": "Career Consultation Services",
+            "itemListElement": [
+              {
+                "@type": "Offer",
+                "name": "Basic Career Consultation",
+                "price": "4500",
+                "priceCurrency": "KES",
+                "description": "1-on-1 WhatsApp consultation, access to 30+ verified job portals, CV templates, visa guidance, and NEA agency verification"
+              },
+              {
+                "@type": "Offer",
+                "name": "ATS CV Optimization",
+                "price": "3500",
+                "priceCurrency": "KES",
+                "description": "Professional CV rewrite optimized for Applicant Tracking Systems"
+              },
+              {
+                "@type": "Offer",
+                "name": "Interview Coaching",
+                "price": "5000",
+                "priceCurrency": "KES",
+                "description": "One-on-one interview preparation and coaching session"
+              }
+            ]
+          },
+          "aggregateRating": {
+            "@type": "AggregateRating",
+            "ratingValue": "4.8",
+            "reviewCount": "150",
+            "bestRating": "5",
+            "worstRating": "1"
+          }
+        },
+        {
+          "@type": "WebSite",
+          "@id": "https://workabroadhub.tech/#website",
+          "url": "https://workabroadhub.tech",
+          "name": "WorkAbroad Hub",
+          "description": "Kenya's leading platform for verified overseas employment and career consultation",
+          "publisher": {
+            "@id": "https://workabroadhub.tech/#organization"
+          },
+          "potentialAction": {
+            "@type": "SearchAction",
+            "target": {
+              "@type": "EntryPoint",
+              "urlTemplate": "https://workabroadhub.tech/tools/visa-sponsorship-jobs?search={search_term_string}"
+            },
+            "query-input": "required name=search_term_string"
+          },
+          "inLanguage": "en-KE"
+        }
+      ]
+    }
+    </script>
+    
+    <!-- FAQ Schema -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "What exactly am I paying for with the KES 4,500 fee?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "The KES 4,500 is a one-time career consultation fee that includes a personalized WhatsApp consultation, lifetime access to 30+ verified job portals, country-specific CV templates, NEA agency verification database access, and ongoing updates."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Is WorkAbroad Hub a recruitment agency?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "No, WorkAbroad Hub is NOT a recruitment agency. We are a career consultation service that provides expert guidance and verified resources to help you apply for overseas jobs independently."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How do you verify the job portals are legitimate?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "We only include job portals from official government employment agencies, recognized employer associations, and well-established job boards. Our team regularly reviews each portal to ensure they are active and legitimate."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What is the NEA agency verification feature?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "We maintain a database of 1,278+ NEA-registered agencies showing their license status (valid or expired). Before you pay any recruitment agency, you can verify they have a valid NEA license."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How can I pay for WorkAbroad Hub services?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "We accept M-Pesa (shortcode 4153025), PayPal, and major credit/debit cards. All payments are processed securely."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Does WorkAbroad Hub guarantee I will get a job?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "No. WorkAbroad Hub is a consultation and guidance service. We provide tools, resources, and expert guidance to maximize your chances, but we cannot guarantee employment outcomes. We are compliant with Kenya Data Protection Act 2019."
+          }
+        }
+      ]
+    }
+    </script>
+
+    <!-- BreadcrumbList Schema for key pages -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://workabroadhub.tech/" },
+        { "@type": "ListItem", "position": 2, "name": "NEA Agencies", "item": "https://workabroadhub.tech/nea-agencies" },
+        { "@type": "ListItem", "position": 3, "name": "Visa Sponsorship Jobs", "item": "https://workabroadhub.tech/tools/visa-sponsorship-jobs" },
+        { "@type": "ListItem", "position": 4, "name": "Career Tools", "item": "https://workabroadhub.tech/tools" },
+        { "@type": "ListItem", "position": 5, "name": "Services", "item": "https://workabroadhub.tech/services" }
+      ]
+    }
+    </script>
+    <script type="module" crossorigin src="/assets/index-BZq2yF9c.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-DybgiTkD.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
