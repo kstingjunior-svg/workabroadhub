@@ -1,6 +1,6 @@
 
 import { Router } from "express";
-import { db } from "../db";
+import { db } from "./db";
 import { payments, subscriptions } from "../shared/schema";
 import { eq } from "drizzle-orm";
 import { stkPush } from "./mpesa";
