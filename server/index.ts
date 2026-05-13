@@ -1,5 +1,5 @@
-process.on('uncaughtException', (err) => console.error('UNCAUGHT:', err));
-process.on('unhandledRejection', (err) => console.error('UNHANDLED:', err));
+process.on('uncaughtException', (err) => { console.error('UNCAUGHT:', err.message); console.error('STACK:', err.stack); process.exit(1); });
+process.on('unhandledRejection', (err: any) => { console.error('UNHANDLED:', err?.message || err); console.error('STACK:', err?.stack); process.exit(1); });
 
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
