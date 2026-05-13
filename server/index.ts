@@ -1,6 +1,5 @@
 import 'dotenv/config';
 // @ts-nocheck
-
 import express from "express";
 import router from "./routes";
 import { createServer } from "http";
@@ -10,22 +9,17 @@ import rateLimit from "express-rate-limit";
 import cors from "cors";
 import compression from "compression";
 import { applyDdosProtection } from "./middleware/ddos-protection";
-import path from "path";
-import fs from "fs";
 
 // =======================
 // 🚀 CREATE APP + SERVER
 // =======================
-
 const app = express();
 const httpServer = createServer(app);
-
 initSocketIO(httpServer);
 
 // =======================
 // 🌐 CORS
 // =======================
-
 app.use(cors({
   origin: true,
   credentials: true,
@@ -34,9 +28,7 @@ app.use(cors({
 // =======================
 // 🔐 SECURITY
 // =======================
-
 app.use(helmet());
-
 app.use(rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10000,
@@ -45,16 +37,13 @@ app.use(rateLimit({
 // =======================
 // 🔥 BODY PARSER
 // =======================
-
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
 app.use(compression());
 
 // =======================
 // 🛡️ OPTIONAL DDOS
 // =======================
-
 try {
   app.use(applyDdosProtection);
 } catch (e) {
@@ -64,7 +53,6 @@ try {
 // =======================
 // 🧪 TEST ROUTE
 // =======================
-
 app.get("/health", (_req, res) => {
   res.json({
     success: true,
@@ -73,34 +61,9 @@ app.get("/health", (_req, res) => {
 });
 
 // =======================
-// 📦 FRONTEND BUILD
-// =======================
-
-const clientPath = path.join(process.cwd(), "dist", "public");
-
-if (fs.existsSync(clientPath)) {
-  console.log("✅ Frontend build found");
-
-  app.use(express.static(clientPath));
-
-  app.get("*", (_req, res) => {
-    res.sendFile(path.join(clientPath, "index.html"));
-  });
-
-} else {
-  console.log("❌ Frontend build missing:", clientPath);
-
-  app.get("*", (_req, res) => {
-    res.status(500).send("Frontend build not found");
-  });
-}
-
-// =======================
 // ✅ API ROUTES
 // =======================
-
 app.use(router);
-
 app.get("/premium-test", (_req, res) => {
   res.json({
     success: true,
@@ -111,9 +74,7 @@ app.get("/premium-test", (_req, res) => {
 // =======================
 // 🚀 START SERVER
 // =======================
-
 const PORT = Number(process.env.PORT) || 10001;
-
 httpServer.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
