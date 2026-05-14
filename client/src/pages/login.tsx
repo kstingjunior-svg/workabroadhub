@@ -43,14 +43,12 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  // Read the redirect param once on mount
   const redirectTo = (() => {
     const params = new URLSearchParams(window.location.search);
     const r = params.get("redirect");
     return r && r !== "/" && r !== "/dashboard" ? r : "/dashboard";
   })();
 
-  // If already logged in, bounce straight to destination
   useEffect(() => {
     if (!authLoading && user) {
       const stored = localStorage.getItem("auth_redirect");
@@ -91,6 +89,12 @@ export default function LoginPage() {
 
     setLoading(true);
     try {
+      // Fetch CSRF token first
+      const csrfRes = await fetch("/api/csrf-token", {
+        credentials: "include",
+      });
+      const { csrfToken } = await csrfRes.json();
+
       const endpoint = tab === "signup" ? "/api/auth/register" : "/api/auth/login";
       const referral_code = localStorage.getItem("referral_code") || undefined;
       const body = tab === "signup"
@@ -99,7 +103,10 @@ export default function LoginPage() {
 
       const res = await fetch(endpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": csrfToken,
+        },
         credentials: "include",
         body: JSON.stringify(body),
       });
@@ -119,8 +126,6 @@ export default function LoginPage() {
 
       setSuccess(tab === "signup" ? "Account created! Redirecting…" : "Signed in! Redirecting…");
       if (tab === "signup") trackEvent("signup");
-      // Wipe the ENTIRE query cache and session storage so no stale data
-      // from a previously signed-in account leaks through to this new session
       queryClient.clear();
       sessionStorage.clear();
 
@@ -150,7 +155,6 @@ export default function LoginPage() {
       style={{ background: "linear-gradient(135deg, #F4F2EE 0%, #FFFFFF 100%)" }}
     >
       <div className="w-full max-w-[420px]">
-        {/* Back to home */}
         <button
           onClick={() => navigate("/")}
           className="flex items-center gap-1.5 text-sm text-[#7A8A9A] hover:text-[#1A2530] mb-6 transition-colors"
@@ -165,7 +169,6 @@ export default function LoginPage() {
           style={{ boxShadow: "0 20px 40px -10px rgba(0,0,0,0.05)" }}
           data-testid="login-card"
         >
-          {/* Header */}
           <div className="mb-7">
             <div className="flex items-center gap-2 mb-4">
               <span className="text-xl">🌍</span>
@@ -185,7 +188,6 @@ export default function LoginPage() {
             </p>
           </div>
 
-          {/* Tab switcher */}
           <div className="flex gap-0.5 bg-[#F4F2EE] rounded-[10px] p-1 mb-6">
             {(["signin", "signup"] as Tab[]).map(t => (
               <button
@@ -203,7 +205,6 @@ export default function LoginPage() {
             ))}
           </div>
 
-          {/* Error banner */}
           {error && (
             <div
               className="bg-[#FEF3F2] text-[#D92D20] px-4 py-3 rounded-[8px] text-sm mb-5 leading-snug"
@@ -213,7 +214,6 @@ export default function LoginPage() {
             </div>
           )}
 
-          {/* Success banner */}
           {success && (
             <div
               className="bg-green-50 text-green-700 px-4 py-3 rounded-[8px] text-sm mb-5 flex items-center gap-2"
@@ -224,9 +224,7 @@ export default function LoginPage() {
             </div>
           )}
 
-          {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Name row — signup only */}
             {tab === "signup" && (
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -260,7 +258,6 @@ export default function LoginPage() {
               </div>
             )}
 
-            {/* Email */}
             <div>
               <label className="block text-sm font-medium text-[#1A2530] mb-1.5">
                 Email <span className="text-red-500">*</span>
@@ -278,7 +275,6 @@ export default function LoginPage() {
               />
             </div>
 
-            {/* Password */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="block text-sm font-medium text-[#1A2530]">
@@ -319,7 +315,6 @@ export default function LoginPage() {
               {tab === "signup" && <PasswordStrength password={password} />}
             </div>
 
-            {/* Submit */}
             <button
               type="submit"
               disabled={loading || !!success}
@@ -332,7 +327,6 @@ export default function LoginPage() {
             </button>
           </form>
 
-          {/* Divider */}
           <div className="relative my-6">
             <div className="absolute inset-0 flex items-center">
               <div className="w-full border-t border-[#E2DDD5]" />
@@ -342,8 +336,7 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {/* Replit OIDC */}
-          <a
+          
             href="/api/login"
             onClick={() => {
               if (redirectTo && redirectTo !== "/" && redirectTo !== "/dashboard") {
@@ -357,7 +350,6 @@ export default function LoginPage() {
             Continue with Replit
           </a>
 
-          {/* Switch tab */}
           <p className="text-center text-sm text-[#5A6A7A] mt-5">
             {tab === "signin" ? (
               <>Don't have an account?{" "}
@@ -385,7 +377,6 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {/* Footer links */}
         <p className="text-center text-xs text-[#7A8A9A] mt-5 space-x-3">
           <a href="/privacy-policy" className="hover:text-[#1A2530] transition-colors">Privacy Policy</a>
           <span>·</span>
