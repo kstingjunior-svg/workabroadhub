@@ -84,6 +84,12 @@ export function AuthModal({ open, onClose, defaultTab = "login", redirectPath }:
 
     setLoading(true);
     try {
+      // Fetch CSRF token first
+      const csrfRes = await fetch("/api/csrf-token", {
+        credentials: "include",
+      });
+      const { csrfToken } = await csrfRes.json();
+
       const endpoint = tab === "signup" ? "/api/auth/register" : "/api/auth/login";
       const referral_code = localStorage.getItem("referral_code") || undefined;
       const body = tab === "signup"
@@ -92,7 +98,10 @@ export function AuthModal({ open, onClose, defaultTab = "login", redirectPath }:
 
       const res = await fetch(endpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": csrfToken,
+        },
         credentials: "include",
         body: JSON.stringify(body),
       });
@@ -112,8 +121,6 @@ export function AuthModal({ open, onClose, defaultTab = "login", redirectPath }:
 
       setSuccessMsg(tab === "signup" ? "Account created! Taking you to your dashboard…" : "Signed in! Redirecting…");
 
-      // Wipe the ENTIRE query cache and session storage so no stale data
-      // from a previously signed-in account leaks through to this new session
       queryClient.clear();
       sessionStorage.clear();
 
@@ -140,7 +147,6 @@ export function AuthModal({ open, onClose, defaultTab = "login", redirectPath }:
         className="relative w-full max-w-md bg-background border border-border rounded-2xl shadow-2xl z-10 animate-in slide-in-from-bottom-4 duration-300"
         data-testid="auth-modal"
       >
-        {/* Close */}
         <button
           onClick={onClose}
           className="absolute top-4 right-4 h-8 w-8 rounded-full bg-muted flex items-center justify-center text-muted-foreground hover:bg-muted/80 transition-colors"
@@ -149,7 +155,6 @@ export function AuthModal({ open, onClose, defaultTab = "login", redirectPath }:
           <X className="h-4 w-4" />
         </button>
 
-        {/* Header */}
         <div className="p-6 pb-0">
           <div className="flex items-center gap-2 mb-1">
             <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -167,7 +172,6 @@ export function AuthModal({ open, onClose, defaultTab = "login", redirectPath }:
           </p>
         </div>
 
-        {/* Tabs */}
         <div className="flex mx-6 mt-4 rounded-lg bg-muted p-1 gap-1">
           <button
             onClick={() => switchTab("login")}
@@ -187,9 +191,7 @@ export function AuthModal({ open, onClose, defaultTab = "login", redirectPath }:
           </button>
         </div>
 
-        {/* Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {/* Success */}
           {successMsg && (
             <div className="flex items-center gap-2 p-3 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-300 text-sm" data-testid="auth-success-msg">
               <Check className="h-4 w-4 flex-shrink-0" />
@@ -197,7 +199,6 @@ export function AuthModal({ open, onClose, defaultTab = "login", redirectPath }:
             </div>
           )}
 
-          {/* Server error */}
           {serverError && (
             <div className="flex items-start gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-sm" data-testid="auth-error-msg">
               <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
@@ -212,7 +213,6 @@ export function AuthModal({ open, onClose, defaultTab = "login", redirectPath }:
             </div>
           )}
 
-          {/* Name row (signup only) */}
           {tab === "signup" && (
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
@@ -244,7 +244,6 @@ export function AuthModal({ open, onClose, defaultTab = "login", redirectPath }:
             </div>
           )}
 
-          {/* Email */}
           <div className="space-y-1.5">
             <Label htmlFor="auth-email">Email address <span className="text-red-500">*</span></Label>
             <Input
@@ -261,7 +260,6 @@ export function AuthModal({ open, onClose, defaultTab = "login", redirectPath }:
             {fieldErrors.email && <p className="text-xs text-red-500">{fieldErrors.email}</p>}
           </div>
 
-          {/* Password */}
           <div className="space-y-1.5">
             <Label htmlFor="auth-password">Password <span className="text-red-500">*</span></Label>
             <div className="relative">
@@ -289,7 +287,6 @@ export function AuthModal({ open, onClose, defaultTab = "login", redirectPath }:
             {tab === "signup" && <PasswordStrength password={password} />}
           </div>
 
-          {/* Submit */}
           <Button
             type="submit"
             className="w-full h-11"
@@ -303,14 +300,12 @@ export function AuthModal({ open, onClose, defaultTab = "login", redirectPath }:
             )}
           </Button>
 
-          {/* Divider */}
           <div className="relative">
             <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border" /></div>
             <div className="relative flex justify-center text-xs text-muted-foreground"><span className="bg-background px-2">or</span></div>
           </div>
 
-          {/* Replit OAuth fallback */}
-          <a
+          
             href="/api/login"
             onClick={() => {
               const dest = redirectPath || "";
@@ -325,7 +320,6 @@ export function AuthModal({ open, onClose, defaultTab = "login", redirectPath }:
             Continue with Replit
           </a>
 
-          {/* Switch tab link */}
           <p className="text-center text-sm text-muted-foreground">
             {tab === "login" ? (
               <>Don't have an account?{" "}
