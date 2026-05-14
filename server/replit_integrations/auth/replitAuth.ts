@@ -2,16 +2,12 @@ import passport from "passport";
 import session from "express-session";
 import type { Express, RequestHandler } from "express";
 import connectPg from "connect-pg-simple";
-
 const pgStore = connectPg(session);
-
 let _sessionParser: RequestHandler | null = null;
-
 export function getSessionParser(): RequestHandler {
   if (!_sessionParser) _sessionParser = getSession();
   return _sessionParser;
 }
-
 function getSession() {
   return session({
     secret: process.env.SESSION_SECRET!,
@@ -25,13 +21,12 @@ function getSession() {
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: true,
       maxAge: 7 * 24 * 60 * 60 * 1000,
-      sameSite: "lax",
+      sameSite: "none",
     },
   });
 }
-
 export async function setupAuth(app: Express) {
   app.set("trust proxy", 1);
   app.use(getSessionParser());
@@ -53,9 +48,7 @@ export async function setupAuth(app: Express) {
   passport.serializeUser((user: any, cb) => cb(null, user));
   passport.deserializeUser((user: any, cb) => cb(null, user));
 }
-
 export function registerAuthRoutes(app: Express) {}
-
 export const isAuthenticated: RequestHandler = async (req, res, next) => {
   const customUserId = (req.session as any).customUserId as string | undefined;
   if (customUserId) {
