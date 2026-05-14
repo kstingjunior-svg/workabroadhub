@@ -2761,15 +2761,25 @@ WorkAbroad Hub
 
       
 <a
-href="/api/login"
-onClick={() => {
-if (redirectTo && redirectTo !== "/" && redirectTo !== "/dashboard") {
-localStorage.setItem("auth_redirect", redirectTo);
-}
-}}
-className="flex items-center justify-center gap-2 w-full py-[12px] border-[1.5px] border-[#E2DDD5] rounded-[12px] text-sm text-[#5A6A7A] hover:border-[#1A2530] hover:text-[#1A2530] transition-colors"
-data-testid="btn-replit-login"
-
+  href="/api/login"
+  onClick={() => {
+    if (
+      redirectTo &&
+      redirectTo !== "/" &&
+      redirectTo !== "/dashboard"
+    ) {
+      localStorage.setItem(
+        "auth_redirect",
+        redirectTo
+      );
+    }
+  }}
+  className="flex items-center justify-center gap-2 w-full py-[12px] border-[1.5px] border-[#E2DDD5] rounded-[12px] text-sm text-[#5A6A7A] hover:border-[#1A2530] hover:text-[#1A2530] transition-colors"
+  data-testid="btn-replit-login"
+>
+  <ExternalLink className="h-3.5 w-3.5" />
+  Continue with Replit
+</a>
 
 
       <p className="text-center text-sm text-[#5A6A7A] mt-5">
