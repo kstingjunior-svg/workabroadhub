@@ -33,7 +33,8 @@ initSocketIO(httpServer);
 const allowedOrigins = new Set([
   "https://workabroadhub.tech",
   "https://www.workabroadhub.tech",
-  "https://workabroadhub-1.onrender.com",
+  "https://workabroadhub.onrender.com",
+  "https://workabroadhub.vercel.app",
   ...(process.env.REPLIT_DOMAINS?.split(",").map(d => `https://${d}`) || []),
 ].filter(Boolean));
 
