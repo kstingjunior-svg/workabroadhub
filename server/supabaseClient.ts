@@ -3,14 +3,27 @@ import { createClient, SupabaseClient } from "@supabase/supabase-js";
 // IMPORTANT: use `||` not `??` so empty-string env vars also fall back.
 // On Render, an env var set to "" passes the `??` check and breaks the
 // Supabase client with "Invalid path specified in request URL".
+//
+// Also strip any /rest/v1[/] suffix — supabase-js wants the project's BASE
+// URL (https://<project>.supabase.co), not the REST endpoint path. Some
+// envs have SUPABASE_URL=https://<project>.supabase.co/rest/v1/ pasted in
+// (that's the value Supabase shows in the API Reference page), which makes
+// supabase-js append /rest/v1/<table> on top — giving /rest/v1/rest/v1/...
+// and the "Invalid path specified in request URL" error.
 const RAW_SUPABASE_URL = (process.env.SUPABASE_URL || "https://pvsxecrqfexgwspuqvlp.supabase.co").trim();
-const supabaseUrl = /^https?:\/\//.test(RAW_SUPABASE_URL)
-  ? RAW_SUPABASE_URL.replace(/\/+$/, "")  // strip trailing slashes
-  : "https://pvsxecrqfexgwspuqvlp.supabase.co";
+const supabaseUrl = (() => {
+  if (!/^https?:\/\//.test(RAW_SUPABASE_URL)) {
+    return "https://pvsxecrqfexgwspuqvlp.supabase.co";
+  }
+  let u = RAW_SUPABASE_URL.replace(/\/+$/, "");          // strip trailing slashes
+  u = u.replace(/\/rest\/v\d+(\/.*)?$/i, "");            // strip /rest/v1[/anything]
+  return u;
+})();
 
 if (RAW_SUPABASE_URL !== supabaseUrl) {
   console.warn(
-    `[Supabase] SUPABASE_URL was malformed ("${RAW_SUPABASE_URL}") — falling back to "${supabaseUrl}"`
+    `[Supabase] SUPABASE_URL was malformed ("${RAW_SUPABASE_URL}") — using "${supabaseUrl}" instead. ` +
+    `Update the env var in Render to drop the /rest/v1 suffix.`
   );
 }
 
