@@ -553,6 +553,32 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // ── Bind the port FIRST so Render's port scanner sees us alive ─────
+  // Render kills any deploy that doesn't open a listening port within
+  // ~5 minutes. The legacy structure put httpServer.listen() at the
+  // bottom of this IIFE, AFTER seedDatabase / governmentRegistry / DB
+  // audits / phone-normalisation UPDATE / etc. — that easily blew past
+  // Render's window, which is why deploys time out with "No open ports
+  // detected" while the schedulers in the logs are clearly running.
+  // Now we bind immediately and let the rest initialize in the background.
+  const PORT = parseInt(process.env.PORT || "5000", 10);
+
+  httpServer.on("error", (err: NodeJS.ErrnoException) => {
+    console.error("[Server] Fatal listen error:", err.message);
+    process.exit(1);
+  });
+
+  httpServer.listen(PORT, "0.0.0.0", () => {
+    console.log("Server running on port " + PORT);
+    // Log the M-Pesa callback URL at startup so it's always visible in logs
+    const appUrl = process.env.APP_URL || "";
+    const replitDomains = process.env.REPLIT_DOMAINS?.split(",")[0]?.trim() || "";
+    const baseUrl = appUrl || (replitDomains ? `https://${replitDomains}` : `http://localhost:${PORT}`);
+    const callbackUrl = `${baseUrl}/api/mpesa/callback`;
+    const isPublic = callbackUrl.startsWith("https://") && !callbackUrl.includes("localhost");
+    log(`[M-Pesa] Callback URL: ${callbackUrl} | Public: ${isPublic ? "YES ✓" : "NO ✗ — set APP_URL secret to your deployed domain"}`);
+  });
+
   registerQueueHandlers();
   await registerRoutes(httpServer, app);
 
@@ -1252,58 +1278,43 @@ app.use((req, res, next) => {
     }
   }
 
-  const PORT = process.env.PORT || 5000;
-
-  httpServer.on("error", (err: NodeJS.ErrnoException) => {
-    console.error("[Server] Fatal listen error:", err.message);
-    process.exit(1);
-  });
-
-  httpServer.listen(PORT, "0.0.0.0", async () => {
-    console.log("Server running on port " + PORT);
-
-      // Log the M-Pesa callback URL at startup so it's always visible in logs
-      const appUrl = process.env.APP_URL || "";
-      const replitDomains = process.env.REPLIT_DOMAINS?.split(",")[0]?.trim() || "";
-      const baseUrl = appUrl || (replitDomains ? `https://${replitDomains}` : "http://localhost:5000");
-      const callbackUrl = `${baseUrl}/api/mpesa/callback`;
-      const isPublic = callbackUrl.startsWith("https://") && !callbackUrl.includes("localhost");
-      log(`[M-Pesa] Callback URL: ${callbackUrl} | Public: ${isPublic ? "YES ✓" : "NO ✗ — set APP_URL secret to your deployed domain"}`);
-
-      // ── Startup: patch mismatched sessions ───────────────────────────────
-      // Fix sessions where a user registered via email/password then later
-      // signed in via Replit OIDC — the OIDC claims.sub won't match their
-      // real DB user ID, so we update the sessions table directly.
-      try {
-        const mismatchedRows = await db.execute(sql`
-          SELECT s.sid, s.sess, u.id AS real_id, u.email
-          FROM sessions s
-          JOIN users u ON u.email = s.sess->'passport'->'user'->'claims'->>'email'
-          WHERE s.expire > NOW()
-            AND s.sess->'passport'->'user'->'claims'->>'sub' IS NOT NULL
-            AND s.sess->'passport'->'user'->'claims'->>'sub' != u.id
-        `);
-        const rows = (mismatchedRows.rows ?? mismatchedRows) as any[];
-        let patched = 0;
-        for (const row of rows) {
-          const sess = typeof row.sess === "string" ? JSON.parse(row.sess) : row.sess;
-          const oldId = sess?.passport?.user?.claims?.sub;
-          if (sess?.passport?.user?.claims) {
-            sess.passport.user.claims.sub = row.real_id;
-          }
-          await db.execute(sql`
-            UPDATE sessions SET sess = ${JSON.stringify(sess)}::jsonb WHERE sid = ${row.sid}
-          `);
-          patched++;
-          console.log(`[SessionMerge] ${row.email}: ${oldId} → ${row.real_id}`);
-        }
-        if (patched > 0) {
-          console.log(`[SessionMerge] ✓ Patched ${patched} mismatched session(s) at startup`);
-        }
-      } catch (mergeErr: any) {
-        console.warn("[SessionMerge] Startup merge failed (non-fatal):", mergeErr?.message);
+  // ── Startup: patch mismatched sessions ───────────────────────────────
+  // Was previously nested inside the httpServer.listen() callback; moved
+  // here so it runs alongside the other background-startup work without
+  // blocking the port binding above.
+  //
+  // Fix sessions where a user registered via email/password then later
+  // signed in via Replit OIDC — the OIDC claims.sub won't match their
+  // real DB user ID, so we update the sessions table directly.
+  try {
+    const mismatchedRows = await db.execute(sql`
+      SELECT s.sid, s.sess, u.id AS real_id, u.email
+      FROM sessions s
+      JOIN users u ON u.email = s.sess->'passport'->'user'->'claims'->>'email'
+      WHERE s.expire > NOW()
+        AND s.sess->'passport'->'user'->'claims'->>'sub' IS NOT NULL
+        AND s.sess->'passport'->'user'->'claims'->>'sub' != u.id
+    `);
+    const rows = (mismatchedRows.rows ?? mismatchedRows) as any[];
+    let patched = 0;
+    for (const row of rows) {
+      const sess = typeof row.sess === "string" ? JSON.parse(row.sess) : row.sess;
+      const oldId = sess?.passport?.user?.claims?.sub;
+      if (sess?.passport?.user?.claims) {
+        sess.passport.user.claims.sub = row.real_id;
       }
-  });
+      await db.execute(sql`
+        UPDATE sessions SET sess = ${JSON.stringify(sess)}::jsonb WHERE sid = ${row.sid}
+      `);
+      patched++;
+      console.log(`[SessionMerge] ${row.email}: ${oldId} → ${row.real_id}`);
+    }
+    if (patched > 0) {
+      console.log(`[SessionMerge] ✓ Patched ${patched} mismatched session(s) at startup`);
+    }
+  } catch (mergeErr: any) {
+    console.warn("[SessionMerge] Startup merge failed (non-fatal):", mergeErr?.message);
+  }
 
   // ── Graceful shutdown ────────────────────────────────────────────────────────
   // Drain connections cleanly when Replit / container sends SIGTERM (deploy / restart).
