@@ -1112,15 +1112,16 @@ export class DatabaseStorage implements IStorage {
 
   // Expire any payments still in "awaiting_payment" after the cutoff window.
   // Returns the full list of expired records so callers can send user notifications.
+  // NOTE: ISO-string binding — see comment in checkNotificationExists.
   async expireStalePayments(olderThanMinutes = 15): Promise<Payment[]> {
-    const cutoff = new Date(Date.now() - olderThanMinutes * 60 * 1000);
+    const cutoffIso = new Date(Date.now() - olderThanMinutes * 60 * 1000).toISOString();
     const expired = await db
       .update(payments)
       .set({ status: "expired", updatedAt: new Date() })
       .where(
         and(
           eq(payments.status, "awaiting_payment"),
-          sql`${payments.createdAt} < ${cutoff}`
+          sql`${payments.createdAt} < ${cutoffIso}`
         )
       )
       .returning();
@@ -1128,13 +1129,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAbandonedOrders(minMinutes = 60, maxHours = 48): Promise<ServiceOrder[]> {
-    const minCutoff = new Date(Date.now() - minMinutes * 60 * 1000);
-    const maxCutoff = new Date(Date.now() - maxHours * 60 * 60 * 1000);
+    const minCutoffIso = new Date(Date.now() - minMinutes * 60 * 1000).toISOString();
+    const maxCutoffIso = new Date(Date.now() - maxHours * 60 * 60 * 1000).toISOString();
     return db.select().from(serviceOrders).where(
       and(
         eq(serviceOrders.status, "pending_payment"),
-        sql`${serviceOrders.createdAt} <= ${minCutoff}`,
-        sql`${serviceOrders.createdAt} >= ${maxCutoff}`,
+        sql`${serviceOrders.createdAt} <= ${minCutoffIso}`,
+        sql`${serviceOrders.createdAt} >= ${maxCutoffIso}`,
         isNull(serviceOrders.abandonedCartAlertSentAt),
       )
     ).orderBy(desc(serviceOrders.createdAt));
@@ -1147,14 +1148,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async expireStaleServiceOrders(olderThanHours = 48): Promise<ServiceOrder[]> {
-    const cutoff = new Date(Date.now() - olderThanHours * 60 * 60 * 1000);
+    const cutoffIso = new Date(Date.now() - olderThanHours * 60 * 60 * 1000).toISOString();
     const expired = await db
       .update(serviceOrders)
       .set({ status: "expired", updatedAt: new Date() })
       .where(
         and(
           eq(serviceOrders.status, "pending_payment"),
-          sql`${serviceOrders.updatedAt} < ${cutoff}`
+          sql`${serviceOrders.updatedAt} < ${cutoffIso}`
         )
       )
       .returning();
@@ -2290,14 +2291,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAgencyStats(): Promise<{ total: number; valid: number; expired: number }> {
-    const now = new Date();
+    const nowIso = new Date().toISOString();
     const [totalRow] = await db.select({ count: sql<number>`count(*)` })
       .from(neaAgencies).where(eq(neaAgencies.isPublished, true));
     const [expiredRow] = await db.select({ count: sql<number>`count(*)` })
       .from(neaAgencies).where(
         and(
           eq(neaAgencies.isPublished, true),
-          sql`${neaAgencies.expiryDate} < ${now}`
+          sql`${neaAgencies.expiryDate} < ${nowIso}`
         )
       );
     const total = Number(totalRow?.count ?? 0);
@@ -2433,14 +2434,19 @@ export class DatabaseStorage implements IStorage {
     startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date(date);
     endOfDay.setHours(23, 59, 59, 999);
-    
+
+    // NOTE: Always interpolate Date params as ISO strings. The postgres-js
+    // driver (3.4.9) can raise `ERR_INVALID_ARG_TYPE` inside its Bind path
+    // when a Date object reaches `reset.str` without explicit type
+    // negotiation — converting to ISO 8601 sidesteps the issue and is
+    // accepted natively by PostgreSQL timestamp/timestamptz columns.
     const result = await db.select({ count: sql<number>`count(*)` })
       .from(agencyNotifications)
       .where(and(
         eq(agencyNotifications.agencyId, agencyId),
         eq(agencyNotifications.type, type),
-        sql`${agencyNotifications.createdAt} >= ${startOfDay}`,
-        sql`${agencyNotifications.createdAt} <= ${endOfDay}`
+        sql`${agencyNotifications.createdAt} >= ${startOfDay.toISOString()}`,
+        sql`${agencyNotifications.createdAt} <= ${endOfDay.toISOString()}`
       ));
     return Number(result[0]?.count ?? 0) > 0;
   }
@@ -2454,22 +2460,22 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getActiveAddOnsByType(addOnType: string): Promise<AgencyAddOn[]> {
-    const now = new Date();
+    const nowIso = new Date().toISOString();
     return db.select().from(agencyAddOns).where(and(
       eq(agencyAddOns.addOnType, addOnType),
       eq(agencyAddOns.isActive, true),
-      sql`${agencyAddOns.startDate} <= ${now}`,
-      sql`${agencyAddOns.endDate} >= ${now}`
+      sql`${agencyAddOns.startDate} <= ${nowIso}`,
+      sql`${agencyAddOns.endDate} >= ${nowIso}`
     ));
   }
 
   async getAgencyActiveAddOns(agencyId: string): Promise<AgencyAddOn[]> {
-    const now = new Date();
+    const nowIso = new Date().toISOString();
     return db.select().from(agencyAddOns).where(and(
       eq(agencyAddOns.agencyId, agencyId),
       eq(agencyAddOns.isActive, true),
-      sql`${agencyAddOns.startDate} <= ${now}`,
-      sql`${agencyAddOns.endDate} >= ${now}`
+      sql`${agencyAddOns.startDate} <= ${nowIso}`,
+      sql`${agencyAddOns.endDate} >= ${nowIso}`
     ));
   }
 
@@ -3340,14 +3346,16 @@ export class DatabaseStorage implements IStorage {
   async getConversionFunnel(startDate: Date, endDate: Date): Promise<{ step: string; count: number; percentage: number }[]> {
     const steps = ['landing_view', 'signup', 'payment_started', 'payment_completed', 'dashboard_access'];
     const results: { step: string; count: number; percentage: number }[] = [];
-    
+    const startIso = startDate.toISOString();
+    const endIso = endDate.toISOString();
+
     for (const step of steps) {
       const [result] = await db.select({ count: sql<number>`count(distinct ${conversionEvents.sessionId})` })
         .from(conversionEvents)
         .where(and(
           eq(conversionEvents.funnelStep, step),
-          sql`${conversionEvents.completedAt} >= ${startDate}`,
-          sql`${conversionEvents.completedAt} <= ${endDate}`
+          sql`${conversionEvents.completedAt} >= ${startIso}`,
+          sql`${conversionEvents.completedAt} <= ${endIso}`
         ));
       
       results.push({
@@ -3367,6 +3375,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getTopPages(startDate: Date, endDate: Date, limit: number): Promise<{ page: string; views: number }[]> {
+    const startIso = startDate.toISOString();
+    const endIso = endDate.toISOString();
     const result = await db.select({
       page: analyticsEvents.page,
       views: sql<number>`count(*)::int`
@@ -3374,8 +3384,8 @@ export class DatabaseStorage implements IStorage {
     .from(analyticsEvents)
     .where(and(
       eq(analyticsEvents.eventType, 'page_view'),
-      sql`${analyticsEvents.createdAt} >= ${startDate}`,
-      sql`${analyticsEvents.createdAt} <= ${endDate}`
+      sql`${analyticsEvents.createdAt} >= ${startIso}`,
+      sql`${analyticsEvents.createdAt} <= ${endIso}`
     ))
     .groupBy(analyticsEvents.page)
     .orderBy(sql`count(*) desc`)
@@ -3388,14 +3398,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getDeviceBreakdown(startDate: Date, endDate: Date): Promise<{ device: string; count: number; percentage: number }[]> {
+    const startIso = startDate.toISOString();
+    const endIso = endDate.toISOString();
     const result = await db.select({
       device: analyticsEvents.deviceType,
       count: sql<number>`count(distinct ${analyticsEvents.sessionId})::int`
     })
     .from(analyticsEvents)
     .where(and(
-      sql`${analyticsEvents.createdAt} >= ${startDate}`,
-      sql`${analyticsEvents.createdAt} <= ${endDate}`
+      sql`${analyticsEvents.createdAt} >= ${startIso}`,
+      sql`${analyticsEvents.createdAt} <= ${endIso}`
     ))
     .groupBy(analyticsEvents.deviceType);
     
@@ -3415,15 +3427,17 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getActiveUsers(minutes: number): Promise<number> {
-    const cutoff = new Date(Date.now() - minutes * 60 * 1000);
+    const cutoffIso = new Date(Date.now() - minutes * 60 * 1000).toISOString();
     const [result] = await db.select({ count: sql<number>`count(distinct ${analyticsEvents.sessionId})::int` })
       .from(analyticsEvents)
-      .where(sql`${analyticsEvents.createdAt} >= ${cutoff}`);
-    
+      .where(sql`${analyticsEvents.createdAt} >= ${cutoffIso}`);
+
     return Number(result?.count || 0);
   }
 
   async getEventsByCategory(startDate: Date, endDate: Date, category?: string): Promise<{ category: string; eventName: string; count: number }[]> {
+    const startIso = startDate.toISOString();
+    const endIso = endDate.toISOString();
     let query = db.select({
       category: analyticsEvents.eventCategory,
       eventName: analyticsEvents.eventName,
@@ -3431,8 +3445,8 @@ export class DatabaseStorage implements IStorage {
     })
     .from(analyticsEvents)
     .where(and(
-      sql`${analyticsEvents.createdAt} >= ${startDate}`,
-      sql`${analyticsEvents.createdAt} <= ${endDate}`,
+      sql`${analyticsEvents.createdAt} >= ${startIso}`,
+      sql`${analyticsEvents.createdAt} <= ${endIso}`,
       category ? eq(analyticsEvents.eventCategory, category) : sql`1=1`
     ))
     .groupBy(analyticsEvents.eventCategory, analyticsEvents.eventName)
@@ -3670,13 +3684,14 @@ export class DatabaseStorage implements IStorage {
     const endOfDay = new Date(date);
     endOfDay.setHours(23, 59, 59, 999);
 
+    // Bind dates as ISO strings (see comment in checkNotificationExists).
     const [existing] = await db.select({ count: sql<number>`count(*)` })
       .from(licenseReminderLogs)
       .where(and(
         eq(licenseReminderLogs.agencyId, agencyId),
         eq(licenseReminderLogs.reminderTier, reminderTier),
-        sql`${licenseReminderLogs.createdAt} >= ${startOfDay}`,
-        sql`${licenseReminderLogs.createdAt} <= ${endOfDay}`,
+        sql`${licenseReminderLogs.createdAt} >= ${startOfDay.toISOString()}`,
+        sql`${licenseReminderLogs.createdAt} <= ${endOfDay.toISOString()}`,
       ));
     return Number(existing?.count || 0) > 0;
   }
@@ -3951,58 +3966,68 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getTopSuspiciousIPs(since: Date, limit = 10): Promise<{ ipAddress: string; totalRiskPoints: number; eventCount: number; eventTypes: string[] }[]> {
-    const rows = await db.execute(sql`
+    // Bind `since` as an ISO string — postgres-js 3.4.9 throws
+    // ERR_INVALID_ARG_TYPE in Buffer.byteLength inside its Bind path
+    // when a Date arrives without explicit type negotiation.
+    const sinceIso = since.toISOString();
+    const rows: any = await db.execute(sql`
       SELECT
         ip_address AS "ipAddress",
         SUM(risk_points)::int AS "totalRiskPoints",
         COUNT(*)::int AS "eventCount",
         ARRAY_AGG(DISTINCT event_type)::text[] AS "eventTypes"
       FROM security_events
-      WHERE ip_address IS NOT NULL AND created_at >= ${since}
+      WHERE ip_address IS NOT NULL AND created_at >= ${sinceIso}
       GROUP BY ip_address
       ORDER BY SUM(risk_points) DESC
       LIMIT ${limit}
     `);
-    return rows.rows as any;
+    // postgres-js returns a RowList (array-like). pg returns { rows: [...] }.
+    // Support both so the function works whether db is wired to postgres-js or pg.
+    return (rows.rows ?? rows) as any;
   }
 
   async getHighRiskUsers(since: Date, limit = 10): Promise<{ userId: string; totalRiskPoints: number; eventCount: number; eventTypes: string[] }[]> {
-    const rows = await db.execute(sql`
+    const sinceIso = since.toISOString();
+    const rows: any = await db.execute(sql`
       SELECT
         user_id AS "userId",
         SUM(risk_points)::int AS "totalRiskPoints",
         COUNT(*)::int AS "eventCount",
         ARRAY_AGG(DISTINCT event_type)::text[] AS "eventTypes"
       FROM security_events
-      WHERE user_id IS NOT NULL AND created_at >= ${since}
+      WHERE user_id IS NOT NULL AND created_at >= ${sinceIso}
       GROUP BY user_id
       ORDER BY SUM(risk_points) DESC
       LIMIT ${limit}
     `);
-    return rows.rows as any;
+    return (rows.rows ?? rows) as any;
   }
 
   async getSecurityEventStats(since: Date): Promise<{ totalEvents: number; totalRiskPoints: number; uniqueIPs: number; uniqueUsers: number; byType: Record<string, number> }> {
-    const totalsResult = await db.execute(sql`
+    const sinceIso = since.toISOString();
+    const totalsResult: any = await db.execute(sql`
       SELECT
         COUNT(*)::int AS "totalEvents",
         COALESCE(SUM(risk_points), 0)::int AS "totalRiskPoints",
         COUNT(DISTINCT ip_address)::int AS "uniqueIPs",
         COUNT(DISTINCT user_id)::int AS "uniqueUsers"
       FROM security_events
-      WHERE created_at >= ${since}
+      WHERE created_at >= ${sinceIso}
     `);
-    const t = (totalsResult.rows[0] ?? {}) as Record<string, number>;
+    const totalsRows = (totalsResult.rows ?? totalsResult) as any[];
+    const t = (totalsRows[0] ?? {}) as Record<string, number>;
 
-    const typeResult = await db.execute(sql`
+    const typeResult: any = await db.execute(sql`
       SELECT event_type AS "eventType", COUNT(*)::int AS cnt
       FROM security_events
-      WHERE created_at >= ${since}
+      WHERE created_at >= ${sinceIso}
       GROUP BY event_type
     `);
+    const typeRows = (typeResult.rows ?? typeResult) as any[];
 
     const byType: Record<string, number> = {};
-    for (const row of (typeResult.rows as any[])) {
+    for (const row of typeRows) {
       byType[row.eventType] = row.cnt;
     }
 
@@ -4016,7 +4041,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async pruneOldSecurityEvents(olderThan: Date): Promise<number> {
-    const result = await db.delete(securityEvents).where(sql`${securityEvents.createdAt} < ${olderThan}`);
+    const olderThanIso = olderThan.toISOString();
+    const result: any = await db.delete(securityEvents).where(sql`${securityEvents.createdAt} < ${olderThanIso}`);
     return result.rowCount ?? 0;
   }
 
@@ -4197,10 +4223,11 @@ export class DatabaseStorage implements IStorage {
   async getRecentComplianceEvents(agencyId: string, monthsBack: number = 12): Promise<AgencyComplianceEvent[]> {
     const cutoffDate = new Date();
     cutoffDate.setMonth(cutoffDate.getMonth() - monthsBack);
+    const cutoffIso = cutoffDate.toISOString();
     return db.select().from(agencyComplianceEvents)
       .where(and(
         eq(agencyComplianceEvents.agencyId, agencyId),
-        sql`${agencyComplianceEvents.createdAt} >= ${cutoffDate}`
+        sql`${agencyComplianceEvents.createdAt} >= ${cutoffIso}`
       ))
       .orderBy(desc(agencyComplianceEvents.createdAt));
   }
@@ -4956,7 +4983,6 @@ export class DatabaseStorage implements IStorage {
     if (existing.length > 0) {
       await db.delete(scamWallLikes).where(eq(scamWallLikes.id, existing[0].id));
       const [updated] = await db.update(scamReports)
-        .set({ likesCount: sql`GREATEST(0, ${scamReports.likesCount} - 1)` })
         .where(eq(scamReports.id, reportId)).returning({ likesCount: scamReports.likesCount });
       return { liked: false, likesCount: updated?.likesCount ?? 0 };
     } else {

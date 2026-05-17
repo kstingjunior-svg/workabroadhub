@@ -1,22 +1,44 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
-const supabaseUrl = process.env.SUPABASE_URL ?? "https://pvsxecrqfexgwspuqvlp.supabase.co";
+// IMPORTANT: use `||` not `??` so empty-string env vars also fall back.
+// On Render, an env var set to "" passes the `??` check and breaks the
+// Supabase client with "Invalid path specified in request URL".
+const RAW_SUPABASE_URL = (process.env.SUPABASE_URL || "https://pvsxecrqfexgwspuqvlp.supabase.co").trim();
+const supabaseUrl = /^https?:\/\//.test(RAW_SUPABASE_URL)
+  ? RAW_SUPABASE_URL.replace(/\/+$/, "")  // strip trailing slashes
+  : "https://pvsxecrqfexgwspuqvlp.supabase.co";
+
+if (RAW_SUPABASE_URL !== supabaseUrl) {
+  console.warn(
+    `[Supabase] SUPABASE_URL was malformed ("${RAW_SUPABASE_URL}") — falling back to "${supabaseUrl}"`
+  );
+}
 
 // Use the service role key on the server — bypasses RLS for trusted server-to-server writes.
 // Falls back to anon key if service key is not yet configured.
 const supabaseKey =
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  process.env.SUPABASE_ANON_KEY ||
+  (process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim() ||
+  (process.env.SUPABASE_ANON_KEY || "").trim() ||
   "";
 
 let _client: SupabaseClient | null = null;
+let _clientInitFailed = false;
 
 function getClient(): SupabaseClient | null {
   if (!supabaseKey) return null;
+  if (_clientInitFailed) return null;
   if (!_client) {
-    _client = createClient(supabaseUrl, supabaseKey, {
-      auth: { persistSession: false },
-    });
+    try {
+      _client = createClient(supabaseUrl, supabaseKey, {
+        auth: { persistSession: false },
+      });
+    } catch (err: any) {
+      _clientInitFailed = true;
+      console.error(
+        `[Supabase] createClient() failed with url="${supabaseUrl}": ${err?.message ?? err}`
+      );
+      return null;
+    }
   }
   return _client;
 }

@@ -48,8 +48,23 @@ async function getOAuthToken(forceRefresh = false): Promise<string> {
   }
 
   try {
+    // Defensive validation — Safaricom returns 400 with an empty body when
+    // the key or secret contains stray whitespace or newlines, which is the
+    // most common production misconfiguration. Catching it locally gives a
+    // much more actionable error than the upstream "OAuth token error: 400 \"\"".
+    if (/\s/.test(consumerKey) || /\s/.test(consumerSecret)) {
+      const err = "MPESA_CONSUMER_KEY or MPESA_CONSUMER_SECRET contains whitespace — re-copy the value from the Daraja portal";
+      _tokenError = err;
+      throw new Error(`[M-Pesa] ${err}`);
+    }
+
     const auth = Buffer.from(`${consumerKey}:${consumerSecret}`).toString("base64");
-    console.log("[M-Pesa] Requesting OAuth token from:", `${MPESA_BASE_URL}/oauth/v1/generate`);
+    console.log(
+      "[M-Pesa] Requesting OAuth token from:",
+      `${MPESA_BASE_URL}/oauth/v1/generate`,
+      "| keyLen:", consumerKey.length,
+      "| secretLen:", consumerSecret.length
+    );
 
     const tokenRes = await axios.get(
       `${MPESA_BASE_URL}/oauth/v1/generate?grant_type=client_credentials`,
@@ -63,9 +78,22 @@ async function getOAuthToken(forceRefresh = false): Promise<string> {
     console.log(`[M-Pesa] OAuth token obtained — expires in ${Math.round(expiresIn / 60000)} min`);
     return token;
   } catch (err: any) {
-    const msg = err.response?.data?.errorMessage || err.response?.data?.error_description || err.message || "Token request failed";
+    // Safaricom's 400 response is often empty — surface enough context that a
+    // human can act on it (status + headers + first 200 chars of body).
+    const status = err.response?.status;
+    const data = err.response?.data;
+    const bodySnippet = typeof data === "string"
+      ? data.slice(0, 200)
+      : JSON.stringify(data ?? {}).slice(0, 200);
+    const wwwAuth = err.response?.headers?.["www-authenticate"];
+    const msg = data?.errorMessage || data?.error_description || err.message || "Token request failed";
     _tokenError = msg;
-    console.error("[M-Pesa] OAuth token error:", err.response?.status, JSON.stringify(err.response?.data));
+    console.error(
+      `[M-Pesa] OAuth token error: status=${status ?? "n/a"} body=${bodySnippet || "<empty>"}` +
+      (wwwAuth ? ` | www-authenticate="${wwwAuth}"` : "") +
+      ` | keyLen=${consumerKey.length} secretLen=${consumerSecret.length}` +
+      ` | hint=${status === 400 ? "double-check MPESA_CONSUMER_KEY / MPESA_CONSUMER_SECRET in Render env (sandbox keys ≠ production keys)" : ""}`
+    );
     throw err;
   }
 }
