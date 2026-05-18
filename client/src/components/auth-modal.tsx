@@ -392,19 +392,6 @@ export function AuthModal({
 
               <div>
                 {serverError}
-
-                {serverError.includes(
-                  "Replit"
-                ) && (
-                  <a
-                    href="/api/login"
-                    className="flex items-center gap-1 mt-1 font-medium underline"
-                  >
-                    Continue with Replit
-
-                    <ExternalLink className="h-3 w-3" />
-                  </a>
-                )}
               </div>
             </div>
           )}
@@ -578,42 +565,6 @@ export function AuthModal({
               "Create Free Account"
             )}
           </Button>
-
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t border-border" />
-            </div>
-
-            <div className="relative flex justify-center text-xs text-muted-foreground">
-              <span className="bg-background px-2">
-                or
-              </span>
-            </div>
-          </div>
-
-          <a
-            href="/api/login"
-            onClick={() => {
-              const dest =
-                redirectPath || "";
-
-              if (
-                dest &&
-                dest !== "/" &&
-                dest !== "/dashboard"
-              ) {
-                localStorage.setItem(
-                  "auth_redirect",
-                  dest
-                );
-              }
-            }}
-            className="flex items-center justify-center gap-2 w-full h-10 rounded-lg border border-border text-sm text-muted-foreground hover:bg-muted transition-colors"
-            data-testid="btn-replit-login"
-          >
-            <ExternalLink className="h-3.5 w-3.5" />
-            Continue with Replit
-          </a>
 
           <p className="text-center text-sm text-muted-foreground">
             {tab === "login" ? (

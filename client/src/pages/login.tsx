@@ -386,18 +386,6 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div className="my-6 text-center text-sm text-gray-500">
-            or
-          </div>
-
-          <a
-            href="/api/login"
-            className="flex items-center justify-center gap-2 w-full border rounded p-3"
-          >
-            <ExternalLink className="h-4 w-4" />
-            Continue with Replit
-          </a>
-
         </div>
       </div>
     </div>

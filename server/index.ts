@@ -296,7 +296,7 @@ app.use((req, res, next) => {
     // registerRoutes(app)
     // NOT registerRoutes(httpServer, app)
 
-    await registerRoutes(app);
+    await registerRoutes(httpServer, app);
 
     // ────────────────────────────────────────────────────────────────────────
     // BACKGROUND STARTUP TASKS (NON-BLOCKING)
