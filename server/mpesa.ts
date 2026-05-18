@@ -2,7 +2,16 @@ import axios from "axios";
 import moment from "moment";
 import { mpesaCircuitBreaker, mpesaB2CCircuitBreaker, CircuitBreakerOpenError } from "./circuit-breaker";
 
-const MPESA_BASE_URL = "https://sandbox.safaricom.co.ke";
+// Switch between Daraja production and sandbox via the MPESA_ENV env var.
+// Acceptable values (case-insensitive): "production" | "prod" | "live"  →  api.safaricom.co.ke
+//                                       anything else (or unset)         →  sandbox.safaricom.co.ke
+// Alternatively, set MPESA_BASE_URL explicitly to override both.
+const _mpesaEnv = (process.env.MPESA_ENV || "").trim().toLowerCase();
+const _isProd = ["production", "prod", "live"].includes(_mpesaEnv);
+const MPESA_BASE_URL = (process.env.MPESA_BASE_URL || "").trim() || (
+  _isProd ? "https://api.safaricom.co.ke" : "https://sandbox.safaricom.co.ke"
+);
+console.log(`[M-Pesa] Environment: ${_isProd ? "PRODUCTION" : "SANDBOX"} | base=${MPESA_BASE_URL}`);
 export function getCallbackBaseUrl(): string {
   if (process.env.MPESA_CALLBACK_URL) {
     const url = new URL(process.env.MPESA_CALLBACK_URL);
@@ -91,8 +100,8 @@ async function getOAuthToken(forceRefresh = false): Promise<string> {
     console.error(
       `[M-Pesa] OAuth token error: status=${status ?? "n/a"} body=${bodySnippet || "<empty>"}` +
       (wwwAuth ? ` | www-authenticate="${wwwAuth}"` : "") +
-      ` | keyLen=${consumerKey.length} secretLen=${consumerSecret.length}` +
-      ` | hint=${status === 400 ? "double-check MPESA_CONSUMER_KEY / MPESA_CONSUMER_SECRET in Render env (sandbox keys ≠ production keys)" : ""}`
+      ` | env=${_isProd ? "PRODUCTION" : "SANDBOX"} keyLen=${consumerKey.length} secretLen=${consumerSecret.length}` +
+      ` | hint=${status === 400 ? `400 from Daraja means the consumer key/secret aren't valid for the ${_isProd ? "PRODUCTION (api.safaricom.co.ke)" : "SANDBOX (sandbox.safaricom.co.ke)"} environment. Make sure the MPESA_CONSUMER_KEY / MPESA_CONSUMER_SECRET in Render belong to your Go-Live app (not a sandbox app), and that MPESA_ENV=production is set.` : ""}`
     );
     throw err;
   }
