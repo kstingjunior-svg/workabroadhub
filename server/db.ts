@@ -1,7 +1,13 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import pkg from "pg";
 
-import { users, payments, subscriptions } from "../shared/schema";
+// Note: `subscriptions` used to be imported here but that symbol doesn't
+// exist on the schema (the real export is `userSubscriptions`). Pulling in
+// an undefined name caused the Drizzle schema map to be `{ subscriptions: undefined }`,
+// which sometimes broke relational query plumbing. Using a wildcard import
+// gives Drizzle the entire schema in one shot and stays correct even when
+// new tables are added.
+import * as schema from "../shared/schema";
 
 const { Pool } = pkg;
 
@@ -20,6 +26,4 @@ export const pool = new Pool({
   },
 });
 
-export const db = drizzle(pool, {
-  schema: { users, payments, subscriptions },
-});
+export const db = drizzle(pool, { schema });

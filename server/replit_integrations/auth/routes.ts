@@ -109,7 +109,20 @@ export function registerAuthRoutes(app: Express) {
     }
     const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
     if (!user) {
-      return res.status(404).json({ message: "User not found" });
+      // Stale session — the row that customUserId pointed at is gone.
+      // Destroy the session so the client gets a clean login next time,
+      // and return 401 (not 404) so the auth hook treats it as logged-out
+      // instead of "user missing" (which used to bounce the modal back).
+      const sess = req.session as any;
+      if (sess && typeof sess.destroy === "function") {
+        sess.destroy(() => {
+          res.clearCookie("connect.sid");
+          res.status(401).json({ message: "Session expired. Please sign in again." });
+        });
+      } else {
+        res.status(401).json({ message: "Session expired. Please sign in again." });
+      }
+      return;
     }
     res.json(user);
   });
