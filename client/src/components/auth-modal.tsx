@@ -566,6 +566,18 @@ export function AuthModal({
             )}
           </Button>
 
+          {tab === "login" && (
+            <p className="text-center text-sm text-muted-foreground -mt-1">
+              <a
+                href="/forgot-password"
+                className="text-primary hover:underline"
+                data-testid="link-forgot-password"
+              >
+                Forgot your password?
+              </a>
+            </p>
+          )}
+
           <p className="text-center text-sm text-muted-foreground">
             {tab === "login" ? (
               <>

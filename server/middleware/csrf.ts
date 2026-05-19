@@ -26,6 +26,11 @@ const CSRF_EXEMPT = new Set([
   // Passive telemetry — no destructive state changes
   "/api/track-live",
   "/api/track-event",
+  // Password recovery — protected by the one-time email token, not by session.
+  // CSRF doesn't add real security here (the token IS the authorization);
+  // rate limiting handles the only abuse vector (email spam).
+  "/api/auth/forgot-password",
+  "/api/auth/reset-password",
 ]);
 
 function isCsrfExempt(path: string): boolean {

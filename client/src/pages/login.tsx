@@ -384,6 +384,18 @@ export default function LoginPage() {
                 "Create Account"
               )}
             </button>
+
+            {tab === "signin" && (
+              <div className="text-center text-sm">
+                <a
+                  href="/forgot-password"
+                  className="text-[#1d4ed8] hover:underline"
+                  data-testid="link-forgot-password"
+                >
+                  Forgot your password?
+                </a>
+              </div>
+            )}
           </form>
 
         </div>

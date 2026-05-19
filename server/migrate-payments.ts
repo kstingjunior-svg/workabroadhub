@@ -48,6 +48,25 @@ export async function ensurePaymentColumns(): Promise<void> {
       )`,
     },
     { name: "payments.delivery_status",      sql: `ALTER TABLE payments ADD COLUMN IF NOT EXISTS delivery_status VARCHAR` },
+    {
+      name: "password_reset_tokens_table",
+      sql: `CREATE TABLE IF NOT EXISTS password_reset_tokens (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id VARCHAR NOT NULL,
+        token VARCHAR(128) NOT NULL UNIQUE,
+        expires_at TIMESTAMP NOT NULL,
+        used_at TIMESTAMP,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      )`,
+    },
+    {
+      name: "password_reset_tokens_token_idx",
+      sql: `CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_token ON password_reset_tokens(token)`,
+    },
+    {
+      name: "password_reset_tokens_user_idx",
+      sql: `CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user ON password_reset_tokens(user_id)`,
+    },
   ];
 
   let applied = 0;
