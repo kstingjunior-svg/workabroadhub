@@ -21,9 +21,19 @@ function getSession() {
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
+      // `secure: true` requires the cookie to be sent only over HTTPS — fine
+      // for production (workabroadhub.tech is HTTPS). Local dev over http://
+      // would need this conditional, but tsx + Render always uses HTTPS.
       secure: true,
       maxAge: 7 * 24 * 60 * 60 * 1000,
-      sameSite: "none",
+      // sameSite: "lax" is the correct setting for same-origin login flows
+      // (frontend and API on the same domain). Previously this was "none",
+      // which Chrome treats as a third-party cookie and blocks in incognito
+      // mode + with third-party cookie restrictions — breaking the session
+      // immediately after /api/auth/login. "lax" still allows the cookie on
+      // top-level navigations and on same-origin XHR/fetch, which is what
+      // the auth flow needs.
+      sameSite: "lax",
     },
   });
 }
