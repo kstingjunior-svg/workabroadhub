@@ -218,11 +218,25 @@ export default function LoginPage() {
           : "Signed in! Redirecting..."
       );
 
-      queryClient.clear();
+      // Pre-fetch the authenticated user so the dashboard mounts
+      // already-authenticated and doesn't bounce back to /login.
+      try {
+        const userRes = await fetch(`${apiBase}/api/auth/user`, {
+          credentials: "include",
+        });
+        if (userRes.ok) {
+          const userData = await userRes.json();
+          queryClient.setQueryData(["/api/auth/user"], userData);
+        } else {
+          queryClient.clear();
+        }
+      } catch {
+        queryClient.clear();
+      }
 
       setTimeout(() => {
         navigate(redirectTo, { replace: true });
-      }, 700);
+      }, 300);
     } catch (err) {
       console.error(err);
 

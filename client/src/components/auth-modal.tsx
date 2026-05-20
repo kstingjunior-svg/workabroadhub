@@ -268,28 +268,38 @@ export function AuthModal({
           : "Signed in! Redirecting…"
       );
 
-      queryClient.clear();
-
       sessionStorage.clear();
+
+      // Pre-populate the auth-user query cache so the dashboard mounts
+      // already-authenticated. Wait for one round-trip to confirm the
+      // server-side session is readable from this tab (handles the rare
+      // case where the Set-Cookie hasn't been applied yet).
+      try {
+        const userRes = await fetch(`${apiBase}/api/auth/user`, {
+          credentials: "include",
+        });
+        if (userRes.ok) {
+          const userData = await userRes.json();
+          queryClient.setQueryData(["/api/auth/user"], userData);
+        } else {
+          queryClient.clear();
+        }
+      } catch {
+        queryClient.clear();
+      }
 
       setTimeout(() => {
         onClose();
-
         resetForm();
 
         const dest =
           redirectPath ||
-          localStorage.getItem(
-            "auth_redirect"
-          ) ||
+          localStorage.getItem("auth_redirect") ||
           "/dashboard";
 
-        localStorage.removeItem(
-          "auth_redirect"
-        );
-
+        localStorage.removeItem("auth_redirect");
         navigate(dest);
-      }, 800);
+      }, 400);
     } catch {
       setServerError(
         "Network error. Please check your connection and try again."
