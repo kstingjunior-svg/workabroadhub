@@ -12,7 +12,7 @@ import { SuccessStoriesSection } from "@/components/success-stories-section";
 import { AdvisorsSection } from "@/components/advisors-section";
 import { PlatformStatsSection } from "@/components/platform-stats-section";
 import { trackLandingView, trackButtonClick } from "@/lib/analytics";
-import { useLocation } from "wouter";   // landing-page now navigates instead of opening a modal
+import { AuthModal } from "@/components/auth-modal";
 import { useToast } from "@/hooks/use-toast";
 import { useFirebasePresence } from "@/hooks/use-firebase-presence";
 import { useVerifiedSuccessStories } from "@/lib/firebase-success-stories";
@@ -21,15 +21,13 @@ import SubmitForReviewModal from "@/components/submit-for-review-modal";
 export default function Landing() {
   const { t } = useTranslation();
   const { toast } = useToast();
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authModalTab, setAuthModalTab] = useState<"login" | "signup">("signup");
+  const [authRedirectPath, setAuthRedirectPath] = useState<string | undefined>(undefined);
   const [submitModalOpen, setSubmitModalOpen] = useState(false);
-  const [, navigate] = useLocation();
 
-  // Single source of truth for auth UI: the standalone /login + /signup pages.
-  // No more popup modal — eliminates the post-login bounce loop via
-  // ProtectedRedirect that used to send users to /login after the modal
-  // navigated them to /dashboard.
-  const openSignUp = () => { navigate("/signup"); };
-  const openLogin  = () => { navigate("/login"); };
+  const openSignUp = () => { setAuthModalTab("signup"); setAuthModalOpen(true); };
+  const openLogin = () => { setAuthModalTab("login"); setAuthModalOpen(true); };
 
   const { data: agencyStats } = useQuery<{ total: number; valid: number; expired: number; lastUpdated: string }>({
     queryKey: ["/api/agencies/stats"],
@@ -94,14 +92,18 @@ export default function Landing() {
         description: "Your account and all data have been permanently erased. Create a new account to get started again.",
         duration: 8000,
       });
-      // Send the user straight to the signup page
-      navigate("/signup");
+      // Open the sign-up modal automatically
+      setAuthModalTab("signup");
+      setAuthModalOpen(true);
     }
-    // Auto-redirect to /login (preserving the original target) when sent here from a protected page
+    // Auto-open login modal when redirected from a protected page
     const redirect = urlParams.get("redirect");
     if (redirect && redirect !== "/" && redirect !== "/dashboard") {
+      setAuthRedirectPath(redirect);
+      setAuthModalTab("login");
+      setAuthModalOpen(true);
+      // Clean the redirect param from the URL bar
       window.history.replaceState({}, "", window.location.pathname);
-      navigate("/login?redirect=" + encodeURIComponent(redirect));
     }
   }, []);
   
@@ -1533,6 +1535,12 @@ export default function Landing() {
         open={submitModalOpen}
         onOpenChange={setSubmitModalOpen}
         defaultType="testimonial"
+      />
+      <AuthModal
+        open={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+        defaultTab={authModalTab}
+        redirectPath={authRedirectPath}
       />
     </div>
   );

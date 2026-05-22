@@ -221,10 +221,13 @@ function SkipLink() {
 function ProtectedRedirect() {
   const [location, navigate] = useLocation();
   useEffect(() => {
+    // The modal lives on the landing page. Send users to / with a
+    // redirect= query param; landing.tsx's effect picks it up and opens
+    // the login modal automatically.
     if (location && location !== "/" && location !== "/dashboard") {
-      navigate("/login?redirect=" + encodeURIComponent(location), { replace: true });
+      navigate("/?redirect=" + encodeURIComponent(location), { replace: true });
     } else {
-      navigate("/login", { replace: true });
+      navigate("/", { replace: true });
     }
   }, []);
   return (
