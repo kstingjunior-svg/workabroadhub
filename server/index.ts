@@ -117,9 +117,11 @@ const allowedOrigins = new Set([
   "https://www.workabroadhub.tech",
   "https://workabroadhub.onrender.com",
   "https://workabroadhub.vercel.app",
-  ...(process.env.REPLIT_DOMAINS?.split(",").map(
-    (d) => `https://${d}`
-  ) || []),
+  // Additional production origins, comma-separated. Set in Render → Environment
+  // when you add new frontend hosts (e.g. a Vercel preview, a custom domain).
+  ...(process.env.ADDITIONAL_CORS_ORIGINS?.split(",")
+    .map((o) => o.trim())
+    .filter(Boolean) || []),
 ].filter(Boolean));
 
 app.use(
@@ -304,11 +306,23 @@ app.use((req, res, next) => {
 
     import("./seed")
       .then(async (m) => {
+        // Existing seeds
         m.seedDatabase?.().catch(console.error);
         m.promoteFirstUserToAdmin?.().catch(console.error);
         m.seedStudentVisas?.().catch(console.error);
         m.seedApplicationPacks?.().catch(console.error);
         m.seedPlans?.().catch(console.error);
+
+        // Restored seeds (Batch C): fraud rules, visa jobs, indexes, NEA sync,
+        // service prices. All non-blocking — failures logged but won't crash
+        // boot.
+        m.seedFraudDetectionRules?.().catch(console.error);
+        m.seedVisaJobs?.().catch(console.error);
+        m.seedUsaVisaJobs?.().catch(console.error);
+        m.ensureIndexes?.().catch(console.error);
+        m.syncNeaAgencies?.().catch(console.error);
+        m.deduplicateNeaAgencies?.().catch(console.error);
+        m.syncServicePrices?.().catch(console.error);
       })
       .catch(console.error);
 
@@ -329,6 +343,23 @@ app.use((req, res, next) => {
     import("./portal-health-checker")
       .then((m) => {
         m.startPortalHealthChecker();
+      })
+      .catch(console.error);
+
+    // Restored (Batch C): security event monitor. Watches for anomalies and
+    // creates security alerts. Safe no-op if no security events occur.
+    import("./security")
+      .then((m) => {
+        m.initSecurityMonitor();
+      })
+      .catch(console.error);
+
+    // Restored (Batch C): background async queue + handlers. Drives CV
+    // processing, email delivery, fraud checks, WhatsApp follow-ups, etc.
+    // Without this, jobs enqueued elsewhere in the app sit forever unprocessed.
+    import("./queue")
+      .then((m) => {
+        m.registerQueueHandlers();
       })
       .catch(console.error);
 
@@ -410,6 +441,25 @@ app.use((req, res, next) => {
           })
         );
 
+        // Restored (Batch C): mirror server errors to Firebase RTDB for
+        // centralized monitoring. Fire-and-forget — Firebase outages must
+        // never block the user response. firebaseRtdb itself catches its
+        // own errors, so we just need to not await it.
+        import("./services/firebaseRtdb")
+          .then((m) =>
+            m.logErrorToFirebase?.({
+              type: err.name || "Error",
+              code: err.status || 500,
+              message: err.message ?? "Unknown error",
+              stack: err.stack,
+              url: req.originalUrl ?? req.path,
+              method: req.method,
+              timestamp: new Date().toISOString(),
+              reqId: (req as any).reqId,
+            })
+          )
+          .catch(() => {});
+
         if (res.headersSent) {
           return;
         }
@@ -426,7 +476,7 @@ app.use((req, res, next) => {
       }
     );
 
-    // ────────────────────────────────────────────────────────────────────────
+    // ───────────────────────────────────────────────────────────────────────
     // DATABASE AUDIT
     // ────────────────────────────────────────────────────────────────────────
 

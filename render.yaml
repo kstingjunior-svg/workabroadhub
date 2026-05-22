@@ -1,0 +1,116 @@
+# Render Blueprint — declarative deployment config.
+# Commit this file to git. Render will read it on deploy.
+# Docs: https://render.com/docs/blueprint-spec
+#
+# Architecture: single Web Service that serves both the API and the built
+# frontend SPA. Vite outputs to dist/public/, tsc outputs to dist/server/,
+# and server/static.ts wires the two together at runtime.
+
+services:
+  - type: web
+    name: workabroadhub
+    runtime: node
+    plan: starter          # adjust to your Render plan
+    region: oregon         # or your chosen region
+
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+
+    # Health check — server/routes.ts exposes /api/health (and the root path
+    # serves index.html, also fine). Render polls this after deploy.
+    healthCheckPath: /api/health
+
+    # NOTE: secrets are NOT committed here. Set them via the Render dashboard
+    # (Environment tab) or `render env set`. The `sync: false` flag here tells
+    # Render to expect a manual value, not to read it from this file.
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: 20.18.0
+
+      # ── Database (Supabase Postgres) ────────────────────────────────────
+      - key: DATABASE_URL
+        sync: false      # postgres:// session-pooler URL from Supabase
+      - key: DB_POOL_MAX
+        value: "20"
+      - key: DB_POOL_MIN
+        value: "2"
+
+      # ── Supabase ────────────────────────────────────────────────────────
+      - key: SUPABASE_URL
+        sync: false      # https://<project>.supabase.co  (no /rest/v1)
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_ANON_KEY
+        sync: false
+
+      # ── Session / auth ──────────────────────────────────────────────────
+      - key: SESSION_SECRET
+        generateValue: true     # Render generates a random value on first deploy
+
+      # ── App URLs ────────────────────────────────────────────────────────
+      - key: APP_URL
+        value: https://workabroadhub.onrender.com
+      - key: ADDITIONAL_CORS_ORIGINS
+        sync: false
+
+      # ── M-Pesa (Safaricom Daraja) ──────────────────────────────────────
+      - key: MPESA_ENV
+        value: production
+      - key: MPESA_BASE_URL
+        value: https://api.safaricom.co.ke
+      - key: MPESA_CONSUMER_KEY
+        sync: false
+      - key: MPESA_CONSUMER_SECRET
+        sync: false
+      - key: MPESA_SHORTCODE
+        sync: false
+      - key: MPESA_PASSKEY
+        sync: false
+      - key: MPESA_CALLBACK_URL
+        sync: false
+
+      # ── External services (set in dashboard) ────────────────────────────
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: AI_INTEGRATIONS_OPENAI_API_KEY
+        sync: false
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_WHATSAPP_NUMBER
+        sync: false
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: PAYPAL_ENV
+        value: live
+      - key: REDIS_URL
+        sync: false       # leave blank if not using Redis
+      - key: FIREBASE_DATABASE_SECRET
+        sync: false       # leave blank if you skipped Firebase error logging
+
+      # ── Email (Gmail SMTP or generic SMTP) ──────────────────────────────
+      - key: GMAIL_USER
+        sync: false
+      - key: GMAIL_APP_PASSWORD
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+
+      # ── Admin ───────────────────────────────────────────────────────────
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_EMAILS
+        sync: false
+      - key: ADMIN_PHONE_NUMBER
+        sync: false

@@ -5239,7 +5239,7 @@ Crawl-delay: 1`);
         success: false,
         message: err.message,
         safaricomError,
-        callbackUrl: `${process.env.APP_URL || `https://${process.env.REPLIT_DOMAINS?.split(",")[0]}`}/api/mpesa/callback`,
+        callbackUrl: `${process.env.APP_URL || "https://workabroadhub.tech"}/api/mpesa/callback`,
         hint: safaricomError?.errorCode === "400.002.02"
           ? "Shortcode not activated for Lipa Na M-Pesa Online (STK Push). Contact Safaricom Business Care: 0722 004 422 or M-PesaBusiness@safaricom.co.ke to activate shortcode for C2B STK Push."
           : safaricomError?.errorCode === "500.001.1001"
@@ -5280,18 +5280,14 @@ Crawl-delay: 1`);
   // GET /api/admin/mpesa/callback-url — verify the callback URL Safaricom is receiving
   app.get("/api/admin/mpesa/callback-url", isAuthenticated, isAdmin, async (req: any, res) => {
     const appUrl = process.env.APP_URL || "";
-    const replitDomains = process.env.REPLIT_DOMAINS || "";
-    const primaryDomain = replitDomains.split(",")[0]?.trim() || "";
-
-    const baseUrl = appUrl || (primaryDomain ? `https://${primaryDomain}` : "https://localhost:5000");
+    const baseUrl = appUrl || "https://localhost:5000";
     const callbackUrl = `${baseUrl}/api/mpesa/callback`;
     const isPublic = callbackUrl.startsWith("https://") && !callbackUrl.includes("localhost");
 
     res.json({
       callbackUrl,
       isPublic,
-      appUrl: appUrl || "(not set — using REPLIT_DOMAINS fallback)",
-      replitDomains: replitDomains || "(not set)",
+      appUrl: appUrl || "(not set — set APP_URL in Render env vars)",
       mpesaEnv: process.env.MPESA_ENV || "production",
       shortcode: process.env.MPESA_SHORTCODE || "4153025",
       warning: !isPublic

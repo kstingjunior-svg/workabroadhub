@@ -8,7 +8,7 @@ export function getSessionParser(): RequestHandler {
   if (!_sessionParser) _sessionParser = getSession();
   return _sessionParser;
 }
-function getSession() {
+export function getSession() {
   return session({
     secret: process.env.SESSION_SECRET!,
     store: new pgStore({
@@ -57,54 +57,6 @@ export async function setupAuth(app: Express) {
   app.use(passport.session());
   passport.serializeUser((user: any, cb) => cb(null, user));
   passport.deserializeUser((user: any, cb) => cb(null, user));
-}
-export function registerAuthRoutes(app: Express) {
-  app.post("/api/auth/register", async (req: any, res) => {
-    try {
-      const { email, password, firstName, lastName } = req.body;
-      if (!email || !password) return res.status(400).json({ message: "Email and password required" });
-      const bcrypt = await import("bcryptjs");
-      const { storage } = await import("../storage");
-      const existing = await storage.getUserByEmail(email);
-      if (existing) return res.status(409).json({ message: "Email already registered" });
-      const hash = await bcrypt.hash(password, 10);
-      const user = await storage.createUser({ email, password: hash, firstName, lastName, authMethod: "email" });
-      (req.session as any).customUserId = user.id;
-      res.json({ id: user.id, email: user.email });
-    } catch (err: any) {
-      res.status(500).json({ message: "Registration failed" });
-    }
-  });
-
-  app.post("/api/auth/login", async (req: any, res) => {
-    try {
-      const { email, password } = req.body;
-      if (!email || !password) return res.status(400).json({ message: "Email and password required" });
-      const bcrypt = await import("bcryptjs");
-      const { storage } = await import("../storage");
-      const user = await storage.getUserByEmail(email);
-      if (!user || !user.password) return res.status(401).json({ message: "Invalid credentials" });
-      const valid = await bcrypt.compare(password, user.password);
-      if (!valid) return res.status(401).json({ message: "Invalid credentials" });
-      (req.session as any).customUserId = user.id;
-      res.json({ id: user.id, email: user.email });
-    } catch (err: any) {
-      res.status(500).json({ message: "Login failed" });
-    }
-  });
-
-  app.post("/api/auth/logout", (req: any, res) => {
-    req.session.destroy(() => res.json({ success: true }));
-  });
-
-  app.get("/api/auth/user", async (req: any, res) => {
-    const userId = (req.session as any).customUserId;
-    if (!userId) return res.status(401).json({ message: "Not authenticated" });
-    const { storage } = await import("../storage");
-    const user = await storage.getUserById(userId);
-    if (!user) return res.status(404).json({ message: "User not found" });
-    res.json(user);
-  });
 }
 export const isAuthenticated: RequestHandler = async (req, res, next) => {
   const customUserId = (req.session as any).customUserId as string | undefined;

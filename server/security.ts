@@ -238,7 +238,7 @@ async function runSecurityScan(): Promise<void> {
 function runInfrastructureCheck(): void {
   const checks = {
     nodeEnv: process.env.NODE_ENV,
-    httpsEnforced: process.env.NODE_ENV === "production" || Boolean(process.env.REPL_SLUG ?? process.env.REPL_ID),
+    httpsEnforced: process.env.NODE_ENV === "production",
     sessionSecretSet: Boolean(process.env.SESSION_SECRET),
     mpesaKeysSet: Boolean(process.env.MPESA_CONSUMER_KEY && process.env.MPESA_CONSUMER_SECRET),
     twilioConfigured: Boolean(process.env.TWILIO_ACCOUNT_SID),

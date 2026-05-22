@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
 import { Copy, Check, Share2, ExternalLink } from "lucide-react";
 import { SiWhatsapp, SiFacebook } from "react-icons/si";
+import { FaLinkedin } from "react-icons/fa";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -75,7 +76,7 @@ export function ReportShareBar({ toolName, reportId }: ReportShareBarProps) {
             className="h-9 text-xs gap-1.5 bg-[#0A66C2] hover:bg-[#0958a8] text-white border-0"
             data-testid="button-share-report-linkedin"
           >
-            <SiLinkedin className="h-3.5 w-3.5" /> LinkedIn
+            <FaLinkedin className="h-3.5 w-3.5" /> LinkedIn
           </Button>
           <Button
             size="sm"

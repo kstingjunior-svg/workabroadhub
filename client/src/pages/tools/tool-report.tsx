@@ -23,6 +23,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { SiWhatsapp, SiFacebook } from "react-icons/si";
+import { FaLinkedin } from "react-icons/fa";
 import { useToast } from "@/hooks/use-toast";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -142,7 +143,7 @@ function ShareBar({ reportUrl, toolName, reportId, views, shares }: { reportUrl:
             className="h-10 text-xs gap-1.5 bg-[#0A66C2] hover:bg-[#0958a8] text-white border-0"
             data-testid="button-share-linkedin"
           >
-            <SiFacebook className="h-4 w-4" /> LinkedIn
+            <FaLinkedin className="h-4 w-4" /> LinkedIn
           </Button>
           <Button
             onClick={handleCopy}

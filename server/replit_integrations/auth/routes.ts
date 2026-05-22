@@ -14,8 +14,8 @@ const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
 function appBaseUrl(): string {
   const explicit = (process.env.APP_URL || "").trim().replace(/\/+$/, "");
   if (explicit) return explicit;
-  const replit = process.env.REPLIT_DOMAINS?.split(",")[0]?.trim();
-  if (replit) return `https://${replit}`;
+  // Production fallback when APP_URL is not configured — used for password
+  // reset email links etc. Set APP_URL in Render → Environment for new hosts.
   return "https://workabroadhub.tech";
 }
 
@@ -50,7 +50,7 @@ export function registerAuthRoutes(app: Express) {
         return res.status(409).json({ message: "An account with that email already exists. Try signing in instead." });
       }
 
-      const passwordHash = await bcrypt.hash(password, 10);
+      const passwordHash = await bcrypt.hash(password, 12);
       const [created] = await db
         .insert(users)
         .values({ email: rawEmail, passwordHash, authMethod: "email", firstName, lastName })
@@ -191,7 +191,7 @@ export function registerAuthRoutes(app: Express) {
         return res.status(400).json({ message: "This reset link has expired. Request a new one." });
       }
 
-      const passwordHash = await bcrypt.hash(password, 10);
+      const passwordHash = await bcrypt.hash(password, 12);
       await pool.query(`UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2`, [passwordHash, row.user_id]);
       await pool.query(`UPDATE password_reset_tokens SET used_at = NOW() WHERE id = $1`, [row.id]);
 

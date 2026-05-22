@@ -18,8 +18,8 @@ export function getCallbackBaseUrl(): string {
     return `${url.protocol}//${url.host}`;
   }
   if (process.env.APP_URL) return process.env.APP_URL;
-  const domains = process.env.REPLIT_DOMAINS?.split(",")[0];
-  if (domains) return `https://${domains}`;
+  // On Render, set APP_URL=https://<your-service>.onrender.com in env vars.
+  // localhost fallback only triggers in dev when nothing is configured.
   return "https://localhost:5000";
 }
 
@@ -180,7 +180,7 @@ export async function stkPush(
     const formattedPhone = formatPhoneNumber(phone);
 
     // Always use the actual running server domain so Safaricom can reach this server.
-    // getCallbackBaseUrl() uses REPLIT_DOMAINS which is the live public URL of this server.
+    // getCallbackBaseUrl() uses APP_URL which is the live public URL of this server.
     // Callers may pass a custom callbackUrl override (e.g. /api/payments/mpesa/callback)
     const callbackUrl = overrideCallbackUrl || `${getCallbackBaseUrl()}/api/mpesa/callback`;
     console.log("[M-Pesa] STK Push → phone:", formattedPhone, "| amount:", amount, "| accountRef:", accountRef, "| callback:", callbackUrl);
