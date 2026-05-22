@@ -72,6 +72,10 @@ function buildRef(code: string | number) {
   return `WAH-${code}-${ts}`;
 }
 
+// Surface the underlying error to the browser console *and* (when
+// clicked) inline on the error page itself. No more hidden shift+click
+// keyboard combo — users can copy the actual error and report it.
+
 export default function ErrorPage({
   type,
   code,
@@ -89,6 +93,23 @@ export default function ErrorPage({
 
   const config = MESSAGES[resolvedType] ?? MESSAGES.general;
   const errorRef = buildRef(resolvedCode);
+
+  // Surface the actual exception to the browser console on every render so
+  // the user / support can immediately see what really happened — and copy
+  // it. Previously this was only available behind shift+click 3x.
+  useEffect(() => {
+    if (error) {
+      console.error(
+        "[ErrorPage] Underlying error\n  type:", resolvedType,
+        "\n  code:", resolvedCode,
+        "\n  ref:", errorRef,
+        "\n  name:", error.name,
+        "\n  message:", error.message,
+        "\n  status:", (error as any).status,
+        "\n  stack:", error.stack,
+      );
+    }
+  }, [error, resolvedType, resolvedCode, errorRef]);
 
   // Auto-retry countdown
   const [countdown, setCountdown] = useState(config.autoRetry ? 5 : 0);

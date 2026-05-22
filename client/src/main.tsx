@@ -30,6 +30,7 @@ if ("serviceWorker" in navigator) {
 
 // Errors that are always safe to ignore — browser quirks, extensions, background blips
 const NOISE_PATTERNS = [
+  // Genuine browser/environment noise — keep ignoring these.
   "resizeobserver",
   "script error",
   "permission denied",
@@ -39,22 +40,18 @@ const NOISE_PATTERNS = [
   "aborterror",
   "abort",
   "cancelled",
-  "network request failed",
-  "failed to fetch",
-  "networkerror",
-  "load failed",
-  "firebase",
-  "elevenlabs",
-  "timeout",
-  "the operation was aborted",
-  "signal is aborted",
-  "failed to connect to websocket",
-  "websocket",
   "vite-hmr",
   "hmr",
-  "cannot read properties of null",
-  "usecontext",
-  "reading 'usecontext'",
+  // NOTE: previously this list also silenced:
+  //   "cannot read properties of null", "usecontext", "reading 'usecontext'",
+  //   "failed to fetch", "load failed", "network request failed",
+  //   "firebase", "elevenlabs", "timeout", "websocket", ...
+  // Those are real application errors (especially the null-property ones,
+  // which are exactly what fires when a service page reads user.firstName
+  // while user is briefly null). Suppressing them meant the actual cause of
+  // the "We're fixing this" loop never reached our error log. Now they get
+  // logged so we can diagnose the real failure instead of treating every
+  // crash as background noise.
 ];
 
 // Chunk-load failures — Vite lazy imports that can't be fetched (new deploy, CDN miss)

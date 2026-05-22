@@ -42,11 +42,15 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     this.setState({ errorInfo });
-    console.error(
-      "[ErrorBoundary] Caught:",
-      { name: error.name, message: error.message, status: (error as any).status },
-      errorInfo
-    );
+    // Loud, copy-pasteable diagnostic — surfaces the real cause so we can
+    // fix it instead of just rendering "We're fixing this" indefinitely.
+    console.group("%c[ErrorBoundary] Caught a render-time error", "color:#fff;background:#dc2626;padding:2px 6px;border-radius:3px");
+    console.error("name:    ", error.name);
+    console.error("message: ", error.message);
+    console.error("status:  ", (error as any).status);
+    console.error("stack:   ", error.stack);
+    console.error("componentStack: ", errorInfo.componentStack);
+    console.groupEnd();
   }
 
   handleRetry = () => {
