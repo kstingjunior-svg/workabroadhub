@@ -54,7 +54,9 @@ export function useAuth() {
     queryKey: ["/api/auth/user"],
     queryFn: fetchUser,
     retry: false,
-    staleTime: 30_000, // 30 s — mutations invalidate immediately; window-focus refetches keep badge in sync
+    staleTime: 5 * 60_000,            // 5 min — long enough that a transient blip doesn't refetch
+    refetchOnWindowFocus: false,      // do NOT refetch on focus — a transient 401/503 would log the user out
+    refetchOnReconnect: false,        // same reasoning for network-flap refetches
   });
 
   const logoutMutation = useMutation({

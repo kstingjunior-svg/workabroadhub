@@ -310,8 +310,15 @@ export function AuthModal({
         );
       }
 
-      // Mark the query as stale so the next mount refetches the full record.
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      // NOTE: do NOT invalidateQueries here. That marks the cache stale and
+      // triggers an immediate background refetch (because useAuth is already
+      // mounted in App.tsx with an active observer). If that refetch hits a
+      // transient 401 (cookie-acknowledgement race) or 5xx, useAuth's fetchUser
+      // returns null/throws, the cache flips to null, App.tsx's `if (!user)`
+      // becomes true, the unauthenticated Switch renders, and the user gets
+      // bounced to /. Better to let the staleTime (30 s) carry the user past
+      // the initial dashboard mount; any extra fields the dashboard needs are
+      // fetched by its own queries.
 
       setTimeout(() => {
         onClose();
