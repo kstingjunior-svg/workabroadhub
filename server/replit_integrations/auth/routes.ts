@@ -107,25 +107,37 @@ export function registerAuthRoutes(app: Express) {
   });
 
   app.get("/api/auth/user", async (req: Request, res: Response) => {
-    const userId = (req.session as any)?.customUserId as string | undefined;
-    if (!userId) {
-      return res.status(401).json({ message: "Not authenticated" });
-    }
-    const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-    if (!user) {
-      // Stale session — destroy it so the client gets a clean login next time.
-      const sess = req.session as any;
-      if (sess && typeof sess.destroy === "function") {
-        sess.destroy(() => {
-          res.clearCookie("connect.sid");
-          res.status(401).json({ message: "Session expired. Please sign in again." });
-        });
-      } else {
-        res.status(401).json({ message: "Session expired. Please sign in again." });
+    try {
+      const userId = (req.session as any)?.customUserId as string | undefined;
+      if (!userId) {
+        return res.status(401).json({ message: "Not authenticated" });
       }
-      return;
+      const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+      if (!user) {
+        // Stale session — destroy it so the client gets a clean login next time.
+        const sess = req.session as any;
+        if (sess && typeof sess.destroy === "function") {
+          sess.destroy(() => {
+            res.clearCookie("connect.sid");
+            res.status(401).json({ message: "Session expired. Please sign in again." });
+          });
+        } else {
+          res.status(401).json({ message: "Session expired. Please sign in again." });
+        }
+        return;
+      }
+      res.json(user);
+    } catch (err: any) {
+      // Defensive: this used to crash with no try/catch and produce a generic
+      // 500 page on the client. Now we log the actual reason and surface it
+      // to the client as 503 (transient) so the SPA can retry rather than
+      // forcing a logout flow.
+      console.error("[Auth][/api/auth/user] error:", err?.message, err?.code, err?.stack?.split("\n")[0]);
+      res.status(503).json({
+        message: "Temporary error fetching your session. Please retry.",
+        code: err?.code ?? "auth_user_lookup_failed",
+      });
     }
-    res.json(user);
   });
 
   // Forgot password — always returns 200 to prevent email enumeration.

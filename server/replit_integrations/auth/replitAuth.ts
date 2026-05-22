@@ -13,7 +13,7 @@ export function getSession() {
     secret: process.env.SESSION_SECRET!,
     store: new pgStore({
       conString: process.env.DATABASE_URL,
-      createTableIfMissing: false,
+      createTableIfMissing: true,
       ttl: 7 * 24 * 60 * 60,
       tableName: "sessions",
     }),

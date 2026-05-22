@@ -19077,7 +19077,7 @@ Tone examples:
         const timeout = setTimeout(() => controller.abort(), 25000);
         const completion = await openai.chat.completions.create(
           {
-            model: "gpt-4.1-mini",
+            model: "gpt-4o-mini",
             messages: [{ role: "system", content: systemPrompt }, ...session.messages],
             max_tokens: 400,
             temperature: 0.65,
