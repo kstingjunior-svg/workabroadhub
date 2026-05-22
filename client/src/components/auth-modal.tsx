@@ -271,9 +271,26 @@ export function AuthModal({
       sessionStorage.clear();
 
       // Pre-populate the auth-user query cache so the dashboard mounts
-      // already-authenticated. Wait for one round-trip to confirm the
-      // server-side session is readable from this tab (handles the rare
-      // case where the Set-Cookie hasn't been applied yet).
+      // already-authenticated.
+      //
+      // STEP 1 (always): trust the login response. It contains { id, email }
+      //   at minimum, which is enough for useAuth.isAuthenticated = !!user
+      //   to return true. The authenticated route tree will render and the
+      //   dashboard's own queries will fetch any extra fields they need.
+      //
+      // STEP 2 (bonus): try to fetch the full user record so the cache has
+      //   firstName/plan/role/etc populated immediately. Failure here is
+      //   non-fatal — we keep the minimal user from STEP 1, log a warning,
+      //   and let useAuth's normal staleTime/refetch eventually populate
+      //   the full record.
+      //
+      // Previously this block called queryClient.clear() on any non-200
+      // response, which wiped the just-set minimal user along with every
+      // other cached query — that's what made post-login behave like
+      // "not logged in" and bounced users to the home page.
+      const minimalUser = { id: data.id, email: data.email } as any;
+      queryClient.setQueryData(["/api/auth/user"], minimalUser);
+
       try {
         const userRes = await fetch(`${apiBase}/api/auth/user`, {
           credentials: "include",
@@ -282,11 +299,19 @@ export function AuthModal({
           const userData = await userRes.json();
           queryClient.setQueryData(["/api/auth/user"], userData);
         } else {
-          queryClient.clear();
+          console.warn(
+            `[Auth] verify /api/auth/user returned ${userRes.status}; keeping minimal user from login response`
+          );
         }
-      } catch {
-        queryClient.clear();
+      } catch (e: any) {
+        console.warn(
+          "[Auth] verify /api/auth/user network error; keeping minimal user from login response:",
+          e?.message ?? e
+        );
       }
+
+      // Mark the query as stale so the next mount refetches the full record.
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
 
       setTimeout(() => {
         onClose();
