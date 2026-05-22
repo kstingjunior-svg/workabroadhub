@@ -183,7 +183,11 @@ export default function PricingPage() {
   function goToPayment(planId: string) {
     trackEvent(`click_upgrade_${planId}`);
     if (!user) {
-      window.location.href = "/api/login";
+      // Send users to the landing page with a redirect param so the
+      // login modal auto-opens and brings them back here after sign-in.
+      // (Replaces the broken "/api/login" — a Replit-OIDC leftover that
+      // doesn't exist as a route in the current Render/Supabase build.)
+      window.location.href = "/?redirect=" + encodeURIComponent("/pricing");
       return;
     }
     navigate(`/payment?plan=${planId}`);

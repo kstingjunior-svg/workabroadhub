@@ -482,10 +482,15 @@ function Router() {
   const [, navigate] = useLocation();
   const [loadingTimedOut, setLoadingTimedOut] = useState(false);
 
-  // Safety net: if auth check takes > 4 seconds, unblock the app
+  // Safety net: if auth check takes > 12 seconds, unblock the app.
+  // We previously used 4 s, which fired during cold Render starts (where
+  // the first /api/auth/user can take 3-6 s), silently dumping the user
+  // into the unauthenticated Switch and bouncing them. 12 s is long
+  // enough to absorb cold starts while still preventing an infinite
+  // spinner if /api/auth/user is genuinely broken.
   useEffect(() => {
     if (!isLoading) return;
-    const timer = setTimeout(() => setLoadingTimedOut(true), 4000);
+    const timer = setTimeout(() => setLoadingTimedOut(true), 12000);
     return () => clearTimeout(timer);
   }, [isLoading]);
 

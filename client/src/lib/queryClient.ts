@@ -152,14 +152,13 @@ async function refreshSession(): Promise<boolean> {
     });
 
     if (res.ok) {
-      queryClient.invalidateQueries({
-        queryKey: ["/api/auth/user"],
-      });
-
+      // Don't invalidate /api/auth/user here — that triggers a refetch race
+      // with the just-restored session. If the session was actually refreshed,
+      // useAuth will see the fresh data on its own normal refetch cycle.
+      // Only invalidate the user's plan so any cached "free" state updates.
       queryClient.invalidateQueries({
         queryKey: ["/api/user/plan"],
       });
-
       return true;
     }
 
@@ -267,7 +266,7 @@ export const STALE_TIMES = {
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      queryFn: getQueryFn({ on401: "throw" }),
+      queryFn: getQueryFn({ on401: "returnNull" }),  // graceful null instead of throwing into ErrorBoundary
       refetchInterval: false,
       refetchOnWindowFocus: false,
       staleTime: STALE_TIMES.DYNAMIC,
@@ -296,10 +295,9 @@ queryClient.setQueryDefaults(["/api/user/plan"], {
   refetchOnWindowFocus: true,
 });
 
-queryClient.setQueryDefaults(["/api/auth/user"], {
-  staleTime: 30000,
-  refetchOnWindowFocus: true,
-});
+// (Removed: previously this override fought use-auth.ts settings, causing
+// the auth query to refetch on every window-focus event. A single transient
+// failure would then null the user and bounce them through ProtectedRedirect.)
 
 export function prefetchCriticalData() {
   prefetchCsrfToken();
