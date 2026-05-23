@@ -1,0 +1,20 @@
+# Files Render should NOT transfer to the runtime container.
+# Note: Render uses .gitignore by default if no .renderignore exists, which
+# strips dist/ — exactly what was breaking our deploys. This file overrides
+# that and lists only things that genuinely shouldn't reach runtime.
+node_modules/
+.git/
+.github/
+.local/
+.cache/
+attached_assets/
+uploads/
+tests/
+*.log
+*.db
+*.sqlite
+.env
+.env.*
+
+# IMPORTANT: dist/ is INTENTIONALLY NOT listed here — it must be transferred
+# to runtime so `node dist/server/index.js` can find the compiled server.
