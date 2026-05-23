@@ -28,7 +28,12 @@ export function usePremium(): PremiumState {
           return;
         }
 
-        const res = await fetch("https://workabroadhub.onrender.com/api/premium/status", {
+        // Use a relative URL so the request is same-origin with the page
+        // (workabroadhub.tech). Hardcoding the onrender.com host forces the
+        // browser to send this cross-origin, and the session cookie
+        // (sameSite=lax) is then blocked — breaking auth on the live domain.
+        const res = await fetch("/api/premium/status", {
+          credentials: "include",
           headers: {
             Authorization: `Bearer ${session.access_token}`,
           },
