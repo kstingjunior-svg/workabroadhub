@@ -47,11 +47,15 @@ export function NotificationBell() {
   const [open, setOpen] = useState(false);
   const qc = useQueryClient();
 
-  const { data: notifications = [], isLoading } = useQuery<UserNotification[]>({
+  const { data, isLoading } = useQuery<UserNotification[] | null>({
     queryKey: ["/api/notifications"],
     refetchInterval: 30_000,
     staleTime: 25_000,
   });
+  // Defensive: queryClient is configured with `on401: "returnNull"`, so an
+  // unauthenticated response gives us `null` (not `undefined`), which the
+  // destructuring default `= []` would NOT have caught. Coalesce explicitly.
+  const notifications: UserNotification[] = Array.isArray(data) ? data : [];
 
   const unread = notifications.filter(n => !n.isRead).length;
 
