@@ -3,13 +3,37 @@
     "module": "CommonJS",
     "moduleResolution": "node",
     "target": "ES2020",
-    "outDir": "dist/server",
-    "rootDir": "server",
+    "outDir": "dist",
+    "rootDir": ".",
     "strict": false,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "types": ["node"]
+    "noEmit": false,
+    "noEmitOnError": false,
+    "incremental": false,
+    "types": [
+      "node"
+    ],
+    "resolveJsonModule": true,
+    "allowSyntheticDefaultImports": true,
+    "paths": {
+      "@shared/*": [
+        "./shared/*"
+      ]
+    },
+    "baseUrl": "."
   },
-  "include": ["server/**/*"],
-  "exclude": ["node_modules", "dist"]
+  "include": [
+    "server/**/*",
+    "shared/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "client",
+    "tests",
+    "**/*.test.ts",
+    "scripts",
+    "server/server-prod.ts"
+  ]
 }
