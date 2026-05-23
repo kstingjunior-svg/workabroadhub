@@ -28,12 +28,18 @@
     "shared/**/*"
   ],
   "exclude": [
-    "node_modules",
-    "dist",
-    "client",
-    "tests",
     "**/*.test.ts",
+    "client",
+    "dist",
+    "drizzle.config.mts",
+    "drizzle.config.ts",
+    "node_modules",
     "scripts",
-    "server/server-prod.ts"
+    "server/server-prod.ts",
+    "tests",
+    "vite.config.mts",
+    "vite.config.ts",
+    "vitest.config.mts",
+    "vitest.config.ts"
   ]
 }
