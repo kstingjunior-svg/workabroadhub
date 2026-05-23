@@ -64,7 +64,7 @@ function SecurityAlertsTab() {
   const [filterResolved, setFilterResolved] = useState<string>("unresolved");
   const { toast } = useToast();
 
-  const { data: alerts = [], isLoading } = useQuery<SecurityAlert[]>({
+  const { data: _raw_alerts, isLoading  } = useQuery<SecurityAlert[]>({
     queryKey: ["/api/admin/security-alerts", filterSeverity, filterResolved],
     queryFn: async () => {
       const params = new URLSearchParams();
@@ -76,6 +76,7 @@ function SecurityAlertsTab() {
       return res.json();
     },
   });
+  const alerts: SecurityAlert[] = Array.isArray(_raw_alerts) ? _raw_alerts : [];
 
   const resolveMutation = useMutation({
     mutationFn: (id: string) => apiRequest("PATCH", `/api/admin/security-alerts/${id}/resolve`, {}),
@@ -224,9 +225,10 @@ function SecurityAlertsTab() {
 }
 
 function FraudAlertsTab() {
-  const { data: fraudAlerts = [], isLoading } = useQuery<any[]>({
+  const { data: _raw_fraudAlerts, isLoading  } = useQuery<any[]>({
     queryKey: ["/api/admin/fraud-alerts"],
   });
+  const fraudAlerts: any[] = Array.isArray(_raw_fraudAlerts) ? _raw_fraudAlerts : [];
 
   return (
     <div className="space-y-4">
@@ -272,9 +274,10 @@ function FraudAlertsTab() {
 }
 
 function AdminActivityTab() {
-  const { data: logs = [], isLoading } = useQuery<any[]>({
+  const { data: _raw_logs, isLoading  } = useQuery<any[]>({
     queryKey: ["/api/admin/admin-activity"],
   });
+  const logs: any[] = Array.isArray(_raw_logs) ? _raw_logs : [];
 
   return (
     <div className="space-y-4">

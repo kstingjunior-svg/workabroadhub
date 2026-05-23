@@ -142,7 +142,7 @@ export default function AgenciesMarketplace() {
   const [country, setCountry] = useState("All Countries");
   const [category, setCategory] = useState("All Categories");
 
-  const { data: jobs = [], isLoading } = useQuery<AgencyJobListing[]>({
+  const { data: _raw_jobs, isLoading  } = useQuery<AgencyJobListing[]>({
     queryKey: ["/api/agencies", country, category],
     queryFn: () => {
       const params = new URLSearchParams();
@@ -151,6 +151,7 @@ export default function AgenciesMarketplace() {
       return fetch(`/api/agencies?${params}`).then(r => r.json());
     },
   });
+  const jobs: AgencyJobListing[] = Array.isArray(_raw_jobs) ? _raw_jobs : [];
 
   const { data: bulkScoresData } = useQuery<{ scores: Record<string, { overallScore: number; tier: string }> }>({
     queryKey: ["/api/agency-scores/bulk"],

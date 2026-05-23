@@ -99,18 +99,21 @@ export default function AdminAgencyAddOns() {
     notes: "",
   });
 
-  const { data: agencies = [], isLoading: agenciesLoading } = useQuery<NeaAgency[]>({
+  const { data: _raw_agencies, isLoading: agenciesLoading  } = useQuery<NeaAgency[]>({
     queryKey: ["/api/admin/nea-agencies"],
   });
+  const agencies: NeaAgency[] = Array.isArray(_raw_agencies) ? _raw_agencies : [];
 
-  const { data: addOns = [], isLoading: addOnsLoading } = useQuery<AgencyAddOn[]>({
+  const { data: _raw_addOns, isLoading: addOnsLoading  } = useQuery<AgencyAddOn[]>({
     queryKey: ["/api/admin/agency-add-ons", selectedAgency],
     queryFn: () => fetch(`/api/admin/agency-add-ons${selectedAgency && selectedAgency !== "all" ? `?agencyId=${selectedAgency}` : ""}`).then(r => r.json()),
   });
+  const addOns: AgencyAddOn[] = Array.isArray(_raw_addOns) ? _raw_addOns : [];
 
-  const { data: countries = [] } = useQuery<{ id: string; name: string }[]>({
+  const { data: _raw_countries  } = useQuery<{ id: string; name: string }[]>({
     queryKey: ["/api/countries"],
   });
+  const countries: { id: string; name: string }[] = Array.isArray(_raw_countries) ? _raw_countries : [];
 
   const { data: clickStats } = useQuery<{ stats: { source: string; count: number }[]; total: number }>({
     queryKey: ["/api/admin/agency-clicks", viewingClicks],

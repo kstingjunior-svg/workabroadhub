@@ -282,11 +282,12 @@ export default function UsersPage() {
     staleTime: 30_000,
   });
 
-  const { data: liveSessions = [], refetch: refetchLive } = useQuery<ActiveSessionRow[]>({
+  const { data: _raw_liveSessions, refetch: refetchLive  } = useQuery<ActiveSessionRow[]>({
     queryKey: ["/api/admin/active-sessions"],
     refetchInterval: 30_000, // auto-refresh every 30 seconds
     staleTime: 15_000,
   });
+  const liveSessions: ActiveSessionRow[] = Array.isArray(_raw_liveSessions) ? _raw_liveSessions : [];
 
   const { data: userPayments, isLoading: userPaymentsLoading } = useQuery<any[]>({
     queryKey: ["/api/admin/users", viewPaymentsUser?.id, "payments"],

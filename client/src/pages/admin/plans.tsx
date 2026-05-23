@@ -192,9 +192,10 @@ export default function AdminPlans() {
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [editState, setEditState] = useState<EditState | null>(null);
 
-  const { data: plans = [], isLoading } = useQuery<Plan[]>({
+  const { data: _raw_plans, isLoading  } = useQuery<Plan[]>({
     queryKey: ["/api/admin/plans"],
   });
+  const plans: Plan[] = Array.isArray(_raw_plans) ? _raw_plans : [];
 
   const updateMutation = useMutation({
     mutationFn: async ({ planId, data }: { planId: string; data: Partial<EditState> }) => {

@@ -150,9 +150,10 @@ function MyJobsTab({ agencyId }: { agencyId: string }) {
   const [form, setForm] = useState({ ...BLANK_JOB });
   const [deleting, setDeleting] = useState<string | null>(null);
 
-  const { data: jobs = [], isLoading } = useQuery<AgencyJob[]>({
+  const { data: _raw_jobs, isLoading  } = useQuery<AgencyJob[]>({
     queryKey: ["/api/agency-portal/jobs"],
   });
+  const jobs: AgencyJob[] = Array.isArray(_raw_jobs) ? _raw_jobs : [];
 
   const createMutation = useMutation({
     mutationFn: (data: typeof form) => apiRequest("POST", "/api/agency-portal/jobs", data),
@@ -580,10 +581,11 @@ export default function AgencyPortal() {
     );
   }
 
-  const { data: myAddOns = [], isLoading: addOnsLoading } = useQuery<AgencyAddOn[]>({
+  const { data: _raw_myAddOns, isLoading: addOnsLoading  } = useQuery<AgencyAddOn[]>({
     queryKey: ["/api/agency-portal/my-addons"],
     enabled: !!myAgency,
   });
+  const myAddOns: AgencyAddOn[] = Array.isArray(_raw_myAddOns) ? _raw_myAddOns : [];
 
   const { data: clickStats } = useQuery<ClickStats>({
     queryKey: ["/api/agency-portal/my-clicks"],
@@ -592,10 +594,11 @@ export default function AgencyPortal() {
     ),
   });
 
-  const { data: searchResults = [] } = useQuery<NeaAgency[]>({
+  const { data: _raw_searchResults  } = useQuery<NeaAgency[]>({
     queryKey: ["/api/agency-portal/search", searchQuery],
     enabled: searchQuery.length >= 3 && !myAgency,
   });
+  const searchResults: NeaAgency[] = Array.isArray(_raw_searchResults) ? _raw_searchResults : [];
 
   const claimMutation = useMutation({
     mutationFn: (agencyId: string) => apiRequest("POST", "/api/agency-portal/claim", { agencyId }),
@@ -628,10 +631,11 @@ export default function AgencyPortal() {
     enabled: !!myAgency,
   });
 
-  const { data: renewalHistory = [] } = useQuery<any[]>({
+  const { data: _raw_renewalHistory  } = useQuery<any[]>({
     queryKey: ["/api/license-renewal/history", myAgency?.id],
     enabled: !!myAgency,
   });
+  const renewalHistory: any[] = Array.isArray(_raw_renewalHistory) ? _raw_renewalHistory : [];
 
   const { data: renewalStatus } = useQuery<{ id: string; status: string; mpesaReceiptNumber?: string; newExpiryDate?: string }>({
     queryKey: ["/api/license-renewal/status", renewalPaymentId],

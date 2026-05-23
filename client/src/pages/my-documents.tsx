@@ -91,9 +91,10 @@ export default function MyDocuments() {
   const [revisionText, setRevisionText] = useState("");
   const [showRevisionInput, setShowRevisionInput] = useState(false);
 
-  const { data: orders = [], isLoading: ordersLoading } = useQuery<OrderWithDeliverables[]>({
+  const { data: _raw_orders, isLoading: ordersLoading  } = useQuery<OrderWithDeliverables[]>({
     queryKey: ["/api/service-orders"],
   });
+  const orders: OrderWithDeliverables[] = Array.isArray(_raw_orders) ? _raw_orders : [];
 
   const { data: userDocsData, isLoading: docsLoading } = useQuery<UserDocumentsResponse>({
     queryKey: ["/api/user/documents"],

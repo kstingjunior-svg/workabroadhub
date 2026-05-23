@@ -114,9 +114,10 @@ export default function AdminConsultationsPage() {
     }
   }
 
-  const { data: consultations = [], isLoading } = useQuery<ConsultationBooking[]>({
+  const { data: _raw_consultations, isLoading  } = useQuery<ConsultationBooking[]>({
     queryKey: ["/api/admin/consultations"],
   });
+  const consultations: ConsultationBooking[] = Array.isArray(_raw_consultations) ? _raw_consultations : [];
 
   const updateMutation = useMutation({
     mutationFn: ({ id, status, advisorNotes }: { id: string; status?: string; advisorNotes?: string }) =>
