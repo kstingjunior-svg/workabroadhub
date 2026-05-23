@@ -1,4 +1,19 @@
 "use strict";
+// ────────────────────────────────────────
+// RUNTIME PATH-ALIAS RESOLVER (PROD ONLY)
+// ─────────────────────────────────────────
+// tsc does not rewrite TypeScript `paths` aliases, so the compiled CJS output
+// still contains literal require("@shared/...") calls that Node cannot resolve.
+// Register module-alias to map @shared -> dist/shared at startup.
+{
+    const _path = require("path");
+    if (typeof __filename === "string" && __filename.split(_path.sep).includes("dist")) {
+        const moduleAlias = require("module-alias");
+        moduleAlias.addAliases({
+            "@shared": _path.resolve(__dirname, "..", "shared"),
+        });
+    }
+}
 // ─────────────────────────────────────────────────────────────────────────────
 // SAFE PROCESS-LEVEL HANDLERS (ONLY DEFINE ONCE)
 // ─────────────────────────────────────────────────────────────────────────────

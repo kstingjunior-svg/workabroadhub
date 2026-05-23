@@ -1,5 +1,26 @@
 
 // ─────────────────────────────────────────────────────────────────────────────
+// RUNTIME PATH-ALIAS RESOLVER (PROD ONLY)
+// ─────────────────────────────────────────────────────────────────────────────
+// tsc does not transform TypeScript `paths` aliases at compile time, so the
+// compiled CJS output still contains literal `require("@shared/...")` calls
+// that Node cannot resolve. In dev, tsx hooks into module resolution and
+// honors tsconfig paths, so this prologue does nothing. In compiled prod
+// (running from dist/), we register module-alias to map @shared -> dist/shared.
+// Detection key: only run when this file is loaded from a path containing
+// the dist folder; never when executed directly from source via tsx.
+{
+  const _path = require("path") as typeof import("path");
+  if (typeof __filename === "string" && __filename.split(_path.sep).includes("dist")) {
+    const moduleAlias: any = require("module-alias");
+    // __dirname here = .../dist/server, so ../shared = .../dist/shared
+    moduleAlias.addAliases({
+      "@shared": _path.resolve(__dirname, "..", "shared"),
+    });
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // SAFE PROCESS-LEVEL HANDLERS (ONLY DEFINE ONCE)
 // ─────────────────────────────────────────────────────────────────────────────
 
