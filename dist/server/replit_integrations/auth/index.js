@@ -1,0 +1,12 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.registerAuthRoutes = exports.authStorage = exports.getSessionParser = exports.getSession = exports.isAuthenticated = exports.setupAuth = void 0;
+var replitAuth_1 = require("./replitAuth");
+Object.defineProperty(exports, "setupAuth", { enumerable: true, get: function () { return replitAuth_1.setupAuth; } });
+Object.defineProperty(exports, "isAuthenticated", { enumerable: true, get: function () { return replitAuth_1.isAuthenticated; } });
+Object.defineProperty(exports, "getSession", { enumerable: true, get: function () { return replitAuth_1.getSession; } });
+Object.defineProperty(exports, "getSessionParser", { enumerable: true, get: function () { return replitAuth_1.getSessionParser; } });
+var storage_1 = require("./storage");
+Object.defineProperty(exports, "authStorage", { enumerable: true, get: function () { return storage_1.authStorage; } });
+var routes_1 = require("./routes");
+Object.defineProperty(exports, "registerAuthRoutes", { enumerable: true, get: function () { return routes_1.registerAuthRoutes; } });

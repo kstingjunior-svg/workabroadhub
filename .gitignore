@@ -1,5 +1,5 @@
 node_modules/
-dist/
+# dist/   # commented out: dist/ is committed because Render Free strips it from runtime
 .local/
 .cache/
 uploads/

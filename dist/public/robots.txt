@@ -1,0 +1,47 @@
+User-agent: *
+Allow: /
+
+# Block admin and private pages
+Disallow: /admin
+Disallow: /admin/
+Disallow: /api/
+Disallow: /payment
+Disallow: /profile
+Disallow: /my-orders
+Disallow: /order/
+Disallow: /service-order/
+Disallow: /assisted-apply/
+Disallow: /application-tracker
+Disallow: /agency-portal
+
+# Allow public tools and pages
+Allow: /tools/
+Allow: /tools/ats-cv-checker
+Allow: /tools/job-scam-checker
+Allow: /tools/visa-sponsorship-jobs
+Allow: /tools/cv-templates
+Allow: /country/
+Allow: /nea-agencies
+Allow: /agencies
+Allow: /verify
+Allow: /agency-map
+Allow: /compliance-index
+Allow: /visa-guides
+Allow: /green-card
+Allow: /student-visas
+Allow: /about
+Allow: /contact
+Allow: /faq
+Allow: /pricing
+Allow: /services
+Allow: /referrals
+Allow: /privacy-policy
+Allow: /terms-of-service
+Allow: /refund-policy
+Allow: /career-match
+
+# Sitemap
+Sitemap: https://workabroadhub.tech/sitemap.xml
+
+# Crawl delay (be gentle with the server)
+Crawl-delay: 1
