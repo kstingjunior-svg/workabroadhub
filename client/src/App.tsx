@@ -272,6 +272,12 @@ const LazyRefundPolicy = withSuspense(RefundPolicy);
 const LazyAboutPage = withSuspense(AboutPage);
 const LazyContactPage = withSuspense(ContactPage);
 const LazyFAQPage = withSuspense(FAQPage);
+// Fix for React error #426 — these were used as raw `lazy()` exports without
+// a Suspense boundary, causing the dashboard's "Just a small detour" page to
+// fire whenever an authenticated user clicked through to them.
+const LazyMyOverview  = withSuspense(MyOverview);
+const LazyMyPayments  = withSuspense(MyPayments);
+const LazyMyDocuments = withSuspense(MyDocuments);
 const LazyReferrals = withSuspense(Referrals);
 const LazyReferralTerms = withSuspense(ReferralTerms);
 const LazyCareerMatch = withSuspense(CareerMatch);
@@ -380,10 +386,10 @@ function AuthenticatedRoutes() {
       <Route path="/application-tracker" component={LazyApplicationTracker} />
       <Route path="/profile" component={LazyProfile} />
       <Route path="/my-account" component={() => <Suspense fallback={<div />}><MyAccountPage /></Suspense>} />
-      <Route path="/my-payments" component={MyPayments} />
-      <Route path="/payments" component={MyPayments} />
-      <Route path="/my-documents" component={MyDocuments} />
-      <Route path="/my-overview" component={MyOverview} />
+      <Route path="/my-payments" component={LazyMyPayments} />
+      <Route path="/payments" component={LazyMyPayments} />
+      <Route path="/my-documents" component={LazyMyDocuments} />
+      <Route path="/my-overview" component={LazyMyOverview} />
       <Route path="/login" component={LazyLoginPage} />
       <Route path="/signup" component={LazyLoginPage} />
       <Route path="/forgot-password" component={LazyForgotPassword} />
