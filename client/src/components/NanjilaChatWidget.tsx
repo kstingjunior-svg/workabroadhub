@@ -42,11 +42,21 @@ function speakWithBrowser(
 ): void {
   if (!("speechSynthesis" in window)) { onEnd(); return; }
 
-  // Strip markdown/HTML so the TTS doesn't read asterisks aloud
+  // Strip markdown/HTML AND every Unicode emoji so the TTS doesn't read out
+  // "smiling face" or "envelope". Covers all standard emoji blocks:
+  // emoticons, symbols, dingbats, transport, flags, supplemental, etc.
   const clean = text
     .replace(/<[^>]*>/g, " ")
     .replace(/\*\*?([^*]+)\*\*?/g, "$1")
     .replace(/#{1,6}\s/g, "")
+    // Extended_Pictographic catches almost all emojis natively
+    .replace(/\p{Extended_Pictographic}/gu, "")
+    // Variation selectors + ZWJ that often trail emoji sequences
+    .replace(/[‍️︎]/g, "")
+    // Regional indicators (flag emoji) — pairs of letters
+    .replace(/[\u{1F1E6}-\u{1F1FF}]/gu, "")
+    // Bullet/list characters that some TTS reads as "bullet"
+    .replace(/[•·●◦▪▫►▶]/g, "")
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 500); // browser TTS performance degrades beyond ~500 chars
