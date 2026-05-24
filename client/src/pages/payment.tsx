@@ -157,6 +157,16 @@ export default function Payment() {
     staleTime: 10 * 60 * 1000,
   });
 
+  // Fetch payment options FIRST so paymentOptions.country is in scope before
+  // we reference it in the price-resolution query below. Previously this was
+  // declared further down — which worked in dev (no minification) but blew up
+  // in production with a TDZ error: "Cannot access 'K' before initialization".
+  const { data: paymentOptions, isLoading: optionsLoading } = useQuery<PaymentOptions>({
+    queryKey: ["/api/payments/options"],
+    queryFn: getQueryFn({ on401: "returnNull" }),
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+  });
+
   // Effective planId — "pro_referral" tells the pricing engine to apply the 20% referral discount.
   // Must be defined before the /api/price query so the query key is correct from the start.
   const effectivePlanId = referralApplied && urlPlanId === "pro" ? "pro_referral" : (urlPlanId ?? "pro");
@@ -193,6 +203,13 @@ export default function Payment() {
   const paymentAmount: number = resolvedPrice?.finalPrice ?? 0;
   const basePaymentAmount: number | null = resolvedPrice?.basePrice ?? null;
   const priceReady = !priceLoading && paymentAmount > 0;
+
+  // Look up the full Plan object matching the URL plan id (or "pro" default).
+  // Used in toasts and headings — falls back to null if the plans query is
+  // still loading or the id doesn't match. Was missing entirely before, causing
+  // a ReferenceError once the page rendered.
+  const selectedPlan: Plan | null =
+    (plans ?? []).find((p) => p.planId === (urlPlanId ?? "pro")) ?? null;
 
   const { data: paypalConfig } = useQuery<PayPalConfig>({
     queryKey: ["/api/paypal/config"],
@@ -254,12 +271,7 @@ export default function Payment() {
     },
   };
 
-  // ── Step 5: Fetch payment options (recommendation + available methods) ──────
-  const { data: paymentOptions, isLoading: optionsLoading } = useQuery<PaymentOptions>({
-    queryKey: ["/api/payments/options"],
-    queryFn: getQueryFn({ on401: "returnNull" }),
-    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
-  });
+  // (paymentOptions query moved to top of component to avoid TDZ — see above)
 
   // Set selectedMethod to recommended once options load
   useEffect(() => {
@@ -1342,7 +1354,7 @@ export default function Payment() {
                   <p className="text-gray-600 dark:text-gray-400 mb-3">
                     Pay{" "}
                     {referralApplied && (
-                      <span className="line-through opacity-50 text-sm mr-1">KES {basePaymentAmount.toLocaleString()}</span>
+                      <span className="line-through opacity-50 text-sm mr-1">KES {(basePaymentAmount ?? 0).toLocaleString()}</span>
                     )}
                     <strong className={referralApplied ? "text-green-600 dark:text-green-400" : "text-foreground"}>
                       KES {paymentAmount.toLocaleString()}
