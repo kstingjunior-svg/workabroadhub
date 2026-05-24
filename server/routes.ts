@@ -2075,6 +2075,27 @@ Crawl-delay: 1`);
     try {
       const userId = req.user?.claims?.sub;
       if (!userId) return res.status(401).json({ message: "Unauthorized" });
+
+      // Admin bypass — admins always see themselves as Pro so they can use
+      // every gated feature for QA / customer support without paying. Server
+      // middleware (requirePlan.ts) enforces the same bypass; this endpoint
+      // controls what the client UI shows.
+      const userRow = await storage.getUserById(userId);
+      const isAdminUser = !!(
+        userRow &&
+        (userRow.isAdmin === true ||
+          userRow.role === "ADMIN" ||
+          userRow.role === "SUPER_ADMIN")
+      );
+      if (isAdminUser) {
+        const proPlan = await storage.getPlanById("pro");
+        return res.json({
+          planId: "pro",
+          plan: proPlan,
+          subscription: { status: "active", plan: "pro", isAdminBypass: true },
+        });
+      }
+
       const planId = await storage.getUserPlan(userId);
       const plan = await storage.getPlanById(planId);
       const subscription = await storage.getUserSubscription(userId);

@@ -50,11 +50,19 @@ export const requireAnyPaidPlan: RequestHandler = async (req: any, res, next) =>
   }
 
   try {
-    const { rows } = await pool.query<{ plan: string; subscription_status: string }>(
-      `SELECT plan, subscription_status FROM users WHERE id = $1`,
+    const { rows } = await pool.query<{ plan: string; subscription_status: string; is_admin: boolean; role: string }>(
+      `SELECT plan, subscription_status, is_admin, role FROM users WHERE id = $1`,
       [userId],
     );
     const user = rows[0];
+
+    // ── Admin bypass ────────────────────────────────────────────────────────
+    // Admins (is_admin=true OR role in ADMIN/SUPER_ADMIN) get free access to
+    // every gated feature so they can manage/QA the platform without paying.
+    if (user && (user.is_admin === true || user.role === "ADMIN" || user.role === "SUPER_ADMIN")) {
+      req.planId = "pro";
+      return next();
+    }
 
     if (!user || user.subscription_status !== "active") {
       const planId = user?.plan ?? "free";
@@ -97,12 +105,18 @@ export const requireProPlan: RequestHandler = async (req: any, res, next) => {
   }
 
   try {
-    const { rows } = await pool.query<{ plan: string; subscription_status: string }>(
-      `SELECT plan, subscription_status FROM users WHERE id = $1`,
+    const { rows } = await pool.query<{ plan: string; subscription_status: string; is_admin: boolean; role: string }>(
+      `SELECT plan, subscription_status, is_admin, role FROM users WHERE id = $1`,
       [userId],
     );
     const user = rows[0];
     const planId = user?.plan ?? "free";
+
+    // Admin bypass — admins always count as Pro.
+    if (user && (user.is_admin === true || user.role === "ADMIN" || user.role === "SUPER_ADMIN")) {
+      req.planId = "pro";
+      return next();
+    }
 
     if (!user || user.subscription_status !== "active" || planId !== "pro") {
       const reason = !user || planId === "free" ? "free_plan" : user.subscription_status !== "active" ? "expired_plan" : "insufficient_plan";
