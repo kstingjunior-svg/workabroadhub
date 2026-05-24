@@ -5,6 +5,13 @@ import { eq } from "drizzle-orm";
 import { db, pool } from "../../db";
 import { users } from "@shared/models/auth";
 import { sendEmail } from "../../email";
+import { validateEmail } from "../../utils/email-validator";
+import { validatePhone } from "../../utils/phone-validator";
+import {
+  sendEmailVerificationCode,
+  sendSmsVerificationCode,
+  verifyCode,
+} from "../../services/identityVerification";
 
 // Email + password auth routes (replaces the disabled stub).
 
@@ -38,14 +45,20 @@ export function registerAuthRoutes(app: Express) {
       const firstName = req.body?.firstName ? String(req.body.firstName).trim() : null;
       const lastName  = req.body?.lastName  ? String(req.body.lastName).trim()  : null;
 
-      if (!rawEmail || !EMAIL_RE.test(rawEmail)) {
-        return res.status(400).json({ message: "Please enter a valid email address." });
+      // Real-identity email validation: blocks disposable/throwaway providers,
+      // verifies the domain actually accepts mail (MX records), and rejects
+      // obvious test patterns (test@test.com etc.).
+      const emailCheck = await validateEmail(rawEmail);
+      if (!emailCheck.valid) {
+        return res.status(400).json({ message: emailCheck.message, reason: emailCheck.reason });
       }
+      const cleanEmail = emailCheck.normalized;
+
       if (!password || password.length < 8) {
         return res.status(400).json({ message: "Password must be at least 8 characters." });
       }
 
-      const [existing] = await db.select().from(users).where(eq(users.email, rawEmail)).limit(1);
+      const [existing] = await db.select().from(users).where(eq(users.email, cleanEmail)).limit(1);
       if (existing) {
         return res.status(409).json({ message: "An account with that email already exists. Try signing in instead." });
       }
@@ -53,7 +66,7 @@ export function registerAuthRoutes(app: Express) {
       const passwordHash = await bcrypt.hash(password, 12);
       const [created] = await db
         .insert(users)
-        .values({ email: rawEmail, passwordHash, authMethod: "email", firstName, lastName })
+        .values({ email: cleanEmail, passwordHash, authMethod: "email", firstName, lastName })
         .returning();
 
       if (!created) {
@@ -61,7 +74,21 @@ export function registerAuthRoutes(app: Express) {
       }
 
       await setSessionUserId(req, created.id);
-      res.json({ id: created.id, email: created.email });
+
+      // Fire-and-forget: send email verification code so user can verify on next page.
+      // Don't block registration response on email delivery — surfaces as a non-fatal
+      // toast on the client. The user can also request a re-send from /verify-email.
+      sendEmailVerificationCode(created.id, cleanEmail).catch((e) =>
+        console.warn("[Auth][register] verification email failed:", e?.message),
+      );
+
+      res.json({
+        id: created.id,
+        email: created.email,
+        emailVerified: false,
+        phoneVerified: false,
+        needsVerification: true,
+      });
     } catch (err: any) {
       console.error("[Auth][register] error:", err?.message);
       if (err?.code === "23505") {
@@ -215,5 +242,103 @@ export function registerAuthRoutes(app: Express) {
     }
   });
 
+  // ──────────────────────────────────────────────────────────────────────────
+  // IDENTITY VERIFICATION — email + phone OTP
+  // Endpoints:
+  //   POST /api/auth/send-email-code   — (re)send email OTP to current user
+  //   POST /api/auth/send-phone-code   — validate phone via Twilio Lookup, then send SMS OTP
+  //   POST /api/auth/verify-email      — submit 6-digit email code
+  //   POST /api/auth/verify-phone      — submit 6-digit SMS code
+  //   GET  /api/auth/verification-status — current email_verified / phone_verified flags
+  // ──────────────────────────────────────────────────────────────────────────
+
+  function getSessionUserId(req: Request): string | null {
+    return ((req.session as any)?.customUserId as string | undefined) ?? null;
+  }
+
+  app.post("/api/auth/send-email-code", async (req: Request, res: Response) => {
+    const userId = getSessionUserId(req);
+    if (!userId) return res.status(401).json({ message: "Please sign in first." });
+    const r = await pool.query<{ email: string; email_verified: boolean }>(
+      `SELECT email, email_verified FROM users WHERE id = $1`,
+      [userId],
+    );
+    const u = r.rows[0];
+    if (!u) return res.status(404).json({ message: "User not found." });
+    if (u.email_verified) return res.json({ ok: true, message: "Email already verified." });
+    const result = await sendEmailVerificationCode(userId, u.email);
+    if (!result.ok) return res.status(429).json({ message: result.message });
+    res.json({ ok: true, message: "Verification code sent. Check your inbox." });
+  });
+
+  app.post("/api/auth/send-phone-code", async (req: Request, res: Response) => {
+    const userId = getSessionUserId(req);
+    if (!userId) return res.status(401).json({ message: "Please sign in first." });
+    const rawPhone = String(req.body?.phone ?? "").trim();
+    if (!rawPhone) return res.status(400).json({ message: "Phone number is required." });
+
+    // Real-identity phone validation: format + Twilio Lookup (catches fake/disconnected numbers)
+    const phoneCheck = await validatePhone(rawPhone);
+    if (!phoneCheck.valid) {
+      return res.status(400).json({ message: phoneCheck.message, reason: phoneCheck.reason });
+    }
+    const e164 = phoneCheck.e164;
+
+    // Save the validated phone (so we know what to verify against later) BEFORE sending SMS
+    await pool.query(`UPDATE users SET phone = $1, phone_verified = false, updated_at = NOW() WHERE id = $2`, [
+      e164,
+      userId,
+    ]);
+
+    const result = await sendSmsVerificationCode(userId, e164);
+    if (!result.ok) return res.status(429).json({ message: result.message });
+    res.json({ ok: true, message: "Verification code sent via SMS.", phoneE164: e164 });
+  });
+
+  app.post("/api/auth/verify-email", async (req: Request, res: Response) => {
+    const userId = getSessionUserId(req);
+    if (!userId) return res.status(401).json({ message: "Please sign in first." });
+    const code = String(req.body?.code ?? "");
+    const result = await verifyCode(userId, "email", code);
+    if (!result.ok) return res.status(400).json({ message: result.message, reason: result.reason });
+    res.json({ ok: true, message: result.message });
+  });
+
+  app.post("/api/auth/verify-phone", async (req: Request, res: Response) => {
+    const userId = getSessionUserId(req);
+    if (!userId) return res.status(401).json({ message: "Please sign in first." });
+    const code = String(req.body?.code ?? "");
+    const result = await verifyCode(userId, "sms", code);
+    if (!result.ok) return res.status(400).json({ message: result.message, reason: result.reason });
+    res.json({ ok: true, message: result.message });
+  });
+
+  app.get("/api/auth/verification-status", async (req: Request, res: Response) => {
+    const userId = getSessionUserId(req);
+    if (!userId) return res.status(401).json({ message: "Please sign in first." });
+    const r = await pool.query<{
+      email: string;
+      phone: string | null;
+      email_verified: boolean;
+      phone_verified: boolean;
+      is_admin: boolean;
+      role: string;
+    }>(
+      `SELECT email, phone, email_verified, phone_verified, is_admin, role FROM users WHERE id = $1`,
+      [userId],
+    );
+    const u = r.rows[0];
+    if (!u) return res.status(404).json({ message: "User not found." });
+    const isAdmin = u.is_admin || u.role === "ADMIN" || u.role === "SUPER_ADMIN";
+    res.json({
+      email: u.email,
+      phone: u.phone,
+      emailVerified: u.email_verified || isAdmin,
+      phoneVerified: u.phone_verified || isAdmin,
+      isAdmin,
+    });
+  });
+
   console.log("[Auth] Email/password routes registered: /api/auth/register, /api/auth/login, /api/auth/logout, /api/auth/user, /api/auth/forgot-password, /api/auth/reset-password");
+  console.log("[Auth] Verification routes registered: /api/auth/{send-email-code, send-phone-code, verify-email, verify-phone, verification-status}");
 }

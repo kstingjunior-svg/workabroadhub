@@ -11,6 +11,7 @@ import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integra
 import { csrfTokenEndpoint, validateCsrf } from "./middleware/csrf";
 import { requireAnyPaidPlan, requireProPlan, requireSupabasePro, getAccessViolations } from "./middleware/requirePlan";
 import { requireAuth } from "./middleware/requireAuth";
+import { requireVerifiedForPayment } from "./services/identityVerification";
 import { z } from "zod";
 import { UserRole, type UserRoleType } from "@shared/models/auth";
 import type { NeaAgency } from "@shared/schema";
@@ -3297,7 +3298,7 @@ Crawl-delay: 1`);
     }
   });
 
-  app.post("/api/payments/initiate", isAuthenticated, async (req: any, res) => {
+  app.post("/api/payments/initiate", isAuthenticated, requireVerifiedForPayment, async (req: any, res) => {
     try {
       const userId = req.user?.claims?.sub;
       if (!userId) {
@@ -3544,7 +3545,7 @@ Crawl-delay: 1`);
   //   3. Call Safaricom stkPush() with phone + amount from the row
   //   4. Stamp the real Safaricom CheckoutRequestID back onto the row
   //   5. Return { success: true, checkoutRequestId: "<safaricom id>" }
-  app.post("/api/mpesa/stk", isAuthenticated, async (req: any, res) => {
+  app.post("/api/mpesa/stk", isAuthenticated, requireVerifiedForPayment, async (req: any, res) => {
     try {
       const userId = req.user?.claims?.sub;
       if (!userId) return res.status(401).json({ success: false, error: "Unauthorized" });
@@ -4364,7 +4365,7 @@ Crawl-delay: 1`);
   }
 
   // ── POST /api/payments/mpesa/stk-push — unified STK push for plans + services ─
-  app.post("/api/payments/mpesa/stk-push", isAuthenticated, async (req: any, res) => {
+  app.post("/api/payments/mpesa/stk-push", isAuthenticated, requireVerifiedForPayment, async (req: any, res) => {
     try {
       const userId = req.user?.claims?.sub ?? req.user?.id;
       if (!userId) return res.status(401).json({ message: "Unauthorized" });
@@ -5096,7 +5097,7 @@ Crawl-delay: 1`);
     });
   });
 
-  app.post("/api/mpesa/stkpush", isAuthenticated, async (req: any, res) => {
+  app.post("/api/mpesa/stkpush", isAuthenticated, requireVerifiedForPayment, async (req: any, res) => {
     try {
       const userId = req.user?.claims?.sub;
       if (!userId) {
@@ -17248,7 +17249,7 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
   // SECURITY: For plan upgrades (serviceId = "plan_basic" | "plan_pro") the amount is
   // ALWAYS resolved from the database — the client-supplied amount is IGNORED.
   // This prevents any 1-KES or arbitrary-amount exploit attempts.
-  app.post("/api/paypal/create-order", isAuthenticated, async (req: any, res) => {
+  app.post("/api/paypal/create-order", isAuthenticated, requireVerifiedForPayment, async (req: any, res) => {
     try {
       if (!isPayPalConfigured()) {
         return res.status(503).json({ message: "PayPal is not configured." });
