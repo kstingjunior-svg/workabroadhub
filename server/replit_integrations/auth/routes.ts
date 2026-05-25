@@ -140,20 +140,39 @@ export function registerAuthRoutes(app: Express) {
         return res.status(401).json({ message: "Not authenticated" });
       }
       const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-      if (!user) {
-        // Stale session — destroy it so the client gets a clean login next time.
-        const sess = req.session as any;
-        if (sess && typeof sess.destroy === "function") {
-          sess.destroy(() => {
-            res.clearCookie("connect.sid");
-            res.status(401).json({ message: "Session expired. Please sign in again." });
+      if (user) {
+        // ── Admin bypass ────────────────────────────────────────────────────
+        // Admins (is_admin=true OR role in ADMIN/SUPER_ADMIN) must look like
+        // Pro users to every client component so they can test/QA every paid
+        // service without the "Upgrade to Pro" prompts. We override plan +
+        // subscription flags + verification flags on the response only —
+        // the DB values stay untouched.
+        const isAdminUser =
+          user.isAdmin === true ||
+          user.role === "ADMIN" ||
+          user.role === "SUPER_ADMIN";
+        if (isAdminUser) {
+          return res.json({
+            ...user,
+            plan: "pro",
+            subscriptionStatus: "active",
+            emailVerified: true,
+            phoneVerified: true,
+            isAdminBypass: true,
           });
-        } else {
-          res.status(401).json({ message: "Session expired. Please sign in again." });
         }
-        return;
+        return res.json(user);
       }
-      res.json(user);
+      // No user row matches the session userId — stale session, destroy it
+      const sess = req.session as any;
+      if (sess && typeof sess.destroy === "function") {
+        sess.destroy(() => {
+          res.clearCookie("connect.sid");
+          res.status(401).json({ message: "Session expired. Please sign in again." });
+        });
+      } else {
+        res.status(401).json({ message: "Session expired. Please sign in again." });
+      }
     } catch (err: any) {
       // Defensive: this used to crash with no try/catch and produce a generic
       // 500 page on the client. Now we log the actual reason and surface it

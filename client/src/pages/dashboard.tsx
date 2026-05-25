@@ -26,6 +26,7 @@ import { useUpgradeModal } from "@/contexts/upgrade-modal-context";
 import { LockedFeature } from "@/components/locked-feature";
 import { UrgencyBanner } from "@/components/urgency-banner";
 import { AgencyAlertBanner } from "@/components/agency-alert-banner";
+import { VerificationBanner } from "@/components/verification-banner";
 import { LockedContentPreview } from "@/components/locked-content-preview";
 import { pushSuccessStory } from "@/lib/firebase-success-stories";
 import { useToast } from "@/hooks/use-toast";
@@ -1275,6 +1276,10 @@ export default function Dashboard() {
 
       {/* ── MAIN CONTENT ───────────────────────────────────────────────── */}
       <div className="px-4 py-5 space-y-5 pb-28 max-w-2xl mx-auto">
+
+        {/* Identity verification reminder — shows above all other banners for
+            unverified users. Self-hides for admins, verified users, and anons. */}
+        <VerificationBanner />
 
         {/* Agency alert + urgency banners for free users */}
         {!isPaid && (
