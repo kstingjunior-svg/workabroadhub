@@ -25,6 +25,8 @@ import { trackDashboardAccess } from "@/lib/analytics";
 import { useUpgradeModal } from "@/contexts/upgrade-modal-context";
 import { LockedFeature } from "@/components/locked-feature";
 import { UrgencyBanner } from "@/components/urgency-banner";
+import { DashboardHeroCTA } from "@/components/dashboard-hero-cta";
+import { DashboardServicesGrid } from "@/components/dashboard-services-grid";
 import { AgencyAlertBanner } from "@/components/agency-alert-banner";
 import { VerificationBanner } from "@/components/verification-banner";
 import { LockedContentPreview } from "@/components/locked-content-preview";
@@ -1280,6 +1282,15 @@ export default function Dashboard() {
         {/* Identity verification reminder — shows above all other banners for
             unverified users. Self-hides for admins, verified users, and anons. */}
         <VerificationBanner />
+
+        {/* ───────────────────────────────────────────────────────────────────
+            NEW DASHBOARD HERO + SERVICES GRID (Phase 1 conversion redesign)
+            • Three-button "What do you need today?" — Option A from the strategy
+            • Marketplace-style services grid with prices visible — Option B
+            • Replaces the buried "CV Services" + "Tools to Accelerate" sections
+            ─────────────────────────────────────────────────────────────────── */}
+        <DashboardHeroCTA />
+        <DashboardServicesGrid />
 
         {/* Agency alert + urgency banners for free users */}
         {!isPaid && (
