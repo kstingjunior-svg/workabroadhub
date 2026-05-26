@@ -94,6 +94,13 @@ const SERVICE_META: Record<string, ServiceMeta> = {
     needsJobDescription: true,
     description: "Likely questions, STAR-method sample answers, and what to ask the interviewer.",
   },
+  ats_cover_bundle: {
+    name: "ATS + Cover Letter Bundle",
+    needsCv: true,
+    needsCountry: false,
+    needsJobDescription: true,
+    description: "An ATS-optimized CV plus a matching cover letter — one package, best value deal.",
+  },
 };
 
 type Stage = "upload" | "processing" | "done" | "failed";

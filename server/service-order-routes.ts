@@ -157,6 +157,34 @@ Use ## for headings and bullets where useful.`,
 ## Salary negotiation tips for the role
 Use ## headers and bullets.`,
   },
+  ats_cover_bundle: {
+    name: "ATS + Cover Letter Bundle",
+    needsCv: true,
+    filename: "ATS_CV_and_Cover_Letter",
+    estSeconds: 90,
+    systemPrompt: `You are a CV + cover letter expert. Produce BOTH documents in a single response, separated by a clear divider:
+
+# ATS-OPTIMIZED CV
+
+(Rewrite the user's CV with:
+- Standard ATS section headers (Summary, Experience, Education, Skills, Certifications)
+- Quantified achievements where reasonable
+- Industry keywords woven in naturally
+- Plain text format, no tables/columns
+- ## section headings, * bullets for achievements)
+
+# ---
+
+# COVER LETTER
+
+(Now produce a 300-word cover letter:
+- Addressed to "Dear Hiring Manager,"
+- Connects CV experience to the job specifics provided
+- Strong opening hook + closing ask
+- Signed off with candidate's name)
+
+Output as plain text. Use ## for the two main section dividers above.`,
+  },
 };
 
 // Each service may also be referenced by its DB UUID; we look up by slug only here.
@@ -255,13 +283,12 @@ async function processOrder(orderId: string): Promise<void> {
       return;
     }
 
-    await updateOrderStatus(orderId, "completed", { output_text: output, completed_at: "NOW()" }).catch(async () => {
-      // The "NOW()" placeholder above doesn't work via parameter binding — do a direct update instead
-      await pool.query(
-        `UPDATE service_orders SET output_text = $2, completed_at = NOW(), status = 'completed', updated_at = NOW() WHERE id = $1`,
-        [orderId, output],
-      );
-    });
+    // Final write — NOW() can't be passed as a bound parameter, so we use a
+    // direct SQL update here rather than the generic updateOrderStatus helper.
+    await pool.query(
+      `UPDATE service_orders SET output_text = $2, status = 'completed', completed_at = NOW(), updated_at = NOW() WHERE id = $1`,
+      [orderId, output],
+    );
   } catch (err: any) {
     console.error(`[ServiceOrder] processOrder error for ${orderId}:`, err?.message);
     await pool.query(
@@ -333,8 +360,20 @@ export function registerServiceOrderRoutes(app: Express, isAuthenticated: Reques
           needsPayment: price > 0,
         });
       } catch (err: any) {
-        console.error("[ServiceOrder] create error:", err?.message);
-        res.status(500).json({ message: "Could not create your order. Please try again." });
+        // Surface the underlying cause so the client can show it to the user
+        // (and so logs make the failure mode obvious — e.g. missing table).
+        const errMsg = err?.message ?? "Unknown error";
+        const errCode = err?.code ?? null;
+        console.error("[ServiceOrder] create error:", errMsg, errCode);
+        // Common case: migration not run yet
+        const looksLikeMissingTable =
+          /relation .* does not exist/i.test(errMsg) || errCode === "42P01";
+        res.status(500).json({
+          message: looksLikeMissingTable
+            ? "Service-order table not yet created on this database. Run migrations/0005_service_orders.sql in Supabase first."
+            : `Could not create your order: ${errMsg}`,
+          code: errCode,
+        });
       }
     },
   );
