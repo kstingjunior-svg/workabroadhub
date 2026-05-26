@@ -135,8 +135,31 @@ export default function Services() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
 
+  // Services that use the new unified upload → pay → AI → download flow.
+  // For these, redirect to /services/order/:slug instead of calling /api/pay
+  // directly — the order page handles file upload, payment, and download.
+  const AI_DELIVERY_SLUGS = new Set([
+    "cv_fix_lite",
+    "ats_cv_optimization",
+    "cv_rewrite",
+    "cover_letter",
+    "sop_writing",
+    "motivation_letter",
+    "linkedin_optimization",
+    "interview_coaching",
+    "ats_cover_bundle",
+  ]);
+
   async function startPayment(service: Service) {
     trackServerEvent("click_service", { serviceId: service.id });
+
+    // Route AI-delivered services through the new unified order flow
+    const slug = (service.code ?? service.slug ?? service.id ?? "").toLowerCase();
+    if (AI_DELIVERY_SLUGS.has(slug)) {
+      navigate(`/services/order/${slug}`);
+      return;
+    }
+
     setPaying(service.id);
     try {
       // Resolve the canonical price via the pricing engine before initiating payment.

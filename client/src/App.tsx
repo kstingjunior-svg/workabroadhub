@@ -89,6 +89,7 @@ const PayPage = lazy(() => import("@/pages/pay"));
 const MyDocuments = lazy(() => import("@/pages/my-documents"));
 const MyOverview = lazy(() => import("@/pages/my-overview"));
 const AccountVerify = lazy(() => import("@/pages/account-verify"));
+const ServiceOrderFlow = lazy(() => import("@/pages/service-order-flow"));
 const LoginPage = lazy(() => import("@/pages/login"));
 const ForgotPassword = lazy(() => import("@/pages/forgot-password"));
 const ResetPassword = lazy(() => import("@/pages/reset-password"));
@@ -280,6 +281,7 @@ const LazyMyOverview  = withSuspense(MyOverview);
 const LazyMyPayments  = withSuspense(MyPayments);
 const LazyMyDocuments = withSuspense(MyDocuments);
 const LazyAccountVerify = withSuspense(AccountVerify);
+const LazyServiceOrderFlow = withSuspense(ServiceOrderFlow);
 const LazyReferrals = withSuspense(Referrals);
 const LazyReferralTerms = withSuspense(ReferralTerms);
 const LazyCareerMatch = withSuspense(CareerMatch);
@@ -393,6 +395,7 @@ function AuthenticatedRoutes() {
       <Route path="/my-documents" component={LazyMyDocuments} />
       <Route path="/my-overview" component={LazyMyOverview} />
       <Route path="/account/verify" component={LazyAccountVerify} />
+      <Route path="/services/order/:slug" component={LazyServiceOrderFlow} />
       <Route path="/login" component={LazyLoginPage} />
       <Route path="/signup" component={LazyLoginPage} />
       <Route path="/forgot-password" component={LazyForgotPassword} />

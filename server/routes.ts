@@ -18351,6 +18351,13 @@ Rules:
   const { registerToolsRoutes } = await import("./tools-routes");
   registerToolsRoutes(app, isAuthenticated, isAdmin);
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SERVICE ORDER FLOW — unified upload → pay → AI → download for paid services
+  // (CV Fix Lite, ATS, Cover Letter, SOP, Country CV Rewrite, Motivation, etc.)
+  // ═══════════════════════════════════════════════════════════════════════════
+  const { registerServiceOrderRoutes } = await import("./service-order-routes");
+  registerServiceOrderRoutes(app, isAuthenticated);
+
   // AI Routes — /api/ai/cv/check, /api/ai/jobs/generate, /api/ai/jobs/batch-generate, /api/ai/jobs/history, /api/ai/jobs/retry/:id
   const { default: aiRouter } = await import("./routes/ai");
   app.use("/api/ai", aiRouter);
