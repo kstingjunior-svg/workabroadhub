@@ -3440,9 +3440,13 @@ Crawl-delay: 1`);
 
       // SECURITY: Store refCode AND phone in metadata for secure server-side verification.
       // The phone is stored here so the M-Pesa callback can verify the payer matches the initiator.
+      // serviceOrderId is also included when the user came from /services/order/:slug,
+      // so paymentPipeline can trigger AI generation right after payment success.
+      const bodyServiceOrderId = (req.body?.serviceOrderId as string | undefined) || undefined;
       const metadata = JSON.stringify({
         ...(refCode ? { refCode } : {}),
         ...(normalizedPhone ? { phone: normalizedPhone } : {}),
+        ...(bodyServiceOrderId ? { serviceOrderId: bodyServiceOrderId } : {}),
       });
 
       // Resolve amount from DB.
