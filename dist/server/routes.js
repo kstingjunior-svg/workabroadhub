@@ -38,6 +38,7 @@ const auth_1 = require("./replit_integrations/auth");
 const csrf_1 = require("./middleware/csrf");
 const requirePlan_1 = require("./middleware/requirePlan");
 const requireAuth_1 = require("./middleware/requireAuth");
+const identityVerification_1 = require("./services/identityVerification");
 const zod_1 = require("zod");
 const auth_2 = require("@shared/models/auth");
 const router_1 = require("./ai/router");
@@ -1227,6 +1228,14 @@ function bumpServicesVersion(rows) {
     }
 }
 async function registerRoutes(httpServer, app) {
+    console.log("🚀 [setupRoutes] STARTING — build tag: VISA-JOBS-V3-2026-05-28");
+    // ─── EARLY DIAGNOSTIC PINGS ─────────────────────────────────────────────────
+    // Mounted FIRST so they're guaranteed to register even if later setup throws.
+    // If /api/early-ping returns 404, registerRoutes itself isn't being called.
+    app.get("/api/early-ping", (_req, res) => {
+        res.json({ ok: true, where: "early", buildTag: "V3", ts: new Date().toISOString() });
+    });
+    console.log("✅ [setupRoutes] /api/early-ping registered");
     await (0, auth_1.setupAuth)(app);
     (0, auth_1.registerAuthRoutes)(app);
     // Track active sessions for the admin dashboard real-time counter.
@@ -1861,6 +1870,23 @@ Crawl-delay: 1`);
             const userId = req.user?.claims?.sub;
             if (!userId)
                 return res.status(401).json({ message: "Unauthorized" });
+            // Admin bypass — admins always see themselves as Pro so they can use
+            // every gated feature for QA / customer support without paying. Server
+            // middleware (requirePlan.ts) enforces the same bypass; this endpoint
+            // controls what the client UI shows.
+            const userRow = await storage_1.storage.getUserById(userId);
+            const isAdminUser = !!(userRow &&
+                (userRow.isAdmin === true ||
+                    userRow.role === "ADMIN" ||
+                    userRow.role === "SUPER_ADMIN"));
+            if (isAdminUser) {
+                const proPlan = await storage_1.storage.getPlanById("pro");
+                return res.json({
+                    planId: "pro",
+                    plan: proPlan,
+                    subscription: { status: "active", plan: "pro", isAdminBypass: true },
+                });
+            }
             const planId = await storage_1.storage.getUserPlan(userId);
             const plan = await storage_1.storage.getPlanById(planId);
             const subscription = await storage_1.storage.getUserSubscription(userId);
@@ -2965,7 +2991,7 @@ Crawl-delay: 1`);
             res.status(500).json({ message: err.message });
         }
     });
-    app.post("/api/payments/initiate", auth_1.isAuthenticated, async (req, res) => {
+    app.post("/api/payments/initiate", auth_1.isAuthenticated, identityVerification_1.requireVerifiedForPayment, async (req, res) => {
         try {
             const userId = req.user?.claims?.sub;
             if (!userId) {
@@ -3097,9 +3123,13 @@ Crawl-delay: 1`);
             }
             // SECURITY: Store refCode AND phone in metadata for secure server-side verification.
             // The phone is stored here so the M-Pesa callback can verify the payer matches the initiator.
+            // serviceOrderId is also included when the user came from /services/order/:slug,
+            // so paymentPipeline can trigger AI generation right after payment success.
+            const bodyServiceOrderId = req.body?.serviceOrderId || undefined;
             const metadata = JSON.stringify({
                 ...(refCode ? { refCode } : {}),
                 ...(normalizedPhone ? { phone: normalizedPhone } : {}),
+                ...(bodyServiceOrderId ? { serviceOrderId: bodyServiceOrderId } : {}),
             });
             // Resolve amount from DB.
             // Plans:    "plan_pro" → strip prefix → "pro"   (looks up plans table)
@@ -3199,7 +3229,7 @@ Crawl-delay: 1`);
     //   3. Call Safaricom stkPush() with phone + amount from the row
     //   4. Stamp the real Safaricom CheckoutRequestID back onto the row
     //   5. Return { success: true, checkoutRequestId: "<safaricom id>" }
-    app.post("/api/mpesa/stk", auth_1.isAuthenticated, async (req, res) => {
+    app.post("/api/mpesa/stk", auth_1.isAuthenticated, identityVerification_1.requireVerifiedForPayment, async (req, res) => {
         try {
             const userId = req.user?.claims?.sub;
             if (!userId)
@@ -3975,7 +4005,7 @@ Crawl-delay: 1`);
         return result.rows[0] ?? null;
     }
     // ── POST /api/payments/mpesa/stk-push — unified STK push for plans + services ─
-    app.post("/api/payments/mpesa/stk-push", auth_1.isAuthenticated, async (req, res) => {
+    app.post("/api/payments/mpesa/stk-push", auth_1.isAuthenticated, identityVerification_1.requireVerifiedForPayment, async (req, res) => {
         try {
             const userId = req.user?.claims?.sub ?? req.user?.id;
             if (!userId)
@@ -4394,13 +4424,29 @@ Crawl-delay: 1`);
                             (0, socket_1.getIO)().emit("user_upgraded", { user_id: supabaseUid });
                         }
                         const { runPaymentPipeline } = await Promise.resolve().then(() => __importStar(require("./services/paymentPipeline")));
+                        // Resolve planId robustly. Different code paths historically set
+                        // serviceId in different shapes, so we accept ALL of them:
+                        //   • payment.planId is already set → use it
+                        //   • serviceId is "plan_pro" / "plan_basic" → strip the prefix
+                        //   • serviceId is just "pro" / "basic" / "yearly" / "monthly" → use as-is
+                        //   • everything else is a one-off service purchase (planId stays null)
+                        const sid = (payment.serviceId ?? "").toLowerCase();
+                        const resolvedPlanId = payment.planId ??
+                            (sid.startsWith("plan_") ? sid.replace("plan_", "") : null) ??
+                            (["pro", "basic", "yearly", "monthly", "trial"].includes(sid) ? sid : null);
                         await runPaymentPipeline({
                             payment: { ...payment, userId: pipelineUser.id, amount: amountPaid ?? payment.amount },
                             user: pipelineUser,
                             method: "mpesa",
                             transactionId: mpesaReceipt || payment.id,
-                            planId: payment.serviceId?.startsWith("plan_") ? (payment.planId ?? null) : null,
+                            planId: resolvedPlanId,
                         });
+                        if (resolvedPlanId) {
+                            console.log(`[MPESA CALLBACK] Plan activation triggered: userId=${pipelineUser.id} plan=${resolvedPlanId}`);
+                        }
+                        else {
+                            console.log(`[MPESA CALLBACK] One-off service purchase (no plan activation): serviceId=${sid}`);
+                        }
                     }
                     else {
                         await storage_1.storage.updatePayment(payment.id, {
@@ -4630,7 +4676,7 @@ Crawl-delay: 1`);
             }
         });
     });
-    app.post("/api/mpesa/stkpush", auth_1.isAuthenticated, async (req, res) => {
+    app.post("/api/mpesa/stkpush", auth_1.isAuthenticated, identityVerification_1.requireVerifiedForPayment, async (req, res) => {
         try {
             const userId = req.user?.claims?.sub;
             if (!userId) {
@@ -16039,7 +16085,7 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
     // SECURITY: For plan upgrades (serviceId = "plan_basic" | "plan_pro") the amount is
     // ALWAYS resolved from the database — the client-supplied amount is IGNORED.
     // This prevents any 1-KES or arbitrary-amount exploit attempts.
-    app.post("/api/paypal/create-order", auth_1.isAuthenticated, async (req, res) => {
+    app.post("/api/paypal/create-order", auth_1.isAuthenticated, identityVerification_1.requireVerifiedForPayment, async (req, res) => {
         try {
             if (!(0, paypal_1.isPayPalConfigured)()) {
                 return res.status(503).json({ message: "PayPal is not configured." });
@@ -17043,6 +17089,33 @@ Rules:
     // ═══════════════════════════════════════════════════════════════════════════
     const { registerToolsRoutes } = await Promise.resolve().then(() => __importStar(require("./tools-routes")));
     registerToolsRoutes(app, auth_1.isAuthenticated, isAdmin);
+    // ═══════════════════════════════════════════════════════════════════════════
+    // SERVICE ORDER FLOW — unified upload → pay → AI → download for paid services
+    // (CV Fix Lite, ATS, Cover Letter, SOP, Country CV Rewrite, Motivation, etc.)
+    // ═══════════════════════════════════════════════════════════════════════════
+    const { registerServiceOrderRoutes } = await Promise.resolve().then(() => __importStar(require("./service-order-routes")));
+    registerServiceOrderRoutes(app, auth_1.isAuthenticated);
+    // ═══════════════════════════════════════════════════════════════════════════
+    // VISA-SPONSORED JOBS — server-authoritative catalog with Pro-gated apply
+    //   GET /api/visa-jobs          → public list (no applyUrl)
+    //   GET /api/visa-jobs/:id/apply → 302 redirect for Pro users / 403 otherwise
+    // (Wrapped with try/catch + logging so any module-load failure is visible.)
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Liveness probe that doesn't depend on the dynamic-imported module — if this
+    // 404s on the live site, we know setupRoutes never reached this line.
+    console.log("🎯 [setupRoutes] About to register /api/visa-jobs-ping");
+    app.get("/api/visa-jobs-ping", (_req, res) => {
+        res.json({ ok: true, ts: new Date().toISOString() });
+    });
+    console.log("✅ [setupRoutes] /api/visa-jobs-ping registered");
+    try {
+        const { registerVisaJobsRoutes } = await Promise.resolve().then(() => __importStar(require("./visa-jobs-routes")));
+        registerVisaJobsRoutes(app, auth_1.isAuthenticated);
+    }
+    catch (err) {
+        console.error("[VisaJobs] ❌ Failed to register routes:", err?.message);
+        console.error(err?.stack);
+    }
     // AI Routes — /api/ai/cv/check, /api/ai/jobs/generate, /api/ai/jobs/batch-generate, /api/ai/jobs/history, /api/ai/jobs/retry/:id
     const { default: aiRouter } = await Promise.resolve().then(() => __importStar(require("./routes/ai")));
     app.use("/api/ai", aiRouter);
@@ -17119,21 +17192,63 @@ Rules:
         return null;
     }
     // Base persona — user-specific context is appended at runtime after DB lookup
-    const WA_BASE_PROMPT = `You are Nanjila, WorkAbroad Hub's career assistant — warm, knowledgeable, and unmistakably Kenyan.
+    const WA_BASE_PROMPT = `You are Nanjila — a real Kenyan career advisor at WorkAbroad Hub. You are a person, not a chatbot. Talk like a warm friend who happens to be expert at overseas jobs.
 
-IDENTITY:
-- Name: Nanjila | Brand: WorkAbroad Hub | Role: Career Assistant
-- You speak like a trusted Kenyan professional: confident, caring, occasionally mixing Swahili naturally.
+YOUR VOICE:
+- You're a 28-year-old Kenyan woman, university-educated, has lived in Nairobi all her life.
+- You've personally helped 1,000+ Kenyans move abroad for work and study.
+- You speak the way a smart, slightly playful Kenyan friend texts on WhatsApp — natural, warm, real.
+- You sprinkle in Swahili the way Kenyans actually do: "sawa", "poa", "asante", "karibu", "twende", "bwana", "wewe" — never forced, never every sentence.
+- You laugh, you sympathize, you sometimes tease gently. You're not a customer service robot.
 
-CRITICAL CONVERSATION RULES:
-1. NEVER start a reply with "Hello, I'm Nanjila" or any form of self-introduction after the first greeting. You already introduced yourself — just answer the question directly.
-2. Do NOT repeat your name, brand name, or role at the start of follow-up replies. Jump straight to the answer.
-3. Be warm, professional, and concise (under 3 short paragraphs unless explaining services).
-4. Never make up information. When unsure, escalate to a human immediately.
-5. Always highlight safety: NEA verification, scam protection.
-6. State all prices in KES. Never quote USD or GBP unless asked about destination costs.
-7. Mix English + Swahili naturally. Never sound robotic.
-8. Use emojis occasionally — not on every sentence.
+ABSOLUTE NO-NOs (Breaking these makes you sound robotic):
+1. NEVER reintroduce yourself. The greeting "Hi, I'm Nanjila" happens ONCE at the start of a session. After that, EVERY reply must skip the introduction and dive straight into the substance. If a user says "thanks", say "anytime 😊" — NOT "Hi I'm Nanjila, you're welcome".
+2. NEVER repeat your name in the middle of a reply ("As Nanjila, I'd say..." — forbidden).
+3. NEVER list every service in one reply. Mention only the ONE service that fits the user's specific question, and pitch it conversationally.
+4. NEVER use more than 1 emoji per reply. Most replies should have ZERO emojis. The voice synthesizer reads them out loud ("smiling face emoji") and it sounds awful.
+5. NEVER respond with bullet points unless the user explicitly asks for a list. Talk like a human — in sentences.
+6. NEVER say "I'm an AI" or "I'm a chatbot" or "I'm just here to help". You're Nanjila.
+
+HOW TO REPLY WELL:
+- First-time greeting (only when no prior context): "Hey! I'm Nanjila — career advisor here at WorkAbroad Hub. What are you trying to figure out?"
+- Continuation replies: jump straight in. Examples:
+   User: "Tell me about jobs in Canada"
+   You: "Canada is hot right now, especially nursing and IT. Express Entry is the main path — you basically score points on age, English, qualifications, and a Canadian job offer adds 50 more. Are you nursing, IT, or something else?"
+
+   User: "How much does the Pro plan cost?"
+   You: "Pro is KES 4,500 for the year — works out to under 400 bob a month. Gets you unlimited NEA agency checks, all 30+ verified job portals, ATS CV scanner, and direct WhatsApp access to me. Want me to walk you through what unlocks first?"
+
+   User: "Thanks!"
+   You: "Anytime. Holler if anything else comes up."
+
+   User: "I want to study in the UK"
+   You: "Nice choice — UK student visas are pretty straightforward if your offer letter and finances are in order. What level — bachelors, masters, PhD? And do you have a university shortlist already?"
+
+WHAT YOU KNOW:
+- Pro Plan: KES 4,500/year. Unlimited NEA checks, 30+ verified portals, ATS CV scanner, WhatsApp consultation, priority support.
+- 566 verified NEA agencies in our database. 728 are expired or fake — we flag them.
+- Countries covered: UK, Canada, Australia, UAE, USA, Germany, plus broader Europe.
+- CV services (all delivered by AI in under 3 minutes):
+   - ATS CV Optimization: KES 3,500
+   - Country-Specific CV Rewrite: KES 3,500
+   - Cover Letter: KES 1,500
+   - Interview Coaching: KES 5,000
+   - Visa Guidance: KES 3,000
+   - LinkedIn Optimization: KES 3,000
+   - Statement of Purpose: KES 4,000
+   - Contract Review: KES 3,500
+   - Employer Verification: KES 2,500
+   - Pre-Departure Orientation: KES 1,500
+- Job Application Packs: Starter KES 2,500 (3 apps), Pro KES 5,500 (8 apps), Premium KES 9,500 (15 apps)
+- Student Packs: Starter KES 3,500 (3 unis), Pro KES 7,500 (6 unis), Premium KES 12,000 (10 unis)
+- Subscriptions: Premium WhatsApp Support KES 1,000/mo, Premium Job Alerts KES 500/mo, Emergency Support KES 300/mo
+- All prices KES only. Don't quote USD/GBP.
+- CV upload: users can send a PDF or Word doc in this chat — you'll read it and match them to jobs instantly.
+
+SAFETY ALWAYS:
+- Push NEA verification when agencies come up.
+- Warn about red flags (upfront fees, "guaranteed" jobs, recruiters via personal WhatsApp).
+- If unsure or technical issue, say "Let me get a human teammate on this — drop your number at /contact and we'll WhatsApp you within the hour." Don't make stuff up.
 
 KNOWLEDGE BASE — TOPICS YOU HANDLE:
 1. Pro Plan pricing (KES 4,500/year, 360 days)
@@ -17636,7 +17751,10 @@ Tone examples:
                             const ttsText = reply
                                 .replace(/[*_~`]/g, "") // strip markdown bold/italic/code
                                 .replace(/^[•\-–]\s*/gm, "") // strip bullet points
-                                .replace(/📊|🎯|👤|🌍|📋|✅|👏|•/g, "") // strip emojis that don't read well
+                                .replace(/\p{Extended_Pictographic}/gu, "") // strip ALL emojis (no more "smiling face")
+                                .replace(/[\u{1F1E6}-\u{1F1FF}]/gu, "") // strip flag regional indicators
+                                .replace(/[‍️︎]/g, "") // strip ZWJ + variation selectors
+                                .replace(/[•·●◦▪▫►▶]/g, "") // strip bullet glyphs TTS reads as "bullet"
                                 .replace(/\n{2,}/g, ". ") // double newlines → sentence pause
                                 .replace(/\n/g, ", ") // single newlines → comma pause
                                 .replace(/\s{2,}/g, " ") // collapse spaces
@@ -17731,9 +17849,12 @@ Tone examples:
                 try {
                     const { generateVoiceFile } = await Promise.resolve().then(() => __importStar(require("./lib/elevenlabs")));
                     const ttsText = reply
-                        .replace(/[*_~`]/g, "")
-                        .replace(/^[•\-–]\s*/gm, "")
-                        .replace(/📊|🎯|👤|🌍|📋|✅|👏|•/g, "")
+                        .replace(/[*_~`]/g, "") // markdown
+                        .replace(/^[•\-–]\s*/gm, "") // bullets
+                        .replace(/\p{Extended_Pictographic}/gu, "") // ALL emojis
+                        .replace(/[\u{1F1E6}-\u{1F1FF}]/gu, "") // flag regional indicators
+                        .replace(/[‍️︎]/g, "") // ZWJ + variation selectors
+                        .replace(/[•·●◦▪▫►▶]/g, "") // bullet glyphs TTS reads as "bullet"
                         .replace(/\n{2,}/g, ". ")
                         .replace(/\n/g, ", ")
                         .replace(/\s{2,}/g, " ")
