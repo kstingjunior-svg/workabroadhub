@@ -18384,9 +18384,20 @@ Rules:
   // VISA-SPONSORED JOBS — server-authoritative catalog with Pro-gated apply
   //   GET /api/visa-jobs          → public list (no applyUrl)
   //   GET /api/visa-jobs/:id/apply → 302 redirect for Pro users / 403 otherwise
+  // (Wrapped with try/catch + logging so any module-load failure is visible.)
   // ═══════════════════════════════════════════════════════════════════════════
-  const { registerVisaJobsRoutes } = await import("./visa-jobs-routes");
-  registerVisaJobsRoutes(app, isAuthenticated);
+  // Liveness probe that doesn't depend on the dynamic-imported module — if this
+  // 404s on the live site, we know setupRoutes never reached this line.
+  app.get("/api/visa-jobs-ping", (_req, res) => {
+    res.json({ ok: true, ts: new Date().toISOString() });
+  });
+  try {
+    const { registerVisaJobsRoutes } = await import("./visa-jobs-routes");
+    registerVisaJobsRoutes(app, isAuthenticated);
+  } catch (err: any) {
+    console.error("[VisaJobs] ❌ Failed to register routes:", err?.message);
+    console.error(err?.stack);
+  }
 
   // AI Routes — /api/ai/cv/check, /api/ai/jobs/generate, /api/ai/jobs/batch-generate, /api/ai/jobs/history, /api/ai/jobs/retry/:id
   const { default: aiRouter } = await import("./routes/ai");
@@ -19709,20 +19720,4 @@ Tone examples:
     res.send(twiml.toString());
   });
 
-  // ── Client-side event tracker ────────────────────────────────────────────────
-  app.post("/api/track-event", async (req: any, res) => {
-    const { userId, event, page, metadata = {} } = req.body;
-
-    if (!event) return res.sendStatus(200);
-
-    await pool.query(
-      `INSERT INTO funnel_events (user_id, event, page, metadata)
-       VALUES ($1, $2, $3, $4)`,
-      [userId ?? req.user?.id ?? null, event, page ?? null, metadata]
-    );
-
-    res.sendStatus(200);
-  });
-
-  return httpServer;
-}
+  // ── Client-side event tracker ────────────────────────�
