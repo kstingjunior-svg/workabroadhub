@@ -115,6 +115,23 @@ async function runPaymentPipeline(opts) {
     }).catch((err) => {
         console.error(`[Pipeline] Step 3 FAILED (deliverService): ${err?.message}`);
     });
+    // ── Step 3b: Trigger AI generation for unified service-order flow ───────────
+    // When a payment was initiated via POST /api/services/order/:slug, the
+    // payment.metadata holds the orderId. Fire AI generation now so the
+    // download is ready by the time the user finishes polling.
+    try {
+        const meta = typeof payment.metadata === "string"
+            ? JSON.parse(payment.metadata)
+            : (payment.metadata ?? {});
+        const orderId = meta?.serviceOrderId;
+        if (orderId) {
+            const { onPaymentSuccessForServiceOrder } = await Promise.resolve().then(() => __importStar(require("../service-order-routes")));
+            onPaymentSuccessForServiceOrder(orderId).then(() => console.log(`[Pipeline] Step 3b ✓ service-order AI triggered | orderId=${orderId}`)).catch((err) => console.error(`[Pipeline] Step 3b FAILED: ${err?.message}`));
+        }
+    }
+    catch (err) {
+        console.warn(`[Pipeline] Step 3b skipped (metadata parse): ${err?.message}`);
+    }
     // ── Step 4: notify ──────────────────────────────────────────────────────────
     // Real-time WebSocket events — fire-and-forget so a missing WS connection
     // never delays the response back to the gateway.

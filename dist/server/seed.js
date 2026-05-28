@@ -75,24 +75,31 @@ async function seedDatabase() {
         { countryId: europe.id, section: "visa_warning", content: "Work permits vary by country. EU Blue Card requires job offer with minimum salary threshold. Beware of fake job offers from unverified companies. Always verify employer registration with local authorities." },
     ]);
     await db_1.db.insert(schema_1.jobLinks).values([
+        // NOTE: Some Western job portals (Monster, TotalJobs, CareerBuilder, Workopolis)
+        // use aggressive WAFs (Akamai etc.) that block non-local visitors — including
+        // users browsing from Kenya. We intentionally exclude them and seed only
+        // portals that are reliably reachable from any IP.
         { countryId: usa.id, name: "Indeed USA", url: "https://www.indeed.com", isActive: true, order: 1 },
         { countryId: usa.id, name: "LinkedIn Jobs", url: "https://www.linkedin.com/jobs", isActive: true, order: 2 },
         { countryId: usa.id, name: "USAJOBS (Government)", url: "https://www.usajobs.gov", isActive: true, order: 3 },
+        { countryId: usa.id, name: "Dice (Tech)", url: "https://www.dice.com", isActive: true, order: 4 },
+        { countryId: usa.id, name: "SimplyHired", url: "https://www.simplyhired.com", isActive: true, order: 5 },
         { countryId: canada.id, name: "Job Bank Canada", url: "https://www.jobbank.gc.ca", isActive: true, order: 1 },
         { countryId: canada.id, name: "Indeed Canada", url: "https://ca.indeed.com", isActive: true, order: 2 },
-        { countryId: canada.id, name: "CareerBuilder Canada", url: "https://www.careerbuilder.ca", isActive: true, order: 3 },
-        { countryId: canada.id, name: "Monster Canada", url: "https://www.monster.ca", isActive: true, order: 4 },
-        { countryId: canada.id, name: "Workopolis", url: "https://www.workopolis.com", isActive: true, order: 5 },
+        { countryId: canada.id, name: "LinkedIn Jobs Canada", url: "https://www.linkedin.com/jobs/?location=Canada", isActive: true, order: 3 },
+        { countryId: canada.id, name: "Adzuna Canada", url: "https://www.adzuna.ca", isActive: true, order: 4 },
+        { countryId: canada.id, name: "Eluta", url: "https://www.eluta.ca", isActive: true, order: 5 },
         { countryId: uae.id, name: "Bayt", url: "https://www.bayt.com", isActive: true, order: 1 },
         { countryId: uae.id, name: "XpatJobs UAE", url: "https://unitedarabemirates.xpatjobs.com", isActive: true, order: 2 },
         { countryId: uae.id, name: "Indeed UAE", url: "https://www.indeed.ae", isActive: true, order: 3 },
         { countryId: uae.id, name: "LinkedIn Jobs", url: "https://www.linkedin.com/jobs", isActive: true, order: 4 },
-        { countryId: uae.id, name: "Reed UAE", url: "https://www.reed.co.uk/jobs/jobs-in-uae", isActive: true, order: 5 },
+        { countryId: uae.id, name: "Naukri Gulf", url: "https://www.naukrigulf.com", isActive: true, order: 5 },
+        { countryId: uae.id, name: "GulfTalent", url: "https://www.gulftalent.com", isActive: true, order: 6 },
         { countryId: uk.id, name: "Indeed UK", url: "https://www.indeed.co.uk", isActive: true, order: 1 },
         { countryId: uk.id, name: "Reed", url: "https://www.reed.co.uk", isActive: true, order: 2 },
-        { countryId: uk.id, name: "Totaljobs", url: "https://www.totaljobs.com", isActive: true, order: 3 },
-        { countryId: uk.id, name: "Monster UK", url: "https://www.monster.co.uk", isActive: true, order: 4 },
-        { countryId: uk.id, name: "LinkedIn Jobs", url: "https://www.linkedin.com/jobs", isActive: true, order: 5 },
+        { countryId: uk.id, name: "LinkedIn Jobs UK", url: "https://www.linkedin.com/jobs/?location=United+Kingdom", isActive: true, order: 3 },
+        { countryId: uk.id, name: "CV-Library", url: "https://www.cv-library.co.uk", isActive: true, order: 4 },
+        { countryId: uk.id, name: "Adzuna UK", url: "https://www.adzuna.co.uk", isActive: true, order: 5 },
         // Europe - Germany
         { countryId: europe.id, name: "🇩🇪 Make it in Germany", url: "https://www.make-it-in-germany.com", isActive: true, order: 1 },
         { countryId: europe.id, name: "🇩🇪 Arbeitsagentur", url: "https://www.arbeitsagentur.de", isActive: true, order: 2 },

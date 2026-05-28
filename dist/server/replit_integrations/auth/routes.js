@@ -10,6 +10,9 @@ const drizzle_orm_1 = require("drizzle-orm");
 const db_1 = require("../../db");
 const auth_1 = require("@shared/models/auth");
 const email_1 = require("../../email");
+const email_validator_1 = require("../../utils/email-validator");
+const phone_validator_1 = require("../../utils/phone-validator");
+const identityVerification_1 = require("../../services/identityVerification");
 // Email + password auth routes (replaces the disabled stub).
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
@@ -39,26 +42,41 @@ function registerAuthRoutes(app) {
             const password = String(req.body?.password ?? "");
             const firstName = req.body?.firstName ? String(req.body.firstName).trim() : null;
             const lastName = req.body?.lastName ? String(req.body.lastName).trim() : null;
-            if (!rawEmail || !EMAIL_RE.test(rawEmail)) {
-                return res.status(400).json({ message: "Please enter a valid email address." });
+            // Real-identity email validation: blocks disposable/throwaway providers,
+            // verifies the domain actually accepts mail (MX records), and rejects
+            // obvious test patterns (test@test.com etc.).
+            const emailCheck = await (0, email_validator_1.validateEmail)(rawEmail);
+            if (!emailCheck.valid) {
+                return res.status(400).json({ message: emailCheck.message, reason: emailCheck.reason });
             }
+            const cleanEmail = emailCheck.normalized;
             if (!password || password.length < 8) {
                 return res.status(400).json({ message: "Password must be at least 8 characters." });
             }
-            const [existing] = await db_1.db.select().from(auth_1.users).where((0, drizzle_orm_1.eq)(auth_1.users.email, rawEmail)).limit(1);
+            const [existing] = await db_1.db.select().from(auth_1.users).where((0, drizzle_orm_1.eq)(auth_1.users.email, cleanEmail)).limit(1);
             if (existing) {
                 return res.status(409).json({ message: "An account with that email already exists. Try signing in instead." });
             }
             const passwordHash = await bcrypt_1.default.hash(password, 12);
             const [created] = await db_1.db
                 .insert(auth_1.users)
-                .values({ email: rawEmail, passwordHash, authMethod: "email", firstName, lastName })
+                .values({ email: cleanEmail, passwordHash, authMethod: "email", firstName, lastName })
                 .returning();
             if (!created) {
                 return res.status(500).json({ message: "Could not create your account. Please try again." });
             }
             await setSessionUserId(req, created.id);
-            res.json({ id: created.id, email: created.email });
+            // Fire-and-forget: send email verification code so user can verify on next page.
+            // Don't block registration response on email delivery — surfaces as a non-fatal
+            // toast on the client. The user can also request a re-send from /verify-email.
+            (0, identityVerification_1.sendEmailVerificationCode)(created.id, cleanEmail).catch((e) => console.warn("[Auth][register] verification email failed:", e?.message));
+            res.json({
+                id: created.id,
+                email: created.email,
+                emailVerified: false,
+                phoneVerified: false,
+                needsVerification: true,
+            });
         }
         catch (err) {
             console.error("[Auth][register] error:", err?.message);
@@ -106,21 +124,39 @@ function registerAuthRoutes(app) {
                 return res.status(401).json({ message: "Not authenticated" });
             }
             const [user] = await db_1.db.select().from(auth_1.users).where((0, drizzle_orm_1.eq)(auth_1.users.id, userId)).limit(1);
-            if (!user) {
-                // Stale session — destroy it so the client gets a clean login next time.
-                const sess = req.session;
-                if (sess && typeof sess.destroy === "function") {
-                    sess.destroy(() => {
-                        res.clearCookie("connect.sid");
-                        res.status(401).json({ message: "Session expired. Please sign in again." });
+            if (user) {
+                // ── Admin bypass ────────────────────────────────────────────────────
+                // Admins (is_admin=true OR role in ADMIN/SUPER_ADMIN) must look like
+                // Pro users to every client component so they can test/QA every paid
+                // service without the "Upgrade to Pro" prompts. We override plan +
+                // subscription flags + verification flags on the response only —
+                // the DB values stay untouched.
+                const isAdminUser = user.isAdmin === true ||
+                    user.role === "ADMIN" ||
+                    user.role === "SUPER_ADMIN";
+                if (isAdminUser) {
+                    return res.json({
+                        ...user,
+                        plan: "pro",
+                        subscriptionStatus: "active",
+                        emailVerified: true,
+                        phoneVerified: true,
+                        isAdminBypass: true,
                     });
                 }
-                else {
-                    res.status(401).json({ message: "Session expired. Please sign in again." });
-                }
-                return;
+                return res.json(user);
             }
-            res.json(user);
+            // No user row matches the session userId — stale session, destroy it
+            const sess = req.session;
+            if (sess && typeof sess.destroy === "function") {
+                sess.destroy(() => {
+                    res.clearCookie("connect.sid");
+                    res.status(401).json({ message: "Session expired. Please sign in again." });
+                });
+            }
+            else {
+                res.status(401).json({ message: "Session expired. Please sign in again." });
+            }
         }
         catch (err) {
             // Defensive: this used to crash with no try/catch and produce a generic
@@ -192,5 +228,93 @@ function registerAuthRoutes(app) {
             res.status(500).json({ message: "Failed to reset password. Please try again." });
         }
     });
+    // ──────────────────────────────────────────────────────────────────────────
+    // IDENTITY VERIFICATION — email + phone OTP
+    // Endpoints:
+    //   POST /api/auth/send-email-code   — (re)send email OTP to current user
+    //   POST /api/auth/send-phone-code   — validate phone via Twilio Lookup, then send SMS OTP
+    //   POST /api/auth/verify-email      — submit 6-digit email code
+    //   POST /api/auth/verify-phone      — submit 6-digit SMS code
+    //   GET  /api/auth/verification-status — current email_verified / phone_verified flags
+    // ──────────────────────────────────────────────────────────────────────────
+    function getSessionUserId(req) {
+        return req.session?.customUserId ?? null;
+    }
+    app.post("/api/auth/send-email-code", async (req, res) => {
+        const userId = getSessionUserId(req);
+        if (!userId)
+            return res.status(401).json({ message: "Please sign in first." });
+        const r = await db_1.pool.query(`SELECT email, email_verified FROM users WHERE id = $1`, [userId]);
+        const u = r.rows[0];
+        if (!u)
+            return res.status(404).json({ message: "User not found." });
+        if (u.email_verified)
+            return res.json({ ok: true, message: "Email already verified." });
+        const result = await (0, identityVerification_1.sendEmailVerificationCode)(userId, u.email);
+        if (!result.ok)
+            return res.status(429).json({ message: result.message });
+        res.json({ ok: true, message: "Verification code sent. Check your inbox." });
+    });
+    app.post("/api/auth/send-phone-code", async (req, res) => {
+        const userId = getSessionUserId(req);
+        if (!userId)
+            return res.status(401).json({ message: "Please sign in first." });
+        const rawPhone = String(req.body?.phone ?? "").trim();
+        if (!rawPhone)
+            return res.status(400).json({ message: "Phone number is required." });
+        // Real-identity phone validation: format + Twilio Lookup (catches fake/disconnected numbers)
+        const phoneCheck = await (0, phone_validator_1.validatePhone)(rawPhone);
+        if (!phoneCheck.valid) {
+            return res.status(400).json({ message: phoneCheck.message, reason: phoneCheck.reason });
+        }
+        const e164 = phoneCheck.e164;
+        // Save the validated phone (so we know what to verify against later) BEFORE sending SMS
+        await db_1.pool.query(`UPDATE users SET phone = $1, phone_verified = false, updated_at = NOW() WHERE id = $2`, [
+            e164,
+            userId,
+        ]);
+        const result = await (0, identityVerification_1.sendSmsVerificationCode)(userId, e164);
+        if (!result.ok)
+            return res.status(429).json({ message: result.message });
+        res.json({ ok: true, message: "Verification code sent via SMS.", phoneE164: e164 });
+    });
+    app.post("/api/auth/verify-email", async (req, res) => {
+        const userId = getSessionUserId(req);
+        if (!userId)
+            return res.status(401).json({ message: "Please sign in first." });
+        const code = String(req.body?.code ?? "");
+        const result = await (0, identityVerification_1.verifyCode)(userId, "email", code);
+        if (!result.ok)
+            return res.status(400).json({ message: result.message, reason: result.reason });
+        res.json({ ok: true, message: result.message });
+    });
+    app.post("/api/auth/verify-phone", async (req, res) => {
+        const userId = getSessionUserId(req);
+        if (!userId)
+            return res.status(401).json({ message: "Please sign in first." });
+        const code = String(req.body?.code ?? "");
+        const result = await (0, identityVerification_1.verifyCode)(userId, "sms", code);
+        if (!result.ok)
+            return res.status(400).json({ message: result.message, reason: result.reason });
+        res.json({ ok: true, message: result.message });
+    });
+    app.get("/api/auth/verification-status", async (req, res) => {
+        const userId = getSessionUserId(req);
+        if (!userId)
+            return res.status(401).json({ message: "Please sign in first." });
+        const r = await db_1.pool.query(`SELECT email, phone, email_verified, phone_verified, is_admin, role FROM users WHERE id = $1`, [userId]);
+        const u = r.rows[0];
+        if (!u)
+            return res.status(404).json({ message: "User not found." });
+        const isAdmin = u.is_admin || u.role === "ADMIN" || u.role === "SUPER_ADMIN";
+        res.json({
+            email: u.email,
+            phone: u.phone,
+            emailVerified: u.email_verified || isAdmin,
+            phoneVerified: u.phone_verified || isAdmin,
+            isAdmin,
+        });
+    });
     console.log("[Auth] Email/password routes registered: /api/auth/register, /api/auth/login, /api/auth/logout, /api/auth/user, /api/auth/forgot-password, /api/auth/reset-password");
+    console.log("[Auth] Verification routes registered: /api/auth/{send-email-code, send-phone-code, verify-email, verify-phone, verification-status}");
 }

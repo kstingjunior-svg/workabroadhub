@@ -1,22 +1,4 @@
 "use strict";
-// ────────────────────────────────────────
-// RUNTIME PATH-ALIAS RESOLVER (PROD ONLY)
-// ─────────────────────────────────────────
-// tsc does not rewrite TypeScript `paths` aliases, so the compiled CJS output
-// still contains literal require("@shared/...") calls that Node cannot resolve.
-// Register module-alias to map @shared -> dist/shared at startup.
-{
-    const _path = require("path");
-    if (typeof __filename === "string" && __filename.split(_path.sep).includes("dist")) {
-        const moduleAlias = require("module-alias");
-        moduleAlias.addAliases({
-            "@shared": _path.resolve(__dirname, "..", "shared"),
-        });
-    }
-}
-// ─────────────────────────────────────────────────────────────────────────────
-// SAFE PROCESS-LEVEL HANDLERS (ONLY DEFINE ONCE)
-// ─────────────────────────────────────────────────────────────────────────────
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     var desc = Object.getOwnPropertyDescriptor(m, k);
@@ -44,6 +26,29 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+// ─────────────────────────────────────────────────────────────────────────────
+// RUNTIME PATH-ALIAS RESOLVER (PROD ONLY)
+// ─────────────────────────────────────────────────────────────────────────────
+// tsc does not transform TypeScript `paths` aliases at compile time, so the
+// compiled CJS output still contains literal `require("@shared/...")` calls
+// that Node cannot resolve. In dev, tsx hooks into module resolution and
+// honors tsconfig paths, so this prologue does nothing. In compiled prod
+// (running from dist/), we register module-alias to map @shared -> dist/shared.
+// Detection key: only run when this file is loaded from a path containing
+// the dist folder; never when executed directly from source via tsx.
+{
+    const _path = require("path");
+    if (typeof __filename === "string" && __filename.split(_path.sep).includes("dist")) {
+        const moduleAlias = require("module-alias");
+        // __dirname here = .../dist/server, so ../shared = .../dist/shared
+        moduleAlias.addAliases({
+            "@shared": _path.resolve(__dirname, "..", "shared"),
+        });
+    }
+}
+// ─────────────────────────────────────────────────────────────────────────────
+// SAFE PROCESS-LEVEL HANDLERS (ONLY DEFINE ONCE)
+// ─────────────────────────────────────────────────────────────────────────────
 process.on("unhandledRejection", (reason) => {
     console.error(JSON.stringify({
         level: "error",

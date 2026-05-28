@@ -35,8 +35,15 @@ const requireAnyPaidPlan = async (req, res, next) => {
         });
     }
     try {
-        const { rows } = await db_1.pool.query(`SELECT plan, subscription_status FROM users WHERE id = $1`, [userId]);
+        const { rows } = await db_1.pool.query(`SELECT plan, subscription_status, is_admin, role FROM users WHERE id = $1`, [userId]);
         const user = rows[0];
+        // ── Admin bypass ────────────────────────────────────────────────────────
+        // Admins (is_admin=true OR role in ADMIN/SUPER_ADMIN) get free access to
+        // every gated feature so they can manage/QA the platform without paying.
+        if (user && (user.is_admin === true || user.role === "ADMIN" || user.role === "SUPER_ADMIN")) {
+            req.planId = "pro";
+            return next();
+        }
         if (!user || user.subscription_status !== "active") {
             const planId = user?.plan ?? "free";
             logViolation({ userId, endpoint, method, ip, reason: "free_plan", planId, timestamp: ts });
@@ -76,9 +83,14 @@ const requireProPlan = async (req, res, next) => {
         });
     }
     try {
-        const { rows } = await db_1.pool.query(`SELECT plan, subscription_status FROM users WHERE id = $1`, [userId]);
+        const { rows } = await db_1.pool.query(`SELECT plan, subscription_status, is_admin, role FROM users WHERE id = $1`, [userId]);
         const user = rows[0];
         const planId = user?.plan ?? "free";
+        // Admin bypass — admins always count as Pro.
+        if (user && (user.is_admin === true || user.role === "ADMIN" || user.role === "SUPER_ADMIN")) {
+            req.planId = "pro";
+            return next();
+        }
         if (!user || user.subscription_status !== "active" || planId !== "pro") {
             const reason = !user || planId === "free" ? "free_plan" : user.subscription_status !== "active" ? "expired_plan" : "insufficient_plan";
             logViolation({ userId, endpoint, method, ip, reason, planId, timestamp: ts });
