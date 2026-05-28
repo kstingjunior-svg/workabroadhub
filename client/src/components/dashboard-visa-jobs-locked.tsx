@@ -261,4 +261,18 @@ function JobCard({ job, isPro }: { job: VisaJob; isPro: boolean }) {
           <div className="w-full text-center">
             <Link
               href="/pricing"
-              className="inline-flex items-center justify-center gap-1.5 bg-amber-600 hover:bg-amber-700 text-white text-
+              className="inline-flex items-center justify-center gap-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-md pointer-events-auto transition-transform hover:scale-105"
+              data-testid={`lock-cta-${job.id}`}
+            >
+              <Lock className="h-3 w-3" /> Upgrade to apply
+            </Link>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  // For Pro users, the whole card is the clickable apply trigger.
+  // For non-Pro, the card is static with a locked overlay.
+  return content;
+}
