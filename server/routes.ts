@@ -19729,4 +19729,14 @@ Tone examples:
 
     if (!event) return res.sendStatus(200);
 
-    await pool.que
+    await pool.query(
+      `INSERT INTO funnel_events (user_id, event, page, metadata)
+       VALUES ($1, $2, $3, $4)`,
+      [userId ?? req.user?.id ?? null, event, page ?? null, metadata]
+    );
+
+    res.sendStatus(200);
+  });
+
+  return httpServer;
+}
