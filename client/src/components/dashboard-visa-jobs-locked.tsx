@@ -60,14 +60,13 @@ export function DashboardVisaJobsLocked() {
     (user as any)?.role === "ADMIN" ||
     (user as any)?.role === "SUPER_ADMIN";
 
-  const { data, isLoading, isError } = useQuery<{ jobs: VisaJob[]; total: number }>({
+  // Use the project's default queryFn (handles auth, CSRF, retries, cold-start).
+  // queryKey becomes the fetch URL: ["/api/visa-jobs"] → fetch("/api/visa-jobs").
+  const { data, isLoading, isError, refetch } = useQuery<{ jobs: VisaJob[]; total: number }>({
     queryKey: ["/api/visa-jobs"],
-    queryFn: async () => {
-      const res = await fetch("/api/visa-jobs", { credentials: "include" });
-      if (!res.ok) throw new Error(`Failed to fetch visa jobs (${res.status})`);
-      return res.json();
-    },
     staleTime: 5 * 60_000,
+    retry: 3,             // resilient to Render free-tier cold starts
+    retryDelay: (i) => Math.min(1500 * (i + 1), 6000),
   });
 
   const jobs: VisaJob[] = data?.jobs ?? [];
@@ -128,10 +127,17 @@ export function DashboardVisaJobsLocked() {
         </div>
       )}
 
-      {/* Error state */}
+      {/* Error state — Render free tier can take 30–60s to wake up */}
       {isError && (
-        <div className="rounded-xl border border-rose-200 bg-rose-50 dark:bg-rose-950/30 p-4 text-sm text-rose-700 dark:text-rose-300">
-          Couldn't load jobs right now. Please refresh in a moment.
+        <div className="rounded-xl border border-rose-200 bg-rose-50 dark:bg-rose-950/30 p-4 text-sm text-rose-700 dark:text-rose-300 flex items-center justify-between gap-3">
+          <span>Couldn't load jobs right now. The server may be waking up.</span>
+          <button
+            onClick={() => refetch()}
+            className="shrink-0 px-3 py-1 rounded-md bg-rose-600 text-white text-xs font-bold hover:bg-rose-700"
+            data-testid="retry-visa-jobs"
+          >
+            Try again
+          </button>
         </div>
       )}
 
@@ -255,18 +261,4 @@ function JobCard({ job, isPro }: { job: VisaJob; isPro: boolean }) {
           <div className="w-full text-center">
             <Link
               href="/pricing"
-              className="inline-flex items-center justify-center gap-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-md pointer-events-auto transition-transform hover:scale-105"
-              data-testid={`lock-cta-${job.id}`}
-            >
-              <Lock className="h-3 w-3" /> Upgrade to apply
-            </Link>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-
-  // For Pro users, the whole card is the clickable apply trigger.
-  // For non-Pro, the card is static with a locked overlay.
-  return content;
-}
+              className="inline-flex items-center justify-center gap-1.5 bg-amber-600 hover:bg-amber-700 text-white text-
