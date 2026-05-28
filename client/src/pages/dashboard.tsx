@@ -29,6 +29,7 @@ import { DashboardHeroCTA } from "@/components/dashboard-hero-cta";
 import { DashboardServicesGrid } from "@/components/dashboard-services-grid";
 import { DashboardProUpsell } from "@/components/dashboard-pro-upsell";
 import { DashboardSuccessStories } from "@/components/dashboard-success-stories";
+import { DashboardVisaJobsLocked } from "@/components/dashboard-visa-jobs-locked";
 import { AgencyAlertBanner } from "@/components/agency-alert-banner";
 import { VerificationBanner } from "@/components/verification-banner";
 import { LockedContentPreview } from "@/components/locked-content-preview";
@@ -1309,9 +1310,14 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* ── REAL-TIME STATS BAR ──────────────────────────────────────── */}
-        <RealTimeStatsBar />
-        <ActiveVisitorsMini />
+        {/* ── VISA-SPONSORED JOBS (locked for non-Pro users) ───────────────
+            Replaces the old "live people browsing / total members" widgets.
+            Real visa-sponsored roles (drivers, cleaners, nannies, healthcare,
+            construction, hospitality) from Saudi Arabia, UAE, Qatar, Canada,
+            UK, Australia. Non-Pro users see locked cards with "Upgrade to
+            apply" overlay → drives Pro upgrades from a position of value,
+            not pressure. Pro/admin users get direct portal apply links. */}
+        <DashboardVisaJobsLocked />
 
         {/* ── HERO WELCOME ─────────────────────────────────────────────── */}
         <div className="relative overflow-hidden rounded-2xl shadow-lg bg-gradient-to-br from-blue-700 via-indigo-700 to-purple-800" data-testid="card-hero-welcome">
