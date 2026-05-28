@@ -30,6 +30,7 @@ import { DashboardServicesGrid } from "@/components/dashboard-services-grid";
 import { DashboardProUpsell } from "@/components/dashboard-pro-upsell";
 import { DashboardSuccessStories } from "@/components/dashboard-success-stories";
 import { DashboardVisaJobsLocked } from "@/components/dashboard-visa-jobs-locked";
+import { LiveActivityStrip } from "@/components/live-activity-strip";
 import { AgencyAlertBanner } from "@/components/agency-alert-banner";
 import { VerificationBanner } from "@/components/verification-banner";
 import { LockedContentPreview } from "@/components/locked-content-preview";
@@ -1282,6 +1283,12 @@ export default function Dashboard() {
       {/* ── MAIN CONTENT ───────────────────────────────────────────────── */}
       <div className="px-4 py-5 space-y-5 pb-28 max-w-2xl mx-auto">
 
+        {/* Compact live activity strip — shows real online count + total
+            registered members. Sits unobtrusively at the very top so users
+            always see proof the platform is active without it dominating
+            the page. Pulls from /api/public/stats every 30s. */}
+        <LiveActivityStrip />
+
         {/* Identity verification reminder — shows above all other banners for
             unverified users. Self-hides for admins, verified users, and anons. */}
         <VerificationBanner />
@@ -1965,20 +1972,4 @@ export default function Dashboard() {
               </button>
             </Link>
             <Link href="/report-fraud">
-              <button className="w-full py-2 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 rounded-xl text-sm font-medium hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex items-center justify-center gap-2" data-testid="button-report-fraud">
-                <AlertCircle className="h-4 w-4" />
-                Report Fraud / Payment Issue
-              </button>
-            </Link>
-          </div>
-        </div>
-
-        {/* DISCLAIMER */}
-        <p className="text-xs text-gray-400 dark:text-gray-500 text-center px-2 pb-2 leading-relaxed">
-          WorkAbroad Hub is a career consultation service providing 1-on-1 WhatsApp guidance, personalized recommendations, and curated job resources.
-          We are not a recruitment agency and do not guarantee employment, jobs, or visas.
-        </p>
-      </div>
-    </section>
-  );
-}
+              

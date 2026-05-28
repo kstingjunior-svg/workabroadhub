@@ -18380,6 +18380,14 @@ Rules:
   const { registerServiceOrderRoutes } = await import("./service-order-routes");
   registerServiceOrderRoutes(app, isAuthenticated);
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // VISA-SPONSORED JOBS — server-authoritative catalog with Pro-gated apply
+  //   GET /api/visa-jobs          → public list (no applyUrl)
+  //   GET /api/visa-jobs/:id/apply → 302 redirect for Pro users / 403 otherwise
+  // ═══════════════════════════════════════════════════════════════════════════
+  const { registerVisaJobsRoutes } = await import("./visa-jobs-routes");
+  registerVisaJobsRoutes(app, isAuthenticated);
+
   // AI Routes — /api/ai/cv/check, /api/ai/jobs/generate, /api/ai/jobs/batch-generate, /api/ai/jobs/history, /api/ai/jobs/retry/:id
   const { default: aiRouter } = await import("./routes/ai");
   app.use("/api/ai", aiRouter);

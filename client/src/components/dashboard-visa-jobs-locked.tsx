@@ -2,197 +2,40 @@
  * Locked visa-sponsored jobs list — replaces the social-proof "live activity"
  * widgets at the top of the dashboard with a high-value conversion driver.
  *
- * Strategy:
- *   - Free users see real visa-sponsored jobs with locked apply buttons
- *   - Each card has a "Pro only — Upgrade to apply" lock overlay
- *   - Pro/Admin users get instant "Apply now" links to the real portal
- *   - Mix of casual (driver, cleaner, babysitter) + skilled roles so the
- *     audience always sees something relevant to them
+ * SECURITY (Pro-gated):
+ *   - The job catalog is fetched from /api/visa-jobs which returns metadata
+ *     only — no applyUrl is ever sent to the client.
+ *   - The "Apply" button hits /api/visa-jobs/:id/apply which:
+ *       • 302-redirects Pro users to the real portal
+ *       • returns 403 with upgradeUrl for everyone else
+ *   - Inspecting devtools / view-source won't expose any portal URL because
+ *     no portal URL exists in the client bundle.
  *
  * Conversion psychology:
  *   - User sees specific jobs they could apply to NOW
  *   - The lock creates immediate FOMO (real opportunity, blocked by KES 4,500)
  *   - Different from price-anchor cards — these are PROOF the platform works
  */
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
-import { Lock, ExternalLink, MapPin, DollarSign, Plane, ChevronRight, Briefcase } from "lucide-react";
+import { Lock, ExternalLink, MapPin, DollarSign, Plane, ChevronRight, Briefcase, Loader2 } from "lucide-react";
 
 interface VisaJob {
   id: string;
   title: string;
   employer: string;
-  country: string;        // "🇨🇦 Canada"
+  country: string;
   countryFlag: string;
   city: string;
   salary: string;
-  visaType: string;       // "Work Permit · Sponsorship Included"
-  postedAgo: string;      // "Posted 2 days ago"
+  visaType: string;
+  postedAgo: string;
   category: "Casual" | "Skilled" | "Healthcare" | "Hospitality" | "Construction" | "Transport";
-  applyUrl: string;       // Where Pro users get redirected
+  // NOTE: no applyUrl — never sent by the server to non-Pro clients, and never
+  //       needed by the client because the Apply CTA hits a server redirect.
 }
-
-// Curated visa-sponsored jobs that match the WAH audience — Kenyan workers
-// looking for casual + skilled overseas roles. Updated every Monday.
-const VISA_JOBS: VisaJob[] = [
-  {
-    id: "j1",
-    title: "Long-Haul Truck Driver",
-    employer: "Bison Transport",
-    country: "Canada",
-    countryFlag: "🇨🇦",
-    city: "Calgary, AB",
-    salary: "CAD 65,000–80,000/yr",
-    visaType: "TFW Program · LMIA Approved",
-    postedAgo: "Posted 2 days ago",
-    category: "Transport",
-    applyUrl: "https://www.jobbank.gc.ca/jobsearch/jobsearch?searchstring=truck+driver+lmia",
-  },
-  {
-    id: "j2",
-    title: "Domestic Worker / Housekeeper",
-    employer: "Private Household",
-    country: "Saudi Arabia",
-    countryFlag: "🇸🇦",
-    city: "Riyadh",
-    salary: "SAR 1,500–2,200/month",
-    visaType: "Domestic Worker Visa Sponsored",
-    postedAgo: "Posted today",
-    category: "Casual",
-    applyUrl: "https://www.bayt.com/en/saudi-arabia/jobs/domestic-jobs/",
-  },
-  {
-    id: "j3",
-    title: "Nursing Assistant (NHS)",
-    employer: "Bupa Care UK",
-    country: "United Kingdom",
-    countryFlag: "🇬🇧",
-    city: "Manchester",
-    salary: "£22,000–28,000/yr",
-    visaType: "Tier 2 Health & Care Visa",
-    postedAgo: "Posted 3 days ago",
-    category: "Healthcare",
-    applyUrl: "https://www.indeed.co.uk/jobs?q=care+assistant+visa+sponsorship",
-  },
-  {
-    id: "j4",
-    title: "Construction Worker",
-    employer: "Bechtel Qatar",
-    country: "Qatar",
-    countryFlag: "🇶🇦",
-    city: "Doha",
-    salary: "QAR 2,500–3,500/month + housing",
-    visaType: "Work Visa Sponsored · Free Accommodation",
-    postedAgo: "Posted 5 days ago",
-    category: "Construction",
-    applyUrl: "https://www.bayt.com/en/qatar/jobs/construction-jobs/",
-  },
-  {
-    id: "j5",
-    title: "Hotel Housekeeper",
-    employer: "Atlantis The Palm",
-    country: "UAE",
-    countryFlag: "🇦🇪",
-    city: "Dubai",
-    salary: "AED 1,800–2,500/month + accommodation",
-    visaType: "Employment Visa · Free Flight",
-    postedAgo: "Posted 1 day ago",
-    category: "Hospitality",
-    applyUrl: "https://www.bayt.com/en/uae/jobs/housekeeping-jobs/",
-  },
-  {
-    id: "j6",
-    title: "Nanny / Childcare Worker",
-    employer: "Au Pair Family Network",
-    country: "Australia",
-    countryFlag: "🇦🇺",
-    city: "Sydney",
-    salary: "AUD 600–800/week + room",
-    visaType: "Working Holiday / Sponsorship",
-    postedAgo: "Posted 4 days ago",
-    category: "Casual",
-    applyUrl: "https://www.seek.com.au/nanny-jobs/visa-sponsorship",
-  },
-  {
-    id: "j7",
-    title: "Aged Care Worker",
-    employer: "BUPA Aged Care",
-    country: "Australia",
-    countryFlag: "🇦🇺",
-    city: "Melbourne",
-    salary: "AUD 55,000–68,000/yr",
-    visaType: "Skilled Visa 482 · Sponsorship",
-    postedAgo: "Posted 2 days ago",
-    category: "Healthcare",
-    applyUrl: "https://www.seek.com.au/aged-care-jobs/visa-sponsorship",
-  },
-  {
-    id: "j8",
-    title: "Restaurant Server / Waiter",
-    employer: "Marriott Hotels",
-    country: "UAE",
-    countryFlag: "🇦🇪",
-    city: "Abu Dhabi",
-    salary: "AED 2,000–2,800/month + tips",
-    visaType: "2-Year Employment Visa Sponsored",
-    postedAgo: "Posted 6 days ago",
-    category: "Hospitality",
-    applyUrl: "https://www.bayt.com/en/uae/jobs/waiter-jobs/",
-  },
-  {
-    id: "j9",
-    title: "Security Guard",
-    employer: "Securitas Saudi",
-    country: "Saudi Arabia",
-    countryFlag: "🇸🇦",
-    city: "Jeddah",
-    salary: "SAR 2,000–2,800/month",
-    visaType: "Work Visa Sponsored · Housing Included",
-    postedAgo: "Posted 1 day ago",
-    category: "Casual",
-    applyUrl: "https://www.bayt.com/en/saudi-arabia/jobs/security-guard-jobs/",
-  },
-  {
-    id: "j10",
-    title: "Farm Worker (Greenhouse)",
-    employer: "Niagara Farms Canada",
-    country: "Canada",
-    countryFlag: "🇨🇦",
-    city: "Niagara, ON",
-    salary: "CAD 16–20/hour",
-    visaType: "Seasonal Agricultural Worker Program",
-    postedAgo: "Posted 3 days ago",
-    category: "Casual",
-    applyUrl: "https://www.jobbank.gc.ca/jobsearch/jobsearch?searchstring=farm+worker+sawp",
-  },
-  {
-    id: "j11",
-    title: "Mechanical Technician",
-    employer: "Siemens Saudi",
-    country: "Saudi Arabia",
-    countryFlag: "🇸🇦",
-    city: "Dammam",
-    salary: "SAR 4,500–6,500/month",
-    visaType: "Iqama Sponsored · Family Visa Available",
-    postedAgo: "Posted 4 days ago",
-    category: "Skilled",
-    applyUrl: "https://www.bayt.com/en/saudi-arabia/jobs/mechanical-technician-jobs/",
-  },
-  {
-    id: "j12",
-    title: "Welder / Steel Fabricator",
-    employer: "TAV Construction",
-    country: "Qatar",
-    countryFlag: "🇶🇦",
-    city: "Lusail",
-    salary: "QAR 3,000–4,500/month",
-    visaType: "Work Visa Sponsored · 30 Days Annual Leave",
-    postedAgo: "Posted today",
-    category: "Construction",
-    applyUrl: "https://www.bayt.com/en/qatar/jobs/welder-jobs/",
-  },
-];
 
 const CATEGORY_COLORS: Record<VisaJob["category"], string> = {
   Casual:       "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300",
@@ -213,9 +56,26 @@ export function DashboardVisaJobsLocked() {
   const isPro =
     (user as any)?.plan === "pro" ||
     (user as any)?.subscriptionStatus === "active" ||
-    (user as any)?.isAdmin === true;
+    (user as any)?.isAdmin === true ||
+    (user as any)?.role === "ADMIN" ||
+    (user as any)?.role === "SUPER_ADMIN";
 
-  const filtered = filter === "All" ? VISA_JOBS : VISA_JOBS.filter((j) => j.category === filter);
+  const { data, isLoading, isError } = useQuery<{ jobs: VisaJob[]; total: number }>({
+    queryKey: ["/api/visa-jobs"],
+    queryFn: async () => {
+      const res = await fetch("/api/visa-jobs", { credentials: "include" });
+      if (!res.ok) throw new Error(`Failed to fetch visa jobs (${res.status})`);
+      return res.json();
+    },
+    staleTime: 5 * 60_000,
+  });
+
+  const jobs: VisaJob[] = data?.jobs ?? [];
+
+  const filtered = useMemo(
+    () => (filter === "All" ? jobs : jobs.filter((j) => j.category === filter)),
+    [filter, jobs],
+  );
   const visible = showAll ? filtered : filtered.slice(0, 6);
 
   return (
@@ -226,7 +86,7 @@ export function DashboardVisaJobsLocked() {
             <Plane className="h-5 w-5 text-blue-500" /> Visa-Sponsored Jobs · Live Now
           </h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Real employers · Visa & flight included · Updated daily
+            {jobs.length > 0 ? `${jobs.length}+ real openings` : "Loading openings"} · Visa & flight included · Updated daily
           </p>
         </div>
         {!isPro && (
@@ -260,12 +120,29 @@ export function DashboardVisaJobsLocked() {
         )}
       </div>
 
+      {/* Loading state */}
+      {isLoading && (
+        <div className="flex items-center justify-center py-12 text-muted-foreground">
+          <Loader2 className="h-5 w-5 animate-spin mr-2" />
+          <span className="text-sm">Loading visa-sponsored jobs…</span>
+        </div>
+      )}
+
+      {/* Error state */}
+      {isError && (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 dark:bg-rose-950/30 p-4 text-sm text-rose-700 dark:text-rose-300">
+          Couldn't load jobs right now. Please refresh in a moment.
+        </div>
+      )}
+
       {/* Job cards grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {visible.map((job) => (
-          <JobCard key={job.id} job={job} isPro={isPro} />
-        ))}
-      </div>
+      {!isLoading && !isError && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {visible.map((job) => (
+            <JobCard key={job.id} job={job} isPro={isPro} />
+          ))}
+        </div>
+      )}
 
       {filtered.length > 6 && (
         <div className="text-center mt-4">
@@ -278,13 +155,13 @@ export function DashboardVisaJobsLocked() {
         </div>
       )}
 
-      {!isPro && (
+      {!isPro && jobs.length > 0 && (
         <div className="mt-4 rounded-xl bg-gradient-to-br from-amber-500 to-rose-600 text-white p-4 flex items-center gap-4">
           <div className="shrink-0 w-12 h-12 rounded-full bg-white/20 flex items-center justify-center">
             <Lock className="h-6 w-6" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-bold mb-0.5">All {VISA_JOBS.length} jobs unlock with Pro</p>
+            <p className="text-sm font-bold mb-0.5">All {jobs.length} jobs unlock with Pro</p>
             <p className="text-xs text-white/85">
               KES 4,500/year · Less than mandazi/day · Apply to every job + 30+ portals + WhatsApp support
             </p>
@@ -311,12 +188,27 @@ function JobCard({ job, isPro }: { job: VisaJob; isPro: boolean }) {
     </span>
   );
 
+  /**
+   * Apply handler — opens the server redirect endpoint in a new tab.
+   * The server validates Pro status server-side and either 302-redirects
+   * to the real portal or returns 403. Either way, no portal URL ever
+   * lives in the client bundle.
+   */
+  const handleApply = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isPro) return;
+    window.open(`/api/visa-jobs/${encodeURIComponent(job.id)}/apply`, "_blank", "noopener,noreferrer");
+  };
+
   const content = (
     <div
       className={`relative rounded-xl border bg-card p-4 transition-all ${
         isPro ? "hover:shadow-md hover:border-blue-300 cursor-pointer" : "opacity-95"
       }`}
       data-testid={`job-card-${job.id}`}
+      onClick={isPro ? handleApply : undefined}
+      role={isPro ? "button" : undefined}
     >
       {/* Top row: country + category */}
       <div className="flex items-start justify-between mb-2 gap-2">
@@ -374,18 +266,7 @@ function JobCard({ job, isPro }: { job: VisaJob; isPro: boolean }) {
     </div>
   );
 
-  // Pro users get a clickable wrapper that opens the application portal
-  return isPro ? (
-    <a
-      href={job.applyUrl}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="block"
-      data-testid={`apply-link-${job.id}`}
-    >
-      {content}
-    </a>
-  ) : (
-    content
-  );
+  // For Pro users, the whole card is the clickable apply trigger.
+  // For non-Pro, the card is static with a locked overlay.
+  return content;
 }
