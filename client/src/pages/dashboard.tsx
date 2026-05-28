@@ -27,6 +27,8 @@ import { LockedFeature } from "@/components/locked-feature";
 import { UrgencyBanner } from "@/components/urgency-banner";
 import { DashboardHeroCTA } from "@/components/dashboard-hero-cta";
 import { DashboardServicesGrid } from "@/components/dashboard-services-grid";
+import { DashboardProUpsell } from "@/components/dashboard-pro-upsell";
+import { DashboardSuccessStories } from "@/components/dashboard-success-stories";
 import { AgencyAlertBanner } from "@/components/agency-alert-banner";
 import { VerificationBanner } from "@/components/verification-banner";
 import { LockedContentPreview } from "@/components/locked-content-preview";
@@ -1287,10 +1289,12 @@ export default function Dashboard() {
             NEW DASHBOARD HERO + SERVICES GRID (Phase 1 conversion redesign)
             • Three-button "What do you need today?" — Option A from the strategy
             • Marketplace-style services grid with prices visible — Option B
+            • Pro upsell card with KES 12/day framing — anchors the yearly plan
             • Replaces the buried "CV Services" + "Tools to Accelerate" sections
             ─────────────────────────────────────────────────────────────────── */}
         <DashboardHeroCTA />
         <DashboardServicesGrid />
+        <DashboardProUpsell />
 
         {/* Agency alert + urgency banners for free users */}
         {!isPaid && (
@@ -1601,6 +1605,9 @@ export default function Dashboard() {
 
         {/* ── CREDITS WIDGET (Firebase live) ───────────────────────────── */}
         <CreditsWidget userId={user?.id} />
+
+        {/* ── SUCCESS STORIES (rotating Kenyan testimonials) ───────────── */}
+        <DashboardSuccessStories />
 
         {/* ── PAYMENT HISTORY ──────────────────────────────────────────── */}
         {paymentHistory && paymentHistory.length > 0 && (

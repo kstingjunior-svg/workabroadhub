@@ -315,13 +315,22 @@ export function registerServiceOrderRoutes(app: Express, isAuthenticated: Reques
     isAuthenticated,
     cvUpload.single("cv"),
     async (req: any, res: Response) => {
+      const t0 = Date.now();
+      const slug = String(req.params.slug || "").toLowerCase();
+      console.log(`[ServiceOrder] POST /api/services/order/${slug} | userId=${req.user?.claims?.sub ?? req.user?.id ?? "??"} hasFile=${!!req.file}`);
+
       try {
         const userId: string | undefined = req.user?.claims?.sub ?? req.user?.id;
-        if (!userId) return res.status(401).json({ message: "Please sign in first." });
+        if (!userId) {
+          console.warn(`[ServiceOrder] No userId on request`);
+          return res.status(401).json({ message: "Please sign in first." });
+        }
 
-        const slug = String(req.params.slug || "").toLowerCase();
         const config = getConfig(slug);
-        if (!config) return res.status(404).json({ message: "Unknown service." });
+        if (!config) {
+          console.warn(`[ServiceOrder] Unknown service slug: "${slug}"`);
+          return res.status(404).json({ message: `Unknown service: ${slug}` });
+        }
 
         // CV extraction if required
         let cvText: string | null = null;
@@ -352,6 +361,7 @@ export function registerServiceOrderRoutes(app: Express, isAuthenticated: Reques
         );
         const price = priceRows[0]?.price ?? 0;
 
+        console.log(`[ServiceOrder] Created orderId=${orderId} slug=${slug} price=${price} cvLen=${cvText?.length ?? 0} in ${Date.now() - t0}ms`);
         res.json({
           orderId,
           serviceName: config.name,
