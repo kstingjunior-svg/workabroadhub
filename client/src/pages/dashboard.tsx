@@ -1972,4 +1972,21 @@ export default function Dashboard() {
               </button>
             </Link>
             <Link href="/report-fraud">
-              
+              <button className="w-full py-2 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 rounded-xl text-sm font-medium hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex items-center justify-center gap-2" data-testid="button-report-fraud">
+                <AlertCircle className="h-4 w-4" />
+                Report Fraud / Payment Issue
+              </button>
+            </Link>
+          </div>
+        </div>
+
+        {/* DISCLAIMER */}
+        <p className="text-xs text-gray-400 dark:text-gray-500 text-center px-2 pb-2 leading-relaxed">
+          WorkAbroad Hub is a career consultation service providing 1-on-1 WhatsApp guidance, personalized recommendations, and curated job resources.
+          We are not a recruitment agency and do not guarantee employment, jobs, or visas.
+        </p>
+      </div>
+    </section>
+  );
+}
+  
