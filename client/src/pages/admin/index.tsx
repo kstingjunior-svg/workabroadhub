@@ -36,6 +36,16 @@ import {
   Phone,
 } from "lucide-react";
 
+function planLabel(plan: string | null | undefined): string {
+  const p = (plan || "").toLowerCase();
+  if (p === "pro") return "Pro Plan (KES 4,500/year)";
+  if (p === "basic") return "Basic Plan";
+  if (p === "yearly") return "Yearly Plan";
+  if (p === "monthly") return "Monthly Plan";
+  if (p === "trial") return "1-Day Trial";
+  return p ? p.charAt(0).toUpperCase() + p.slice(1) + " Plan" : "Plan upgrade";
+}
+
 function planBadge(plan: string | null | undefined) {
   const p = (plan || "free").toLowerCase();
   if (p === "pro") return (
@@ -80,8 +90,12 @@ interface Payment {
   mpesaReceiptNumber?: string;
   transactionRef?: string;
   planId?: string;
+  serviceId?: string;
+  serviceName?: string;
+  serviceLabel?: string;  // server-resolved human-readable label
   userEmail?: string;
   userName?: string;
+  userPhone?: string;
   createdAt: string;
 }
 
@@ -717,31 +731,59 @@ export default function AdminDashboard() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {recentPayments.map((payment) => (
-                    <div
-                      key={payment.id}
-                      className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
-                      data-testid={`row-payment-${payment.id}`}
-                    >
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">
-                          {payment.userEmail || payment.userName || payment.phoneNumber || "Unknown"}
-                        </p>
-                        <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-                          <span className="capitalize">{payment.method || "mpesa"}</span>
-                          {payment.planId && <span>· {payment.planId}</span>}
-                          <span>·</span>
-                          <span>{new Date(payment.createdAt).toLocaleDateString("en-KE", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
-                        </p>
+                  {recentPayments.map((payment) => {
+                    // Resolve a human-readable label for what was bought.
+                    // Server-side serviceLabel is the most reliable; fall back
+                    // through serviceName → planId → serviceId → generic.
+                    const what =
+                      payment.serviceLabel ||
+                      payment.serviceName ||
+                      (payment.planId ? planLabel(payment.planId) : null) ||
+                      (payment.serviceId
+                        ? payment.serviceId.startsWith("plan_")
+                          ? planLabel(payment.serviceId.replace("plan_", ""))
+                          : "Service Purchase"
+                        : "Service Purchase");
+                    return (
+                      <div
+                        key={payment.id}
+                        className="flex items-start justify-between p-3 rounded-lg bg-muted/50 gap-3"
+                        data-testid={`row-payment-${payment.id}`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          {/* Top line: WHAT was paid for + amount badge */}
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <p className="text-sm font-semibold truncate" data-testid={`text-payment-service-${payment.id}`}>
+                              {what}
+                            </p>
+                            {payment.planId && planBadge(payment.planId)}
+                          </div>
+                          {/* Second line: WHO paid */}
+                          <p className="text-xs text-muted-foreground truncate">
+                            {payment.userEmail || payment.userName || payment.phoneNumber || payment.userPhone || "Unknown buyer"}
+                          </p>
+                          {/* Third line: how + receipt + when */}
+                          <p className="text-[11px] text-muted-foreground flex items-center gap-1.5 mt-0.5">
+                            <span className="capitalize">{payment.method || "mpesa"}</span>
+                            {payment.mpesaReceiptNumber && (
+                              <>
+                                <span>·</span>
+                                <span className="font-mono">{payment.mpesaReceiptNumber}</span>
+                              </>
+                            )}
+                            <span>·</span>
+                            <span>{new Date(payment.createdAt).toLocaleDateString("en-KE", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+                          </p>
+                        </div>
+                        <div className="flex flex-col items-end gap-1 shrink-0">
+                          <span className="font-semibold text-sm">
+                            KES {payment.amount.toLocaleString()}
+                          </span>
+                          {getStatusBadge(payment.status)}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-3">
-                        <span className="font-semibold text-sm">
-                          KES {payment.amount.toLocaleString()}
-                        </span>
-                        {getStatusBadge(payment.status)}
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </CardContent>

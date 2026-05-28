@@ -4843,13 +4843,31 @@ Crawl-delay: 1`);
               getIO().emit("user_upgraded", { user_id: supabaseUid });
             }
             const { runPaymentPipeline } = await import("./services/paymentPipeline");
+            // Resolve planId robustly. Different code paths historically set
+            // serviceId in different shapes, so we accept ALL of them:
+            //   • payment.planId is already set → use it
+            //   • serviceId is "plan_pro" / "plan_basic" → strip the prefix
+            //   • serviceId is just "pro" / "basic" / "yearly" / "monthly" → use as-is
+            //   • everything else is a one-off service purchase (planId stays null)
+            const sid = (payment.serviceId ?? "").toLowerCase();
+            const resolvedPlanId: string | null =
+              (payment.planId as string | null) ??
+              (sid.startsWith("plan_") ? sid.replace("plan_", "") : null) ??
+              (["pro", "basic", "yearly", "monthly", "trial"].includes(sid) ? sid : null);
+
             await runPaymentPipeline({
               payment: { ...payment, userId: pipelineUser.id, amount: amountPaid ?? payment.amount },
               user:    pipelineUser,
               method:  "mpesa",
               transactionId: mpesaReceipt || payment.id,
-              planId: payment.serviceId?.startsWith("plan_") ? (payment.planId ?? null) : null,
+              planId: resolvedPlanId,
             });
+
+            if (resolvedPlanId) {
+              console.log(`[MPESA CALLBACK] Plan activation triggered: userId=${pipelineUser.id} plan=${resolvedPlanId}`);
+            } else {
+              console.log(`[MPESA CALLBACK] One-off service purchase (no plan activation): serviceId=${sid}`);
+            }
           } else {
             await storage.updatePayment(payment.id, {
               needs_review:   true,
