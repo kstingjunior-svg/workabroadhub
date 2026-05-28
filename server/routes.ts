@@ -1392,6 +1392,7 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  console.log("🚀 [setupRoutes] STARTING — build tag: VISA-JOBS-V2-2026-05-28");
   await setupAuth(app);
   registerAuthRoutes(app);
 
@@ -18388,9 +18389,11 @@ Rules:
   // ═══════════════════════════════════════════════════════════════════════════
   // Liveness probe that doesn't depend on the dynamic-imported module — if this
   // 404s on the live site, we know setupRoutes never reached this line.
+  console.log("🎯 [setupRoutes] About to register /api/visa-jobs-ping");
   app.get("/api/visa-jobs-ping", (_req, res) => {
     res.json({ ok: true, ts: new Date().toISOString() });
   });
+  console.log("✅ [setupRoutes] /api/visa-jobs-ping registered");
   try {
     const { registerVisaJobsRoutes } = await import("./visa-jobs-routes");
     registerVisaJobsRoutes(app, isAuthenticated);
@@ -19726,14 +19729,4 @@ Tone examples:
 
     if (!event) return res.sendStatus(200);
 
-    await pool.query(
-      `INSERT INTO funnel_events (user_id, event, page, metadata)
-       VALUES ($1, $2, $3, $4)`,
-      [userId ?? req.user?.id ?? null, event, page ?? null, metadata]
-    );
-
-    res.sendStatus(200);
-  });
-
-  return httpServer;
-}
+    await pool.que
