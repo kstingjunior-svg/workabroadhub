@@ -1392,7 +1392,16 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  console.log("🚀 [setupRoutes] STARTING — build tag: VISA-JOBS-V2-2026-05-28");
+  console.log("🚀 [setupRoutes] STARTING — build tag: VISA-JOBS-V3-2026-05-28");
+
+  // ─── EARLY DIAGNOSTIC PINGS ─────────────────────────────────────────────────
+  // Mounted FIRST so they're guaranteed to register even if later setup throws.
+  // If /api/early-ping returns 404, registerRoutes itself isn't being called.
+  app.get("/api/early-ping", (_req, res) => {
+    res.json({ ok: true, where: "early", buildTag: "V3", ts: new Date().toISOString() });
+  });
+  console.log("✅ [setupRoutes] /api/early-ping registered");
+
   await setupAuth(app);
   registerAuthRoutes(app);
 
