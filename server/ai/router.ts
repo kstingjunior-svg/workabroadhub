@@ -2,7 +2,38 @@ import { nanjilaAgent } from "./nanjila";
 import { checkPayment } from "./tools/checkPayment";
 import { sendWhatsApp } from "../services/whatsapp";
 import { trackEvent } from "./utils";
+import { pool } from "../db";
 export { detectLanguage } from "./utils";
+
+/**
+ * Pull the live service catalog from Postgres so Nanjila's pricing is always
+ * in sync with /services and the dashboard cards. Cached in-process for 60s
+ * so chat traffic doesn't hammer the DB. If the query fails, falls back to
+ * a generic message — never leaks a stale price.
+ */
+let _priceCache: { rows: Array<{ slug: string; name: string; price: number; badge: string | null }>; ts: number } | null = null;
+const PRICE_CACHE_TTL_MS = 60_000;
+
+async function fetchServicePricing(): Promise<Array<{ slug: string; name: string; price: number; badge: string | null }>> {
+  const now = Date.now();
+  if (_priceCache && now - _priceCache.ts < PRICE_CACHE_TTL_MS) {
+    return _priceCache.rows;
+  }
+  const { rows } = await pool.query<{ slug: string; name: string; price: number; badge: string | null }>(
+    `SELECT slug, name, price, badge
+       FROM services
+      WHERE is_active = true AND is_subscription = false
+      ORDER BY price ASC, name ASC`,
+  );
+  _priceCache = { rows, ts: now };
+  return rows;
+}
+
+function formatPriceLine(s: { name: string; price: number; badge: string | null }): string {
+  const price = s.price === 0 ? "FREE" : `KES ${s.price.toLocaleString()}`;
+  const badge = s.badge ? `  🔥 (${s.badge.toLowerCase()})` : "";
+  return `✔ ${s.name} — ${price}${badge}`;
+}
 
 export function detectIntent(message: string) {
   const m = message.toLowerCase();
@@ -71,20 +102,21 @@ I'll guide you step-by-step.
 `;
   }
 
-  // 🔥 PRICING — keep in sync with DashboardServicesGrid + /services page
+  // 🔥 PRICING — pulled live from the `services` table so it never drifts
+  // from the dashboard cards / /services page. 60s in-process cache.
   if (intent === "pricing") {
-    return `
+    try {
+      const rows = await fetchServicePricing();
+      if (rows.length === 0) {
+        // DB returned no active services — fall through to generic copy
+        throw new Error("no active services");
+      }
+      const menu = rows.map(formatPriceLine).join("\n");
+      return `
 Our services are super affordable — most cost less than a single mandazi per day.
 
 Here's the current menu:
-✔ CV Health Check — FREE (3 min)
-✔ CV Fix Lite — KES 99
-✔ Cover Letter — KES 149
-✔ ATS CV Optimization — KES 499  🔥 (most popular)
-✔ Country-Specific CV Rewrite — KES 699
-✔ Motivation Letter — KES 699
-✔ SOP / Personal Statement — KES 999
-✔ LinkedIn Profile Optimization — KES 3,000
+${menu}
 
 For comparison, a typical career consultant in Nairobi charges KES 5,000–25,000 for the same work.
 
@@ -92,6 +124,17 @@ You pay by M-Pesa, AI delivers in minutes, and you download as Word or PDF.
 
 Want me to point you at the right one for what you're trying to do?
 `;
+    } catch (err) {
+      console.error("[Nanjila/pricing] DB lookup failed, using generic fallback:", (err as any)?.message);
+      // Don't show stale prices ever. Give a soft answer that nudges to /services.
+      return `
+Our service prices are super affordable — most cost less than a single mandazi per day.
+
+The full live menu is here: https://workabroadhub.tech/services
+
+Tell me what you're trying to do (job application? scholarship? CV review?) and I'll point you at the right one.
+`;
+    }
   }
 
   // 🔥 HOT — ready to act
