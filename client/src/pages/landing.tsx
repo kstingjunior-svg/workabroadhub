@@ -998,15 +998,20 @@ export default function Landing() {
                 </div>
 
                 <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-white leading-tight">
-                  Are You a Licensed{' '}
-                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-cyan-400 to-teal-400">
-                    Recruitment Agency?
+                  Get found by{' '}
+                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-cyan-400 to-blue-400">
+                    Kenyan job seekers
                   </span>
+                  {' '}actively browsing.
                 </h2>
 
                 <p className="text-lg text-blue-100/80 leading-relaxed max-w-xl">
-                  Claim your verified NEA profile, boost your visibility to thousands of job seekers,
-                  and access premium tools to grow your agency with WorkAbroad Hub.
+                  Stand out from <strong className="text-white">798 expired-license agencies</strong>. Get a verified badge, priority placement in 1,293 listings, and direct contact from
+                  thousands of monthly job-seekers. Built specifically for NEA-licensed recruiters serving Kenyans abroad.
+                </p>
+
+                <p className="text-sm text-emerald-200/90 font-semibold">
+                  💼 Recruiters using WorkAbroad Hub fill positions <span className="underline">3× faster</span> than via classifieds.
                 </p>
 
                 <div className="grid sm:grid-cols-3 gap-4 py-2">
@@ -1027,14 +1032,17 @@ export default function Landing() {
                   </div>
                 </div>
 
-                <div className="flex flex-col sm:flex-row gap-4 pt-2">
-                  <Button size="lg" className="text-base px-8 bg-gradient-to-r from-blue-500 via-cyan-500 to-teal-500 hover:from-blue-400 hover:via-cyan-400 hover:to-teal-400 border-0 shadow-lg shadow-blue-500/25 font-semibold" asChild data-testid="button-agency-portal-cta">
+                <div className="flex flex-col sm:flex-row gap-4 pt-2 items-start">
+                  <Button size="lg" className="text-base px-8 py-6 h-auto bg-gradient-to-r from-emerald-500 via-cyan-500 to-blue-500 hover:from-emerald-400 hover:via-cyan-400 hover:to-blue-400 border-0 shadow-lg shadow-emerald-500/30 font-semibold text-base" asChild data-testid="button-agency-portal-cta">
                     <a href="/agency-portal">
                       <Building2 className="mr-2 h-5 w-5" />
-                      Open Agency Portal
-                      <ArrowRight className="ml-2 h-5 w-5" />
+                      Claim my agency profile →
                     </a>
                   </Button>
+                  <div className="text-xs text-blue-200/70 sm:py-3">
+                    Free to list · Verification in 24h<br/>
+                    Premium upgrades from KES 1,500/mo
+                  </div>
                 </div>
               </div>
 
