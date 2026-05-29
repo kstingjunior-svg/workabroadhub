@@ -103,7 +103,7 @@ const SERVICE_META: Record<string, ServiceMeta> = {
   },
 };
 
-type Stage = "upload" | "processing" | "done" | "failed";
+type Stage = "upload" | "paying" | "processing" | "done" | "failed";
 
 export default function ServiceOrderFlow() {
   const [match, params] = useRoute<{ slug: string }>("/services/order/:slug");
@@ -123,6 +123,12 @@ export default function ServiceOrderFlow() {
   const [jobDescription, setJobDescription] = useState("");
   const [targetCountry, setTargetCountry] = useState("");
   const [extraInput, setExtraInput] = useState("");
+
+  // ── Payment-stage state (standalone M-Pesa STK on the same page) ─────────
+  const [amount, setAmount] = useState<number>(0);
+  const [mpesaPhone, setMpesaPhone] = useState<string>("");
+  const [payingNow, setPayingNow] = useState<boolean>(false);
+  const [stkSent, setStkSent] = useState<boolean>(false);
 
   const [submitting, setSubmitting] = useState(false);
   const pollRef = useRef<number | null>(null);
@@ -226,11 +232,12 @@ export default function ServiceOrderFlow() {
       setOrderId(data.orderId);
       setServiceName(data.serviceName);
       setEstSeconds(data.estSeconds || 60);
+      setAmount(data.price ?? 0);
 
       if (data.needsPayment && data.price > 0) {
-        navigate(
-          `/payment?service=${encodeURIComponent(slug)}&order=${encodeURIComponent(data.orderId)}&amount=${data.price}`,
-        );
+        // Stay on the SAME page — show the inline M-Pesa STK pay UI so the
+        // user pays for THIS service (not pushed to the Pro Plan upgrade).
+        setStage("paying");
       } else {
         setStage("processing");
         startPolling(data.orderId);
@@ -239,6 +246,66 @@ export default function ServiceOrderFlow() {
       toast({ title: "Order failed", description: err.message, variant: "destructive" });
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  // ── STANDALONE M-PESA STK PUSH ──────────────────────────────────────────────
+  // Triggered by the "Pay KES X via M-Pesa" button on the paying stage. Calls
+  // /api/payments/initiate with the service slug as the serviceId so the
+  // payment pipeline knows to mark THIS service order as paid (and not treat
+  // it as a Pro Plan upgrade). On success we transition to processing and
+  // poll the order status — once the M-Pesa callback marks it 'paid', the
+  // server's processOrder() runs the AI generation, and status flips to
+  // 'completed', at which point this same page shows the download buttons.
+  async function payForService() {
+    if (!orderId) return;
+    const phoneClean = mpesaPhone.replace(/\s+/g, "").trim();
+    if (!/^(?:0|254|\+254)?7\d{8}$/.test(phoneClean) && !/^(?:0|254|\+254)?1\d{8}$/.test(phoneClean)) {
+      toast({
+        title: "Invalid M-Pesa number",
+        description: "Use 07XXXXXXXX, 01XXXXXXXX, or +254XXXXXXXXX",
+        variant: "destructive",
+      });
+      return;
+    }
+    setPayingNow(true);
+    try {
+      const csrf = await fetchCsrfToken();
+      const res = await fetch("/api/payments/initiate", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
+        body: JSON.stringify({
+          method: "mpesa",
+          phoneNumber: phoneClean,
+          serviceId: slug,                    // server pipeline keys off this
+          serviceName: serviceName || meta.name,
+          metadata: { serviceOrderId: orderId },
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        // 403 + verify message → user must verify email/phone first
+        if (res.status === 403 && /verify/i.test(data?.message ?? "")) {
+          toast({ title: "Verify your account first", description: "Redirecting…" });
+          setTimeout(() => navigate("/account/verify"), 1200);
+          return;
+        }
+        throw new Error(data?.message || "Could not initiate payment.");
+      }
+      setStkSent(true);
+      toast({
+        title: "STK push sent",
+        description: "Check your phone — enter your M-Pesa PIN to complete payment.",
+      });
+      // Transition to processing — the poller watches for status='completed'.
+      // The M-Pesa callback marks the order 'paid' which triggers processOrder.
+      setStage("processing");
+      startPolling(orderId);
+    } catch (err: any) {
+      toast({ title: "Payment failed", description: err.message, variant: "destructive" });
+    } finally {
+      setPayingNow(false);
     }
   }
 
@@ -341,6 +408,7 @@ export default function ServiceOrderFlow() {
 
               <Button onClick={handleSubmit} disabled={submitting} size="lg" className="w-full">
                 {submitting ? (
+                {submitting ? (
                   <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Creating order…</>
                 ) : (
                   <>Continue to payment →</>
@@ -348,6 +416,58 @@ export default function ServiceOrderFlow() {
               </Button>
               <p className="text-xs text-muted-foreground text-center">
                 Your CV is processed by AI in under {Math.ceil(estSeconds / 60) || 1} minute{estSeconds > 60 ? "s" : ""} and never shared.
+              </p>
+            </CardContent>
+          )}
+
+          {/* ── PAYING STAGE — inline M-Pesa STK for THIS service (no Pro plan needed) ── */}
+          {stage === "paying" && orderId && (
+            <CardContent className="space-y-4">
+              <div className="rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 p-4">
+                <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-200">
+                  ✅ Order created. Pay <strong>KES {amount.toLocaleString()}</strong> to start generation.
+                </p>
+                <p className="text-xs text-emerald-700 dark:text-emerald-400 mt-1">
+                  This is a one-off payment for {serviceName || meta.name}. No subscription, no Pro Plan required.
+                  Once payment confirms, your document is generated in ~{Math.round(estSeconds / 60) || 1} minute and
+                  you'll download it from this same page.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="mpesa-phone">Safaricom M-Pesa number</Label>
+                <Input
+                  id="mpesa-phone"
+                  type="tel"
+                  inputMode="numeric"
+                  placeholder="07XXXXXXXX"
+                  value={mpesaPhone}
+                  onChange={(e) => setMpesaPhone(e.target.value)}
+                  disabled={payingNow || stkSent}
+                  data-testid="input-mpesa-phone"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Must be a Safaricom line (07XX or 01XX). M-Pesa STK push only works on Safaricom.
+                </p>
+              </div>
+
+              <Button
+                onClick={payForService}
+                disabled={payingNow || stkSent || !mpesaPhone}
+                size="lg"
+                className="w-full bg-green-600 hover:bg-green-700"
+                data-testid="button-pay-mpesa"
+              >
+                {payingNow
+                  ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Sending STK push…</>
+                  : stkSent
+                  ? <>Waiting for M-Pesa PIN entry…</>
+                  : <>Pay KES {amount.toLocaleString()} via M-Pesa</>}
+              </Button>
+
+              <p className="text-[11px] text-center text-muted-foreground">
+                You'll receive an STK push on your phone. Enter your M-Pesa PIN to confirm.
+                You stay on this page — the document downloads here once it's ready.
               </p>
             </CardContent>
           )}
