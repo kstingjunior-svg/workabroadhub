@@ -71,18 +71,26 @@ Tell me:
 I'll guide you step-by-step.
 `;
     }
-    // 🔥 PRICING
+    // 🔥 PRICING — keep in sync with DashboardServicesGrid + /services page
     if (intent === "pricing") {
         return `
-Our services are affordable compared to agents charging 100K+.
+Our services are super affordable — most cost less than a single mandazi per day.
 
-For example:
-✔ ATS CV Optimization – KES 3,500
-✔ Assisted Apply – KES 6,000
+Here's the current menu:
+✔ CV Health Check — FREE (3 min)
+✔ CV Fix Lite — KES 99
+✔ Cover Letter — KES 149
+✔ ATS CV Optimization — KES 499  🔥 (most popular)
+✔ Country-Specific CV Rewrite — KES 699
+✔ Motivation Letter — KES 699
+✔ SOP / Personal Statement — KES 999
+✔ LinkedIn Profile Optimization — KES 3,000
 
-This can literally change your life.
+For comparison, a typical career consultant in Nairobi charges KES 5,000–25,000 for the same work.
 
-Would you like me to help you get started now?
+You pay by M-Pesa, AI delivers in minutes, and you download as Word or PDF.
+
+Want me to point you at the right one for what you're trying to do?
 `;
     }
     // 🔥 HOT — ready to act
@@ -150,7 +158,7 @@ Would you like to start safely with a CV first?
         if (payment.status === "success") {
             return `✅ Payment confirmed for ${payment.service_name} (KES ${payment.amount})`;
         }
-        return `⏳ Your payment for ${payment.service_name} is still pending.`;
+        return `⏳ Your payment for ${payment.service_name} is ${payment.status}.`;
     }
     // 🔥 CV REQUEST
     if (lower.includes("cv")) {
