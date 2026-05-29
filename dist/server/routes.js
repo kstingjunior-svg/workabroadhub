@@ -3335,15 +3335,28 @@ Crawl-delay: 1`);
                 }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
                 return res.status(500).json({ success: false, error: "Failed to send STK push. Please try again." });
             }
-            // Stamp Safaricom's IDs onto the row — this is what the M-Pesa callback will match on
+            // Stamp Safaricom's IDs onto the row — this is what the M-Pesa callback will match on.
+            // MERGE existing metadata (from /api/payments/initiate) with the new Safaricom fields
+            // so we don't lose serviceOrderId, refCode, etc. that the unified service-order
+            // flow stored. Without this merge, the M-Pesa callback can't trigger AI generation
+            // because Step 3b in paymentPipeline reads meta.serviceOrderId.
+            let existingMeta = {};
+            try {
+                const raw = payment.metadata;
+                if (raw)
+                    existingMeta = typeof raw === "string" ? JSON.parse(raw) : raw;
+            }
+            catch { /* fallthrough — treat as empty */ }
+            const mergedMeta = {
+                ...existingMeta,
+                checkoutRequestId: safaricomId,
+                merchantRequestId,
+                phone,
+            };
             await storage_1.storage.updatePayment(payment.id, {
                 checkoutRequestId: safaricomId,
                 transactionRef: safaricomId,
-                metadata: JSON.stringify({
-                    checkoutRequestId: safaricomId,
-                    merchantRequestId,
-                    phone,
-                }),
+                metadata: JSON.stringify(mergedMeta),
             });
             storage_1.storage.createPaymentAuditLog({
                 paymentId: payment.id,
