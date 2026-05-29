@@ -1536,4 +1536,14 @@ export default function Landing() {
       <SubmitForReviewModal
         open={submitModalOpen}
         onOpenChange={setSubmitModalOpen}
-        defaultTyp
+        defaultType="testimonial"
+      />
+      <AuthModal
+        open={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+        defaultTab={authModalTab}
+        redirectPath={authRedirectPath}
+      />
+    </div>
+  );
+}
