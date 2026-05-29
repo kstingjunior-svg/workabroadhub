@@ -1354,9 +1354,20 @@ export default function Dashboard() {
                     </span>
                   )}
                 </div>
-                {!isPaid && (
+                {/* ── Personalized next-action line — replaces generic copy.
+                    Speaks to user's actual state so the banner stops being
+                    decorative and becomes a conversion driver. */}
+                {!isPaid ? (
+                  <p className="text-amber-200 text-xs mt-2 leading-relaxed font-semibold">
+                    👉 Lock in Pro for KES 4,500/year — less than a mandazi/day for 30+ portals, WhatsApp support, and Pro-only visa jobs.
+                  </p>
+                ) : (totalSpentKES ?? 0) === 0 ? (
+                  <p className="text-emerald-200 text-xs mt-2 leading-relaxed font-semibold">
+                    ✨ Your Pro is active — try your first service. Most members start with ATS Optimization (KES 499).
+                  </p>
+                ) : (
                   <p className="text-blue-200 text-xs mt-2 leading-relaxed">
-                    Unlock personalized career guidance, 30+ verified job portals, and 1-on-1 WhatsApp consultation.
+                    🎯 You're in. Browse new visa-sponsored jobs below — refreshed daily.
                   </p>
                 )}
               </div>
