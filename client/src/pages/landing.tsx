@@ -396,15 +396,29 @@ export default function Landing() {
                   </ul>
                 </div>
 
-                {/* CTA */}
-                <button
-                  onClick={openSignUp}
-                  className="mt-8 w-full sm:w-auto px-8 py-4 font-semibold text-base bg-yellow-400 hover:bg-yellow-300 transition-colors"
-                  style={{ color: '#1A2530' }}
-                  data-testid="button-hero-cta"
-                >
-                  Get Started Free – Create Your Account
-                </button>
+                {/* DUAL CTA — candidates (primary) + recruiters (secondary).
+                    The secondary surface for recruitment agencies is critical:
+                    landing-page traffic from agency searches was bouncing
+                    because the agent portal was buried 5 sections down. */}
+                <div className="mt-8 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+                  <button
+                    onClick={openSignUp}
+                    className="w-full sm:w-auto px-8 py-4 font-semibold text-base bg-yellow-400 hover:bg-yellow-300 transition-colors"
+                    style={{ color: '#1A2530' }}
+                    data-testid="button-hero-cta"
+                  >
+                    Get Started Free – Create Your Account
+                  </button>
+
+                  <a
+                    href="/agency-portal"
+                    className="w-full sm:w-auto px-6 py-4 font-semibold text-base text-center border-2 transition-colors hover:bg-slate-100"
+                    style={{ color: '#1A2530', borderColor: '#1A2530' }}
+                    data-testid="button-hero-agency-cta"
+                  >
+                    🏢 I'm a recruiter — list my agency →
+                  </a>
+                </div>
 
                 <div className="mt-3">
                   <a
