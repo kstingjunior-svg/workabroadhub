@@ -271,35 +271,55 @@ export default function ServiceOrderFlow() {
     setPayingNow(true);
     try {
       const csrf = await fetchCsrfToken();
-      const res = await fetch("/api/payments/initiate", {
+
+      // ─── STEP 1: create the pending payment row (DB) ────────────────────
+      // Returns paymentId / checkoutRequestId — but does NOT send STK push yet.
+      const initRes = await fetch("/api/payments/initiate", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
         body: JSON.stringify({
           method: "mpesa",
           phoneNumber: phoneClean,
-          serviceId: slug,                    // server pipeline keys off this
+          serviceId: slug,
           serviceName: serviceName || meta.name,
-          metadata: { serviceOrderId: orderId },
+          serviceOrderId: orderId,            // payment pipeline reads this to mark THIS order paid
         }),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        // 403 + verify message → user must verify email/phone first
-        if (res.status === 403 && /verify/i.test(data?.message ?? "")) {
+      const initData = await initRes.json();
+      if (!initRes.ok || initData?.success === false) {
+        if (initRes.status === 403 && /verify/i.test(initData?.message ?? "")) {
           toast({ title: "Verify your account first", description: "Redirecting…" });
           setTimeout(() => navigate("/account/verify"), 1200);
           return;
         }
-        throw new Error(data?.message || "Could not initiate payment.");
+        throw new Error(initData?.message || initData?.error || "Could not create payment record.");
       }
+      const paymentId = initData?.paymentId ?? initData?.checkoutRequestId ?? initData?.checkout_request_id;
+      if (!paymentId) {
+        throw new Error("Server did not return a paymentId. Cannot trigger STK push.");
+      }
+
+      // ─── STEP 2: actually trigger the Safaricom STK push ────────────────
+      // This is what makes the M-Pesa prompt appear on the user's phone.
+      const stkRes = await fetch("/api/mpesa/stk", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
+        body: JSON.stringify({ checkoutRequestId: paymentId }),
+      });
+      const stkData = await stkRes.json();
+      if (!stkRes.ok || stkData?.success === false) {
+        throw new Error(stkData?.message || stkData?.error || "Safaricom STK push failed. Try again.");
+      }
+
       setStkSent(true);
       toast({
-        title: "STK push sent",
-        description: "Check your phone — enter your M-Pesa PIN to complete payment.",
+        title: "STK push sent to your phone",
+        description: "Check your phone now — enter your M-Pesa PIN to complete payment.",
       });
-      // Transition to processing — the poller watches for status='completed'.
-      // The M-Pesa callback marks the order 'paid' which triggers processOrder.
+      // Transition to processing. The M-Pesa callback marks the order paid
+      // which triggers AI generation. We poll for status="completed".
       setStage("processing");
       startPolling(orderId);
     } catch (err: any) {
