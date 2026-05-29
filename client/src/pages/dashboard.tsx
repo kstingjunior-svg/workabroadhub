@@ -1443,8 +1443,38 @@ export default function Dashboard() {
           })}
         </div>
 
-        {/* ── ACTIVITY SNAPSHOT (from Supabase parallel fetch) ─────────── */}
-        {userData && (
+        {/* ── ACTIVITY SNAPSHOT — conversion-aware ──────────────────────
+            • If the user has REAL activity (paid OR has services unlocked):
+              show the 3-stat grid as a progress brag.
+            • If the user has NOTHING yet: show a single "Your next step"
+              card so they never see "0 / 0 / 0" (empty-state confession).
+        */}
+        {userData && (totalSpentKES ?? 0) === 0 && (activeCount ?? 0) === 0 && (requestsCount ?? 0) === 0 ? (
+          <Link href={isPaid ? "/services" : "/tools/ats-cv-checker"}>
+            <div
+              className="rounded-2xl p-4 bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-md hover:shadow-lg hover:scale-[1.01] active:scale-[0.99] transition-all duration-200 cursor-pointer"
+              data-testid="card-next-step"
+            >
+              <div className="flex items-center gap-3">
+                <div className="shrink-0 w-11 h-11 rounded-xl bg-white/20 flex items-center justify-center text-2xl">
+                  {isPaid ? "🚀" : "🎁"}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[11px] uppercase tracking-wide text-white/80 font-semibold mb-0.5">Your next step</p>
+                  <p className="text-sm font-bold leading-tight">
+                    {isPaid
+                      ? "Pick your first service — most members start with ATS Optimization"
+                      : "Take your FREE CV Health Check — see what recruiters spot in 3 min"}
+                  </p>
+                  <p className="text-[11px] text-white/85 mt-1">
+                    {isPaid ? "All Pro services unlocked · Word + PDF delivery" : "No payment · No signup hoops · Instant AI feedback"}
+                  </p>
+                </div>
+                <ChevronRight className="h-5 w-5 text-white/90 shrink-0" />
+              </div>
+            </div>
+          </Link>
+        ) : userData && (
           <div className="grid grid-cols-3 gap-2.5" data-testid="section-activity-stats">
             {[
               {
@@ -1989,4 +2019,3 @@ export default function Dashboard() {
     </section>
   );
 }
-  
