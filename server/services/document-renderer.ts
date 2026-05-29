@@ -155,33 +155,46 @@ export function renderPdf(input: RenderInput): Promise<Buffer> {
           doc.moveDown(0.5);
           continue;
         }
+        // Headings — each one explicitly closes any previous text run by
+        // setting continued:false (defensive against pdfkit state leak).
         if (line.startsWith("### ")) {
-          doc.font("Helvetica-Bold").fontSize(12).text(line.slice(4));
+          doc.font("Helvetica-Bold").fontSize(12).text(line.slice(4), { continued: false });
           doc.moveDown(0.3);
         } else if (line.startsWith("## ")) {
-          doc.font("Helvetica-Bold").fontSize(14).text(line.slice(3));
+          doc.font("Helvetica-Bold").fontSize(14).text(line.slice(3), { continued: false });
           doc.moveDown(0.3);
         } else if (line.startsWith("# ")) {
-          doc.font("Helvetica-Bold").fontSize(16).text(line.slice(2));
+          doc.font("Helvetica-Bold").fontSize(16).text(line.slice(2), { continued: false });
           doc.moveDown(0.5);
         } else if (/^[*-]\s/.test(line)) {
-          doc.font("Helvetica").fontSize(11).text("•  " + line.replace(/^[*-]\s/, ""));
+          doc
+            .font("Helvetica")
+            .fontSize(11)
+            .text("•  " + line.replace(/^[*-]\s/, ""), { continued: false });
         } else {
-          // Render with bold spans
-          const parts = line.split(/(\*\*[^*]+\*\*)/);
-          let first = true;
-          for (const part of parts) {
-            if (!part) continue;
+          // Render inline bold spans (**bold**). Filter empty fragments first,
+          // then use index-based iteration to set continued correctly on the
+          // FINAL part. Previously used indexOf() which returned the first
+          // occurrence — when the line ended with a "**word**" span, the empty
+          // trailing fragment got continued:true and bled into the next line.
+          const parts = line
+            .split(/(\*\*[^*]+\*\*)/)
+            .filter((p) => p && p.length > 0);
+
+          if (parts.length === 0) {
+            doc.moveDown(0.5);
+            continue;
+          }
+
+          parts.forEach((part, idx) => {
             const isBold = part.startsWith("**") && part.endsWith("**");
             const text = isBold ? part.slice(2, -2) : part;
+            const isLastPart = idx === parts.length - 1;
             doc
               .font(isBold ? "Helvetica-Bold" : "Helvetica")
               .fontSize(11)
-              .text(text, { continued: !isLast(parts, part) });
-            first = false;
-          }
-          // Force newline after the paragraph
-          doc.text("");
+              .text(text, { continued: !isLastPart });
+          });
         }
       }
 
