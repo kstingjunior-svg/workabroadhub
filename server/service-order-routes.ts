@@ -402,10 +402,14 @@ export function registerServiceOrderRoutes(app: Express, isAuthenticated: Reques
         }
 
         res.status(500).json({
+          // Always surface the raw Postgres error verbatim so the actual missing
+          // relation (could be service_orders OR something else like users, a
+          // sequence, a trigger function) is visible to the user/dev.
           message: looksLikeMissingTable
-            ? `service_orders MISSING on server's DB. Server sees → host=${dbDiag?.host ?? "?"} db=${dbDiag?.db ?? "?"} user=${dbDiag?.user_name ?? "?"} tables_with_service_prefix=${dbDiag?.tables_seen ?? "NONE"}`
+            ? `Postgres says: "${errMsg}". Server is on host=${dbDiag?.host ?? "?"} db=${dbDiag?.db ?? "?"} user=${dbDiag?.user_name ?? "?"}. service_* tables it sees: ${dbDiag?.tables_seen ?? "NONE"}.`
             : `Could not create your order: ${errMsg}`,
           code: errCode,
+          rawError: errMsg,
           dbDiag,
         });
       }
