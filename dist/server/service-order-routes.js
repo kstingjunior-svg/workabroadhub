@@ -197,10 +197,24 @@ async function extractCvOrError(req) {
 // ── DB helpers ──────────────────────────────────────────────────────────────
 async function createOrder(args) {
     const id = crypto_1.default.randomUUID();
+    // We fill BOTH service_id (old schema, NOT NULL) and service_slug (new
+    // columns added for the unified flow) with the same slug — so both old
+    // Drizzle-based code paths AND new service-order-routes work cleanly.
     await db_1.pool.query(`INSERT INTO service_orders
-       (id, user_id, service_slug, service_name, status, cv_text, job_description, target_country, extra_input, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, 'pending_payment', $5, $6, $7, $8, NOW(), NOW())
-     ON CONFLICT (id) DO NOTHING`, [id, args.userId, args.slug, args.serviceName, args.cvText, args.jobDescription, args.targetCountry, args.extraInput]);
+       (id, user_id, service_id, service_slug, service_name, amount, currency, status,
+        cv_text, job_description, target_country, extra_input, created_at, updated_at)
+     VALUES ($1, $2, $3, $3, $4, $5, 'KES', 'pending_payment', $6, $7, $8, $9, NOW(), NOW())
+     ON CONFLICT (id) DO NOTHING`, [
+        id,
+        args.userId,
+        args.slug, // used for both service_id and service_slug
+        args.serviceName,
+        args.amount ?? 0,
+        args.cvText,
+        args.jobDescription,
+        args.targetCountry,
+        args.extraInput,
+    ]);
     return id;
 }
 async function updateOrderStatus(orderId, status, fields = {}) {
@@ -293,18 +307,20 @@ function registerServiceOrderRoutes(app, isAuthenticated) {
             const jobDescription = String(req.body?.jobDescription ?? "").trim() || null;
             const targetCountry = String(req.body?.targetCountry ?? "").trim() || null;
             const extraInput = String(req.body?.extraInput ?? "").trim() || null;
+            // Look up the canonical price BEFORE creating the order so we can
+            // record it in the `amount` column (the old schema requires it).
+            const { rows: priceRows } = await db_1.pool.query(`SELECT price FROM services WHERE slug = $1 OR code = $1 LIMIT 1`, [slug]);
+            const price = priceRows[0]?.price ?? 0;
             const orderId = await createOrder({
                 userId,
                 slug,
                 serviceName: config.name,
+                amount: price,
                 cvText,
                 jobDescription,
                 targetCountry,
                 extraInput,
             });
-            // Look up the canonical price from the services table by slug
-            const { rows: priceRows } = await db_1.pool.query(`SELECT price FROM services WHERE slug = $1 OR code = $1 LIMIT 1`, [slug]);
-            const price = priceRows[0]?.price ?? 0;
             console.log(`[ServiceOrder] Created orderId=${orderId} slug=${slug} price=${price} cvLen=${cvText?.length ?? 0} in ${Date.now() - t0}ms`);
             res.json({
                 orderId,
