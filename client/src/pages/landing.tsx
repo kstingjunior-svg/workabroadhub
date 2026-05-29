@@ -616,76 +616,6 @@ export default function Landing() {
           </div>
         </section>
 
-        {/* Why Choose Us Section - PREMIUM REDESIGN */}
-        <section id="features" className="py-20 sm:py-28 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
-          {/* Soft gradient background - light blue to white */}
-          <div className="absolute inset-0 bg-gradient-to-b from-blue-50/50 via-background to-slate-50/50 dark:from-blue-950/20 dark:via-background dark:to-slate-950/20" />
-          
-          <div className="relative max-w-7xl mx-auto">
-            {/* Section Header */}
-            <div className="text-center mb-12 sm:mb-20 space-y-4">
-              <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-100/80 dark:bg-blue-900/40 rounded-full mx-auto border border-blue-200/50 dark:border-blue-800/50">
-                <Sparkles className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                <span className="text-sm font-semibold text-blue-700 dark:text-blue-300">Why Choose WorkAbroad Hub</span>
-              </div>
-              <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight">
-                {t("landing.whyChooseUs")}
-              </h2>
-              <p className="text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-                Thousands of Africans trust us to guide their overseas job search. Here's what makes us different.
-              </p>
-            </div>
-            
-            {/* Feature Cards Grid */}
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
-              {features.map((feature, index) => (
-                <Card 
-                  key={index} 
-                  className={`group relative overflow-hidden rounded-2xl border border-white/50 dark:border-white/10 shadow-lg hover:shadow-2xl transition-all duration-500 hover:-translate-y-2 bg-gradient-to-br ${feature.bgGradient} backdrop-blur-sm`}
-                >
-                  <CardContent className="p-6 sm:p-8 space-y-5">
-                    {/* Icon with gradient background */}
-                    <div className={`h-14 w-14 rounded-2xl ${feature.iconBg} flex items-center justify-center shadow-md group-hover:scale-110 group-hover:shadow-lg transition-all duration-300`}>
-                      <feature.icon className={`h-7 w-7 ${feature.iconColor}`} />
-                    </div>
-                    
-                    {/* Content */}
-                    <div className="space-y-2">
-                      <h3 className="text-xl font-bold">{feature.title}</h3>
-                      <p className="text-sm font-medium text-muted-foreground/80">{feature.subtitle}</p>
-                    </div>
-                    
-                    <p className="text-muted-foreground leading-relaxed text-sm sm:text-base">
-                      {feature.description}
-                    </p>
-                    
-                    {/* Stat badge */}
-                    <div className="flex items-center justify-between pt-2">
-                      <Badge variant="secondary" className={`text-xs font-semibold border-0 bg-gradient-to-r ${feature.gradient} text-white`}>
-                        {feature.stat}
-                      </Badge>
-                      <div className={`h-1 w-12 rounded-full bg-gradient-to-r ${feature.gradient} opacity-50 group-hover:w-20 group-hover:opacity-100 transition-all duration-300`} />
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-            
-            {/* CTA after features */}
-            <div className="mt-12 sm:mt-16 text-center space-y-4">
-              <Button 
-                size="lg" 
-                className="text-base px-8 py-6 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-lg shadow-blue-500/25 hover:shadow-xl transition-all duration-300" 
-                onClick={openSignUp}
-                data-testid="button-features-cta"
-              >
-                Start Your Overseas Job Search
-                <ArrowRight className="ml-2 h-5 w-5" />
-              </Button>
-              <p className="text-sm text-muted-foreground">Start your overseas career journey today</p>
-            </div>
-          </div>
-        </section>
 
         {/* ═══════════════════════════════════════════════════════════════ */}
         {/* PLATFORM STATS SECTION                                         */}
@@ -1168,6 +1098,78 @@ export default function Landing() {
                 </div>
               </CardContent>
             </Card>
+          </div>
+        </section>
+
+
+        {/* Why Choose Us Section - PREMIUM REDESIGN */}
+        <section id="features" className="py-20 sm:py-28 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
+          {/* Soft gradient background - light blue to white */}
+          <div className="absolute inset-0 bg-gradient-to-b from-blue-50/50 via-background to-slate-50/50 dark:from-blue-950/20 dark:via-background dark:to-slate-950/20" />
+          
+          <div className="relative max-w-7xl mx-auto">
+            {/* Section Header */}
+            <div className="text-center mb-12 sm:mb-20 space-y-4">
+              <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-100/80 dark:bg-blue-900/40 rounded-full mx-auto border border-blue-200/50 dark:border-blue-800/50">
+                <Sparkles className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                <span className="text-sm font-semibold text-blue-700 dark:text-blue-300">Why Choose WorkAbroad Hub</span>
+              </div>
+              <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight">
+                {t("landing.whyChooseUs")}
+              </h2>
+              <p className="text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+                Thousands of Africans trust us to guide their overseas job search. Here's what makes us different.
+              </p>
+            </div>
+            
+            {/* Feature Cards Grid */}
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
+              {features.map((feature, index) => (
+                <Card 
+                  key={index} 
+                  className={`group relative overflow-hidden rounded-2xl border border-white/50 dark:border-white/10 shadow-lg hover:shadow-2xl transition-all duration-500 hover:-translate-y-2 bg-gradient-to-br ${feature.bgGradient} backdrop-blur-sm`}
+                >
+                  <CardContent className="p-6 sm:p-8 space-y-5">
+                    {/* Icon with gradient background */}
+                    <div className={`h-14 w-14 rounded-2xl ${feature.iconBg} flex items-center justify-center shadow-md group-hover:scale-110 group-hover:shadow-lg transition-all duration-300`}>
+                      <feature.icon className={`h-7 w-7 ${feature.iconColor}`} />
+                    </div>
+                    
+                    {/* Content */}
+                    <div className="space-y-2">
+                      <h3 className="text-xl font-bold">{feature.title}</h3>
+                      <p className="text-sm font-medium text-muted-foreground/80">{feature.subtitle}</p>
+                    </div>
+                    
+                    <p className="text-muted-foreground leading-relaxed text-sm sm:text-base">
+                      {feature.description}
+                    </p>
+                    
+                    {/* Stat badge */}
+                    <div className="flex items-center justify-between pt-2">
+                      <Badge variant="secondary" className={`text-xs font-semibold border-0 bg-gradient-to-r ${feature.gradient} text-white`}>
+                        {feature.stat}
+                      </Badge>
+                      <div className={`h-1 w-12 rounded-full bg-gradient-to-r ${feature.gradient} opacity-50 group-hover:w-20 group-hover:opacity-100 transition-all duration-300`} />
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+            
+            {/* CTA after features */}
+            <div className="mt-12 sm:mt-16 text-center space-y-4">
+              <Button 
+                size="lg" 
+                className="text-base px-8 py-6 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-lg shadow-blue-500/25 hover:shadow-xl transition-all duration-300" 
+                onClick={openSignUp}
+                data-testid="button-features-cta"
+              >
+                Start Your Overseas Job Search
+                <ArrowRight className="ml-2 h-5 w-5" />
+              </Button>
+              <p className="text-sm text-muted-foreground">Start your overseas career journey today</p>
+            </div>
           </div>
         </section>
 
