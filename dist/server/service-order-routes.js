@@ -396,7 +396,6 @@ function registerServiceOrderRoutes(app, isAuthenticated) {
             const config = getConfig(order.service_slug);
             const filenameBase = config?.filename ?? order.service_name.replace(/\s+/g, "_");
             const filename = `${filenameBase}.${format}`;
-            const buffer = format === "docx";
             const buffer = format === "docx"
                 ? await (0, document_renderer_1.renderDocx)({
                     title: order.service_name,

@@ -481,8 +481,6 @@ export function registerServiceOrderRoutes(app: Express, isAuthenticated: Reques
 
         const buffer =
           format === "docx"
-        const buffer =
-          format === "docx"
             ? await renderDocx({
                 title: order.service_name,
                 body: order.output_text,
