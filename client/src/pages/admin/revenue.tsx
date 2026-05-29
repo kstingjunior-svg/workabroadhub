@@ -14,6 +14,16 @@ import { DollarSign, TrendingUp, CreditCard, Percent } from "lucide-react";
 
 type StatsData = {
   revenueByType:   { type: string; total: number; count: number }[];
+  /** NEW — per-service breakdown so admin sees CV Fix Lite vs Cover Letter vs etc. */
+  revenueByService?: {
+    service_id:   string | null;
+    plan_id:      string | null;
+    display_name: string;
+    category:     string;
+    total:        number;
+    count:        number;
+    avg_amount:   number;
+  }[];
   revenueByDay:    { date: string; total: number }[];
   statusBreakdown: { status: string; count: number; total: number }[];
   totalRevenue:    number;
@@ -220,6 +230,90 @@ export default function AdminRevenue() {
           </Card>
         </div>
 
+        {/* ── PER-SERVICE BREAKDOWN — granular view ──────────────────────── */}
+        {/* This is what was missing: the admin can now see exactly which
+            services are converting (CV Fix Lite KES 99 × 12 = KES 1,188 etc.)
+            so marketing decisions can be data-driven, not gut-driven. */}
+        <Card data-testid="card-revenue-by-service">
+          <CardHeader>
+            <CardTitle className="text-sm">Revenue by Service (detailed)</CardTitle>
+            <CardDescription className="text-xs">
+              Every individual service & plan. Sorted by revenue. This is where you spot what to market more.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <div className="h-[200px] animate-pulse bg-muted rounded-lg" />
+            ) : (data?.revenueByService ?? []).length === 0 ? (
+              <p className="text-xs text-muted-foreground text-center py-12">No completed payments for this period yet.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm" data-testid="table-service-revenue">
+                  <thead>
+                    <tr className="border-b text-xs text-muted-foreground uppercase tracking-wide">
+                      <th className="text-left py-2 px-2">Service / Plan</th>
+                      <th className="text-left py-2 px-2">Category</th>
+                      <th className="text-right py-2 px-2">Sales</th>
+                      <th className="text-right py-2 px-2">Avg / sale</th>
+                      <th className="text-right py-2 px-2">Revenue</th>
+                      <th className="text-right py-2 px-2">Revenue</th>
+                      <th className="text-right py-2 px-2">% of total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data!.revenueByService!.map((s, i) => {
+                      const pct = data!.totalRevenue > 0 ? (s.total / data!.totalRevenue) * 100 : 0;
+                      const isTop = i === 0;
+                      return (
+                        <tr
+                          key={`${s.service_id ?? ""}-${s.plan_id ?? ""}-${i}`}
+                          className={`border-b last:border-0 ${isTop ? "bg-emerald-50 dark:bg-emerald-950/20" : ""}`}
+                          data-testid={`row-service-${i}`}
+                        >
+                          <td className="py-2 px-2">
+                            <div className="font-semibold">{s.display_name}</div>
+                            <div className="text-[10px] text-muted-foreground">
+                              {s.plan_id ? `Plan: ${s.plan_id}` : s.service_id ?? "—"}
+                            </div>
+                          </td>
+                          <td className="py-2 px-2">
+                            <span className="text-[10px] uppercase px-2 py-0.5 rounded-full bg-muted">
+                              {s.category}
+                            </span>
+                          </td>
+                          <td className="py-2 px-2 text-right tabular-nums">{s.count}</td>
+                          <td className="py-2 px-2 text-right tabular-nums text-muted-foreground">
+                            KES {s.avg_amount.toLocaleString()}
+                          </td>
+                          <td className="py-2 px-2 text-right tabular-nums font-bold">
+                            KES {s.total.toLocaleString()}
+                          </td>
+                          <td className="py-2 px-2 text-right tabular-nums text-muted-foreground">
+                            {pct.toFixed(1)}%
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t-2 font-bold">
+                      <td className="py-2 px-2" colSpan={2}>Total</td>
+                      <td className="py-2 px-2 text-right tabular-nums">
+                        {data!.revenueByService!.reduce((s, r) => s + r.count, 0)}
+                      </td>
+                      <td className="py-2 px-2" />
+                      <td className="py-2 px-2 text-right tabular-nums">
+                        KES {data!.totalRevenue.toLocaleString()}
+                      </td>
+                      <td className="py-2 px-2 text-right tabular-nums">100%</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Line chart — revenue trend */}
         <Card data-testid="card-revenue-trend">
           <CardHeader>
@@ -249,12 +343,8 @@ export default function AdminRevenue() {
                     formatter={(v: number) => [`KES ${v.toLocaleString()}`, "Revenue"]}
                     contentStyle={{ fontSize: 12 }}
                   />
+                  <Line type="monotone" dataKey="total" stroke="#0088FE" strokeWidth={2} dot={false} />
                   <Legend iconSize={10} wrapperStyle={{ fontSize: 11 }} />
-                  <Line
-                    type="monotone" dataKey="total"
-                    stroke="#0088FE" strokeWidth={2}
-                    dot={false} name="KES"
-                  />
                 </LineChart>
               </ResponsiveContainer>
             )}

@@ -8020,8 +8020,36 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
                 .groupBy(schema_1.payments.status)
                 .orderBy((0, drizzle_orm_1.sql) `count(*) desc`);
             const totalRevenue = revenueByType.reduce((s, r) => s + (r.total ?? 0), 0);
+            // 4. PER-SERVICE breakdown — every paid service/plan as its own row.
+            // Joins payments → services on service_id, falls back to plan_id label
+            // when the row is a subscription. This is what the admin actually wants
+            // to see: "Cover Letter: KES 149 × 12 = KES 1,788" instead of just "Other".
+            const revenueByServiceRows = await db_1.pool.query(`
+        SELECT
+          p.service_id,
+          p.plan_id,
+          COALESCE(s.name, plans.plan_name, p.service_name, p.service_id, p.plan_id, 'Unknown') AS display_name,
+          CASE
+            WHEN p.plan_id IS NOT NULL THEN 'Subscription'
+            WHEN s.category IS NOT NULL THEN s.category
+            ELSE 'Other'
+          END AS category,
+          SUM(p.amount)::int                              AS total,
+          COUNT(*)::int                                   AS count,
+          ROUND(AVG(p.amount))::int                       AS avg_amount
+        FROM payments p
+        LEFT JOIN services s ON s.slug = p.service_id OR s.code = p.service_id
+        LEFT JOIN plans    ON plans.plan_id = p.plan_id
+        WHERE p.status IN ('completed', 'success')
+          ${startDate ? `AND p.created_at >= '${startDate.replace(/[^0-9\-T:Z.]/g, '')}'` : ""}
+          ${endDate ? `AND p.created_at <= '${endDate.replace(/[^0-9\-T:Z.]/g, '')}'` : ""}
+        GROUP BY p.service_id, p.plan_id, s.name, plans.plan_name, p.service_name, s.category
+        ORDER BY total DESC
+      `);
+            const revenueByService = revenueByServiceRows.rows;
             res.json({
                 revenueByType,
+                revenueByService, // NEW — per-service detail rows for the admin breakdown table
                 revenueByDay,
                 statusBreakdown,
                 totalRevenue,
