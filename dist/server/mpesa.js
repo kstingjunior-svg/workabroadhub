@@ -156,7 +156,11 @@ overrideCallbackUrl // Optional: override the Safaricom callback destination
         // Always use the actual running server domain so Safaricom can reach this server.
         // getCallbackBaseUrl() uses APP_URL which is the live public URL of this server.
         // Callers may pass a custom callbackUrl override (e.g. /api/payments/mpesa/callback)
-        const callbackUrl = overrideCallbackUrl || `${getCallbackBaseUrl()}/api/mpesa/callback`;
+        // /api/payments/mpesa/callback is the modern handler that runs the full
+        // payment pipeline (runPaymentPipeline → unlock + AI generation for service
+        // orders). The legacy /api/mpesa/callback only activates Pro Plan and never
+        // triggers service-order AI gen — keep all Safaricom callbacks on the new path.
+        const callbackUrl = overrideCallbackUrl || `${getCallbackBaseUrl()}/api/payments/mpesa/callback`;
         console.log("[M-Pesa] STK Push → phone:", formattedPhone, "| amount:", amount, "| accountRef:", accountRef, "| callback:", callbackUrl);
         const res = await axios_1.default.post(`${MPESA_BASE_URL}/mpesa/stkpush/v1/processrequest`, {
             BusinessShortCode: shortCode,

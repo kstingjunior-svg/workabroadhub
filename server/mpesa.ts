@@ -182,7 +182,11 @@ export async function stkPush(
     // Always use the actual running server domain so Safaricom can reach this server.
     // getCallbackBaseUrl() uses APP_URL which is the live public URL of this server.
     // Callers may pass a custom callbackUrl override (e.g. /api/payments/mpesa/callback)
-    const callbackUrl = overrideCallbackUrl || `${getCallbackBaseUrl()}/api/mpesa/callback`;
+    // /api/payments/mpesa/callback is the modern handler that runs the full
+    // payment pipeline (runPaymentPipeline → unlock + AI generation for service
+    // orders). The legacy /api/mpesa/callback only activates Pro Plan and never
+    // triggers service-order AI gen — keep all Safaricom callbacks on the new path.
+    const callbackUrl = overrideCallbackUrl || `${getCallbackBaseUrl()}/api/payments/mpesa/callback`;
     console.log("[M-Pesa] STK Push → phone:", formattedPhone, "| amount:", amount, "| accountRef:", accountRef, "| callback:", callbackUrl);
 
     const res = await axios.post(
@@ -439,8 +443,7 @@ export async function pullTransactions(shortCode: string, startDate: string, end
       accessToken = await getOAuthToken(true); // force refresh
       const res = await doRequest(accessToken);
       console.log("[PullAPI] Retry pulled", res.data?.Response?.length || 0, "transactions");
-      return res.data?.Response || [];
-    }
+      return res.data?.Response || [];    }
     // Re-throw as informative error
     const detail = err.response?.data?.errorMessage || err.response?.data?.message || err.message || "Unknown Pull API error";
     throw new Error(detail);
