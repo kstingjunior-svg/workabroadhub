@@ -315,18 +315,39 @@ function registerServiceOrderRoutes(app, isAuthenticated) {
             });
         }
         catch (err) {
-            // Surface the underlying cause so the client can show it to the user
-            // (and so logs make the failure mode obvious — e.g. missing table).
             const errMsg = err?.message ?? "Unknown error";
             const errCode = err?.code ?? null;
             console.error("[ServiceOrder] create error:", errMsg, errCode);
-            // Common case: migration not run yet
             const looksLikeMissingTable = /relation .* does not exist/i.test(errMsg) || errCode === "42P01";
+            // Diagnostic: if Postgres says the table is missing, query the actual
+            // host + database the server is connected to. Lets the user verify
+            // whether the server's DATABASE_URL points at the same Supabase
+            // project where they ran the migration.
+            let dbDiag = null;
+            if (looksLikeMissingTable) {
+                try {
+                    const { rows } = await db_1.pool.query(`
+              SELECT
+                inet_server_addr()::text             AS host,
+                current_database()                   AS db,
+                current_user                         AS user_name,
+                (SELECT string_agg(table_schema || '.' || table_name, ', ')
+                   FROM information_schema.tables
+                  WHERE table_name LIKE 'service%') AS tables_seen
+            `);
+                    dbDiag = rows[0] ?? null;
+                    console.error("[ServiceOrder] DB diag:", dbDiag);
+                }
+                catch (diagErr) {
+                    console.error("[ServiceOrder] diag query failed:", diagErr?.message);
+                }
+            }
             res.status(500).json({
                 message: looksLikeMissingTable
-                    ? "Service-order table not yet created on this database. Run migrations/0005_service_orders.sql in Supabase first."
+                    ? `service_orders MISSING on server's DB. Server sees → host=${dbDiag?.host ?? "?"} db=${dbDiag?.db ?? "?"} user=${dbDiag?.user_name ?? "?"} tables_with_service_prefix=${dbDiag?.tables_seen ?? "NONE"}`
                     : `Could not create your order: ${errMsg}`,
                 code: errCode,
+                dbDiag,
             });
         }
     });
@@ -375,6 +396,7 @@ function registerServiceOrderRoutes(app, isAuthenticated) {
             const config = getConfig(order.service_slug);
             const filenameBase = config?.filename ?? order.service_name.replace(/\s+/g, "_");
             const filename = `${filenameBase}.${format}`;
+            const buffer = format === "docx";
             const buffer = format === "docx"
                 ? await (0, document_renderer_1.renderDocx)({
                     title: order.service_name,
