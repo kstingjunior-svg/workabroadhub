@@ -408,7 +408,6 @@ export default function ServiceOrderFlow() {
 
               <Button onClick={handleSubmit} disabled={submitting} size="lg" className="w-full">
                 {submitting ? (
-                {submitting ? (
                   <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Creating order…</>
                 ) : (
                   <>Continue to payment →</>
