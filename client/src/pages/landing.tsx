@@ -47,7 +47,9 @@ export default function Landing() {
 
   const { data: publicStats } = useQuery<{
     totalUsers: number;
-    activeVisitors: number;
+    activeNow: number;              // real-time session tracker (same as dashboard)
+    activeAuthenticated: number;
+    activeVisitors: number;         // legacy field — kept for backwards compat
     expiredAgencies: number;
     activePortals: number;
     successStories: number;
@@ -56,7 +58,7 @@ export default function Landing() {
     countriesServed: number;
   }>({
     queryKey: ["/api/public/stats"],
-    refetchInterval: 60_000,
+    refetchInterval: 30_000,        // match dashboard cadence so numbers stay in sync
     staleTime: 55_000,
   });
 
@@ -261,9 +263,9 @@ export default function Landing() {
                     </div>
                     <span style={{ color: '#2A3A4A' }}>
                       <strong style={{ color: '#1A2530' }} data-testid="visitor-count">
-                        {fbVisitors ?? publicStats?.activeVisitors ?? '…'}
+                        {publicStats?.activeNow ?? fbVisitors ?? '…'}
                       </strong>{' '}
-                      {(fbVisitors ?? publicStats?.activeVisitors ?? 0) === 1 ? 'person' : 'people'} browsing now
+                      {(publicStats?.activeNow ?? fbVisitors ?? 0) === 1 ? 'person' : 'people'} browsing now
                     </span>
                   </div>
 
@@ -1534,14 +1536,4 @@ export default function Landing() {
       <SubmitForReviewModal
         open={submitModalOpen}
         onOpenChange={setSubmitModalOpen}
-        defaultType="testimonial"
-      />
-      <AuthModal
-        open={authModalOpen}
-        onClose={() => setAuthModalOpen(false)}
-        defaultTab={authModalTab}
-        redirectPath={authRedirectPath}
-      />
-    </div>
-  );
-}
+        defaultTyp
