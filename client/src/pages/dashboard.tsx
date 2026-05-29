@@ -1408,8 +1408,13 @@ export default function Dashboard() {
           <ActiveOrderMiniCard order={activeOrder} />
         </div>
 
-        {/* ── AI MATCH BOX ─────────────────────────────────────────────── */}
-        <AiMatchBox />
+        {/* ── AI MATCH BOX — DISABLED (Phase 1 conversion cleanup) ──────
+            Was a duplicate of the AI matcher already shown in the hero CTA.
+            Six "find jobs" entry points were diluting focus. Removing this
+            one drops the count to two: Hero CTA + Visa-Sponsored Jobs.
+            Component left in scope in case we re-enable a single primary
+            matcher elsewhere. */}
+        {/* <AiMatchBox /> */}
 
         {/* ── QUICK STAT CARDS (3 across) ─────────────────────────────── */}
         <div className="grid grid-cols-3 gap-2.5" data-testid="section-quick-stats">
@@ -1592,14 +1597,11 @@ export default function Dashboard() {
                 onClick={() => openUpgradeModal("consultation_locked", "WhatsApp Consultation", "pro")}
               />
             )}
-            <QuickActionCard
-              emoji="🧠"
-              title="AI Job Match"
-              description="Get personalized job picks"
-              badgeText="AI powered"
-              badgeColor="bg-indigo-500"
-              href="/career-match"
-            />
+            {/* AI Job Match — DISABLED. Was the 3rd duplicate "find jobs"
+                entry point on this page (hero CTA + visa-jobs list + AI box
+                + this card + Tools section + Bulk Apply = six). Removing it
+                so the Quick Actions row focuses on actions you can ONLY do
+                here: CV review, agency verify, scam wall, scam check. */}
             <QuickActionCard
               emoji="📄"
               title="CV Services"
@@ -2020,6 +2022,8 @@ export default function Dashboard() {
             </Link>
           </div>
         </div>
+
+        {/* DISCLAIMER */}
 
         {/* DISCLAIMER */}
         <p className="text-xs text-gray-400 dark:text-gray-500 text-center px-2 pb-2 leading-relaxed">
