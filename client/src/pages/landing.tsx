@@ -397,34 +397,48 @@ export default function Landing() {
                   </ul>
                 </div>
 
-                {/* DUAL CTA — candidates (primary) + recruiters (secondary).
-                    The secondary surface for recruitment agencies is critical:
-                    landing-page traffic from agency searches was bouncing
-                    because the agent portal was buried 5 sections down. */}
-                <div className="mt-8 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+                {/* ── HERO CTA REFRAME (Phase 2 — verify-first conversion) ─────
+                    Primary CTA changed from generic "Get Started Free" to
+                    'Verify an Agency Free' — the same action the right-side
+                    widget performs, giving visitors a clear, low-commitment
+                    first step that maps to the platform's strongest hook.
+                    Recruiter CTA demoted from competing yellow/outlined button
+                    to a small text link so the job-seeker path dominates. */}
+                <div className="mt-8 flex flex-col gap-3">
+                  <a
+                    href="#nea-verify"
+                    className="w-full sm:w-auto inline-block px-8 py-4 font-bold text-base text-center bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-lg shadow-emerald-600/30 transition-colors"
+                    data-testid="button-hero-cta-verify"
+                  >
+                    🛡️ Verify an Agency Free
+                  </a>
+
+                  <p className="text-xs leading-relaxed" style={{ color: '#5C6A7A' }}>
+                    No recruitment fees · Updated weekly · Kenya-focused guidance
+                  </p>
+                </div>
+
+                {/* Secondary action row — small links, both demoted */}
+                <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2">
                   <button
                     onClick={openSignUp}
-                    className="w-full sm:w-auto px-8 py-4 font-semibold text-base bg-yellow-400 hover:bg-yellow-300 transition-colors"
+                    className="text-sm font-semibold underline underline-offset-2 hover:text-emerald-700 transition-colors"
                     style={{ color: '#1A2530' }}
                     data-testid="button-hero-cta"
                   >
-                    Get Started Free – Create Your Account
+                    Create a free account →
                   </button>
-
                   <a
                     href="/agency-portal"
-                    className="w-full sm:w-auto px-6 py-4 font-semibold text-base text-center border-2 transition-colors hover:bg-slate-100"
-                    style={{ color: '#1A2530', borderColor: '#1A2530' }}
+                    className="text-sm underline underline-offset-2 hover:text-emerald-700 transition-colors"
+                    style={{ color: '#5C6A7A' }}
                     data-testid="button-hero-agency-cta"
                   >
-                    🏢 I'm a recruiter — list my agency →
+                    Are you a recruiter? List your agency →
                   </a>
-                </div>
-
-                <div className="mt-3">
                   <a
                     href="#how-it-works"
-                    className="text-sm underline underline-offset-2"
+                    className="text-sm underline underline-offset-2 hover:text-emerald-700 transition-colors"
                     style={{ color: '#5C6A7A' }}
                     data-testid="link-how-it-works"
                   >
@@ -433,8 +447,9 @@ export default function Landing() {
                 </div>
               </div>
 
-              {/* RIGHT: NEA database */}
-              <div className="p-7 sm:p-9">
+              {/* RIGHT: NEA database — `nea-verify` anchor used by the
+                  hero CTA to smooth-scroll on click. */}
+              <div id="nea-verify" className="p-7 sm:p-9 scroll-mt-24">
                 <h2
                   className="text-2xl mb-1"
                   style={{
