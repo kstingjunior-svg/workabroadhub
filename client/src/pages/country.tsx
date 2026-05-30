@@ -204,21 +204,35 @@ export default function Country() {
   };
 
   if (error) {
+    // Only show the payment-required lock for 403 — a 404 means the country
+    // row hasn't been seeded yet, NOT that the user needs to pay again.
+    const errMsg = (error as any)?.message || "";
+    const isPaywall = errMsg.includes("403") || errMsg.includes("Payment required");
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <Card className="max-w-md w-full">
           <CardContent className="p-8 text-center">
             <Lock className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <h2 className="text-xl font-semibold mb-2">Access Required</h2>
+            <h2 className="text-xl font-semibold mb-2">
+              {isPaywall ? "Access Required" : `${countryInfo?.name || "This country"} — coming online`}
+            </h2>
             <p className="text-muted-foreground mb-6">
-              Please complete payment to unlock access to country dashboards.
+              {isPaywall
+                ? "Please complete payment to unlock access to country dashboards."
+                : "We're finalising the portals for this destination. Please refresh in a few seconds — our self-healer is populating the data right now."}
             </p>
             <div className="space-y-3">
-              <Link href="/payment">
-                <Button className="w-full" data-testid="button-unlock-access">
-                  Unlock Access
+              {isPaywall ? (
+                <Link href="/payment">
+                  <Button className="w-full" data-testid="button-unlock-access">
+                    Unlock Access
+                  </Button>
+                </Link>
+              ) : (
+                <Button className="w-full" onClick={() => window.location.reload()} data-testid="button-retry-country">
+                  Retry now
                 </Button>
-              </Link>
+              )}
               <Link href="/">
                 <Button variant="outline" className="w-full" data-testid="button-go-back">
                   Go Back

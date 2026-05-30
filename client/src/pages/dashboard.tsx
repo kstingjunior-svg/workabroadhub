@@ -1326,254 +1326,40 @@ export default function Dashboard() {
             not pressure. Pro/admin users get direct portal apply links. */}
         <DashboardVisaJobsLocked />
 
-        {/* ── HERO WELCOME ─────────────────────────────────────────────── */}
-        <div className="relative overflow-hidden rounded-2xl shadow-lg bg-gradient-to-br from-blue-700 via-indigo-700 to-purple-800" data-testid="card-hero-welcome">
-          <div className="absolute top-0 right-0 w-40 h-40 bg-white/5 rounded-full -translate-y-1/4 translate-x-1/4" />
-          <div className="absolute bottom-0 left-0 w-28 h-28 bg-white/5 rounded-full translate-y-1/3 -translate-x-1/3" />
-          <div className="relative z-10 px-5 py-4">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex-1 min-w-0">
-                <h2 className="text-xl font-bold text-white leading-tight">
-                  Welcome back, {getDisplayName(user)}!
-                </h2>
-                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                  {isPaid ? (
-                    <span className="inline-flex items-center gap-1.5 bg-amber-400/20 border border-amber-400/40 text-amber-300 text-xs font-bold px-2.5 py-1 rounded-full">
-                      <Star className="h-3 w-3 fill-amber-300" />
-                      {currentPlanId === "pro" ? "Pro Plan" : "Basic Plan"}
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1.5 bg-white/10 text-blue-200 text-xs font-semibold px-2.5 py-1 rounded-full">
-                      Free Plan
-                    </span>
-                  )}
-                  {activeSinceLabel && (
-                    <span className="text-blue-300 text-xs flex items-center gap-1">
-                      <Calendar className="h-3 w-3" />
-                      Active since {activeSinceLabel}
-                    </span>
-                  )}
-                </div>
-                {/* ── Personalized next-action line — replaces generic copy.
-                    Speaks to user's actual state so the banner stops being
-                    decorative and becomes a conversion driver. */}
-                {!isPaid ? (
-                  <p className="text-amber-200 text-xs mt-2 leading-relaxed font-semibold">
-                    👉 Lock in Pro for KES 4,500/year — less than a mandazi/day for 30+ portals, WhatsApp support, and Pro-only visa jobs.
-                  </p>
-                ) : (totalSpentKES ?? 0) === 0 ? (
-                  <p className="text-emerald-200 text-xs mt-2 leading-relaxed font-semibold">
-                    ✨ Your Pro is active — try your first service. Most members start with ATS Optimization (KES 499).
-                  </p>
-                ) : (
-                  <p className="text-blue-200 text-xs mt-2 leading-relaxed">
-                    🎯 You're in. Browse new visa-sponsored jobs below — refreshed daily.
-                  </p>
-                )}
-              </div>
-              <div className="flex flex-col items-end gap-2 flex-shrink-0">
-                {!isPaid && (
-                  <button
-                    onClick={() => openUpgradeModal("consultation_locked", "WhatsApp Consultation", "pro")}
-                    className="bg-gradient-to-r from-yellow-400 to-orange-500 hover:from-yellow-300 hover:to-orange-400 text-blue-900 font-bold py-2 px-4 rounded-xl transition-all duration-200 shadow hover:shadow-md text-xs whitespace-nowrap"
-                    data-testid="button-unlock"
-                  >
-                    🔓 Upgrade
-                  </button>
-                )}
-                <Link href="/my-overview">
-                  <button
-                    className="bg-white/15 hover:bg-white/25 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-all duration-200 whitespace-nowrap"
-                    data-testid="link-my-overview"
-                  >
-                    My Overview →
-                  </button>
-                </Link>
-                <Link href="/my-account">
-                  <button
-                    className="bg-white/10 hover:bg-white/20 text-blue-200 text-xs font-medium px-3 py-1.5 rounded-lg transition-all duration-200 whitespace-nowrap"
-                    data-testid="link-my-account"
-                  >
-                    Account
-                  </button>
-                </Link>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* ── CAREER READINESS + ACTIVE ORDER (side by side) ─────────── */}
-        <div className="grid grid-cols-2 gap-3" style={{ minHeight: "160px" }}>
-          <CareerReadinessCard isPaid={isPaid} totalOrders={totalOrders} />
-          <ActiveOrderMiniCard order={activeOrder} />
-        </div>
-
-        {/* ── AI MATCH BOX — DISABLED (Phase 1 conversion cleanup) ──────
-            Was a duplicate of the AI matcher already shown in the hero CTA.
-            Six "find jobs" entry points were diluting focus. Removing this
-            one drops the count to two: Hero CTA + Visa-Sponsored Jobs.
-            Component left in scope in case we re-enable a single primary
-            matcher elsewhere. */}
-        {/* <AiMatchBox /> */}
-
-        {/* ── COMPACT STATS PILL STRIP ───────────────────────────────────
-            Was three big square cards that hogged vertical real estate.
-            Now a thin inline pill row so the actual money-maker section
-            below (Job Destinations) gets the visual priority. Same data,
-            same links, just smaller — visitor's eye now lands on the
-            country cards instead of these meta-stats. */}
-        <div
-          className="flex flex-wrap items-center justify-around gap-2 p-2 rounded-2xl bg-white/60 dark:bg-gray-900/60 border border-slate-200 dark:border-gray-800"
-          data-testid="section-quick-stats"
-        >
-          {[
-            { icon: <Globe className="h-4 w-4 text-teal-600 dark:text-teal-300" />,    value: "9",              label: "Countries", href: "/global-opportunities" },
-            { icon: <Briefcase className="h-4 w-4 text-blue-600 dark:text-blue-300" />, value: "30+",            label: "Portals",   href: undefined as string | undefined },
-            { icon: <Gift className="h-4 w-4 text-orange-600 dark:text-orange-300" />,  value: referralDisplay,  label: referralSub || "Referral", href: "/referrals" },
-          ].map((chip) => {
-            const inner = (
-              <div
-                className="flex items-center gap-2 px-3 py-1.5 hover:bg-slate-100 dark:hover:bg-gray-800 rounded-xl transition-colors cursor-pointer"
-                data-testid={`stat-${(chip.label as string).toLowerCase().replace(/\s+/g, "-")}`}
-              >
-                {chip.icon}
-                <span className="font-bold text-sm text-gray-900 dark:text-white">{chip.value}</span>
-                <span className="text-[11px] text-gray-500 dark:text-gray-400">{chip.label}</span>
-              </div>
-            );
-            return chip.href ? (
-              <Link key={chip.label} href={chip.href}>{inner}</Link>
-            ) : (
-              <div key={chip.label}>{inner}</div>
-            );
-          })}
-        </div>
-
-        {/* ── ACTIVITY SNAPSHOT — conversion-aware ──────────────────────
-            • If the user has REAL activity (paid OR has services unlocked):
-              show the 3-stat grid as a progress brag.
-            • If the user has NOTHING yet: show a single "Your next step"
-              card so they never see "0 / 0 / 0" (empty-state confession).
-        */}
-        {userData && (totalSpentKES ?? 0) === 0 && (activeCount ?? 0) === 0 && (requestsCount ?? 0) === 0 ? (
-          <Link href={isPaid ? "/services" : "/tools/ats-cv-checker"}>
-            <div
-              className="rounded-2xl p-4 bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-md hover:shadow-lg hover:scale-[1.01] active:scale-[0.99] transition-all duration-200 cursor-pointer"
-              data-testid="card-next-step"
-            >
-              <div className="flex items-center gap-3">
-                <div className="shrink-0 w-11 h-11 rounded-xl bg-white/20 flex items-center justify-center text-2xl">
-                  {isPaid ? "🚀" : "🎁"}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[11px] uppercase tracking-wide text-white/80 font-semibold mb-0.5">Your next step</p>
-                  <p className="text-sm font-bold leading-tight">
-                    {isPaid
-                      ? "Pick your first service — most members start with ATS Optimization"
-                      : "Take your FREE CV Health Check — see what recruiters spot in 3 min"}
-                  </p>
-                  <p className="text-[11px] text-white/85 mt-1">
-                    {isPaid ? "All Pro services unlocked · Word + PDF delivery" : "No payment · No signup hoops · Instant AI feedback"}
-                  </p>
-                </div>
-                <ChevronRight className="h-5 w-5 text-white/90 shrink-0" />
-              </div>
-            </div>
-          </Link>
-        ) : userData && (
-          <div className="grid grid-cols-3 gap-2.5" data-testid="section-activity-stats">
-            {[
-              {
-                icon: <CreditCard className="h-4 w-4 text-green-600 dark:text-green-300" />,
-                value: totalSpentKES != null && totalSpentKES > 0
-                  ? `KES ${totalSpentKES.toLocaleString()}`
-                  : "—",
-                label: "Total Paid",
-                sub: `${userData.payments.filter(p => p.status === "completed" || p.status === "success").length} payment${userData.payments.filter(p => p.status === "completed" || p.status === "success").length !== 1 ? "s" : ""}`,
-                bg: "bg-green-50 dark:bg-green-900/20",
-                accent: "text-green-700 dark:text-green-300",
-                href: "/my-payments",
-              },
-              {
-                icon: <Zap className="h-4 w-4 text-purple-600 dark:text-purple-300" />,
-                value: activeCount != null ? String(activeCount) : "—",
-                label: "Services",
-                sub: "Unlocked",
-                bg: "bg-purple-50 dark:bg-purple-900/20",
-                accent: "text-purple-700 dark:text-purple-300",
-                href: "/my-documents",
-              },
-              {
-                icon: <ClipboardList className="h-4 w-4 text-sky-600 dark:text-sky-300" />,
-                value: requestsCount != null ? String(requestsCount) : "—",
-                label: "Requests",
-                sub: requestsCount === 1 ? "In progress" : "Submitted",
-                bg: "bg-sky-50 dark:bg-sky-900/20",
-                accent: "text-sky-700 dark:text-sky-300",
-                href: "/my-orders",
-              },
-            ].map(chip => {
-              const inner = (
-                <div
-                  key={chip.label}
-                  className={`${chip.bg} rounded-2xl p-3 flex flex-col items-center text-center border border-transparent shadow-sm hover:shadow-md hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer`}
-                  data-testid={`stat-${chip.label.toLowerCase().replace(/\s+/g, "-")}`}
-                >
-                  <div className="w-8 h-8 rounded-xl flex items-center justify-center mb-1.5 bg-white/60 dark:bg-black/20">{chip.icon}</div>
-                  <div className={`text-xl font-bold leading-none ${chip.accent}`}>{chip.value}</div>
-                  <div className="text-[11px] font-semibold text-gray-800 dark:text-gray-200 mt-1">{chip.label}</div>
-                  <div className="text-[9px] text-gray-500 dark:text-gray-400 leading-tight mt-0.5">{chip.sub}</div>
-                </div>
-              );
-              return <Link key={chip.label} href={chip.href}>{inner}</Link>;
-            })}
-          </div>
-        )}
-
-        {/* ── JOB DESTINATIONS — EXPANDED 3×3 GRID ─────────────────────
-            Was a tiny horizontal-scroll strip with most countries off-
-            screen. Now a full 3-column grid showing all 9 countries
-            visibly with bigger cards, better hierarchy, and a hint of
-            what each destination is known for. This is one of the page's
-            highest-converting sections (job seekers are visual about
-            destinations) — it deserves real estate. */}
+        {/* ── JOB DESTINATIONS — 9-country grid (RIGHT UNDER 50 JOBS) ─────
+            User feedback: this is the conversion hot-spot. Show every
+            country inline, no "View all" detour. Each tile deep-links
+            directly into that country's dashboard so users hit portals
+            in one click. Gulf countries (Saudi/Qatar/Bahrain) map to the
+            UAE/Arab Countries dashboard which covers the GCC region;
+            Germany maps to Europe.  */}
         <div data-testid="section-destinations">
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <h3 className="text-sm font-bold text-gray-900 dark:text-white">🌍 Job Destinations</h3>
-              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
-                Tap a country to see visa-sponsored openings
-              </p>
-            </div>
-            <Link
-              href="/global-opportunities"
-              className="text-xs text-teal-600 dark:text-teal-400 font-semibold hover:underline whitespace-nowrap"
-            >
-              View all →
-            </Link>
+          <div className="mb-3">
+            <h3 className="text-sm font-bold text-gray-900 dark:text-white">🌍 Job Destinations</h3>
+            <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+              Tap a country to open its verified job portals
+            </p>
           </div>
 
           <div className="grid grid-cols-3 gap-2.5">
             {[
-              { flag: "🇬🇧", code: "GB", name: "UK",        desc: "NHS hiring",         tone: "from-blue-500/10 to-red-500/10" },
-              { flag: "🇦🇪", code: "AE", name: "UAE",       desc: "Tax-free salary",    tone: "from-green-500/10 to-red-500/10" },
-              { flag: "🇨🇦", code: "CA", name: "Canada",    desc: "PR pathway",         tone: "from-red-500/10 to-white/0" },
-              { flag: "🇦🇺", code: "AU", name: "Australia", desc: "482 Skilled visa",   tone: "from-blue-500/10 to-yellow-500/10" },
-              { flag: "🇸🇦", code: "SA", name: "Saudi",     desc: "Vision 2030 hiring", tone: "from-green-700/10 to-emerald-500/10" },
-              { flag: "🇩🇪", code: "DE", name: "Germany",   desc: "EU Blue Card",       tone: "from-black/10 to-yellow-500/10" },
-              { flag: "🇺🇸", code: "US", name: "USA",       desc: "H-1B / EB-3",        tone: "from-blue-500/10 to-red-500/10" },
-              { flag: "🇶🇦", code: "QA", name: "Qatar",     desc: "Tax-free Gulf",      tone: "from-purple-700/10 to-amber-500/10" },
-              { flag: "🇧🇭", code: "BH", name: "Bahrain",   desc: "Hospitality + GCC",  tone: "from-red-500/10 to-white/0" },
+              { flag: "🇬🇧", code: "GB", slug: "uk",        name: "UK",        desc: "NHS hiring",         tone: "from-blue-500/10 to-red-500/10" },
+              { flag: "🇦🇪", code: "AE", slug: "uae",       name: "UAE",       desc: "Tax-free salary",    tone: "from-green-500/10 to-red-500/10" },
+              { flag: "🇨🇦", code: "CA", slug: "canada",    name: "Canada",    desc: "PR pathway",         tone: "from-red-500/10 to-white/0" },
+              { flag: "🇦🇺", code: "AU", slug: "australia", name: "Australia", desc: "482 Skilled visa",   tone: "from-blue-500/10 to-yellow-500/10" },
+              { flag: "🇸🇦", code: "SA", slug: "uae",       name: "Saudi",     desc: "Vision 2030 hiring", tone: "from-green-700/10 to-emerald-500/10" },
+              { flag: "🇩🇪", code: "DE", slug: "europe",    name: "Germany",   desc: "EU Blue Card",       tone: "from-black/10 to-yellow-500/10" },
+              { flag: "🇺🇸", code: "US", slug: "usa",       name: "USA",       desc: "H-1B / EB-3",        tone: "from-blue-500/10 to-red-500/10" },
+              { flag: "🇶🇦", code: "QA", slug: "uae",       name: "Qatar",     desc: "Tax-free Gulf",      tone: "from-purple-700/10 to-amber-500/10" },
+              { flag: "🇧🇭", code: "BH", slug: "uae",       name: "Bahrain",   desc: "Hospitality + GCC",  tone: "from-red-500/10 to-white/0" },
             ].map((c) => (
               <Link
                 key={c.name}
-                href="/global-opportunities"
+                href={`/country/${c.slug}`}
                 data-testid={`dest-${c.name.toLowerCase()}`}
-                className={`group relative flex flex-col gap-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-3 shadow-sm hover:shadow-lg hover:border-teal-300 dark:hover:border-teal-700 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200`}
+                className="group relative flex flex-col gap-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-3 shadow-sm hover:shadow-lg hover:border-teal-300 dark:hover:border-teal-700 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200"
               >
-                {/* Soft flag-tinted background wash */}
                 <div className={`absolute inset-0 rounded-2xl bg-gradient-to-br ${c.tone} opacity-50 group-hover:opacity-80 transition-opacity pointer-events-none`} />
-
                 <div className="relative flex items-center gap-2">
                   <span className="text-2xl leading-none">{c.flag}</span>
                   <div className="min-w-0 flex-1">
@@ -1586,6 +1372,41 @@ export default function Dashboard() {
             ))}
           </div>
         </div>
+
+        {/* ── THIN WELCOME WIDGET ─────────────────────────────────────────
+            One-row greeting. Big celebratory hero + CareerReadiness +
+            ActiveOrder + Stats pill + Activity stats all moved to the
+            My Overview page (button on the right). Keeps the dashboard
+            focused on jobs and destinations. */}
+        <div
+          className="flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600/90 to-indigo-700/90 dark:from-blue-700 dark:to-indigo-800 shadow-sm"
+          data-testid="card-hero-welcome-thin"
+        >
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <span className="text-base font-semibold text-white truncate">
+              Welcome back, {getDisplayName(user)}
+            </span>
+            {isPaid ? (
+              <span className="inline-flex items-center gap-1 bg-amber-400/25 border border-amber-300/40 text-amber-100 text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap">
+                <Star className="h-2.5 w-2.5 fill-amber-200" />
+                {currentPlanId === "pro" ? "Pro" : "Basic"}
+              </span>
+            ) : (
+              <span className="inline-flex items-center bg-white/15 text-blue-100 text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap">
+                Free
+              </span>
+            )}
+          </div>
+          <Link href="/my-overview">
+            <button
+              className="bg-white/15 hover:bg-white/25 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap"
+              data-testid="link-my-overview"
+            >
+              My Overview →
+            </button>
+          </Link>
+        </div>
+
 
         {/* ── QUICK ACTIONS — rich 2×2 cards ────────────────────────── */}
         <div>

@@ -2530,7 +2530,19 @@ Crawl-delay: 1`);
         return res.status(403).json({ message: "Payment required to access this content" });
       }
 
-      const country = await storage.getCountryWithDetails(req.params.code);
+      let country = await storage.getCountryWithDetails(req.params.code);
+      if (!country) {
+        // Self-heal: the country might be one we support (e.g. 'australia')
+        // but that never got inserted by an older seed. Run the portal
+        // self-healer inline, then retry. Idempotent and cheap on hit.
+        try {
+          const seed = await import("./seed");
+          await seed.seedCountryPortals?.();
+          country = await storage.getCountryWithDetails(req.params.code);
+        } catch (e) {
+          console.error("[countries/:code] inline self-heal failed:", e);
+        }
+      }
       if (!country) {
         return res.status(404).json({ message: "Country not found" });
       }
@@ -19785,20 +19797,4 @@ Tone examples:
     res.send(twiml.toString());
   });
 
-  // ── Client-side event tracker ────────────────────────────────────────────────
-  app.post("/api/track-event", async (req: any, res) => {
-    const { userId, event, page, metadata = {} } = req.body;
-
-    if (!event) return res.sendStatus(200);
-
-    await pool.query(
-      `INSERT INTO funnel_events (user_id, event, page, metadata)
-       VALUES ($1, $2, $3, $4)`,
-      [userId ?? req.user?.id ?? null, event, page ?? null, metadata]
-    );
-
-    res.sendStatus(200);
-  });
-
-  return httpServer;
-}
+  // ── Client-side event tracker ──────
