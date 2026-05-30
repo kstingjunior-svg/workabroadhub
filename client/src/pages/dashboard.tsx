@@ -1416,46 +1416,36 @@ export default function Dashboard() {
             matcher elsewhere. */}
         {/* <AiMatchBox /> */}
 
-        {/* ── QUICK STAT CARDS (3 across) ─────────────────────────────── */}
-        <div className="grid grid-cols-3 gap-2.5" data-testid="section-quick-stats">
+        {/* ── COMPACT STATS PILL STRIP ───────────────────────────────────
+            Was three big square cards that hogged vertical real estate.
+            Now a thin inline pill row so the actual money-maker section
+            below (Job Destinations) gets the visual priority. Same data,
+            same links, just smaller — visitor's eye now lands on the
+            country cards instead of these meta-stats. */}
+        <div
+          className="flex flex-wrap items-center justify-around gap-2 p-2 rounded-2xl bg-white/60 dark:bg-gray-900/60 border border-slate-200 dark:border-gray-800"
+          data-testid="section-quick-stats"
+        >
           {[
-            {
-              icon: <Globe className="h-5 w-5 text-teal-600 dark:text-teal-300" />,
-              value: "9",
-              label: "Countries",
-              sub: "View destinations",
-              bg: "bg-teal-50 dark:bg-teal-900/30",
-              accent: "text-teal-700 dark:text-teal-300",
-              href: "/global-opportunities",
-            },
-            {
-              icon: <Briefcase className="h-5 w-5 text-blue-600 dark:text-blue-300" />,
-              value: "30+",
-              label: "Portals",
-              sub: "Verified boards",
-              bg: "bg-blue-50 dark:bg-blue-900/30",
-              accent: "text-blue-700 dark:text-blue-300",
-              href: undefined,
-            },
-            {
-              icon: <Gift className="h-5 w-5 text-orange-600 dark:text-orange-300" />,
-              value: referralDisplay,
-              label: "Referral",
-              sub: referralSub,
-              bg: "bg-orange-50 dark:bg-orange-900/30",
-              accent: "text-orange-700 dark:text-orange-300",
-              href: "/referrals",
-            },
-          ].map(chip => {
+            { icon: <Globe className="h-4 w-4 text-teal-600 dark:text-teal-300" />,    value: "9",              label: "Countries", href: "/global-opportunities" },
+            { icon: <Briefcase className="h-4 w-4 text-blue-600 dark:text-blue-300" />, value: "30+",            label: "Portals",   href: undefined as string | undefined },
+            { icon: <Gift className="h-4 w-4 text-orange-600 dark:text-orange-300" />,  value: referralDisplay,  label: referralSub || "Referral", href: "/referrals" },
+          ].map((chip) => {
             const inner = (
-              <div key={chip.label} className={`${chip.bg} rounded-2xl p-3 flex flex-col items-center text-center border border-transparent shadow-sm hover:shadow-md hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer`} data-testid={`stat-${chip.label.toLowerCase()}`}>
-                <div className={`w-9 h-9 rounded-xl flex items-center justify-center mb-2 bg-white/60 dark:bg-black/20`}>{chip.icon}</div>
-                <div className={`text-2xl font-bold leading-none ${chip.accent}`}>{chip.value}</div>
-                <div className="text-[12px] font-semibold text-gray-800 dark:text-gray-200 mt-1">{chip.label}</div>
-                <div className="text-[10px] text-gray-500 dark:text-gray-400 leading-tight mt-0.5">{chip.sub}</div>
+              <div
+                className="flex items-center gap-2 px-3 py-1.5 hover:bg-slate-100 dark:hover:bg-gray-800 rounded-xl transition-colors cursor-pointer"
+                data-testid={`stat-${(chip.label as string).toLowerCase().replace(/\s+/g, "-")}`}
+              >
+                {chip.icon}
+                <span className="font-bold text-sm text-gray-900 dark:text-white">{chip.value}</span>
+                <span className="text-[11px] text-gray-500 dark:text-gray-400">{chip.label}</span>
               </div>
             );
-            return chip.href ? <Link key={chip.label} href={chip.href}>{inner}</Link> : <div key={chip.label}>{inner}</div>;
+            return chip.href ? (
+              <Link key={chip.label} href={chip.href}>{inner}</Link>
+            ) : (
+              <div key={chip.label}>{inner}</div>
+            );
           })}
         </div>
 
@@ -1540,32 +1530,58 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* ── JOB DESTINATION COUNTRIES ────────────────────────────────── */}
+        {/* ── JOB DESTINATIONS — EXPANDED 3×3 GRID ─────────────────────
+            Was a tiny horizontal-scroll strip with most countries off-
+            screen. Now a full 3-column grid showing all 9 countries
+            visibly with bigger cards, better hierarchy, and a hint of
+            what each destination is known for. This is one of the page's
+            highest-converting sections (job seekers are visual about
+            destinations) — it deserves real estate. */}
         <div data-testid="section-destinations">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Job Destinations</h3>
-            <Link href="/global-opportunities" className="text-[11px] text-teal-600 dark:text-teal-400 font-medium hover:underline">View all →</Link>
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h3 className="text-sm font-bold text-gray-900 dark:text-white">🌍 Job Destinations</h3>
+              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+                Tap a country to see visa-sponsored openings
+              </p>
+            </div>
+            <Link
+              href="/global-opportunities"
+              className="text-xs text-teal-600 dark:text-teal-400 font-semibold hover:underline whitespace-nowrap"
+            >
+              View all →
+            </Link>
           </div>
-          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide" style={{ scrollbarWidth: "none" }}>
+
+          <div className="grid grid-cols-3 gap-2.5">
             {[
-              { flag: "🇬🇧", name: "UK",          desc: "NHS hiring" },
-              { flag: "🇦🇪", name: "UAE",         desc: "Tax-free" },
-              { flag: "🇨🇦", name: "Canada",      desc: "PR pathway" },
-              { flag: "🇦🇺", name: "Australia",   desc: "Skilled visa" },
-              { flag: "🇸🇦", name: "Saudi",       desc: "Vision 2030" },
-              { flag: "🇩🇪", name: "Germany",     desc: "EU Blue Card" },
-              { flag: "🇺🇸", name: "USA",         desc: "H-1B / EB-3" },
-              { flag: "🇶🇦", name: "Qatar",       desc: "Tax-free Gulf" },
-            ].map(c => (
+              { flag: "🇬🇧", code: "GB", name: "UK",        desc: "NHS hiring",         tone: "from-blue-500/10 to-red-500/10" },
+              { flag: "🇦🇪", code: "AE", name: "UAE",       desc: "Tax-free salary",    tone: "from-green-500/10 to-red-500/10" },
+              { flag: "🇨🇦", code: "CA", name: "Canada",    desc: "PR pathway",         tone: "from-red-500/10 to-white/0" },
+              { flag: "🇦🇺", code: "AU", name: "Australia", desc: "482 Skilled visa",   tone: "from-blue-500/10 to-yellow-500/10" },
+              { flag: "🇸🇦", code: "SA", name: "Saudi",     desc: "Vision 2030 hiring", tone: "from-green-700/10 to-emerald-500/10" },
+              { flag: "🇩🇪", code: "DE", name: "Germany",   desc: "EU Blue Card",       tone: "from-black/10 to-yellow-500/10" },
+              { flag: "🇺🇸", code: "US", name: "USA",       desc: "H-1B / EB-3",        tone: "from-blue-500/10 to-red-500/10" },
+              { flag: "🇶🇦", code: "QA", name: "Qatar",     desc: "Tax-free Gulf",      tone: "from-purple-700/10 to-amber-500/10" },
+              { flag: "🇧🇭", code: "BH", name: "Bahrain",   desc: "Hospitality + GCC",  tone: "from-red-500/10 to-white/0" },
+            ].map((c) => (
               <Link
                 key={c.name}
                 href="/global-opportunities"
                 data-testid={`dest-${c.name.toLowerCase()}`}
-                className="flex-shrink-0 flex flex-col items-center gap-1 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl px-3 py-2 shadow-sm hover:shadow-md hover:scale-[1.04] active:scale-[0.97] transition-all duration-150 min-w-[68px]"
+                className={`group relative flex flex-col gap-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-3 shadow-sm hover:shadow-lg hover:border-teal-300 dark:hover:border-teal-700 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200`}
               >
-                <span className="text-2xl leading-none">{c.flag}</span>
-                <span className="text-[11px] font-bold text-gray-800 dark:text-gray-100 whitespace-nowrap">{c.name}</span>
-                <span className="text-[9px] text-gray-400 dark:text-gray-500 whitespace-nowrap">{c.desc}</span>
+                {/* Soft flag-tinted background wash */}
+                <div className={`absolute inset-0 rounded-2xl bg-gradient-to-br ${c.tone} opacity-50 group-hover:opacity-80 transition-opacity pointer-events-none`} />
+
+                <div className="relative flex items-center gap-2">
+                  <span className="text-2xl leading-none">{c.flag}</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[10px] font-mono text-gray-500 dark:text-gray-400 leading-none">{c.code}</div>
+                    <div className="text-sm font-bold text-gray-900 dark:text-white leading-tight truncate">{c.name}</div>
+                  </div>
+                </div>
+                <p className="relative text-[11px] text-gray-600 dark:text-gray-400 leading-tight truncate">{c.desc}</p>
               </Link>
             ))}
           </div>
@@ -2022,8 +2038,6 @@ export default function Dashboard() {
             </Link>
           </div>
         </div>
-
-        {/* DISCLAIMER */}
 
         {/* DISCLAIMER */}
         <p className="text-xs text-gray-400 dark:text-gray-500 text-center px-2 pb-2 leading-relaxed">
