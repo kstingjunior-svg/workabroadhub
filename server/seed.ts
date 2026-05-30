@@ -1453,3 +1453,141 @@ export async function syncServicePrices() {
     console.error("[ServiceSync] Failed to sync service prices:", err.message);
   }
 }
+
+// ─── Country portals self-healer ─────────────────────────────────────────────
+// CRITICAL: Migration 0004 used UPPERCASE country codes ('UK', 'CA', 'AU' etc.)
+// but the original seed inserts countries with LOWERCASE codes ('uk', 'canada',
+// 'uae'…). Result: the migration's INSERTs matched zero rows, leaving every
+// country's "Apply on Platforms" tab empty. On top of that, 'australia' was
+// never seeded at all, so /api/countries/australia 404s and the page shows
+// "Access Required".
+//
+// This seed runs on every boot. It is fully idempotent — uses ON CONFLICT
+// for countries and INSERT…WHERE NOT EXISTS for job_links so click counts
+// and lastVerified timestamps are preserved across reboots.
+export async function seedCountryPortals(): Promise<void> {
+  try {
+    // 1. Ensure all six destination countries exist (lowercase codes).
+    const wantedCountries: Array<{ code: string; name: string; flag: string }> = [
+      { code: "usa",       name: "USA",                  flag: "🇺🇸" },
+      { code: "canada",    name: "Canada",               flag: "🇨🇦" },
+      { code: "uae",       name: "UAE / Arab Countries", flag: "🇦🇪" },
+      { code: "uk",        name: "United Kingdom",       flag: "🇬🇧" },
+      { code: "europe",    name: "Europe",               flag: "🇪🇺" },
+      { code: "australia", name: "Australia",            flag: "🇦🇺" },
+    ];
+    for (const c of wantedCountries) {
+      await pool.query(
+        `INSERT INTO countries (name, code, flag_emoji, is_active)
+         VALUES ($1, $2, $3, true)
+         ON CONFLICT (code) DO NOTHING`,
+        [c.name, c.code, c.flag]
+      );
+    }
+
+    // 2. Canonical job_links per lowercase code. Kenya-accessible portals only
+    //    — no Monster/TotalJobs/CareerBuilder (WAF-blocked from Kenyan IPs).
+    type Link = { name: string; url: string; description: string; order: number };
+    const portalsByCode: Record<string, Link[]> = {
+      uk: [
+        { name: "Indeed UK",        url: "https://www.indeed.co.uk",                                   description: "Largest UK job board — visa sponsorship filter available", order: 1 },
+        { name: "Reed",             url: "https://www.reed.co.uk",                                     description: "UK-wide jobs across every sector",                          order: 2 },
+        { name: "LinkedIn Jobs UK", url: "https://www.linkedin.com/jobs/?location=United+Kingdom",    description: "Professional network jobs — no geo-block",                  order: 3 },
+        { name: "CV-Library",       url: "https://www.cv-library.co.uk",                               description: "UK CV-sharing board, visa-sponsor friendly",                order: 4 },
+        { name: "Adzuna UK",        url: "https://www.adzuna.co.uk",                                   description: "Aggregator across the UK web",                              order: 5 },
+        { name: "NHS Jobs",         url: "https://www.jobs.nhs.uk",                                    description: "Official NHS recruitment — Health & Care Worker visa",      order: 6 },
+        { name: "Glassdoor UK",     url: "https://www.glassdoor.co.uk",                                description: "Salaries + reviews + jobs",                                 order: 7 },
+      ],
+      canada: [
+        { name: "Job Bank Canada",       url: "https://www.jobbank.gc.ca",                            description: "Official Government of Canada job board",        order: 1 },
+        { name: "Indeed Canada",         url: "https://ca.indeed.com",                                description: "Indeed CA — broad coverage",                     order: 2 },
+        { name: "LinkedIn Jobs Canada",  url: "https://www.linkedin.com/jobs/?location=Canada",       description: "Largest professional job network",               order: 3 },
+        { name: "Adzuna Canada",         url: "https://www.adzuna.ca",                                description: "Aggregator covering Canadian listings",          order: 4 },
+        { name: "Eluta",                 url: "https://www.eluta.ca",                                 description: "Top-100 employer search by Mediacorp",           order: 5 },
+        { name: "Workopolis (CA)",       url: "https://www.workopolis.com/findwork.aspx",             description: "Mid-career Canadian job listings",               order: 6 },
+      ],
+      uae: [
+        { name: "Bayt",            url: "https://www.bayt.com",                description: "Middle East largest job board",                      order: 1 },
+        { name: "XpatJobs UAE",    url: "https://unitedarabemirates.xpatjobs.com", description: "Expat-focused UAE roles",                       order: 2 },
+        { name: "Indeed UAE",      url: "https://www.indeed.ae",               description: "Indeed AE — Gulf coverage",                          order: 3 },
+        { name: "LinkedIn Jobs UAE", url: "https://www.linkedin.com/jobs/?location=United+Arab+Emirates", description: "Professional Gulf roles",              order: 4 },
+        { name: "Naukri Gulf",     url: "https://www.naukrigulf.com",          description: "Major Gulf job board, India + Africa friendly",      order: 5 },
+        { name: "GulfTalent",      url: "https://www.gulftalent.com",          description: "Mid-to-senior Gulf roles",                           order: 6 },
+        { name: "Dubizzle Jobs",   url: "https://dubai.dubizzle.com/jobs/",    description: "Classifieds-style UAE jobs",                         order: 7 },
+      ],
+      usa: [
+        { name: "Indeed USA",          url: "https://www.indeed.com",                description: "Largest US job board",                        order: 1 },
+        { name: "LinkedIn Jobs",       url: "https://www.linkedin.com/jobs",         description: "Professional network — H-1B sponsorship",     order: 2 },
+        { name: "USAJOBS (Government)",url: "https://www.usajobs.gov",               description: "Official US federal government jobs",         order: 3 },
+        { name: "Glassdoor USA",       url: "https://www.glassdoor.com",             description: "Salaries + reviews + jobs",                   order: 4 },
+        { name: "Dice (Tech)",         url: "https://www.dice.com",                  description: "Tech-focused — strong H-1B listings",         order: 5 },
+        { name: "SimplyHired",         url: "https://www.simplyhired.com",           description: "Aggregator with friendly access",             order: 6 },
+        { name: "ZipRecruiter",        url: "https://www.ziprecruiter.com",          description: "AI-matched US jobs",                          order: 7 },
+      ],
+      australia: [
+        { name: "SEEK",                  url: "https://www.seek.com.au",                                 description: "Largest Australian job board — visa-sponsor filter",        order: 1 },
+        { name: "Indeed Australia",      url: "https://au.indeed.com",                                   description: "Indeed AU — strong visa-sponsorship listings",              order: 2 },
+        { name: "LinkedIn Jobs AU",      url: "https://www.linkedin.com/jobs/?location=Australia",       description: "Professional jobs in Australia",                            order: 3 },
+        { name: "Workforce Australia",   url: "https://www.workforceaustralia.gov.au",                   description: "Official Australian government job platform",               order: 4 },
+        { name: "Adzuna Australia",      url: "https://www.adzuna.com.au",                               description: "Aggregator covering AU listings",                            order: 5 },
+        { name: "CareerOne",             url: "https://www.careerone.com.au",                            description: "AU job search and career resources",                         order: 6 },
+        { name: "Jora Australia",        url: "https://au.jora.com",                                     description: "Lightweight AU job aggregator",                              order: 7 },
+      ],
+      europe: [
+        // Germany
+        { name: "🇩🇪 Make it in Germany", url: "https://www.make-it-in-germany.com",                            description: "Official German immigration job portal",         order: 1 },
+        { name: "🇩🇪 Arbeitsagentur",     url: "https://www.arbeitsagentur.de",                                 description: "German Federal Employment Agency",               order: 2 },
+        { name: "🇩🇪 Stepstone",          url: "https://www.stepstone.de",                                      description: "Largest German job board, English filter",       order: 3 },
+        { name: "🇩🇪 LinkedIn Germany",   url: "https://www.linkedin.com/jobs/?location=Germany",                description: "Tech + skilled roles in Germany",                order: 4 },
+        { name: "🇩🇪 Indeed Germany",     url: "https://de.indeed.com",                                          description: "Indeed DE — broad coverage",                     order: 5 },
+        // France
+        { name: "🇫🇷 Pole Emploi",        url: "https://www.pole-emploi.fr",                                     description: "Official French employment service",             order: 6 },
+        { name: "🇫🇷 Indeed France",      url: "https://www.indeed.fr",                                          description: "Indeed FR — broad coverage",                     order: 7 },
+        // Netherlands
+        { name: "🇳🇱 IamExpat Jobs",      url: "https://www.iamexpat.nl/jobs-netherlands",                       description: "Expat-friendly Dutch jobs",                      order: 8 },
+        { name: "🇳🇱 Glassdoor NL",       url: "https://www.glassdoor.nl",                                       description: "Salaries + reviews + jobs (NL)",                 order: 9 },
+        // Italy
+        { name: "🇮🇹 Cliclavoro",         url: "https://www.cliclavoro.gov.it",                                  description: "Official Italian government job board",          order: 10 },
+        { name: "🇮🇹 Indeed Italy",       url: "https://www.indeed.it",                                          description: "Indeed IT — broad coverage",                     order: 11 },
+        // Spain
+        { name: "🇪🇸 SEPE",               url: "https://www.sepe.es",                                            description: "Spanish Public Employment Service",              order: 12 },
+        { name: "🇪🇸 Indeed Spain",       url: "https://www.indeed.es",                                          description: "Indeed ES — broad coverage",                     order: 13 },
+        // Poland
+        { name: "🇵🇱 Praca.gov.pl",       url: "https://www.praca.gov.pl",                                       description: "Polish official jobs portal",                    order: 14 },
+        { name: "🇵🇱 Indeed Poland",      url: "https://www.indeed.pl",                                          description: "Indeed PL — broad coverage",                     order: 15 },
+        // Sweden
+        { name: "🇸🇪 Arbetsformedlingen", url: "https://arbetsformedlingen.se",                                  description: "Swedish Public Employment Service",              order: 16 },
+        { name: "🇸🇪 Indeed Sweden",      url: "https://www.indeed.se",                                          description: "Indeed SE — broad coverage",                     order: 17 },
+      ],
+    };
+
+    // 3. Upsert each portal — INSERT only when (country_id, url) is new.
+    //    This preserves click_count and last_verified on existing rows.
+    let inserted = 0;
+    for (const [code, portals] of Object.entries(portalsByCode)) {
+      const cRes = await pool.query<{ id: string }>(
+        `SELECT id FROM countries WHERE code = $1 LIMIT 1`,
+        [code]
+      );
+      const countryId = cRes.rows[0]?.id;
+      if (!countryId) {
+        console.warn(`[Portals] No country row for code='${code}' — skipping`);
+        continue;
+      }
+      for (const p of portals) {
+        const r = await pool.query(
+          `INSERT INTO job_links (country_id, name, url, description, is_active, "order")
+           SELECT $1, $2, $3, $4, true, $5
+           WHERE NOT EXISTS (
+             SELECT 1 FROM job_links WHERE country_id = $1 AND url = $3
+           )`,
+          [countryId, p.name, p.url, p.description, p.order]
+        );
+        if (r.rowCount && r.rowCount > 0) inserted++;
+      }
+    }
+    console.log(`[Portals] Self-heal complete — inserted ${inserted} missing job_links`);
+  } catch (err: any) {
+    console.error("[Portals] Self-heal failed:", err?.message ?? err);
+  }
+}

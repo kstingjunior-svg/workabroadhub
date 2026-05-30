@@ -344,6 +344,12 @@ app.use((req, res, next) => {
         m.syncNeaAgencies?.().catch(console.error);
         m.deduplicateNeaAgencies?.().catch(console.error);
         m.syncServicePrices?.().catch(console.error);
+
+        // CRITICAL: ensure every destination country has its job_links populated.
+        // Migration 0004 used uppercase codes that never matched the lowercase
+        // seed, leaving all "Apply on Platforms" tabs empty. This self-healer
+        // is idempotent — safe to run on every boot.
+        m.seedCountryPortals?.().catch(console.error);
       })
       .catch(console.error);
 
@@ -548,4 +554,4 @@ app.use((req, res, next) => {
 
     process.exit(1);
   }
-})();
+})();
