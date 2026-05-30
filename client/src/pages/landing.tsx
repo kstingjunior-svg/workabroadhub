@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { LandingNeaSearch } from "@/components/landing-nea-search";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PRO_FEATURES } from "@/lib/plan-features";
@@ -451,83 +452,17 @@ export default function Landing() {
                   Official database of registered employment agencies. Updated weekly.
                 </p>
 
-                {/* Counters */}
-                <div className="flex gap-10 mb-3 text-center">
-                  <div data-testid="counter-valid">
-                    <div
-                      className="leading-none mb-1"
-                      data-stat="valid"
-                      style={{ fontFamily: "'Crimson Pro', serif", fontWeight: 600, fontSize: '3rem', color: '#1A2530' }}
-                    >{agencyValid}</div>
-                    <div className="text-xs uppercase tracking-widest mb-2" style={{ color: '#5C6A7A' }}>Active Licenses</div>
-                  </div>
-                  <div data-testid="counter-expired">
-                    <div
-                      className="leading-none mb-1"
-                      data-stat="expired"
-                      style={{ fontFamily: "'Crimson Pro', serif", fontWeight: 600, fontSize: '3rem', color: '#1A2530' }}
-                    >{agencyExpired}</div>
-                    <div className="text-xs uppercase tracking-widest mb-2" style={{ color: '#5C6A7A' }}>Expired / Revoked</div>
-                  </div>
-                </div>
+                {/* ── INTERACTIVE NEA AGENCY VERIFICATION (Phase 1 redesign) ───
+                    Replaces the static "ABC Recruitment Ltd." sample card with
+                    a live, server-backed search box. User types an agency name,
+                    hits Verify, gets a real result from the 1,293-agency table
+                    with ACTIVE / EXPIRED / REVOKED badge.
 
-                {/* Last updated + total */}
-                <p className="mb-5 text-xs" style={{ color: '#7A8A9A' }}>
-                  📅 Updated:{" "}
-                  <span data-stat="lastUpdated">
-                    {agencyLastUpdated ?? "…"}
-                  </span>
-                  {" · "}Total:{" "}
-                  <span data-stat="total">{agencyTotal}</span> agencies
-                </p>
-
-                {/* Agency sample card */}
-                <div
-                  className="p-5 text-sm"
-                  style={{ background: '#F9F8F6', border: '1px solid #E2DDD5' }}
-                  data-testid="sample-agency-card"
-                >
-                  <div className="flex justify-between items-center mb-4">
-                    <span className="font-semibold" style={{ color: '#1A2530' }}>ABC Recruitment Ltd.</span>
-                    <span
-                      className="px-3 py-1 text-xs font-semibold uppercase tracking-wide"
-                      style={{ background: '#E3E8E0', color: '#2F4F4F' }}
-                    >
-                      Active &amp; Licensed
-                    </span>
-                  </div>
-                  {[
-                    ['License No.', 'RA/2024/01/123'],
-                    ['Issued', '15 Jan 2024'],
-                    ['Expires', '15 Jan 2026'],
-                  ].map(([label, value]) => (
-                    <div
-                      key={label}
-                      className="flex justify-between py-2"
-                      style={{ borderBottom: '1px dashed #D1CEC8', color: '#5A6A7A' }}
-                    >
-                      <span style={{ color: '#2A3A4A' }}>{label}</span>
-                      <span>{value}</span>
-                    </div>
-                  ))}
-                  <div
-                    className="mt-4 py-2 text-center text-xs font-semibold uppercase tracking-wide"
-                    style={{ background: '#E3E8E0', color: '#2F4F4F' }}
-                  >
-                    ✅ Safe to Work With — Verified by WorkAbroad Hub
-                  </div>
-                </div>
-
-                {/* Search link */}
-                <p className="mt-4 text-sm" style={{ color: '#5C6A7A' }}>
-                  <a
-                    href="/nea-agencies"
-                    className="underline underline-offset-2"
-                    style={{ color: '#1A2530' }}
-                  >
-                    Search all <span data-stat="total">{agencyTotal}</span> agencies →
-                  </a>
-                </p>
+                    Strategic role: this widget IS the landing page's primary
+                    conversion hook. "Verify before you pay" turns a passive
+                    page into an active tool — the single strongest reason for
+                    a Kenyan job seeker to come (and return) to the site. */}
+                <LandingNeaSearch />
 
                 {/* Testimonial */}
                 <div
