@@ -2530,19 +2530,61 @@ Crawl-delay: 1`);
         return res.status(403).json({ message: "Payment required to access this content" });
       }
 
-      let country = await storage.getCountryWithDetails(req.params.code);
+      const rawCode = String(req.params.code || "").trim();
+      const codeLc  = rawCode.toLowerCase();
+
+      let country = await storage.getCountryWithDetails(codeLc);
+
+      // Self-heal layer 1: the DB row might use UPPERCASE code (legacy from
+      // migration 0004). Try case-insensitive lookup.
       if (!country) {
-        // Self-heal: the country might be one we support (e.g. 'australia')
-        // but that never got inserted by an older seed. Run the portal
-        // self-healer inline, then retry. Idempotent and cheap on hit.
         try {
-          const seed = await import("./seed");
-          await seed.seedCountryPortals?.();
-          country = await storage.getCountryWithDetails(req.params.code);
+          const altRows = await pool.query<{ code: string }>(
+            `SELECT code FROM countries WHERE LOWER(code) = $1 LIMIT 1`,
+            [codeLc]
+          );
+          if (altRows.rows[0]?.code && altRows.rows[0].code !== codeLc) {
+            country = await storage.getCountryWithDetails(altRows.rows[0].code);
+          }
         } catch (e) {
-          console.error("[countries/:code] inline self-heal failed:", e);
+          console.error("[countries/:code] case-insensitive lookup failed:", e);
         }
       }
+
+      // Self-heal layer 2: country row simply doesn't exist (e.g. Australia
+      // was never seeded). Hard-insert the missing row right here — much more
+      // reliable than calling seedCountryPortals which has been failing
+      // silently. Job_links populate in a background task.
+      if (!country) {
+        const KNOWN: Record<string, { name: string; flag: string }> = {
+          usa:       { name: "USA",                  flag: "🇺🇸" },
+          canada:    { name: "Canada",               flag: "🇨🇦" },
+          uae:       { name: "UAE / Arab Countries", flag: "🇦🇪" },
+          uk:        { name: "United Kingdom",       flag: "🇬🇧" },
+          europe:    { name: "Europe",               flag: "🇪🇺" },
+          australia: { name: "Australia",            flag: "🇦🇺" },
+        };
+        const meta = KNOWN[codeLc];
+        if (meta) {
+          try {
+            console.log(`[countries/:code] hard-inserting missing country row: ${codeLc}`);
+            await pool.query(
+              `INSERT INTO countries (name, code, flag_emoji, is_active)
+               VALUES ($1, $2, $3, true)
+               ON CONFLICT (code) DO NOTHING`,
+              [meta.name, codeLc, meta.flag]
+            );
+            country = await storage.getCountryWithDetails(codeLc);
+            // Background — don't block the response while seed runs.
+            import("./seed")
+              .then((s) => s.seedCountryPortals?.())
+              .catch((e) => console.error("[countries/:code] bg seed failed:", e));
+          } catch (e) {
+            console.error("[countries/:code] hard-insert failed:", e);
+          }
+        }
+      }
+
       if (!country) {
         return res.status(404).json({ message: "Country not found" });
       }
@@ -19797,4 +19839,21 @@ Tone examples:
     res.send(twiml.toString());
   });
 
-  // ── Client-side event tracker ──────
+
+  // ── Client-side event tracker ────────────────────────────────────────────────
+  app.post("/api/track-event", async (req: any, res) => {
+    const { userId, event, page, metadata = {} } = req.body;
+
+    if (!event) return res.sendStatus(200);
+
+    await pool.query(
+      `INSERT INTO funnel_events (user_id, event, page, metadata)
+       VALUES ($1, $2, $3, $4)`,
+      [userId ?? req.user?.id ?? null, event, page ?? null, metadata]
+    );
+
+    res.sendStatus(200);
+  });
+
+  return httpServer;
+}
