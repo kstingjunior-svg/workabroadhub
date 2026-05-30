@@ -24,12 +24,19 @@ import { useQuery } from "@tanstack/react-query";
 
 interface Agency {
   id: string;
-  name: string;
+  // DB column is `agency_name` → API serializes as `agencyName`
+  agencyName: string;
   licenseNumber?: string | null;
-  status?: string | null;        // "active" | "expired" | "revoked" | etc.
+  // The DB has NO `status` column — status is computed:
+  //   1) if statusOverride is set, use that (admin override)
+  //   2) else if expiryDate is in the past → expired
+  //   3) else → active/licensed
+  statusOverride?: string | null;
   isPublished?: boolean;
   expiryDate?: string | null;
   issueDate?: string | null;
+  email?: string | null;
+  website?: string | null;
   country?: string | null;
 }
 
@@ -38,23 +45,33 @@ interface PublicStats {
   expiredAgencies?: number;
 }
 
-function statusBadge(rawStatus: string | null | undefined, expiryDate: string | null | undefined) {
-  // Normalize — server may report "active"/"expired"/"revoked" OR may use
-  // expiryDate < today to mean expired. Handle both.
-  const status = (rawStatus ?? "").toLowerCase();
-  const isExpiredByDate = expiryDate ? new Date(expiryDate).getTime() < Date.now() : false;
+function statusBadge(statusOverride: string | null | undefined, expiryDate: string | null | undefined) {
+  // The NEA database has NO `status` field. Compute it:
+  //   1. If statusOverride is set, admin has marked the agency manually
+  //      (e.g. "suspended", "revoked", "verified"). Use that as the truth.
+  //   2. Otherwise the status is purely a function of expiryDate:
+  //        expiryDate < today  → EXPIRED  (red)
+  //        expiryDate >= today → ACTIVE & LICENSED  (green)
+  //   3. Only fall through to "UNKNOWN" if expiryDate is missing entirely.
+  const override = (statusOverride ?? "").trim().toLowerCase();
+  const now = Date.now();
+  const expiryTime = expiryDate ? new Date(expiryDate).getTime() : null;
+  const hasExpiry = expiryTime !== null && !isNaN(expiryTime);
+  const isExpiredByDate = hasExpiry && expiryTime! < now;
+  const isValidByDate = hasExpiry && expiryTime! >= now;
 
-  if (status === "revoked") {
-    return { kind: "danger" as const, label: "REVOKED", icon: XCircle };
-  }
-  if (status === "expired" || isExpiredByDate) {
-    return { kind: "danger" as const, label: "EXPIRED", icon: AlertTriangle };
-  }
-  if (status === "active" || status === "valid" || status === "licensed") {
-    return { kind: "ok" as const, label: "ACTIVE & LICENSED", icon: CheckCircle2 };
-  }
-  // Unknown status — show a neutral pill
-  return { kind: "neutral" as const, label: status.toUpperCase() || "UNKNOWN", icon: Shield };
+  // Admin overrides take precedence
+  if (override === "revoked")   return { kind: "danger"  as const, label: "REVOKED",   icon: XCircle };
+  if (override === "suspended") return { kind: "danger"  as const, label: "SUSPENDED", icon: AlertTriangle };
+  if (override === "verified")  return { kind: "ok"      as const, label: "VERIFIED",  icon: CheckCircle2 };
+  if (override === "blacklisted") return { kind: "danger" as const, label: "BLACKLISTED", icon: XCircle };
+
+  // Time-based status (the standard case for most agencies)
+  if (isExpiredByDate)  return { kind: "danger" as const, label: "EXPIRED",            icon: AlertTriangle };
+  if (isValidByDate)    return { kind: "ok"     as const, label: "ACTIVE & LICENSED",  icon: CheckCircle2 };
+
+  // No expiry date AND no override → truly unknown
+  return { kind: "neutral" as const, label: "STATUS UNKNOWN", icon: Shield };
 }
 
 function formatDate(d: string | null | undefined): string {
@@ -114,7 +131,7 @@ export function LandingNeaSearch() {
   }, []);
 
   const badge = firstMatch
-    ? statusBadge(firstMatch.status, firstMatch.expiryDate)
+    ? statusBadge(firstMatch.statusOverride, firstMatch.expiryDate)
     : null;
 
   return (
@@ -198,7 +215,7 @@ export function LandingNeaSearch() {
               >
                 <div className="flex items-start justify-between gap-3 flex-wrap">
                   <div className="min-w-0 flex-1">
-                    <p className="font-bold text-base truncate">{firstMatch.name}</p>
+                    <p className="font-bold text-base">{firstMatch.agencyName}</p>
                     {firstMatch.licenseNumber && (
                       <p className="text-xs text-gray-600 dark:text-gray-400 font-mono">{firstMatch.licenseNumber}</p>
                     )}
