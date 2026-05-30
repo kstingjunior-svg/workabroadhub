@@ -581,4 +581,23 @@ export default function Country() {
               />
             </div>
             <p className="text-xs text-muted-foreground">
-              This will be saved to your Applica
+              This will be saved to your Application Tracker where you can update status, add notes, and track all your applications in one place.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTrackDialogOpen(false)} data-testid="button-cancel-quick-track">
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleQuickTrackSubmit} 
+              disabled={addTrackedMutation.isPending}
+              data-testid="button-save-quick-track"
+            >
+              {addTrackedMutation.isPending ? "Saving..." : "Track Application"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
