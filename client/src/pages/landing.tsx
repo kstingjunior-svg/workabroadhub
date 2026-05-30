@@ -571,23 +571,6 @@ export default function Landing() {
 
 
         {/* ═══════════════════════════════════════════════════════════════ */}
-        {/* PLATFORM STATS SECTION                                         */}
-        {/* ═══════════════════════════════════════════════════════════════ */}
-        <PlatformStatsSection stats={publicStats} />
-
-        {/* ── HOW IT WORKS — 3-step strip (Phase 3) ────────────────────────
-            Sits directly under the hero + stats so visitors see the simple
-            process before scrolling into Free Tools / Countries / Pricing.
-            Reinforces the verify-first framing established in the hero. */}
-        <LandingHowItWorks />
-
-        {/* ── OUR PROMISE — friendly reframe of the legal disclaimer ─────
-            Replaces the cold defensive 'WorkAbroad Hub is NOT a recruitment
-            agency' alert with three soft promise cards that build trust
-            instead of triggering doubt. */}
-        <LandingOurPromise />
-
-        {/* ═══════════════════════════════════════════════════════════════ */}
         {/* FREE TOOLS SECTION                                              */}
         {/* ═══════════════════════════════════════════════════════════════ */}
         <section id="free-tools" className="py-20 sm:py-24 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-slate-50 via-blue-50/40 to-teal-50/40 dark:from-slate-900 dark:via-blue-950/30 dark:to-teal-950/20 border-y border-blue-100 dark:border-blue-900/40">
@@ -702,6 +685,28 @@ export default function Landing() {
 
           </div>
         </section>
+
+        {/* ── FINAL CTA — closing argument before the trust footer (Phase 3) ─
+            Limited-slots urgency, dual payment buttons, social-proof line. */}
+        <LandingFinalCta onStartClick={openSignUp} />
+
+        {/* ═══════════════════════════════════════════════════════════════ */}
+        {/* PLATFORM STATS SECTION                                         */}
+        {/* ═══════════════════════════════════════════════════════════════ */}
+        <PlatformStatsSection stats={publicStats} />
+
+        {/* ── HOW IT WORKS — 3-step strip (Phase 3) ────────────────────────
+            Sits directly under the hero + stats so visitors see the simple
+            process before scrolling into Free Tools / Countries / Pricing.
+            Reinforces the verify-first framing established in the hero. */}
+        <LandingHowItWorks />
+
+        {/* ── OUR PROMISE — friendly reframe of the legal disclaimer ─────
+            Replaces the cold defensive 'WorkAbroad Hub is NOT a recruitment
+            agency' alert with three soft promise cards that build trust
+            instead of triggering doubt. */}
+        <LandingOurPromise />
+
 
         {/* Explore Countries Section - PREMIUM REDESIGN */}
         <section id="countries" className="py-20 sm:py-28 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
@@ -1138,9 +1143,6 @@ export default function Landing() {
           </div>
         </section>
 
-        {/* ── FINAL CTA — closing argument before the trust footer (Phase 3) ─
-            Limited-slots urgency, dual payment buttons, social-proof line. */}
-        <LandingFinalCta onStartClick={openSignUp} />
 
         {/* Trust Section */}
         <section className="py-16 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-muted/30 to-background border-t">
