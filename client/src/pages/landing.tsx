@@ -690,6 +690,123 @@ export default function Landing() {
             Limited-slots urgency, dual payment buttons, social-proof line. */}
         <LandingFinalCta onStartClick={openSignUp} />
 
+        {/* Agency Portal CTA Section - Revenue Stronghold */}
+        <section className="py-20 sm:py-24 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-blue-950 via-indigo-950 to-slate-900" />
+          <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(circle at 20% 50%, rgba(59, 130, 246, 0.3), transparent 50%), radial-gradient(circle at 80% 50%, rgba(139, 92, 246, 0.2), transparent 50%)' }} />
+
+          <div className="relative max-w-6xl mx-auto">
+            <div className="grid lg:grid-cols-2 gap-12 items-center">
+              <div className="space-y-6">
+                <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500/20 border border-blue-400/30 rounded-full animate-pulse">
+                  <Building2 className="h-4 w-4 text-blue-300" />
+                  <span className="text-sm font-semibold text-blue-300">For Licensed Agencies</span>
+                </div>
+
+                <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-white leading-tight">
+                  Get found by{' '}
+                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-cyan-400 to-blue-400">
+                    Kenyan job seekers
+                  </span>
+                  {' '}actively browsing.
+                </h2>
+
+                <p className="text-lg text-blue-100/80 leading-relaxed max-w-xl">
+                  Stand out from <strong className="text-white">798 expired-license agencies</strong>. Get a verified badge, priority placement in 1,293 listings, and direct contact from
+                  thousands of monthly job-seekers. Built specifically for NEA-licensed recruiters serving Kenyans abroad.
+                </p>
+
+                <p className="text-sm text-emerald-200/90 font-semibold">
+                  💼 Recruiters using WorkAbroad Hub fill positions <span className="underline">3× faster</span> than via classifieds.
+                </p>
+
+                <div className="grid sm:grid-cols-3 gap-4 py-2">
+                  <div className="flex flex-col items-center text-center p-4 rounded-xl bg-white/5 border border-white/10 backdrop-blur-sm">
+                    <BadgeCheck className="h-8 w-8 text-emerald-400 mb-2" />
+                    <span className="text-sm font-semibold text-white">Verified Badge</span>
+                    <span className="text-xs text-blue-200/60 mt-1">Build instant trust</span>
+                  </div>
+                  <div className="flex flex-col items-center text-center p-4 rounded-xl bg-white/5 border border-white/10 backdrop-blur-sm">
+                    <TrendingUp className="h-8 w-8 text-cyan-400 mb-2" />
+                    <span className="text-sm font-semibold text-white">Priority Listing</span>
+                    <span className="text-xs text-blue-200/60 mt-1">Top search results</span>
+                  </div>
+                  <div className="flex flex-col items-center text-center p-4 rounded-xl bg-white/5 border border-white/10 backdrop-blur-sm">
+                    <BarChart3 className="h-8 w-8 text-violet-400 mb-2" />
+                    <span className="text-sm font-semibold text-white">Analytics</span>
+                    <span className="text-xs text-blue-200/60 mt-1">Track your reach</span>
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-4 pt-2 items-start">
+                  <Button size="lg" className="text-base px-8 py-6 h-auto bg-gradient-to-r from-emerald-500 via-cyan-500 to-blue-500 hover:from-emerald-400 hover:via-cyan-400 hover:to-blue-400 border-0 shadow-lg shadow-emerald-500/30 font-semibold text-base" asChild data-testid="button-agency-portal-cta">
+                    <a href="/agency-portal">
+                      <Building2 className="mr-2 h-5 w-5" />
+                      Claim my agency profile →
+                    </a>
+                  </Button>
+                  <div className="text-xs text-blue-200/70 sm:py-3">
+                    Free to list · Verification in 24h<br/>
+                    Premium upgrades from KES 1,500/mo
+                  </div>
+                </div>
+              </div>
+
+              <div className="relative hidden lg:block">
+                <div className="absolute -inset-4 bg-gradient-to-br from-blue-500/20 via-cyan-500/10 to-violet-500/20 rounded-3xl blur-2xl" />
+                <div className="relative space-y-4">
+                  <Card className="border-white/10 bg-white/5 backdrop-blur-sm shadow-2xl">
+                    <CardContent className="p-6">
+                      <div className="flex items-center gap-4 mb-4">
+                        <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center">
+                          <Building2 className="h-6 w-6 text-white" />
+                        </div>
+                        <div>
+                          <div className="font-bold text-white">Premium Agency Profile</div>
+                          <div className="text-sm text-blue-200/60">Verified & Featured</div>
+                        </div>
+                        <Badge className="ml-auto bg-emerald-500/20 text-emerald-300 border-emerald-500/30">
+                          <BadgeCheck className="h-3 w-3 mr-1" />
+                          Verified
+                        </Badge>
+                      </div>
+                      <div className="space-y-3 text-sm">
+                        <div className="flex items-center gap-3 py-2 border-b border-white/10">
+                          <BadgeCheck className="h-4 w-4 text-emerald-400 flex-shrink-0" />
+                          <span className="text-blue-100/80">NEA license verified &amp; publicly displayed</span>
+                        </div>
+                        <div className="flex items-center gap-3 py-2 border-b border-white/10">
+                          <TrendingUp className="h-4 w-4 text-cyan-400 flex-shrink-0" />
+                          <span className="text-blue-100/80">Priority listing in agency directory</span>
+                        </div>
+                        <div className="flex items-center gap-3 py-2">
+                          <BarChart3 className="h-4 w-4 text-violet-400 flex-shrink-0" />
+                          <span className="text-blue-100/80">Reach job seekers across Kenya</span>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <Card className="border-white/10 bg-white/5 backdrop-blur-sm">
+                      <CardContent className="p-4 text-center">
+                        <div className="text-2xl font-bold text-white">{agencyTotal}</div>
+                        <div className="text-xs text-blue-200/60">Agencies Listed</div>
+                      </CardContent>
+                    </Card>
+                    <Card className="border-white/10 bg-white/5 backdrop-blur-sm">
+                      <CardContent className="p-4 text-center">
+                        <div className="text-2xl font-bold text-cyan-400">6</div>
+                        <div className="text-xs text-blue-200/60">Countries Covered</div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
         {/* ═══════════════════════════════════════════════════════════════ */}
         {/* PLATFORM STATS SECTION                                         */}
         {/* ═══════════════════════════════════════════════════════════════ */}
@@ -898,122 +1015,6 @@ export default function Landing() {
           </div>
         </section>
 
-        {/* Agency Portal CTA Section - Revenue Stronghold */}
-        <section className="py-20 sm:py-24 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-br from-blue-950 via-indigo-950 to-slate-900" />
-          <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(circle at 20% 50%, rgba(59, 130, 246, 0.3), transparent 50%), radial-gradient(circle at 80% 50%, rgba(139, 92, 246, 0.2), transparent 50%)' }} />
-
-          <div className="relative max-w-6xl mx-auto">
-            <div className="grid lg:grid-cols-2 gap-12 items-center">
-              <div className="space-y-6">
-                <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500/20 border border-blue-400/30 rounded-full animate-pulse">
-                  <Building2 className="h-4 w-4 text-blue-300" />
-                  <span className="text-sm font-semibold text-blue-300">For Licensed Agencies</span>
-                </div>
-
-                <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-white leading-tight">
-                  Get found by{' '}
-                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-cyan-400 to-blue-400">
-                    Kenyan job seekers
-                  </span>
-                  {' '}actively browsing.
-                </h2>
-
-                <p className="text-lg text-blue-100/80 leading-relaxed max-w-xl">
-                  Stand out from <strong className="text-white">798 expired-license agencies</strong>. Get a verified badge, priority placement in 1,293 listings, and direct contact from
-                  thousands of monthly job-seekers. Built specifically for NEA-licensed recruiters serving Kenyans abroad.
-                </p>
-
-                <p className="text-sm text-emerald-200/90 font-semibold">
-                  💼 Recruiters using WorkAbroad Hub fill positions <span className="underline">3× faster</span> than via classifieds.
-                </p>
-
-                <div className="grid sm:grid-cols-3 gap-4 py-2">
-                  <div className="flex flex-col items-center text-center p-4 rounded-xl bg-white/5 border border-white/10 backdrop-blur-sm">
-                    <BadgeCheck className="h-8 w-8 text-emerald-400 mb-2" />
-                    <span className="text-sm font-semibold text-white">Verified Badge</span>
-                    <span className="text-xs text-blue-200/60 mt-1">Build instant trust</span>
-                  </div>
-                  <div className="flex flex-col items-center text-center p-4 rounded-xl bg-white/5 border border-white/10 backdrop-blur-sm">
-                    <TrendingUp className="h-8 w-8 text-cyan-400 mb-2" />
-                    <span className="text-sm font-semibold text-white">Priority Listing</span>
-                    <span className="text-xs text-blue-200/60 mt-1">Top search results</span>
-                  </div>
-                  <div className="flex flex-col items-center text-center p-4 rounded-xl bg-white/5 border border-white/10 backdrop-blur-sm">
-                    <BarChart3 className="h-8 w-8 text-violet-400 mb-2" />
-                    <span className="text-sm font-semibold text-white">Analytics</span>
-                    <span className="text-xs text-blue-200/60 mt-1">Track your reach</span>
-                  </div>
-                </div>
-
-                <div className="flex flex-col sm:flex-row gap-4 pt-2 items-start">
-                  <Button size="lg" className="text-base px-8 py-6 h-auto bg-gradient-to-r from-emerald-500 via-cyan-500 to-blue-500 hover:from-emerald-400 hover:via-cyan-400 hover:to-blue-400 border-0 shadow-lg shadow-emerald-500/30 font-semibold text-base" asChild data-testid="button-agency-portal-cta">
-                    <a href="/agency-portal">
-                      <Building2 className="mr-2 h-5 w-5" />
-                      Claim my agency profile →
-                    </a>
-                  </Button>
-                  <div className="text-xs text-blue-200/70 sm:py-3">
-                    Free to list · Verification in 24h<br/>
-                    Premium upgrades from KES 1,500/mo
-                  </div>
-                </div>
-              </div>
-
-              <div className="relative hidden lg:block">
-                <div className="absolute -inset-4 bg-gradient-to-br from-blue-500/20 via-cyan-500/10 to-violet-500/20 rounded-3xl blur-2xl" />
-                <div className="relative space-y-4">
-                  <Card className="border-white/10 bg-white/5 backdrop-blur-sm shadow-2xl">
-                    <CardContent className="p-6">
-                      <div className="flex items-center gap-4 mb-4">
-                        <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center">
-                          <Building2 className="h-6 w-6 text-white" />
-                        </div>
-                        <div>
-                          <div className="font-bold text-white">Premium Agency Profile</div>
-                          <div className="text-sm text-blue-200/60">Verified & Featured</div>
-                        </div>
-                        <Badge className="ml-auto bg-emerald-500/20 text-emerald-300 border-emerald-500/30">
-                          <BadgeCheck className="h-3 w-3 mr-1" />
-                          Verified
-                        </Badge>
-                      </div>
-                      <div className="space-y-3 text-sm">
-                        <div className="flex items-center gap-3 py-2 border-b border-white/10">
-                          <BadgeCheck className="h-4 w-4 text-emerald-400 flex-shrink-0" />
-                          <span className="text-blue-100/80">NEA license verified &amp; publicly displayed</span>
-                        </div>
-                        <div className="flex items-center gap-3 py-2 border-b border-white/10">
-                          <TrendingUp className="h-4 w-4 text-cyan-400 flex-shrink-0" />
-                          <span className="text-blue-100/80">Priority listing in agency directory</span>
-                        </div>
-                        <div className="flex items-center gap-3 py-2">
-                          <BarChart3 className="h-4 w-4 text-violet-400 flex-shrink-0" />
-                          <span className="text-blue-100/80">Reach job seekers across Kenya</span>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <Card className="border-white/10 bg-white/5 backdrop-blur-sm">
-                      <CardContent className="p-4 text-center">
-                        <div className="text-2xl font-bold text-white">{agencyTotal}</div>
-                        <div className="text-xs text-blue-200/60">Agencies Listed</div>
-                      </CardContent>
-                    </Card>
-                    <Card className="border-white/10 bg-white/5 backdrop-blur-sm">
-                      <CardContent className="p-4 text-center">
-                        <div className="text-2xl font-bold text-cyan-400">6</div>
-                        <div className="text-xs text-blue-200/60">Countries Covered</div>
-                      </CardContent>
-                    </Card>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
 
         {/* Pricing Section */}
         <section id="pricing" className="py-24 px-4 sm:px-6 lg:px-8">
