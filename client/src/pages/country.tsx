@@ -3,6 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRoute, useLocation } from "wouter";
 import { trackJobLinkClick } from "@/lib/analytics";
 import { useJobRedirect } from "@/hooks/use-job-redirect";
+import { useAuth } from "@/hooks/use-auth";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -66,7 +67,26 @@ export default function Country() {
     retry: false,
   });
 
-  const isPaidPlan = userPlan?.planId === "basic" || userPlan?.planId === "pro";
+  // Admin bypass — admins always have full access regardless of plan status.
+  // Server-side /api/auth/user returns isAdminBypass=true for admin users.
+  // Accept all the common shapes the codebase uses for "this is an admin":
+  //   • isAdmin === true
+  //   • isAdminBypass === true (the explicit bypass flag)
+  //   • role === "ADMIN" | "SUPER_ADMIN"
+  const { user } = useAuth();
+  const u = user as any;
+  const isAdminUser =
+    u?.isAdmin === true ||
+    u?.isAdminBypass === true ||
+    u?.role === "ADMIN" ||
+    u?.role === "SUPER_ADMIN";
+
+  const isPaidPlan =
+    isAdminUser ||
+    userPlan?.planId === "basic" ||
+    userPlan?.planId === "pro" ||
+    u?.plan === "pro" ||
+    u?.subscriptionStatus === "active";
 
   useEffect(() => {
     if (error) {
@@ -561,23 +581,4 @@ export default function Country() {
               />
             </div>
             <p className="text-xs text-muted-foreground">
-              This will be saved to your Application Tracker where you can update status, add notes, and track all your applications in one place.
-            </p>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setTrackDialogOpen(false)} data-testid="button-cancel-quick-track">
-              Cancel
-            </Button>
-            <Button 
-              onClick={handleQuickTrackSubmit} 
-              disabled={addTrackedMutation.isPending}
-              data-testid="button-save-quick-track"
-            >
-              {addTrackedMutation.isPending ? "Saving..." : "Track Application"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
-}
+              This will be saved to your Applica

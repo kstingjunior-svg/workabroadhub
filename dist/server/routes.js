@@ -2273,9 +2273,13 @@ Crawl-delay: 1`);
             if (!userId) {
                 return res.status(401).json({ message: "Unauthorized" });
             }
+            // Admin bypass — admins always get full Pro access regardless of plan
+            // (matches the pattern we use elsewhere on the platform). Without this,
+            // admin users were getting 403 Access Required despite being admins.
+            const adminAccess = await storage_1.storage.isUserAdmin(userId).catch(() => false);
             // Use getUserPlan as the single source of truth — handles active subscriptions,
             // expired plans, and admin-promoted accounts (users.plan column fallback).
-            const planId = await storage_1.storage.getUserPlan(userId);
+            const planId = adminAccess ? "pro" : await storage_1.storage.getUserPlan(userId);
             if (planId === "free") {
                 return res.status(403).json({ message: "Payment required to access this content" });
             }
@@ -2283,7 +2287,7 @@ Crawl-delay: 1`);
             if (!country) {
                 return res.status(404).json({ message: "Country not found" });
             }
-            // Strip job portals for non-Pro users
+            // Strip job portals for non-Pro users (admins always count as Pro above)
             const isPaidPlan = planId === "pro";
             if (!isPaidPlan) {
                 return res.json({ ...country, jobLinks: [] });
