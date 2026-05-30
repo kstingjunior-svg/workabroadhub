@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { LandingNeaSearch } from "@/components/landing-nea-search";
+import { LandingHowItWorks } from "@/components/landing-how-it-works";
+import { LandingOurPromise } from "@/components/landing-our-promise";
+import { LandingFinalCta } from "@/components/landing-final-cta";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PRO_FEATURES } from "@/lib/plan-features";
@@ -572,6 +575,18 @@ export default function Landing() {
         {/* ═══════════════════════════════════════════════════════════════ */}
         <PlatformStatsSection stats={publicStats} />
 
+        {/* ── HOW IT WORKS — 3-step strip (Phase 3) ────────────────────────
+            Sits directly under the hero + stats so visitors see the simple
+            process before scrolling into Free Tools / Countries / Pricing.
+            Reinforces the verify-first framing established in the hero. */}
+        <LandingHowItWorks />
+
+        {/* ── OUR PROMISE — friendly reframe of the legal disclaimer ─────
+            Replaces the cold defensive 'WorkAbroad Hub is NOT a recruitment
+            agency' alert with three soft promise cards that build trust
+            instead of triggering doubt. */}
+        <LandingOurPromise />
+
         {/* ═══════════════════════════════════════════════════════════════ */}
         {/* FREE TOOLS SECTION                                              */}
         {/* ═══════════════════════════════════════════════════════════════ */}
@@ -1122,6 +1137,10 @@ export default function Landing() {
             </div>
           </div>
         </section>
+
+        {/* ── FINAL CTA — closing argument before the trust footer (Phase 3) ─
+            Limited-slots urgency, dual payment buttons, social-proof line. */}
+        <LandingFinalCta onStartClick={openSignUp} />
 
         {/* Trust Section */}
         <section className="py-16 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-muted/30 to-background border-t">
