@@ -203,36 +203,31 @@ export default function Country() {
     return `Verified ${d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`;
   };
 
-  if (error) {
-    // Only show the payment-required lock for 403 — a 404 means the country
-    // row hasn't been seeded yet, NOT that the user needs to pay again.
-    const errMsg = (error as any)?.message || "";
-    const isPaywall = errMsg.includes("403") || errMsg.includes("Payment required");
+  // Client-side resilience: if the API errors but the user navigated to a
+  // KNOWN country slug, we render the page with a synthetic empty payload
+  // instead of locking them out. This way an admin / Pro user is NEVER
+  // blocked from a country dashboard even when the backend is mid-deploy
+  // or has a stale DB row. Only the 403 paywall keeps its dedicated
+  // lock screen (real subscription gate).
+  const errMsg = (error as any)?.message || "";
+  const isPaywall = errMsg.includes("403") || errMsg.includes("Payment required");
+
+  if (error && isPaywall) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <Card className="max-w-md w-full">
           <CardContent className="p-8 text-center">
             <Lock className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <h2 className="text-xl font-semibold mb-2">
-              {isPaywall ? "Access Required" : `${countryInfo?.name || "This country"} — coming online`}
-            </h2>
+            <h2 className="text-xl font-semibold mb-2">Access Required</h2>
             <p className="text-muted-foreground mb-6">
-              {isPaywall
-                ? "Please complete payment to unlock access to country dashboards."
-                : "We're finalising the portals for this destination. Please refresh in a few seconds — our self-healer is populating the data right now."}
+              Please complete payment to unlock access to country dashboards.
             </p>
             <div className="space-y-3">
-              {isPaywall ? (
-                <Link href="/payment">
-                  <Button className="w-full" data-testid="button-unlock-access">
-                    Unlock Access
-                  </Button>
-                </Link>
-              ) : (
-                <Button className="w-full" onClick={() => window.location.reload()} data-testid="button-retry-country">
-                  Retry now
+              <Link href="/payment">
+                <Button className="w-full" data-testid="button-unlock-access">
+                  Unlock Access
                 </Button>
-              )}
+              </Link>
               <Link href="/">
                 <Button variant="outline" className="w-full" data-testid="button-go-back">
                   Go Back
@@ -244,6 +239,25 @@ export default function Country() {
       </div>
     );
   }
+
+  // If the API errored on a known country, fall through with a synthetic
+  // empty country object so the rest of the page renders. The "Apply on
+  // Platforms" tab will show its existing empty state ("Job portals are
+  // being updated...") which is far better UX than a lock screen.
+  const effectiveCountry: any = country ?? (
+    countryInfo && error
+      ? {
+          id: `synthetic-${code}`,
+          name: countryInfo.name,
+          code,
+          flagEmoji: countryInfo.flagEmoji,
+          isActive: true,
+          guides: [],
+          jobLinks: [],
+          scamAlerts: [],
+        }
+      : null
+  );
 
   if (isLoading) {
     return (
@@ -357,7 +371,7 @@ export default function Country() {
                 </CardHeader>
                 <CardContent>
                   <p className="text-sm text-muted-foreground whitespace-pre-line">
-                    {country?.guides?.find(g => g.section === "before_apply")?.content || 
+                    {effectiveCountry?.guides?.find((g: any) => g.section === "before_apply")?.content || 
                       "Technical skills relevant to your industry, English proficiency, and cultural adaptability are generally required for most positions."}
                   </p>
                 </CardContent>
@@ -372,7 +386,7 @@ export default function Country() {
                 </CardHeader>
                 <CardContent>
                   <p className="text-sm text-muted-foreground whitespace-pre-line">
-                    {country?.guides?.find(g => g.section === "cv_tips")?.content || 
+                    {effectiveCountry?.guides?.find((g: any) => g.section === "cv_tips")?.content || 
                       "Use a clean, professional format. Include contact information, professional summary, work experience with achievements, education, and relevant skills. Keep it concise (1-2 pages)."}
                   </p>
                 </CardContent>
@@ -391,7 +405,7 @@ export default function Country() {
               </CardHeader>
               <CardContent>
                 <p className="text-sm text-muted-foreground whitespace-pre-line">
-                  {country?.guides?.find(g => g.section === "visa_warning")?.content || 
+                  {effectiveCountry?.guides?.find((g: any) => g.section === "visa_warning")?.content || 
                     "Always apply for visas through official government channels only. Never pay for visa processing through unofficial agents. Legitimate employers will never ask for payment to hire you."}
                 </p>
               </CardContent>
@@ -450,8 +464,8 @@ export default function Country() {
                 </Card>
 
                 <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {country?.jobLinks && country.jobLinks.length > 0 ? (
-                    country.jobLinks.map((link: any) => (
+                  {effectiveCountry?.jobLinks && effectiveCountry.jobLinks.length > 0 ? (
+                    effectiveCountry.jobLinks.map((link: any) => (
                       <Card
                         key={link.id}
                         className="hover-elevate cursor-pointer"

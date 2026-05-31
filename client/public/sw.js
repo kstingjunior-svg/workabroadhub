@@ -1,5 +1,5 @@
 const APP_NAME = "WorkAbroad Hub";
-const CACHE_VERSION = "v4";
+const CACHE_VERSION = "v5"; // bumped after country dashboard resilience fix
 const STATIC_CACHE = `workabroad-static-${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `workabroad-dynamic-${CACHE_VERSION}`;
 
@@ -156,7 +156,4 @@ self.addEventListener("pushsubscriptionchange", (event) => {
 self.addEventListener("sync", (event) => {
   if (event.tag === "sync-analytics") {
     event.waitUntil(
-      fetch("/api/analytics/sync", { method: "POST" }).catch(() => {})
-    );
-  }
-});
+      fetch("/api/analytics/sync", { 
