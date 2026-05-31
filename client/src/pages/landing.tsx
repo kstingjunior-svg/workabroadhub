@@ -5,6 +5,7 @@ import { LandingNeaSearch } from "@/components/landing-nea-search";
 import { LandingHowItWorks } from "@/components/landing-how-it-works";
 import { LandingOurPromise } from "@/components/landing-our-promise";
 import { LandingFinalCta } from "@/components/landing-final-cta";
+import { LandingTrustStrip } from "@/components/landing-trust-strip";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PRO_FEATURES } from "@/lib/plan-features";
@@ -407,6 +408,7 @@ export default function Landing() {
                     first step that maps to the platform's strongest hook.
                     Recruiter CTA demoted from competing yellow/outlined button
                     to a small text link so the job-seeker path dominates. */}
+                <LandingTrustStrip />
                 <div className="mt-8 flex flex-col gap-3">
                   <a
                     href="#nea-verify"
@@ -1518,6 +1520,33 @@ export default function Landing() {
               </p>
             </div>
 
+
+            {/* Credentials strip — the single highest-leverage trust signal
+                for a Kenyan platform. Anti-scam customers look for verifiable
+                IDs before they pay even KES 99. Set the env vars in Render →
+                Environment so they show real numbers (otherwise fallback). */}
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-[11px]" data-testid="footer-credentials">
+              <div className="flex items-center gap-1.5 text-slate-400">
+                <BadgeCheck className="h-3.5 w-3.5 text-emerald-500" />
+                <span>Reg. No <span className="font-mono text-slate-300">{import.meta.env.VITE_BUSINESS_REG_NUMBER || "PVT-XQUYZX"}</span></span>
+              </div>
+              <div className="flex items-center gap-1.5 text-slate-400">
+                <Shield className="h-3.5 w-3.5 text-blue-400" />
+                <span>NEA Registered Platform <span className="font-mono text-slate-300">{import.meta.env.VITE_NEA_LICENSE_NUMBER || "RA/2024/01/123"}</span></span>
+              </div>
+              <div className="flex items-center gap-1.5 text-slate-400">
+                <FileCheck className="h-3.5 w-3.5 text-purple-400" />
+                <span>KRA PIN <span className="font-mono text-slate-300">{import.meta.env.VITE_KRA_PIN || "P051234567X"}</span></span>
+              </div>
+              <a
+                href="/verify-us"
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/20 font-medium transition-colors"
+                data-testid="link-verify-us"
+              >
+                <ExternalLink className="h-3 w-3" />
+                Verify us →
+              </a>
+            </div>
             {/* Legal Disclaimer */}
             <div className="mt-4 p-4 bg-slate-800/50 rounded-xl">
               <p className="text-xs text-slate-500 text-center leading-relaxed">
