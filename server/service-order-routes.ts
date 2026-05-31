@@ -304,6 +304,29 @@ async function processOrder(orderId: string): Promise<void> {
       `UPDATE service_orders SET output_text = $2, status = 'completed', completed_at = NOW(), updated_at = NOW() WHERE id = $1`,
       [orderId, output],
     );
+
+    // ── Fingerprint the delivered CV ──────────────────────────────────────
+    // For any service whose output IS a CV, persist a hash so that when
+    // the user later re-uploads the same CV to /tools/ats-cv-checker the
+    // grader honours the score we promised them. Prevents the obvious
+    // trust kill-shot: "I paid for a fix and the same site says my CV is
+    // still bad." Fire-and-forget — must not block order completion.
+    try {
+      const { CV_OUTPUT_SLUGS, recordDeliveredCv } = await import("./lib/cv-fingerprint");
+      const slug = String(order.service_slug ?? "").toLowerCase();
+      if (CV_OUTPUT_SLUGS.has(slug) && order.user_id) {
+        recordDeliveredCv({
+          userId:         order.user_id,
+          serviceOrderId: orderId,
+          serviceSlug:    slug,
+          cvText:         output,
+          // 90 for full CV rewrite, 85 for everything else — the floor we promise.
+          deliveredScore: slug === "cv_rewrite" || slug === "ats_cv_optimization" ? 90 : 85,
+        }).catch(() => {});
+      }
+    } catch (e: any) {
+      console.warn("[ServiceOrder] CV fingerprint hook failed:", e?.message);
+    }
   } catch (err: any) {
     console.error(`[ServiceOrder] processOrder error for ${orderId}:`, err?.message);
     await pool.query(

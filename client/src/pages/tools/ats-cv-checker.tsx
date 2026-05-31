@@ -45,6 +45,14 @@ interface ATSResult {
   weaknesses?: string[];
   missingKeywords?: string[];
   suggestions?: string[];
+  // Set by the server when the uploaded CV's content hash matches a CV we
+  // previously delivered via a paid service. Triggers the "honoured" badge
+  // and overrides the AI score with the promised one.
+  deliveredCv?: {
+    score: number;
+    at:    string;     // ISO datetime
+    slug:  string;     // e.g. "cv_fix_lite"
+  };
 }
 
 function ScoreRing({ score, grade }: { score: number; grade: string }) {
@@ -316,6 +324,22 @@ export default function ATSCVChecker() {
                 {result.summary && (
                   <p className="text-xs text-muted-foreground mt-2 max-w-xs mx-auto">{result.summary}</p>
                 )}
+                {/* Delivered-CV guarantee badge — proves the platform stands
+                    behind what it sold. Renders when the uploaded CV is one
+                    we previously delivered via a paid service. */}
+                {result.deliveredCv && (
+                  <div
+                    className="mt-4 inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-left max-w-md mx-auto"
+                    data-testid="badge-delivered-cv-honoured"
+                  >
+                    <CheckCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <div className="text-[11px] leading-snug text-emerald-800 dark:text-emerald-200">
+                      <strong>We recognise this CV</strong> — we delivered it on{" "}
+                      {new Date(result.deliveredCv.at).toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric" })}
+                      . Your guaranteed score of <strong>{result.deliveredCv.score}%</strong> is honoured here, no matter how many times you re-upload it.
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -331,7 +355,7 @@ export default function ATSCVChecker() {
                 free tool, while the pain is fresh, converts dramatically
                 better than asking them to navigate to /services later.
                 Hidden once user is paid (no need to upsell). */}
-            {!result.locked && !isPaidUser && result.score < 90 && (
+            {!result.locked && !isPaidUser && result.score < 90 && !result.deliveredCv && (
               <Card className="border-2 border-amber-300 dark:border-amber-700 bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-50 dark:from-amber-950/40 dark:via-orange-950/40 dark:to-yellow-950/40 shadow-md">
                 <CardContent className="p-5 sm:p-6">
                   <div className="flex flex-col sm:flex-row items-start gap-4">
