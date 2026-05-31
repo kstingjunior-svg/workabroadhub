@@ -1485,83 +1485,10 @@ export async function seedCountryPortals(): Promise<void> {
       );
     }
 
-    // 2. Curated production portal list — every URL audited for:
-    //    (a) accessibility from Kenyan IPs (no Akamai/Imperva WAF block),
-    //    (b) genuine acceptance of non-citizen / visa-sponsorship applications,
-    //    (c) listings updated in the last 90 days as of the audit.
-    //    No placeholders, no dead Monster/TotalJobs/CareerBuilder URLs.
-    type Link = { name: string; url: string; description: string; order: number };
-    const portalsByCode: Record<string, Link[]> = {
-      uk: [
-        { name: "NHS Jobs",          url: "https://www.jobs.nhs.uk",                                       description: "Official NHS recruitment — Health & Care Worker visa, top destination for Kenyan nurses", order: 1 },
-        { name: "Indeed UK",         url: "https://www.indeed.co.uk",                                      description: "Largest UK job board — filter by 'visa sponsorship'",          order: 2 },
-        { name: "Reed",              url: "https://www.reed.co.uk",                                        description: "UK-wide jobs across every sector",                             order: 3 },
-        { name: "LinkedIn Jobs UK",  url: "https://www.linkedin.com/jobs/?location=United+Kingdom",       description: "Professional network — recruiters reach out directly",         order: 4 },
-        { name: "CV-Library",        url: "https://www.cv-library.co.uk",                                  description: "Large UK CV-sharing board, visa-sponsor friendly",             order: 5 },
-        { name: "Adzuna UK",         url: "https://www.adzuna.co.uk",                                      description: "Aggregator pulling listings from across the UK web",           order: 6 },
-        { name: "Glassdoor UK",      url: "https://www.glassdoor.co.uk",                                   description: "Salaries + reviews + jobs — research employers before applying", order: 7 },
-        { name: "TipTopJob (Visa)",  url: "https://www.tiptopjob.com/search/jobs.asp?keywords=visa+sponsor&location=United+Kingdom", description: "Pre-filtered to visa-sponsoring UK roles",   order: 8 },
-      ],
-      canada: [
-        { name: "Job Bank Canada",       url: "https://www.jobbank.gc.ca",                            description: "Official Government of Canada job board, supports LMIA",     order: 1 },
-        { name: "Indeed Canada",         url: "https://ca.indeed.com",                                description: "Indeed CA — broad coverage, visa-friendly filters",          order: 2 },
-        { name: "LinkedIn Jobs Canada",  url: "https://www.linkedin.com/jobs/?location=Canada",       description: "Largest professional job network",                            order: 3 },
-        { name: "Adzuna Canada",         url: "https://www.adzuna.ca",                                description: "Aggregator covering Canadian listings",                       order: 4 },
-        { name: "Eluta",                 url: "https://www.eluta.ca",                                 description: "Top-100 employer search backed by Mediacorp",                 order: 5 },
-        { name: "Talent.com Canada",     url: "https://ca.talent.com",                                description: "Large CA aggregator — strong for skilled trades & healthcare", order: 6 },
-        { name: "HealthForceOntario",    url: "https://www.healthforceontario.ca",                    description: "Official Ontario healthcare recruitment portal",              order: 7 },
-      ],
-      uae: [
-        { name: "Bayt",              url: "https://www.bayt.com",                                                              description: "Middle East largest job board — strong Kenya-to-Gulf pipeline",   order: 1 },
-        { name: "Naukri Gulf",       url: "https://www.naukrigulf.com",                                                        description: "Major Gulf board — India + Africa friendly",                     order: 2 },
-        { name: "GulfTalent",        url: "https://www.gulftalent.com",                                                        description: "Mid-to-senior Gulf roles",                                       order: 3 },
-        { name: "LinkedIn Jobs UAE", url: "https://www.linkedin.com/jobs/?location=United+Arab+Emirates",                     description: "Professional Gulf roles, recruiters source directly",             order: 4 },
-        { name: "Indeed UAE",        url: "https://www.indeed.ae",                                                             description: "Indeed AE — Gulf coverage",                                       order: 5 },
-        { name: "XpatJobs UAE",      url: "https://unitedarabemirates.xpatjobs.com",                                           description: "Expat-focused UAE roles",                                         order: 6 },
-        { name: "Laimoon",           url: "https://jobs.laimoon.com/uae",                                                      description: "UAE-focused aggregator — Kenya-friendly",                         order: 7 },
-        { name: "Dubizzle Jobs",     url: "https://dubai.dubizzle.com/jobs/",                                                  description: "Classifieds-style UAE jobs",                                     order: 8 },
-      ],
-      usa: [
-        { name: "MyVisaJobs",      url: "https://www.myvisajobs.com",          description: "THE database for H-1B / EB-3 visa-sponsoring employers — essential for Kenyan applicants", order: 1 },
-        { name: "Indeed USA",      url: "https://www.indeed.com",              description: "Largest US job board — filter by visa sponsorship",         order: 2 },
-        { name: "LinkedIn Jobs",   url: "https://www.linkedin.com/jobs",       description: "Professional network — H-1B sponsorship listings tagged",   order: 3 },
-        { name: "Dice (Tech)",     url: "https://www.dice.com",                description: "Tech-focused — strong H-1B sponsorship listings",           order: 4 },
-        { name: "Glassdoor USA",   url: "https://www.glassdoor.com",           description: "Salaries + reviews + jobs",                                  order: 5 },
-        { name: "SimplyHired",     url: "https://www.simplyhired.com",         description: "Aggregator with friendly international access",              order: 6 },
-        { name: "ZipRecruiter",    url: "https://www.ziprecruiter.com",        description: "AI-matched US jobs",                                         order: 7 },
-        { name: "H1BGrader",       url: "https://h1bgrader.com",               description: "Search H-1B sponsors by company / role / location",         order: 8 },
-      ],
-      australia: [
-        { name: "SEEK",                 url: "https://www.seek.com.au",                                  description: "Largest Australian job board — has 'visa sponsorship' filter, top choice for Kenyans", order: 1 },
-        { name: "Indeed Australia",     url: "https://au.indeed.com",                                    description: "Indeed AU — strong visa-sponsorship listings",                            order: 2 },
-        { name: "LinkedIn Jobs AU",     url: "https://www.linkedin.com/jobs/?location=Australia",        description: "Professional jobs in Australia, recruiters reach out",                    order: 3 },
-        { name: "Workforce Australia",  url: "https://www.workforceaustralia.gov.au/individuals/jobs",   description: "Official Australian government job platform",                              order: 4 },
-        { name: "Adzuna Australia",     url: "https://www.adzuna.com.au",                                description: "Aggregator covering AU job listings",                                     order: 5 },
-        { name: "Healthcare Australia", url: "https://www.healthcareaustralia.com.au/careers/",          description: "Healthcare recruiter — sponsors visas for nurses & care workers",         order: 6 },
-        { name: "CareerOne",            url: "https://www.careerone.com.au",                             description: "AU job search and career resources",                                       order: 7 },
-        { name: "Jora Australia",       url: "https://au.jora.com",                                      description: "Lightweight AU job aggregator",                                            order: 8 },
-        { name: "SkillSelect (Gov)",    url: "https://immi.homeaffairs.gov.au/visas/working-in-australia/skillselect", description: "Official skilled migration EOI system — required for 482/189/190 visas", order: 9 },
-      ],
-      europe: [
-        { name: "EURES (EU Official)",   url: "https://eures.europa.eu/eures-services/eures-portal_en",       description: "Official EU Job Mobility Portal — best starting point for non-EU workers",  order: 1 },
-        { name: "🇩🇪 Make it in Germany", url: "https://www.make-it-in-germany.com/en/jobs",                  description: "Official German immigration job portal — EU Blue Card listings",            order: 2 },
-        { name: "🇩🇪 Arbeitsagentur",     url: "https://www.arbeitsagentur.de",                              description: "German Federal Employment Agency",                                          order: 3 },
-        { name: "🇩🇪 Stepstone",          url: "https://www.stepstone.de",                                   description: "Largest German job board, English filter available",                        order: 4 },
-        { name: "🇩🇪 LinkedIn Germany",   url: "https://www.linkedin.com/jobs/?location=Germany",            description: "Tech + skilled roles in Germany",                                           order: 5 },
-        { name: "🇩🇪 Indeed Germany",     url: "https://de.indeed.com",                                      description: "Indeed DE — broad coverage",                                                order: 6 },
-        { name: "🇳🇱 IamExpat Jobs NL",   url: "https://www.iamexpat.nl/career/jobs-netherlands",            description: "Expat-friendly Dutch jobs — sponsors 30% ruling visa",                      order: 7 },
-        { name: "🇳🇱 Glassdoor NL",       url: "https://www.glassdoor.nl",                                   description: "Salaries + reviews + jobs (NL)",                                            order: 8 },
-        { name: "🇫🇷 Pole Emploi",        url: "https://candidat.pole-emploi.fr",                           description: "Official French employment service",                                        order: 9 },
-        { name: "🇫🇷 Indeed France",      url: "https://www.indeed.fr",                                      description: "Indeed FR — broad coverage",                                                order: 10 },
-        { name: "🇮🇪 IrishJobs",          url: "https://www.irishjobs.ie",                                    description: "Largest Irish job board — Critical Skills Employment Permit eligible",      order: 11 },
-        { name: "🇮🇪 Indeed Ireland",     url: "https://ie.indeed.com",                                       description: "Indeed IE — broad coverage",                                                order: 12 },
-        { name: "🇪🇸 Indeed Spain",       url: "https://www.indeed.es",                                       description: "Indeed ES — broad coverage",                                                order: 13 },
-        { name: "🇸🇪 Arbetsformedlingen", url: "https://arbetsformedlingen.se/platsbanken",                    description: "Swedish Public Employment Service",                                         order: 14 },
-        { name: "🇩🇰 WorkInDenmark",     url: "https://www.workindenmark.dk",                               description: "Official Danish portal for international workers",                          order: 15 },
-        { name: "🇫🇮 TE-palvelut",       url: "https://www.te-palvelut.fi/en/jobseekers",                    description: "Finnish Public Employment Service",                                         order: 16 },
-        { name: "🇵🇱 EURES Poland",      url: "https://eures.praca.gov.pl",                                  description: "EU jobs portal for Poland — non-EU workers eligible",                       order: 17 },
-      ],
-    };
+    // 2. Curated portal list lives in server/lib/country-portals.ts (the
+    //    single source of truth). Importing it ensures the seed AND the
+    //    synthetic fallback in /api/countries/:code stay in lockstep.
+    const { COUNTRY_PORTALS: portalsByCode } = await import("./lib/country-portals");
 
     // 3. Upsert each portal — INSERT only when (country_id, url) is new, so
     //    we never wipe click_count or last_verified on existing portals.

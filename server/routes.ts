@@ -2602,12 +2602,15 @@ Crawl-delay: 1`);
 
       // Layer 3 (BOMB-PROOF): if everything above failed but the code is in
       // our known list, synthesize a minimal country object so the page
-      // ALWAYS renders. Empty arrays mean the user sees the dashboard with
-      // empty portals/guides — far better UX than a "coming online" lock
-      // screen. seedCountryPortals (kicked off above) will catch up.
+      // ALWAYS renders. Now also embeds the canonical portal catalogue as
+      // synthetic jobLinks (syn-<code>-<idx> IDs) — user sees REAL portals
+      // even when the DB is empty. Click handler /api/go/job/:jobId
+      // reverse-resolves the syn-* IDs back to URLs.
       if (!country && KNOWN[codeLc]) {
         const meta = KNOWN[codeLc];
-        console.warn(`[countries/:code] returning synthetic fallback for ${codeLc}`);
+        const { COUNTRY_PORTALS, makeSyntheticPortalId } = await import("./lib/country-portals");
+        const portalCat = COUNTRY_PORTALS[codeLc] || [];
+        console.warn(`[countries/:code] returning synthetic fallback for ${codeLc} with ${portalCat.length} catalogue portals`);
         country = {
           id:        `synthetic-${codeLc}`,
           name:      meta.name,
@@ -2615,7 +2618,18 @@ Crawl-delay: 1`);
           flagEmoji: meta.flag,
           isActive:  true,
           guides:    [],
-          jobLinks:  [],
+          jobLinks:  portalCat.map((p, i) => ({
+            id:           makeSyntheticPortalId(codeLc, i + 1),
+            countryId:    `synthetic-${codeLc}`,
+            name:         p.name,
+            description:  p.description,
+            isActive:     true,
+            order:        p.order,
+            clickCount:   0,
+            lastVerified: new Date(),
+            // url intentionally omitted from the type (handled server-side in
+            // /api/go/job) — client doesn't need it for synthetic rendering.
+          })),
           scamAlerts: [],
         };
       }
@@ -3060,13 +3074,26 @@ Crawl-delay: 1`);
       const { jobId } = req.params;
       const jobType = (req.query.type as string) || "visa";
 
-      // ── PRO gate ──────────────────────────────────────────────────────────
-      const planId = await storage.getUserPlan(userId);
+      // ── PRO gate (with admin bypass — admins always pass) ──────────────────
+      const adminAccess = await storage.isUserAdmin(userId).catch(() => false);
+      const planId = adminAccess ? "pro" : await storage.getUserPlan(userId);
       if (planId !== "pro") {
         return res.status(403).json({
           error: "upgrade_required",
           message: "Upgrade to Pro to access job links.",
         });
+      }
+
+      // ── Synthetic portal short-circuit ─────────────────────────────────────
+      // IDs in the form `syn-<code>-<index>` come from the synthetic country
+      // fallback above. Resolve them from the in-memory catalogue — no DB hit.
+      if (jobType === "portal" && jobId.startsWith("syn-")) {
+        const { resolveSyntheticPortal } = await import("./lib/country-portals");
+        const syn = resolveSyntheticPortal(jobId);
+        if (!syn) {
+          return res.status(404).json({ message: "Synthetic portal not found" });
+        }
+        return res.json({ url: syn.url });
       }
 
       // ── Resolve the external URL ──────────────────────────────────────────
