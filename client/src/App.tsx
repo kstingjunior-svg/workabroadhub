@@ -61,6 +61,8 @@ const PrivacyPolicy = lazy(() => import("@/pages/privacy-policy"));
 const TermsOfService = lazy(() => import("@/pages/terms-of-service"));
 const RefundPolicy = lazy(() => import("@/pages/refund-policy"));
 const VerifyUs = lazy(() => import("@/pages/verify-us"));
+const GuidesIndex = lazy(() => import("@/pages/guides/guides-index"));
+const GuidePage = lazy(() => import("@/pages/guides/guide-page"));
 const AboutPage = lazy(() => import("@/pages/about"));
 const ContactPage = lazy(() => import("@/pages/contact"));
 const FAQPage = lazy(() => import("@/pages/faq"));
@@ -274,6 +276,8 @@ const LazyPrivacyPolicy = withSuspense(PrivacyPolicy);
 const LazyTermsOfService = withSuspense(TermsOfService);
 const LazyRefundPolicy = withSuspense(RefundPolicy);
 const LazyVerifyUs = withSuspense(VerifyUs);
+const LazyGuidesIndex = withSuspense(GuidesIndex);
+const LazyGuidePage = withSuspense(GuidePage);
 const LazyAboutPage = withSuspense(AboutPage);
 const LazyContactPage = withSuspense(ContactPage);
 const LazyFAQPage = withSuspense(FAQPage);
@@ -458,7 +462,13 @@ function AuthenticatedRoutes() {
       <Route path="/terms-of-service" component={LazyTermsOfService} />
       <Route path="/refund-policy" component={LazyRefundPolicy} />
         <Route path="/verify-us" component={LazyVerifyUs} />
+        <Route path="/guides/:slug" component={LazyGuidePage} />
+        <Route path="/guides" component={LazyGuidesIndex} />
+      <Route path="/guides/:slug" component={LazyGuidePage} />
+      <Route path="/guides" component={LazyGuidesIndex} />
       <Route path="/verify-us" component={LazyVerifyUs} />
+      <Route path="/guides/:slug" component={LazyGuidePage} />
+      <Route path="/guides" component={LazyGuidesIndex} />
       <Route path="/about" component={LazyAboutPage} />
       <Route path="/contact" component={LazyContactPage} />
       <Route path="/faq" component={LazyFAQPage} />
