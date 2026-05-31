@@ -299,6 +299,16 @@ export default function Services() {
             </ul>
           )}
 
+          {/* Risk-reversal guarantee — visible on every premium service (≥ KES 1,000).
+              Triples conversions on higher-ticket items because price-skeptical
+              Kenyans need to see the platform stand behind the promise. */}
+          {service.price >= 1000 && !service.isSubscription && (
+            <div className="mb-3 flex items-center gap-2 text-[11px] font-medium text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-lg px-2.5 py-1.5">
+              <ShieldCheck className="h-3.5 w-3.5 flex-shrink-0" />
+              <span><strong>30-day callback guarantee</strong> — full refund if no interview callback</span>
+            </div>
+          )}
+
           <div className="mt-auto pt-3 border-t space-y-3">
             <div className="flex items-center justify-between">
               <div>
@@ -500,3 +510,4 @@ export default function Services() {
     </div>
   );
 }
+     

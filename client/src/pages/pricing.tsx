@@ -33,7 +33,7 @@ const TRUST_ITEMS = [
 const FAQ_ITEMS = [
   {
     q: "What's the difference between the 3 plans?",
-    a: "1 Day Trial (KES 99) gives you 24-hour full access — perfect for testing the platform. Monthly Access (KES 1,000) gives you 30 days of everything. Yearly Access (KES 4,500) is the best value — 365 days for just KES 375/month.",
+    a: "1 Day Trial (KES 99) gives you 24-hour full access — perfect for testing the platform. Monthly Access (KES 600) gives you 30 days of everything. Yearly Access (KES 4,500) is the best value — pay yearly and save KES 2,700 vs paying month-by-month.",
   },
   {
     q: "How does M-Pesa payment work?",
@@ -169,7 +169,7 @@ export default function PricingPage() {
     const extra: Pick<PlanConfig, "perMonth" | "urgency"> = { urgency: ui.urgency };
     if (ui.id === "pro" && price > 0) {
       extra.perMonth = `KES ${Math.round(price / 12).toLocaleString("en-KE")}/mo`;
-      extra.urgency  = `Save KES ${(1000 * 12 - price).toLocaleString("en-KE")} vs monthly billing`;
+      extra.urgency  = `Save KES ${(600 * 12 - price).toLocaleString("en-KE")} vs paying month-by-month`;
     }
     if (ui.id === "trial" && price > 0) {
       extra.urgency = `Try before you commit — just KES ${price}`;
@@ -237,7 +237,7 @@ export default function PricingPage() {
           </p>
 
           <p className="text-white/80 text-sm mb-8">
-            Try for KES 99 · Go monthly for KES 1,000 · Best value at KES 4,500/year
+            Try for KES 99 · Go monthly for KES 600 · Save KES 2,700 with yearly
           </p>
 
           {isActive ? (

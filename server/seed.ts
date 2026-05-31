@@ -1613,3 +1613,34 @@ export async function seedCountryPortals(): Promise<void> {
     console.error("[Portals] Self-heal failed:", err?.message ?? err);
   }
 }
+
+// ─── Plan price sync — idempotent, runs on every boot ────────────────────────
+// Phase-1 conversion optimisation: monthly plan dropped from KES 1,000 → 600
+// per user feedback. Lower monthly anchor drives more signups while preserving
+// the strong yearly incentive (KES 4,500 vs KES 7,200 if paying monthly).
+//
+// Existing plan rows are UPDATEd in place — no inserts (those are handled by
+// seedPlans on cold start). Safe to re-run; only changes rows whose price
+// actually drifted.
+export async function syncPlanPrices(): Promise<void> {
+  try {
+    const targets: Array<{ planId: string; price: number; name?: string }> = [
+      { planId: "trial",   price: 99,   name: "1 Day Trial" },
+      { planId: "monthly", price: 600,  name: "Monthly Access" },
+      { planId: "pro",     price: 4500, name: "Yearly Access" },
+    ];
+
+    let updated = 0;
+    for (const t of targets) {
+      const res = await pool.query(
+        `UPDATE plans SET price = $1, plan_name = COALESCE($2, plan_name)
+          WHERE plan_id = $3 AND price <> $1`,
+        [t.price, t.name ?? null, t.planId]
+      );
+      if (res.rowCount && res.rowCount > 0) updated += res.rowCount;
+    }
+    console.log(`[Plans] Price sync complete — ${updated} row(s) updated`);
+  } catch (err: any) {
+    console.error("[Plans] Price sync failed:", err?.message ?? err);
+  }
+}
