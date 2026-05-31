@@ -2533,10 +2533,24 @@ Crawl-delay: 1`);
       const rawCode = String(req.params.code || "").trim();
       const codeLc  = rawCode.toLowerCase();
 
-      let country = await storage.getCountryWithDetails(codeLc);
+      // Known-good country whitelist — for synthetic fallback below.
+      const KNOWN: Record<string, { name: string; flag: string }> = {
+        usa:       { name: "USA",                  flag: "🇺🇸" },
+        canada:    { name: "Canada",               flag: "🇨🇦" },
+        uae:       { name: "UAE / Arab Countries", flag: "🇦🇪" },
+        uk:        { name: "United Kingdom",       flag: "🇬🇧" },
+        europe:    { name: "Europe",               flag: "🇪🇺" },
+        australia: { name: "Australia",            flag: "🇦🇺" },
+      };
 
-      // Self-heal layer 1: the DB row might use UPPERCASE code (legacy from
-      // migration 0004). Try case-insensitive lookup.
+      let country: any = null;
+      try {
+        country = await storage.getCountryWithDetails(codeLc);
+      } catch (e) {
+        console.error(`[countries/:code] storage lookup failed for ${codeLc}:`, e);
+      }
+
+      // Layer 1: case-insensitive — handles UPPERCASE legacy rows.
       if (!country) {
         try {
           const altRows = await pool.query<{ code: string }>(
@@ -2551,38 +2565,44 @@ Crawl-delay: 1`);
         }
       }
 
-      // Self-heal layer 2: country row simply doesn't exist (e.g. Australia
-      // was never seeded). Hard-insert the missing row right here — much more
-      // reliable than calling seedCountryPortals which has been failing
-      // silently. Job_links populate in a background task.
-      if (!country) {
-        const KNOWN: Record<string, { name: string; flag: string }> = {
-          usa:       { name: "USA",                  flag: "🇺🇸" },
-          canada:    { name: "Canada",               flag: "🇨🇦" },
-          uae:       { name: "UAE / Arab Countries", flag: "🇦🇪" },
-          uk:        { name: "United Kingdom",       flag: "🇬🇧" },
-          europe:    { name: "Europe",               flag: "🇪🇺" },
-          australia: { name: "Australia",            flag: "🇦🇺" },
-        };
+      // Layer 2: try to insert the missing row + kick off background seed.
+      if (!country && KNOWN[codeLc]) {
         const meta = KNOWN[codeLc];
-        if (meta) {
-          try {
-            console.log(`[countries/:code] hard-inserting missing country row: ${codeLc}`);
-            await pool.query(
-              `INSERT INTO countries (name, code, flag_emoji, is_active)
-               VALUES ($1, $2, $3, true)
-               ON CONFLICT (code) DO NOTHING`,
-              [meta.name, codeLc, meta.flag]
-            );
-            country = await storage.getCountryWithDetails(codeLc);
-            // Background — don't block the response while seed runs.
-            import("./seed")
-              .then((s) => s.seedCountryPortals?.())
-              .catch((e) => console.error("[countries/:code] bg seed failed:", e));
-          } catch (e) {
-            console.error("[countries/:code] hard-insert failed:", e);
-          }
+        try {
+          console.log(`[countries/:code] hard-inserting missing country row: ${codeLc}`);
+          await pool.query(
+            `INSERT INTO countries (name, code, flag_emoji, is_active)
+             VALUES ($1, $2, $3, true)
+             ON CONFLICT (code) DO NOTHING`,
+            [meta.name, codeLc, meta.flag]
+          );
+          country = await storage.getCountryWithDetails(codeLc);
+          import("./seed")
+            .then((s) => s.seedCountryPortals?.())
+            .catch((e) => console.error("[countries/:code] bg seed failed:", e));
+        } catch (e) {
+          console.error("[countries/:code] hard-insert failed:", e);
         }
+      }
+
+      // Layer 3 (BOMB-PROOF): if everything above failed but the code is in
+      // our known list, synthesize a minimal country object so the page
+      // ALWAYS renders. Empty arrays mean the user sees the dashboard with
+      // empty portals/guides — far better UX than a "coming online" lock
+      // screen. seedCountryPortals (kicked off above) will catch up.
+      if (!country && KNOWN[codeLc]) {
+        const meta = KNOWN[codeLc];
+        console.warn(`[countries/:code] returning synthetic fallback for ${codeLc}`);
+        country = {
+          id:        `synthetic-${codeLc}`,
+          name:      meta.name,
+          code:      codeLc,
+          flagEmoji: meta.flag,
+          isActive:  true,
+          guides:    [],
+          jobLinks:  [],
+          scamAlerts: [],
+        };
       }
 
       if (!country) {
