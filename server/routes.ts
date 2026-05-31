@@ -2585,6 +2585,21 @@ Crawl-delay: 1`);
         }
       }
 
+      // Layer 2b: country row exists but jobLinks is empty for a known
+      // country — block here and force the portal seed so the user gets
+      // real portals on this very request, not on a delayed background
+      // run. Used to drive the urgent Australia heal.
+      if (country && Array.isArray(country.jobLinks) && country.jobLinks.length === 0 && KNOWN[codeLc]) {
+        try {
+          console.log(`[countries/:code] empty jobLinks for ${codeLc} — forcing portal seed`);
+          const seed = await import("./seed");
+          await seed.seedCountryPortals?.();
+          country = await storage.getCountryWithDetails(codeLc);
+        } catch (e) {
+          console.error(`[countries/:code] forced portal seed failed for ${codeLc}:`, e);
+        }
+      }
+
       // Layer 3 (BOMB-PROOF): if everything above failed but the code is in
       // our known list, synthesize a minimal country object so the page
       // ALWAYS renders. Empty arrays mean the user sees the dashboard with
