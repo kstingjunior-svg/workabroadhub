@@ -179,7 +179,7 @@ export default function ATSCVChecker() {
   };
 
   const scoreColor = result
-    ? result.score >= 70 ? "text-green-600" : result.score >= 45 ? "text-amber-600" : "text-red-600"
+    ? result.score >= 80 ? "text-green-600" : result.score >= 60 ? "text-amber-600" : "text-red-600"
     : "";
 
   const seoSchemas = [
@@ -311,7 +311,7 @@ export default function ATSCVChecker() {
               <CardContent className="p-6 text-center">
                 <ScoreRing score={result.score} grade={result.grade} />
                 <p className={`text-sm font-semibold mt-3 ${scoreColor}`}>
-                  {result.score >= 70 ? "Strong ATS Compatibility" : result.score >= 45 ? "Moderate — Improvements Needed" : "Weak — Significant Improvements Needed"}
+                  {result.score >= 90 ? "Excellent — recruiter-ready" : result.score >= 80 ? "Solid — minor fixes lift you to top 10%" : result.score >= 60 ? "Below ATS pass mark — needs work" : "Weak — most overseas ATS will auto-reject"}
                 </p>
                 {result.summary && (
                   <p className="text-xs text-muted-foreground mt-2 max-w-xs mx-auto">{result.summary}</p>
@@ -388,21 +388,59 @@ export default function ATSCVChecker() {
               </Card>
             )}
 
-            {/* Locked state for unauthenticated users */}
+            {/* Locked state — branched: unauthenticated users see the sign-in
+                CTA, signed-in free users see the KES 99 fix-it tripwire (the
+                conversion moment). Previously this card showed the same
+                'Sign In for Full Report' CTA to BOTH groups, which 404'd for
+                signed-in users hitting /api/login and felt nonsensical. */}
             {result.locked ? (
-              <Card className="border-blue-200 bg-blue-50 dark:bg-blue-900/10 dark:border-blue-800">
-                <CardContent className="p-6 text-center space-y-3">
-                  <Lock className="h-8 w-8 mx-auto text-blue-500" />
-                  <h3 className="font-semibold">Full Report Locked</h3>
-                  <p className="text-sm text-muted-foreground">{result.message}</p>
-                  <a href="/api/login?next=/tools/ats-cv-checker" className="block">
-                    <Button className="w-full" data-testid="button-sign-in-for-full">
-                      Sign In for Full Report
-                      <ChevronRight className="h-4 w-4 ml-1" />
-                    </Button>
-                  </a>
-                </CardContent>
-              </Card>
+              !user ? (
+                <Card className="border-blue-200 bg-blue-50 dark:bg-blue-900/10 dark:border-blue-800">
+                  <CardContent className="p-6 text-center space-y-3">
+                    <Lock className="h-8 w-8 mx-auto text-blue-500" />
+                    <h3 className="font-semibold">Sign in to see the full report</h3>
+                    <p className="text-sm text-muted-foreground">{result.message ?? "Create a free account to unlock strengths, weaknesses, missing keywords, and suggestions."}</p>
+                    <Link href="/login?next=/tools/ats-cv-checker">
+                      <Button className="w-full" data-testid="button-sign-in-for-full">
+                        Sign In (free)
+                        <ChevronRight className="h-4 w-4 ml-1" />
+                      </Button>
+                    </Link>
+                  </CardContent>
+                </Card>
+              ) : (
+                <Card className="border-2 border-amber-300 dark:border-amber-700 bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-50 dark:from-amber-950/40 dark:via-orange-950/40 dark:to-yellow-950/40 shadow-md">
+                  <CardContent className="p-5 sm:p-6 space-y-4">
+                    <div className="flex items-start gap-3">
+                      <div className="shrink-0 w-12 h-12 rounded-2xl bg-amber-500 flex items-center justify-center text-white text-2xl">⚡</div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                          <Badge className="bg-amber-500 text-white border-0">Most Popular</Badge>
+                          <Badge variant="outline" className="border-emerald-400 text-emerald-700 dark:text-emerald-300">
+                            ⏱ Delivered in 3 minutes
+                          </Badge>
+                        </div>
+                        <h3 className="text-lg font-bold leading-tight">
+                          Unlock your full report — and fix what we found
+                        </h3>
+                        <p className="text-sm text-muted-foreground leading-relaxed mt-1">
+                          Your CV scored {result.score}/100. CV Fix Lite gives you the full report PLUS rewrites the
+                          formatting, fixes grammar, and restructures it to pass ATS — delivered in 3 minutes for less
+                          than a mandazi.
+                        </p>
+                      </div>
+                    </div>
+                    <a
+                      href="/services/order/cv_fix_lite"
+                      className="inline-flex w-full items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-bold text-sm py-3 px-4 rounded-xl shadow-md hover:shadow-lg transition-all"
+                      data-testid="button-locked-cv-fix"
+                    >
+                      🎯 Fix My CV for KES 99
+                      <ChevronRight className="h-4 w-4" />
+                    </a>
+                  </CardContent>
+                </Card>
+              )
             ) : returnedFromLogin ? (
               <Card className="border-green-200 bg-green-50 dark:bg-green-900/10 dark:border-green-800">
                 <CardContent className="p-6 text-center space-y-3">
@@ -601,7 +639,7 @@ export default function ATSCVChecker() {
           <span className="text-xs text-muted-foreground">·</span>
           <Link href="/services"><span className="text-xs text-blue-600 dark:text-blue-400 underline underline-offset-2">CV Writing Service</span></Link>
           <span className="text-xs text-muted-foreground">·</span>
-          <a href="/api/login?next=/tools/ats-cv-checker"><span className="text-xs text-blue-600 dark:text-blue-400 underline underline-offset-2">Create Free Account</span></a>
+          <Link href="/login?next=/tools/ats-cv-checker"><span className="text-xs text-blue-600 dark:text-blue-400 underline underline-offset-2">Create Free Account</span></Link>
         </div>
       </div>
     </div>
