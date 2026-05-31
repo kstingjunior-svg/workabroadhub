@@ -351,6 +351,7 @@ app.use((req, res, next) => {
         // is idempotent — safe to run on every boot.
         m.seedCountryPortals?.().catch(console.error);
         m.syncPlanPrices?.().catch(console.error);
+        m.ensureServiceOrderStatusCheck?.().catch(console.error);
       })
       .catch(console.error);
 

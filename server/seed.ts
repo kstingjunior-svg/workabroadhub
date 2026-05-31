@@ -1571,3 +1571,50 @@ export async function syncPlanPrices(): Promise<void> {
     console.error("[Plans] Price sync failed:", err?.message ?? err);
   }
 }
+
+// ─── Service-orders status CHECK constraint widener ─────────────────────────
+// Migration 0005 declared:
+//   CHECK (status IN ('pending_payment','paid','processing','completed','failed','cancelled'))
+// but storage.expireStaleServiceOrders writes status='expired' every cleanup
+// cycle, which crashes with: 'new row for relation "service_orders" violates
+// check constraint "service_orders_status_check"'. The background loop has
+// been silently dying in prod since launch.
+//
+// This boot-time helper drops the old constraint (if it exists with the
+// outdated value set) and re-creates it with 'expired' added. Idempotent —
+// re-running with the correct constraint in place is a no-op.
+export async function ensureServiceOrderStatusCheck(): Promise<void> {
+  try {
+    // Check if the constraint already includes 'expired' — if so, do nothing.
+    const probe = await pool.query<{ pg_get_constraintdef: string }>(`
+      SELECT pg_get_constraintdef(oid) FROM pg_constraint
+       WHERE conname = 'service_orders_status_check'
+       LIMIT 1
+    `);
+    const def = probe.rows[0]?.pg_get_constraintdef ?? "";
+    if (def.includes("'expired'")) {
+      return; // already widened
+    }
+
+    console.log("[ServiceOrders] Widening status CHECK to include 'expired'…");
+    await pool.query(`
+      ALTER TABLE service_orders DROP CONSTRAINT IF EXISTS service_orders_status_check;
+    `);
+    await pool.query(`
+      ALTER TABLE service_orders
+        ADD CONSTRAINT service_orders_status_check
+        CHECK (status IN (
+          'pending_payment',
+          'paid',
+          'processing',
+          'completed',
+          'failed',
+          'cancelled',
+          'expired'
+        ));
+    `);
+    console.log("[ServiceOrders] status CHECK widened — expireStaleServiceOrders will now succeed");
+  } catch (err: any) {
+    console.error("[ServiceOrders] ensureServiceOrderStatusCheck failed:", err?.message ?? err);
+  }
+}
