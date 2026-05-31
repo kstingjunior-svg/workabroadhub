@@ -27,6 +27,7 @@ import { usePageViewFunnel } from "@/hooks/use-page-view-funnel";
 import { useHeartbeat } from "@/hooks/use-heartbeat";
 import { LiveActivityFeed } from "@/components/live-activity-feed";
 import NanjilaChatWidget from "@/components/NanjilaChatWidget";
+import { InstallAppPrompt } from "@/components/install-app-prompt";
 
 // =============================================================================
 // PERFORMANCE: Lazy load ALL pages for code splitting
@@ -660,6 +661,7 @@ function App() {
               <UpgradeModal />
               <LiveActivityFeed />
               <NanjilaChatWidget />
+              <InstallAppPrompt />
             </AgeVerificationGate>
           </UpgradeModalProvider>
         </TooltipProvider>
