@@ -19351,6 +19351,54 @@ Tone examples:
       } catch {}
 
       let systemPrompt = WA_BASE_PROMPT;
+      // ── PRICE-OVERRIDE BLOCK ────────────────────────────────────────────────
+      // WA_BASE_PROMPT was written months ago with hardcoded KES 3,500 figures
+      // that are now stale. Pull the live services + plans rows from the DB on
+      // every call and INJECT them after the base prompt with explicit
+      // priority instructions. The model trusts the later override block
+      // (this is consistent OpenAI behaviour) so even though WA_BASE_PROMPT
+      // still contains old numbers, the live ones are what gets quoted.
+      try {
+        const livePricesRows = await pool.query<{ slug: string; name: string; price: number; currency: string; category: string | null; is_subscription: boolean; subscription_period: string | null }>(`
+          SELECT slug, name, price, currency, category,
+                 COALESCE(is_subscription, false) AS is_subscription,
+                 subscription_period
+            FROM services
+           WHERE is_active = true AND price > 0
+           ORDER BY price ASC
+        `);
+        const livePlansRows = await pool.query<{ plan_id: string; plan_name: string; price: number; billing_period: string }>(`
+          SELECT plan_id, plan_name, price, billing_period
+            FROM plans
+           WHERE is_active = true AND price > 0
+           ORDER BY price ASC
+        `);
+        const svcLines = livePricesRows.rows.map((r) => {
+          const suffix = r.is_subscription ? `/${r.subscription_period === "monthly" ? "mo" : "yr"}` : "";
+          return `  - ${r.name}: ${r.currency} ${r.price.toLocaleString("en-KE")}${suffix}`;
+        }).join("\n");
+        const planLines = livePlansRows.rows.map((p) =>
+          `  - ${p.plan_name}: KES ${p.price.toLocaleString("en-KE")} (${p.billing_period})`
+        ).join("\n");
+        systemPrompt += `
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔒 LIVE PRICE OVERRIDE — pulled from production DB just now.
+   Ignore any older price figures above. THESE are the only correct prices.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+SERVICES (current as of this very message):
+${svcLines || "  (catalogue empty — direct user to /services)"}
+
+SUBSCRIPTION PLANS:
+${planLines || "  (plans temporarily unavailable)"}
+  - Free Plan: KES 0
+
+If anything above contradicts an earlier section in this prompt, the
+LIVE PRICE OVERRIDE wins. Never quote a price not in this list.`;
+      } catch (priceErr: any) {
+        console.warn("[Nanjila chat] live price override failed:", priceErr?.message);
+      }
       systemPrompt += "\n\nNOTE: You are in the in-site chat widget on WorkAbroad Hub's website. The greeting was already sent to the user — do NOT say 'Hello I'm Nanjila' or introduce yourself again. Start every reply by directly addressing what the user asked. Users can upload CVs directly via the attachment button in this chat.";
       if (dbUser) {
         const plan = (dbUser.plan || "free").toLowerCase();
