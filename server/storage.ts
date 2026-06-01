@@ -1149,17 +1149,40 @@ export class DatabaseStorage implements IStorage {
 
   async expireStaleServiceOrders(olderThanHours = 48): Promise<ServiceOrder[]> {
     const cutoffIso = new Date(Date.now() - olderThanHours * 60 * 60 * 1000).toISOString();
-    const expired = await db
-      .update(serviceOrders)
-      .set({ status: "expired", updatedAt: new Date() })
-      .where(
-        and(
-          eq(serviceOrders.status, "pending_payment"),
-          sql`${serviceOrders.updatedAt} < ${cutoffIso}`
+    try {
+      const expired = await db
+        .update(serviceOrders)
+        .set({ status: "expired", updatedAt: new Date() })
+        .where(
+          and(
+            eq(serviceOrders.status, "pending_payment"),
+            sql`${serviceOrders.updatedAt} < ${cutoffIso}`
+          )
         )
-      )
-      .returning();
-    return expired;
+        .returning();
+      return expired;
+    } catch (err: any) {
+      // The status CHECK constraint may not yet include 'expired' on older
+      // schemas (migration 0005 omitted it; widener runs on boot but may not
+      // have completed when this loop fires for the first time). Fall back
+      // to 'cancelled' which IS in the original constraint set — same
+      // semantic effect for the user (cart goes away), no crash.
+      if (String(err?.code) === "23514" || /service_orders_status_check/i.test(err?.message ?? "")) {
+        console.warn("[storage] expireStaleServiceOrders: status CHECK rejects 'expired', falling back to 'cancelled'");
+        const expired = await db
+          .update(serviceOrders)
+          .set({ status: "cancelled", updatedAt: new Date() })
+          .where(
+            and(
+              eq(serviceOrders.status, "pending_payment"),
+              sql`${serviceOrders.updatedAt} < ${cutoffIso}`
+            )
+          )
+          .returning();
+        return expired;
+      }
+      throw err;
+    }
   }
   // ───────────────────────────────────────────────────────────────────────────
 
