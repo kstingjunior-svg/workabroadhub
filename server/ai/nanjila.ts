@@ -78,7 +78,8 @@ async function getLivePlans(): Promise<{ planId: string; name: string; price: nu
 
 export async function nanjilaAgent(
   user: { id: number; name?: string; phone?: string; email?: string; language?: string } | null,
-  message: string
+  message: string,
+  activitySummary?: string
 ): Promise<string> {
   const lang = user?.language || detectLanguage(message);
 
@@ -109,6 +110,14 @@ when a real placement lands.
 ${languageInstruction}
 
 ${userGreeting}
+
+${activitySummary ? `── WHAT THIS USER HAS BEEN DOING (live from our analytics) ──
+${activitySummary}
+
+Use this to feel human. If they've been on a country dashboard, reference it
+("I see you were on the Australia dashboard"). If they have an abandoned order,
+gently ask what stopped them. NEVER repeat the raw bullet list — just weave one
+or two specifics into your reply.` : ""}
 
 ── ABSOLUTE TRUTH RULES ──
 • You MUST use ONLY the prices listed below. Never invent a number. Never quote a "rough" price.

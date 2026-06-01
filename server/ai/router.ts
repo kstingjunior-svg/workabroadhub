@@ -1,4 +1,5 @@
 import { nanjilaAgent } from "./nanjila";
+import { buildActivitySummary } from "./user-activity";
 import { checkPayment } from "./tools/checkPayment";
 import { sendWhatsApp } from "../services/whatsapp";
 import { trackEvent } from "./utils";
@@ -232,7 +233,17 @@ Ready to proceed?
   if (lower.includes("change language")) {
     return "Choose your language: English, Swahili, Arabic.";
   }
-
-  // 🔥 DEFAULT AI RESPONSE
-  return await nanjilaAgent(user, message);
+  // 🔥 DEFAULT AI RESPONSE — with live user-activity context so Nanjila can
+  // reference real recent behaviour ("I see you were on /country/australia
+  // earlier — want me to walk you through the 482 visa?"). Fails open: if
+  // the summary build fails for any reason, Nanjila still answers without it.
+  let activitySummary = "";
+  try {
+    const uid = user?.id != null ? String(user.id) : null;
+    const sum = await buildActivitySummary(uid);
+    activitySummary = sum.asText;
+  } catch (err: any) {
+    console.warn("[router] activity summary build failed:", err?.message);
+  }
+  return await nanjilaAgent(user, message, activitySummary);
 }

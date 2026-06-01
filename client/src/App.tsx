@@ -25,6 +25,8 @@ import { prefetchCriticalData } from "./lib/queryClient";
 import { startServicesPriceWatcher } from "@/lib/services";
 import { usePageViewFunnel } from "@/hooks/use-page-view-funnel";
 import { useHeartbeat } from "@/hooks/use-heartbeat";
+import { useBehaviorTracker } from "@/hooks/use-behavior-tracker";
+import { useNanjilaIdleNudge } from "@/hooks/use-nanjila-idle-nudge";
 import { LiveActivityFeed } from "@/components/live-activity-feed";
 import NanjilaChatWidget from "@/components/NanjilaChatWidget";
 import { InstallAppPrompt } from "@/components/install-app-prompt";
@@ -535,6 +537,8 @@ function Router() {
 
   // Keep session alive and refresh active-user tracker every 60 s
   useHeartbeat();
+  useBehaviorTracker();
+  useNanjilaIdleNudge();
 
   // Poll for service price changes every 10 s — reload if prices changed
   useEffect(() => {

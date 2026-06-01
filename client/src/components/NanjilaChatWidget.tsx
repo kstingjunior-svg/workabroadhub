@@ -303,6 +303,26 @@ export default function NanjilaChatWidget() {
 
   useEffect(() => { setOpen(false); }, [location]);
 
+  // ── Proactive open trigger ────────────────────────────────────────────────
+  // The useNanjilaIdleNudge hook dispatches window CustomEvent("nanjila:open",
+  // { detail: { opener: "..." } }) after 10 min of inactivity. We open the
+  // widget and seed the first AI message so it feels like she initiated.
+  useEffect(() => {
+    function onOpen(ev: Event) {
+      const detail = (ev as CustomEvent).detail ?? {};
+      const opener = String(detail.opener ?? "").trim();
+      setOpen(true);
+      if (opener) {
+        hasGreeted.current = true;
+        setMessages((prev) =>
+          prev.length === 0 ? [{ role: "assistant", content: opener }] : prev
+        );
+      }
+    }
+    window.addEventListener("nanjila:open", onOpen as EventListener);
+    return () => window.removeEventListener("nanjila:open", onOpen as EventListener);
+  }, []);
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading, greetingLoading]);
