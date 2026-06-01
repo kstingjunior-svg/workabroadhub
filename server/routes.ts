@@ -2972,7 +2972,7 @@ Crawl-delay: 1`);
     application_id: z.string().optional(),
   });
 
-  app.post("/api/jobs/analyze", isAuthenticated, async (req: any, res) => {
+  app.post("/api/jobs/analyze", isAuthenticated, requireAnyPaidPlan, async (req: any, res) => {
     try {
       const userId = req.user?.claims?.sub;
       if (!userId) return res.status(401).json({ error: "Not authenticated" });
@@ -13535,7 +13535,7 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
   });
 
   // Trigger AI generation of application materials
-  app.post("/api/user-job-applications/:id/generate", isAuthenticated, async (req: any, res) => {
+  app.post("/api/user-job-applications/:id/generate", isAuthenticated, requireAnyPaidPlan, async (req: any, res) => {
     try {
       const { id } = req.params;
       const userId  = req.user.claims.sub;
