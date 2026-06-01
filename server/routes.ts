@@ -19418,6 +19418,20 @@ LIVE PRICE OVERRIDE wins. Never quote a price not in this list.`;
         console.error("[NanjilChat] AI error:", aiErr.message);
       }
 
+      // ── Price sanitizer — last line of defence ─────────────────────────────
+      // Even with the LIVE PRICE OVERRIDE block injected into the system
+      // prompt and every KES X,XXX scrubbed from WA_BASE_PROMPT, GPT-4o-mini
+      // still occasionally hallucinates old prices from its training data
+      // (e.g. KES 3,500 for ATS CV Optimization). This validator catches and
+      // corrects them before the reply ever reaches the user OR gets pushed
+      // into session.messages (where it would poison the conversation).
+      try {
+        const { sanitizeReply } = await import("./ai/price-sanitizer");
+        reply = await sanitizeReply(reply);
+      } catch (e: any) {
+        console.warn("[NanjilChat] price sanitizer failed:", e?.message);
+      }
+
       session.messages.push({ role: "assistant", content: reply });
 
       let audioUrl: string | null = null;

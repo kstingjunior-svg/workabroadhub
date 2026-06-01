@@ -1,6 +1,7 @@
 import { openai } from "../lib/openai";
 import { pool } from "../db";
 import { detectLanguage } from "./utils";
+import { sanitizeReply } from "./price-sanitizer";
 
 // ─── Live pricing cache ──────────────────────────────────────────────────────
 // Nanjila's biggest credibility failure was quoting stale prices ("CV at KES
@@ -208,7 +209,10 @@ Don't sell. Just open the door for them.
     ],
   });
 
-  return response.choices[0].message.content ?? "";
+  const raw = response.choices[0].message.content ?? "";
+  // Last line of defence — strip / correct any KES prices the model
+  // hallucinated despite the LIVE PRICE OVERRIDE in the system prompt.
+  return await sanitizeReply(raw);
 }
 
 export async function checkUserServices(
