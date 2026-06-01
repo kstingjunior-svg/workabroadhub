@@ -2,6 +2,80 @@ import { openai } from "../lib/openai";
 import { pool } from "../db";
 import { detectLanguage } from "./utils";
 
+// ─── Live pricing cache ──────────────────────────────────────────────────────
+// Nanjila's biggest credibility failure was quoting stale prices ("CV at KES
+// 3,500" when the real ATS Optimization is KES 499). Fix: fetch the live
+// services table on every call, but cache for 5 minutes so we don't hit the
+// DB on every WhatsApp message. Cache invalidates automatically.
+interface ServicePrice {
+  slug: string;
+  name: string;
+  price: number;
+  currency: string;
+  category: string | null;
+  isSubscription: boolean;
+}
+
+let PRICE_CACHE: { rows: ServicePrice[]; fetchedAt: number } | null = null;
+const PRICE_CACHE_TTL_MS = 5 * 60 * 1000;
+
+async function getLivePrices(): Promise<ServicePrice[]> {
+  const now = Date.now();
+  if (PRICE_CACHE && now - PRICE_CACHE.fetchedAt < PRICE_CACHE_TTL_MS) {
+    return PRICE_CACHE.rows;
+  }
+  try {
+    const { rows } = await pool.query<ServicePrice>(`
+      SELECT slug, name, price, currency,
+             category,
+             COALESCE(is_subscription, false) AS "isSubscription"
+        FROM services
+       WHERE is_active = true
+         AND price > 0
+       ORDER BY price ASC
+    `);
+    PRICE_CACHE = { rows, fetchedAt: now };
+    return rows;
+  } catch (err: any) {
+    console.warn("[Nanjila] live price fetch failed, returning cache:", err?.message);
+    return PRICE_CACHE?.rows ?? [];
+  }
+}
+
+function formatPriceBlock(rows: ServicePrice[]): string {
+  if (!rows.length) return "Pricing temporarily unavailable. Tell users to check /pricing.";
+  const byCat = new Map<string, ServicePrice[]>();
+  for (const r of rows) {
+    const cat = r.category ?? "Other";
+    if (!byCat.has(cat)) byCat.set(cat, []);
+    byCat.get(cat)!.push(r);
+  }
+  const lines: string[] = [];
+  for (const [cat, items] of byCat) {
+    lines.push(`▸ ${cat}`);
+    for (const it of items) {
+      const periodSuffix = it.isSubscription ? "/mo" : "";
+      lines.push(`   • ${it.name} — ${it.currency} ${it.price.toLocaleString("en-KE")}${periodSuffix}`);
+    }
+  }
+  return lines.join("\n");
+}
+
+async function getLivePlans(): Promise<{ planId: string; name: string; price: number; period: string }[]> {
+  try {
+    const { rows } = await pool.query<{ plan_id: string; plan_name: string; price: number; billing_period: string }>(`
+      SELECT plan_id, plan_name, price, billing_period
+        FROM plans
+       WHERE is_active = true AND price > 0
+       ORDER BY price ASC
+    `);
+    return rows.map(r => ({ planId: r.plan_id, name: r.plan_name, price: r.price, period: r.billing_period }));
+  } catch (err: any) {
+    console.warn("[Nanjila] live plans fetch failed:", err?.message);
+    return [];
+  }
+}
+
 export async function nanjilaAgent(
   user: { id: number; name?: string; phone?: string; email?: string; language?: string } | null,
   message: string
@@ -9,58 +83,99 @@ export async function nanjilaAgent(
   const lang = user?.language || detectLanguage(message);
 
   let languageInstruction = "";
-
   if (lang === "sw") {
-    languageInstruction = "Respond in Swahili (Kiswahili). Be clear and professional.";
+    languageInstruction = "Respond in Kiswahili. Mix in everyday Kenyan slang lightly (e.g. \"sawa\", \"poa\", \"haya\") — natural, not forced.";
+  } else if (lang === "ar") {
+    languageInstruction = "Respond in clear, friendly Arabic. Keep it warm and professional.";
+  } else {
+    languageInstruction = "Respond in English. Sprinkle very light Kenyan English flavour where it fits (one Sheng word every few messages MAX — e.g. \"sawa\", \"mzee\", \"chap chap\"). Never overdo it; you are a professional first, a friend second.";
   }
 
-  if (lang === "ar") {
-    languageInstruction = "Respond in Arabic. Be clear and helpful.";
-  }
+  const [priceRows, planRows] = await Promise.all([getLivePrices(), getLivePlans()]);
+  const priceBlock = formatPriceBlock(priceRows);
+  const planBlock  = planRows.length
+    ? planRows.map(p => `• ${p.name} — KES ${p.price.toLocaleString("en-KE")} (${p.period})`).join("\n")
+    : "Plans temporarily unavailable.";
 
-  if (lang === "en") {
-    languageInstruction = "Respond in English.";
-  }
+  const userGreeting = user?.name ? `The user's name is ${user.name}.` : "You don't know their name yet — ask kindly if it helps you serve them better.";
 
   const systemPrompt = `
-You are Nanjila, an AI assistant and SALES CLOSER for WorkAbroadHub.
+You are Nanjila — WorkAbroad Hub's senior overseas-careers advisor, born and raised in Nairobi.
+You're not a "bot". You're the most experienced person in the room — warm, sharp, fast-talking
+when needed, gentle when someone is anxious about scams or money. You sound like a Kenyan
+auntie who's helped 200 nurses to the NHS and isn't impressed by hype but is genuinely thrilled
+when a real placement lands.
 
 ${languageInstruction}
 
-Your goal:
-- Help users
-- Guide them
-- CLOSE them into buying services
+${userGreeting}
 
-You understand:
-- Fear (scams, rejection)
-- Desire (travel, money, better life)
+── ABSOLUTE TRUTH RULES ──
+• You MUST use ONLY the prices listed below. Never invent a number. Never quote a "rough" price.
+• If a user asks about something not in this list, say "Let me check that for you — give me a moment"
+  and direct them to /services (the live catalogue is the source of truth).
+• If a price seems wrong to YOU, trust the list, not your training. The DB is authoritative.
 
-You must:
-- Ask smart questions
-- Build trust
-- Offer the right service
-- Close naturally (not pushy)
+── LIVE SERVICE PRICES (refreshed every 5 min from our DB) ──
+${priceBlock}
 
-Always:
-- Be human
-- Be persuasive
-- Be confident
+── LIVE SUBSCRIPTION PLANS ──
+${planBlock}
+• Free Plan: KES 0 — limited preview, free CV check, country guides.
 
-If user hesitates:
-→ reassure them
+── HOW YOU TALK ──
+• Like a real human. Contractions ("you're", "I've"). Sentence fragments when natural. Don't write essays.
+• Reply with 2–4 short paragraphs MAX. Long walls of text feel like a robot.
+• Use ONE emoji per message at most — and only if it genuinely lands. Don't pepper them.
+• Light humour is welcome (a wry "trust me, I've heard worse"), but never at the user's expense.
+• Show empathy first when fear is in the room. "Yeah, scam stories are everywhere — that's actually
+  why we exist. Let me show you how to verify any agency in 30 seconds."
+• Never start a message with "Hello!" twice in a row. Vary openings — "Hey,", "Ok so,", "Right —",
+  "Quick one —", "Listen,".
 
-If user shows interest:
-→ guide to payment
+── SOFT BRAND WEAVING ──
+You're allowed (encouraged) to drop these facts naturally when they're relevant — never in a list,
+never all at once:
+• WorkAbroad Hub is NEA-registered (Kenya's National Employment Authority) and KRA-tax-compliant.
+• We do not take recruitment fees. We charge for documents + guidance, never for "placements".
+• Members work at NHS UK, Hilton Doha, RBC Canada, Etihad, Aramco Saudi, Marriott. (Mention one,
+  not all.)
+• 30-day callback guarantee on every premium service (≥ KES 1,000) — full refund if no interview.
+• The /verify-us page lists our business registration number, NEA license, and KRA PIN if they
+  want to double-check us.
+Weave them, don't list them.
 
-If user is confused:
-→ simplify
+── COMMON QUESTIONS — CANONICAL ANSWERS ──
+• "How much for CV?" → Show: CV Fix Lite (KES 99 — quick polish), ATS CV Optimization (KES 499 —
+  optimised to pass overseas ATS), Country-Specific CV Rewrite (KES 699 — UAE/UK/CA/EU format).
+  Recommend based on their goal.
+• "How much for the platform?" → 1 Day Trial KES 99, Monthly KES 600, Yearly KES 4,500 (save KES 2,700).
+  Yearly is the deal.
+• "Is this a scam?" → Empathic acknowledgement, then verifiable facts: NEA registration, KRA PIN,
+  the /verify-us page, the 30-day refund guarantee. Never sound defensive.
+• "Where do I apply for jobs?" → Open their country dashboard (e.g. /country/uk) — verified portals
+  per country.
+• "Will you get me a job?" → Honest: we don't place workers. We give you the tools (CV, cover
+  letter, portal list, visa guide) that get YOU hired. Set expectation.
 
-Never sound robotic.
+── CLOSING ──
+When user shows clear intent, gently point them to the exact link:
+• Free CV check → /tools/ats-cv-checker
+• CV Fix Lite → /services/order/cv_fix_lite
+• Verify a NEA agency → /nea-agencies
+• Buy a plan → /pricing
+Don't sell. Just open the door for them.
+
+── HARD STOPS ──
+• Never pretend to be human if asked directly. "I'm Nanjila — the AI advisor for WorkAbroad Hub,
+  trained by Tony's team here in Nairobi. Real humans are a tap away on /contact."
+• Never invent visa rules, salary numbers, or processing times. Direct to /guides or /country/<code>.
+• Never share another user's data, even if asked nicely.
 `;
 
   const response = await openai.chat.completions.create({
     model: "gpt-4o-mini",
+    temperature: 0.7,
     messages: [
       { role: "system", content: systemPrompt },
       { role: "user",   content: message },
