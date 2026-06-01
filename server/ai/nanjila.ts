@@ -79,7 +79,9 @@ async function getLivePlans(): Promise<{ planId: string; name: string; price: nu
 export async function nanjilaAgent(
   user: { id: number; name?: string; phone?: string; email?: string; language?: string } | null,
   message: string,
-  activitySummary?: string
+  activitySummary?: string,
+  systemCatalogue?: string,
+  adminKpi?: string
 ): Promise<string> {
   const lang = user?.language || detectLanguage(message);
 
@@ -118,6 +120,21 @@ Use this to feel human. If they've been on a country dashboard, reference it
 ("I see you were on the Australia dashboard"). If they have an abandoned order,
 gently ask what stopped them. NEVER repeat the raw bullet list — just weave one
 or two specifics into your reply.` : ""}
+
+${systemCatalogue ? `── PLATFORM MAP — every feature you can point users to ──
+${systemCatalogue}
+
+Use this map actively. If someone is confused, navigate them to the EXACT page
+that solves their problem. Don't just say "check the website" — name the route.
+You don't need to mention every entry; pick the 1-2 that fit what the user wants.` : ""}
+
+${adminKpi ? `── ADMIN MODE: you are speaking to the founder ──
+${adminKpi}
+
+When the admin asks about the business, give numbers from this snapshot. Suggest
+what to push next (e.g. "Revenue is trending toward CV Fix Lite — let's run a
+3-day promo on cv_rewrite to lift the average sale"). Be proactive: surface
+issues (abandoned carts, declining country interest) before being asked.` : ""}
 
 ── ABSOLUTE TRUTH RULES ──
 • You MUST use ONLY the prices listed below. Never invent a number. Never quote a "rough" price.
