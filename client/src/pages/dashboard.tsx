@@ -1408,83 +1408,91 @@ export default function Dashboard() {
         </div>
 
 
-        {/* ── QUICK ACTIONS — rich 2×2 cards ────────────────────────── */}
-        <div>
-          <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3" data-testid="heading-quick-actions">Quick Actions</h3>
+        {/* ── PRIMARY ACTION WIDGETS — big bold visa + green-card heroes
+            Replaces the old Quick Actions grid (WhatsApp / CV Services /
+            Verify Agency / etc) per user request: those duplicate the
+            landing-page footer/banners. The two CTAs people travel here
+            for are Visa Application help and Green Card Lottery. Make
+            them impossible to miss. */}
+        <div className="grid sm:grid-cols-2 gap-3" data-testid="section-primary-widgets">
+          <Link
+            href="/visa-guides"
+            className="group relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 via-blue-600 to-cyan-500 p-5 shadow-xl hover:shadow-2xl hover:scale-[1.02] active:scale-[0.98] transition-all duration-200"
+            data-testid="widget-visa-application"
+          >
+            {/* Decorative orbs */}
+            <div className="absolute -top-12 -right-12 w-40 h-40 rounded-full bg-white/10 blur-xl pointer-events-none" />
+            <div className="absolute -bottom-8 -left-8 w-32 h-32 rounded-full bg-white/5 blur-xl pointer-events-none" />
 
-          {/* Primary 4-card rich grid */}
-          <div className="grid grid-cols-2 gap-3 mb-3">
-            {isPro ? (
-              <QuickActionCard
-                emoji="💬"
-                title="WhatsApp"
-                description="Chat with your advisor"
-                badgeText="Online now"
-                badgeColor="bg-green-500"
-                href={`https://wa.me/${import.meta.env.VITE_SUPPORT_WHATSAPP || '254742619777'}?text=${encodeURIComponent("Hi, I need career guidance on WorkAbroad Hub.")}`}
-              />
-            ) : (
-              <QuickActionCard
-                emoji="💬"
-                title="WhatsApp"
-                description="Chat with your advisor"
-                badgeText="PRO only"
-                badgeColor="bg-amber-500"
-                locked
-                onClick={() => openUpgradeModal("consultation_locked", "WhatsApp Consultation", "pro")}
-              />
-            )}
-            {/* AI Job Match — DISABLED. Was the 3rd duplicate "find jobs"
-                entry point on this page (hero CTA + visa-jobs list + AI box
-                + this card + Tools section + Bulk Apply = six). Removing it
-                so the Quick Actions row focuses on actions you can ONLY do
-                here: CV review, agency verify, scam wall, scam check. */}
-            <QuickActionCard
-              emoji="📄"
-              title="CV Services"
-              description="Boost your application"
-              badgeText="Expert review"
-              badgeColor="bg-blue-500"
-              href="/services"
-            />
-            <QuickActionCard
-              emoji="🛡️"
-              title="Verify Agency"
-              description="Check before you sign"
-              badgeText="Free check"
-              badgeColor="bg-emerald-600"
-              href="/nea-agencies"
-            />
-          </div>
+            <div className="relative flex flex-col gap-4 text-white min-h-[170px]">
+              <div className="flex items-start justify-between gap-3">
+                <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center text-3xl shadow-inner">
+                  🛂
+                </div>
+                <span className="inline-flex items-center gap-1 bg-white/20 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full backdrop-blur-sm">
+                  ⚡ Step-by-step
+                </span>
+              </div>
+              <div>
+                <h2 className="text-2xl font-extrabold leading-tight mb-1">
+                  Visa Application
+                </h2>
+                <p className="text-sm text-white/90 leading-snug">
+                  Apply for a real work visa — UK, Canada, Australia, USA, UAE, Schengen. We walk you through every form, every document, every fee.
+                </p>
+              </div>
+              <div className="flex items-center justify-between gap-2 mt-auto">
+                <div className="flex items-center -space-x-1 text-base">
+                  <span title="UK">🇬🇧</span>
+                  <span title="Canada">🇨🇦</span>
+                  <span title="Australia">🇦🇺</span>
+                  <span title="USA">🇺🇸</span>
+                  <span title="UAE">🇦🇪</span>
+                  <span title="Europe">🇪🇺</span>
+                </div>
+                <span className="inline-flex items-center gap-1.5 bg-white text-blue-700 text-sm font-bold px-3 py-1.5 rounded-xl group-hover:bg-blue-50 transition-colors">
+                  Start <ArrowRight className="h-4 w-4" />
+                </span>
+              </div>
+            </div>
+          </Link>
 
-          {/* Secondary compact tile row */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <ActionTile
-              icon={<FileText className="h-5 w-5 text-white" />}
-              label="My Documents"
-              color="bg-teal-600"
-              href="/my-documents"
-              badge="NEW"
-            />
-            <ActionTile
-              icon={<Rocket className="h-5 w-5 text-white" />}
-              label="Assisted Apply"
-              color="bg-purple-500"
-              href="/assisted-apply"
-            />
-            <ActionTile
-              icon={<Flame className="h-5 w-5 text-white" />}
-              label="Scam Wall"
-              color="bg-red-500"
-              href="/scam-wall"
-            />
-            <ActionTile
-              icon={<Search className="h-5 w-5 text-white" />}
-              label="Scam Check"
-              color="bg-rose-600"
-              href="/scam-lookup"
-            />
-          </div>
+          <Link
+            href="/green-card"
+            className="group relative overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-600 via-green-600 to-teal-500 p-5 shadow-xl hover:shadow-2xl hover:scale-[1.02] active:scale-[0.98] transition-all duration-200"
+            data-testid="widget-green-card"
+          >
+            <div className="absolute -top-12 -right-12 w-40 h-40 rounded-full bg-white/10 blur-xl pointer-events-none" />
+            <div className="absolute -bottom-8 -left-8 w-32 h-32 rounded-full bg-white/5 blur-xl pointer-events-none" />
+
+            <div className="relative flex flex-col gap-4 text-white min-h-[170px]">
+              <div className="flex items-start justify-between gap-3">
+                <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center text-3xl shadow-inner">
+                  🇺🇸
+                </div>
+                <span className="inline-flex items-center gap-1 bg-white/20 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full backdrop-blur-sm">
+                  🎟 FREE eligibility
+                </span>
+              </div>
+              <div>
+                <h2 className="text-2xl font-extrabold leading-tight mb-1">
+                  Green Card Lottery
+                </h2>
+                <p className="text-sm text-white/90 leading-snug">
+                  DV Lottery 2026 guide — eligibility check, photo specs, application timeline, and how Kenyans actually win. 100% free to enter.
+                </p>
+              </div>
+              <div className="flex items-center justify-between gap-2 mt-auto">
+                <span className="text-[11px] font-semibold text-white/90 inline-flex items-center gap-1">
+                  <CheckCircle className="h-3.5 w-3.5" />
+                  Kenyans selected every year
+                </span>
+                <span className="inline-flex items-center gap-1.5 bg-white text-emerald-700 text-sm font-bold px-3 py-1.5 rounded-xl group-hover:bg-emerald-50 transition-colors">
+                  Open <ArrowRight className="h-4 w-4" />
+                </span>
+              </div>
+            </div>
+          </Link>
         </div>
 
         {/* ── RECENT SIGNUPS (LIVE) ────────────────────────────────────── */}
