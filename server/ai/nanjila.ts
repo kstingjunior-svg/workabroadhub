@@ -27,9 +27,10 @@ async function getLivePrices(): Promise<ServicePrice[]> {
   }
   try {
     const { rows } = await pool.query<ServicePrice>(`
-      SELECT slug, name, price, currency,
-             category,
-             COALESCE(is_subscription, false) AS "isSubscription"
+      SELECT slug, name, price,
+             COALESCE(currency, 'KES') AS currency,
+             NULL AS category,
+             false AS "isSubscription"
         FROM services
        WHERE is_active = true
          AND price > 0

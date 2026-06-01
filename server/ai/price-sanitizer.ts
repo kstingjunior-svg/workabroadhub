@@ -54,9 +54,13 @@ async function getPriceWhitelist(): Promise<PriceRow[]> {
 // Map common service keywords → slug, used to guess what the model MEANT to
 // quote when it hallucinates a price. Order matters — earlier matches win.
 const SLUG_KEYWORDS: Array<{ slug: string; rx: RegExp }> = [
-  { slug: "ats_cv_optimization",  rx: /\bATS\b.*\bCV\b|\bCV\b.*\bATS\b|ATS CV Optim|ATS optim/i },
-  { slug: "cv_rewrite",           rx: /Country[- ]Specific|CV [Rr]ewrite|UAE[- ]format|UK[- ]format/i },
-  { slug: "cv_fix_lite",          rx: /CV Fix Lite|quick polish|CV polish/i },
+  // Specific service patterns first
+  { slug: "ats_cv_optimization",  rx: /\bATS\b.*\bCV\b|\bCV\b.*\bATS\b|ATS CV Optim|ATS optim|ATS [Cc]ompat/i },
+  { slug: "cv_rewrite",           rx: /Country[- ]Specific|CV [Rr]ewrite|UAE[- ]format|UK[- ]format|target country/i },
+  { slug: "cv_fix_lite",          rx: /CV Fix Lite|quick polish|CV polish|fix lite|cv fix\b|CV fix\b/i },
+  // Broad CV catch-all — if no specific match but they mention CV, default to
+  // the most popular CV service (CV Fix Lite at KES 99 is the entry tripwire).
+  { slug: "cv_fix_lite",          rx: /\bCV\b|\bresume\b|curriculum/i },
   { slug: "cover_letter",         rx: /Cover Letter/i },
   { slug: "ats_cover_bundle",     rx: /ATS \+ Cover|Cover Letter Bundle/i },
   { slug: "sop_writing",          rx: /\bSOP\b|Statement of Purpose/i },

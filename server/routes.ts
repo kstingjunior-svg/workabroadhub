@@ -19343,10 +19343,13 @@ Tone examples:
       // (this is consistent OpenAI behaviour) so even though WA_BASE_PROMPT
       // still contains old numbers, the live ones are what gets quoted.
       try {
-        const livePricesRows = await pool.query<{ slug: string; name: string; price: number; currency: string; category: string | null; is_subscription: boolean; subscription_period: string | null }>(`
-          SELECT slug, name, price, currency, category,
-                 COALESCE(is_subscription, false) AS is_subscription,
-                 subscription_period
+        // Defensive: only select columns that exist on every prod schema. The
+        // earlier query referenced subscription_period which may not exist on
+        // older Render DBs — that one missing column threw the whole SELECT and
+        // silently disabled the price override. Fall back to a minimal column
+        // set so the override block ALWAYS lands.
+        const livePricesRows = await pool.query<{ slug: string; name: string; price: number; currency: string | null }>(`
+          SELECT slug, name, price, COALESCE(currency,'KES') AS currency
             FROM services
            WHERE is_active = true AND price > 0
            ORDER BY price ASC
@@ -19357,10 +19360,9 @@ Tone examples:
            WHERE is_active = true AND price > 0
            ORDER BY price ASC
         `);
-        const svcLines = livePricesRows.rows.map((r) => {
-          const suffix = r.is_subscription ? `/${r.subscription_period === "monthly" ? "mo" : "yr"}` : "";
-          return `  - ${r.name}: ${r.currency} ${r.price.toLocaleString("en-KE")}${suffix}`;
-        }).join("\n");
+        const svcLines = livePricesRows.rows.map((r) =>
+          `  - ${r.name}: ${r.currency ?? "KES"} ${r.price.toLocaleString("en-KE")}`
+        ).join("\n");
         const planLines = livePlansRows.rows.map((p) =>
           `  - ${p.plan_name}: KES ${p.price.toLocaleString("en-KE")} (${p.billing_period})`
         ).join("\n");
