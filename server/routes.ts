@@ -19243,8 +19243,30 @@ Tone examples:
             reply += `\n`;
           }
 
+          // Pull live ATS CV Optimization price from the services table so this
+          // suggestion never quotes a stale number. (Earlier hardcoded "KES 3,500"
+          // here was poisoning the chat history — the model then echoed that
+          // figure back on every subsequent turn even after the LIVE PRICE
+          // OVERRIDE in the system prompt told it otherwise.)
+          let atsLiveCopy = "*CV optimization* for ATS systems";
+          let cvFixCopy   = "*CV Fix Lite* — quick polish";
+          try {
+            const { rows: priceRows } = await pool.query<{ slug: string; price: number }>(
+              `SELECT slug, price FROM services
+                WHERE slug IN ('ats_cv_optimization','cv_fix_lite')
+                  AND is_active = true`,
+            );
+            const atsRow    = priceRows.find((r) => r.slug === "ats_cv_optimization");
+            const fixRow    = priceRows.find((r) => r.slug === "cv_fix_lite");
+            if (atsRow) atsLiveCopy = `*CV optimization* for ATS systems (KES ${atsRow.price.toLocaleString("en-KE")})`;
+            if (fixRow) cvFixCopy   = `*CV Fix Lite* — quick polish (KES ${fixRow.price.toLocaleString("en-KE")})`;
+          } catch (e: any) {
+            console.warn("[Nanjila CV reply] live price lookup failed:", e?.message);
+          }
+
           reply += `If you wish to apply for a job abroad or find visa-sponsored opportunities, I can help you with:\n`;
-          reply += `• *CV optimization* for ATS systems (KES 3,500)\n`;
+          reply += `• ${cvFixCopy}\n`;
+          reply += `• ${atsLiveCopy}\n`;
           reply += `• *Job application packs* — we submit on your behalf\n`;
           reply += `• *Visa guidance* for your target country\n\n`;
           reply += `What would you like to do next?`;
