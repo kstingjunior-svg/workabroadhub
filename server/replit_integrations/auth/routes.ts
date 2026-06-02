@@ -299,6 +299,7 @@ export function registerAuthRoutes(app: Express) {
     // Real-identity phone validation: format + Twilio Lookup (catches fake/disconnected numbers)
     const phoneCheck = await validatePhone(rawPhone);
     if (!phoneCheck.valid) {
+      console.warn(`[send-phone-code] phone validation failed userId=${userId} raw=${rawPhone} reason=${phoneCheck.reason} msg=${phoneCheck.message}`);
       return res.status(400).json({ message: phoneCheck.message, reason: phoneCheck.reason });
     }
     const e164 = phoneCheck.e164;
@@ -310,7 +311,21 @@ export function registerAuthRoutes(app: Express) {
     ]);
 
     const result = await sendSmsVerificationCode(userId, e164);
-    if (!result.ok) return res.status(429).json({ message: result.message });
+
+    // Map SMS-service failure codes to correct HTTP status codes so the client
+    // shows the user a sensible error, not a misleading "Too Many Requests".
+    if (!result.ok) {
+      console.warn(`[send-phone-code] SMS send failed userId=${userId} phone=${e164} code=${result.code} message=${result.message}`);
+      let status = 500;
+      if (result.code === "rate_limited") status = 429;
+      else if (result.code === "send_failed") status = 502;
+      // If the failure is "SMS service is not configured", expose a clear hint
+      // so admin can act, but keep the user-facing message friendly.
+      const userMessage = result.code === "send_failed" && /not configured/i.test(result.message)
+        ? "We're temporarily unable to send SMS codes. Please contact support@workabroadhub.tech and we'll verify you manually."
+        : result.message;
+      return res.status(status).json({ message: userMessage, code: result.code });
+    }
     res.json({ ok: true, message: "Verification code sent via SMS.", phoneE164: e164 });
   });
 
@@ -358,6 +373,40 @@ export function registerAuthRoutes(app: Express) {
     });
   });
 
+  // ── Admin override: mark a user phone-verified manually ──────────────────
+  // Use this when SMS delivery is broken (Twilio not configured, account
+  // suspended, A2P 10DLC pending, etc.) AND support has confirmed the user
+  // owns the number through another channel (WhatsApp callback, etc.).
+  app.post("/api/auth/admin/force-verify-phone", async (req: Request, res: Response) => {
+    const userId = (req.session as any)?.customUserId as string | undefined;
+    if (!userId) return res.status(401).json({ message: "Please sign in." });
+    const me = await pool.query<{ is_admin: boolean; role: string }>(
+      `SELECT is_admin, role FROM users WHERE id = $1`,
+      [userId],
+    );
+    const isAdmin = me.rows[0]?.is_admin || me.rows[0]?.role === "ADMIN" || me.rows[0]?.role === "SUPER_ADMIN";
+    if (!isAdmin) return res.status(403).json({ message: "Admin only." });
+
+    const targetUserId = String(req.body?.userId ?? "").trim();
+    const phone        = String(req.body?.phone  ?? "").trim();
+    if (!targetUserId || !phone) {
+      return res.status(400).json({ message: "userId and phone are required." });
+    }
+    await pool.query(
+      `UPDATE users SET phone = $1, phone_verified = true, updated_at = NOW() WHERE id = $2`,
+      [phone, targetUserId],
+    );
+    console.warn(`[Auth] ADMIN force-verified phone for userId=${targetUserId} phone=${phone} by admin=${userId}`);
+    res.json({ ok: true, message: "Phone marked as verified." });
+  });
+
+  // Startup diagnostic — exposes whether SMS delivery is configured.
+  const hasTwilio = Boolean(
+    (process.env.TWILIO_ACCOUNT_SID || "").trim() &&
+    (process.env.TWILIO_AUTH_TOKEN  || "").trim() &&
+    ((process.env.TWILIO_SMS_FROM || "").trim() || (process.env.TWILIO_WHATSAPP_FROM || "").trim())
+  );
+  console.log(`[Auth] Twilio SMS configured: ${hasTwilio ? "YES" : "NO — phone OTP delivery will fail. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_SMS_FROM (or TWILIO_WHATSAPP_FROM) in Render env."}`);
   console.log("[Auth] Email/password routes registered: /api/auth/register, /api/auth/login, /api/auth/logout, /api/auth/user, /api/auth/forgot-password, /api/auth/reset-password");
-  console.log("[Auth] Verification routes registered: /api/auth/{send-email-code, send-phone-code, verify-email, verify-phone, verification-status}");
+  console.log("[Auth] Verification routes registered: /api/auth/{send-email-code, send-phone-code, verify-email, verify-phone, verification-status, admin/force-verify-phone}");
 }
