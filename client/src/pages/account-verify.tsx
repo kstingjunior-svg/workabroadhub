@@ -2,7 +2,8 @@
  * Identity verification page — separate from /verify (agency verification).
  *
  * Route: /account/verify
- * Lets the signed-in user verify their email + phone via 6-digit OTP codes.
+ * Lets the signed-in user verify their email via a 6-digit OTP code.
+ * Phone verification was removed — M-Pesa STK PIN proves phone ownership.
  * Payment endpoints (server-side) reject requests until both flags are true.
  */
 import { useEffect, useState } from "react";
@@ -12,14 +13,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Mail, Phone, CheckCircle2, Loader2, ShieldCheck } from "lucide-react";
+import { Mail, CheckCircle2, Loader2, ShieldCheck } from "lucide-react";
 import { fetchCsrfToken } from "@/lib/queryClient";
 
 interface VerificationStatus {
   email: string;
-  phone: string | null;
   emailVerified: boolean;
-  phoneVerified: boolean;
   isAdmin: boolean;
 }
 
@@ -47,11 +46,6 @@ export default function AccountVerifyPage() {
   const [emailVerifying, setEmailVerifying] = useState(false);
   const [emailCodeSent, setEmailCodeSent] = useState(false);
 
-  const [phoneInput, setPhoneInput] = useState("");
-  const [phoneCode, setPhoneCode] = useState("");
-  const [phoneSending, setPhoneSending] = useState(false);
-  const [phoneVerifying, setPhoneVerifying] = useState(false);
-  const [phoneCodeSent, setPhoneCodeSent] = useState(false);
 
   async function loadStatus() {
     try {
@@ -62,8 +56,7 @@ export default function AccountVerifyPage() {
       }
       const data: VerificationStatus = await res.json();
       setStatus(data);
-      if (data.phone) setPhoneInput(data.phone);
-      if (data.emailVerified && data.phoneVerified) {
+      if (data.emailVerified) {
         toast({ title: "All verified", description: "You're good to go." });
         setTimeout(() => navigate("/dashboard"), 1200);
       }
@@ -114,41 +107,6 @@ export default function AccountVerifyPage() {
     }
   }
 
-  async function sendPhone() {
-    if (!phoneInput.trim()) {
-      toast({ title: "Enter your phone number first", variant: "destructive" });
-      return;
-    }
-    setPhoneSending(true);
-    try {
-      await jsonPost("/api/auth/send-phone-code", { phone: phoneInput.trim() });
-      setPhoneCodeSent(true);
-      toast({ title: "SMS sent", description: "Check your phone for a 6-digit code." });
-    } catch (err: any) {
-      toast({ title: "Could not send SMS", description: err.message, variant: "destructive" });
-    } finally {
-      setPhoneSending(false);
-    }
-  }
-
-  async function submitPhoneCode() {
-    if (phoneCode.replace(/\D/g, "").length !== 6) {
-      toast({ title: "Enter the 6-digit code", variant: "destructive" });
-      return;
-    }
-    setPhoneVerifying(true);
-    try {
-      await jsonPost("/api/auth/verify-phone", { code: phoneCode });
-      toast({ title: "Phone verified ✓", description: "Your number is confirmed." });
-      setPhoneCode("");
-      await loadStatus();
-    } catch (err: any) {
-      toast({ title: "Verification failed", description: err.message, variant: "destructive" });
-    } finally {
-      setPhoneVerifying(false);
-    }
-  }
-
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -158,7 +116,7 @@ export default function AccountVerifyPage() {
   }
   if (!status) return null;
 
-  const allDone = status.emailVerified && status.phoneVerified;
+  const allDone = status.emailVerified;
 
   return (
     <div className="min-h-screen bg-background py-10 px-4">
@@ -169,7 +127,7 @@ export default function AccountVerifyPage() {
           </div>
           <h1 className="text-2xl font-bold">Verify your account</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Real email + real phone keeps WorkAbroad Hub safe for everyone. We require both before any payment.
+            Verify your email once and you're done — no SMS step needed. Required before payment.
           </p>
         </div>
 
@@ -232,68 +190,8 @@ export default function AccountVerifyPage() {
           )}
         </Card>
 
-        {/* PHONE */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between text-base">
-              <span className="flex items-center gap-2"><Phone className="h-4 w-4" /> Phone number</span>
-              {status.phoneVerified ? (
-                <span className="text-xs font-medium text-green-700 bg-green-100 dark:bg-green-900/30 dark:text-green-300 px-2 py-0.5 rounded-full">Verified ✓</span>
-              ) : (
-                <span className="text-xs font-medium text-amber-700 bg-amber-100 dark:bg-amber-900/30 dark:text-amber-300 px-2 py-0.5 rounded-full">Unverified</span>
-              )}
-            </CardTitle>
-            <CardDescription>
-              {status.phone ?? "We'll send an SMS with a code to confirm your number"}
-            </CardDescription>
-          </CardHeader>
-          {!status.phoneVerified && (
-            <CardContent className="space-y-3">
-              {!phoneCodeSent ? (
-                <>
-                  <Label htmlFor="phone-input">WhatsApp / Mobile number</Label>
-                  <Input
-                    id="phone-input"
-                    value={phoneInput}
-                    onChange={(e) => setPhoneInput(e.target.value)}
-                    placeholder="+254712345678 or 0712345678"
-                    type="tel"
-                  />
-                  <Button onClick={sendPhone} disabled={phoneSending} className="w-full">
-                    {phoneSending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Phone className="h-4 w-4 mr-2" />}
-                    Send SMS code
-                  </Button>
-                </>
-              ) : (
-                <div className="space-y-3">
-                  <Label htmlFor="phone-code">6-digit code from your SMS</Label>
-                  <Input
-                    id="phone-code"
-                    value={phoneCode}
-                    onChange={(e) => setPhoneCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                    inputMode="numeric"
-                    maxLength={6}
-                    placeholder="123456"
-                    className="font-mono text-center text-lg tracking-widest"
-                  />
-                  <div className="flex gap-2">
-                    <Button onClick={submitPhoneCode} disabled={phoneVerifying || phoneCode.length !== 6} className="flex-1">
-                      {phoneVerifying ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-                      Verify
-                    </Button>
-                    <Button variant="outline" onClick={sendPhone} disabled={phoneSending}>
-                      Resend
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          )}
-        </Card>
-
         <p className="text-xs text-center text-muted-foreground pt-4">
-          Your contact info is never shared or sold. We use it only for M-Pesa payment prompts,
-          service delivery notifications, and account recovery.
+          Your email is never shared or sold. We use it only for service delivery notifications and account recovery. Your M-Pesa phone is only used for payment prompts.
         </p>
       </div>
     </div>

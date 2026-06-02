@@ -364,11 +364,14 @@ export function registerAuthRoutes(app: Express) {
     const u = r.rows[0];
     if (!u) return res.status(404).json({ message: "User not found." });
     const isAdmin = u.is_admin || u.role === "ADMIN" || u.role === "SUPER_ADMIN";
+    // EMAIL-ONLY verification policy: phoneVerified is ALWAYS reported true
+    // so the client never gates anything on it. Phone column is preserved
+    // for M-Pesa STK push but is no longer a verification gate.
     res.json({
       email: u.email,
       phone: u.phone,
       emailVerified: u.email_verified || isAdmin,
-      phoneVerified: u.phone_verified || isAdmin,
+      phoneVerified: true,
       isAdmin,
     });
   });
@@ -407,6 +410,4 @@ export function registerAuthRoutes(app: Express) {
     ((process.env.TWILIO_SMS_FROM || "").trim() || (process.env.TWILIO_WHATSAPP_FROM || "").trim())
   );
   console.log(`[Auth] Twilio SMS configured: ${hasTwilio ? "YES" : "NO — phone OTP delivery will fail. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_SMS_FROM (or TWILIO_WHATSAPP_FROM) in Render env."}`);
-  console.log("[Auth] Email/password routes registered: /api/auth/register, /api/auth/login, /api/auth/logout, /api/auth/user, /api/auth/forgot-password, /api/auth/reset-password");
-  console.log("[Auth] Verification routes registered: /api/auth/{send-email-code, send-phone-code, verify-email, verify-phone, verification-status, admin/force-verify-phone}");
-}
+  console.log("[Auth] Email/password routes registered: /api/auth/register, /api/auth/login, /api/auth/logout, /api/auth/user, /api/auth/forgot-password, /api/auth/res
