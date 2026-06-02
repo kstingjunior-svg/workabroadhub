@@ -12,6 +12,11 @@ import {
   sendSmsVerificationCode,
   verifyCode,
 } from "../../services/identityVerification";
+import {
+  recordPwaEvent,
+  getPwaStatus,
+  type PwaEventType,
+} from "../../services/pwaInstallTracking";
 
 // Email + password auth routes (replaces the disabled stub).
 
@@ -403,11 +408,69 @@ export function registerAuthRoutes(app: Express) {
     res.json({ ok: true, message: "Phone marked as verified." });
   });
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // PWA install tracking
+  //
+  // The client calls these so we can answer "does this user have the app
+  // installed on this device, or did they install it once and then uninstall?"
+  // — used by the install prompt to swap copy between "Install our app?" and
+  // "Looks like you removed the app — reinstall?".
+  //
+  // Both endpoints are silent no-ops for signed-out users so the client can
+  // call them unconditionally without checking auth first.
+  // ─────────────────────────────────────────────────────────────────────────
+  app.post("/api/pwa/event", async (req: Request, res: Response) => {
+    try {
+      const userId = (req.session as any)?.customUserId as string | undefined;
+      const rawType = String(req.body?.type ?? "").trim();
+      const allowed: PwaEventType[] = ["installed", "standalone-open", "uninstall-detected"];
+      if (!allowed.includes(rawType as PwaEventType)) {
+        return res.status(400).json({ ok: false, message: "Unknown event type." });
+      }
+      if (!userId) {
+        // Signed-out — silently accept so the client doesn't have to branch.
+        return res.json({ ok: true, recorded: false });
+      }
+      await recordPwaEvent(userId, rawType as PwaEventType);
+      res.json({ ok: true, recorded: true });
+    } catch (err: any) {
+      console.warn("[Auth] /api/pwa/event error:", err?.message);
+      res.json({ ok: true, recorded: false }); // never break the UI for telemetry
+    }
+  });
+
+  app.get("/api/pwa/status", async (req: Request, res: Response) => {
+    try {
+      const userId = (req.session as any)?.customUserId as string | undefined;
+      if (!userId) {
+        return res.json({
+          installedAt: null,
+          lastStandaloneAt: null,
+          uninstallSeenAt: null,
+          likelyUninstalled: false,
+          signedIn: false,
+        });
+      }
+      const status = await getPwaStatus(userId);
+      res.json({ ...status, signedIn: true });
+    } catch (err: any) {
+      console.warn("[Auth] /api/pwa/status error:", err?.message);
+      res.json({
+        installedAt: null,
+        lastStandaloneAt: null,
+        uninstallSeenAt: null,
+        likelyUninstalled: false,
+        signedIn: false,
+      });
+    }
+  });
+
   // Startup diagnostic — exposes whether SMS delivery is configured.
   const hasTwilio = Boolean(
     (process.env.TWILIO_ACCOUNT_SID || "").trim() &&
     (process.env.TWILIO_AUTH_TOKEN  || "").trim() &&
     ((process.env.TWILIO_SMS_FROM || "").trim() || (process.env.TWILIO_WHATSAPP_FROM || "").trim())
   );
-  console.log(`[Auth] Twilio SMS configured: ${hasTwilio ? "YES" : "NO — phone OTP delivery will fail. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_SMS_FROM (or TWILIO_WHATSAPP_FROM) in Render env."}`);
-  console.log("[Auth] Email/password routes registered: /api/auth/register, /api/auth/login, /api/auth/logout, /api/auth/user, /api/auth/forgot-password, /api/auth/res
+  console.log(`[Auth] Twilio SMS configured: ${hasTwilio ? "YES" : "NO - phone OTP delivery will fail. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_SMS_FROM (or TWILIO_WHATSAPP_FROM) in Render env."}`);
+  console.log("[Auth] Email/password routes registered: /api/auth/register, /api/auth/login, /api/auth/logout, /api/auth/user, /api/auth/forgot-password, /api/auth/reset-password, /api/auth/send-email-code, /api/auth/verify-email, /api/auth/verification-status, /api/pwa/event, /api/pwa/status");
+}
