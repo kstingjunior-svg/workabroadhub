@@ -1149,39 +1149,76 @@ export class DatabaseStorage implements IStorage {
 
   async expireStaleServiceOrders(olderThanHours = 48): Promise<ServiceOrder[]> {
     const cutoffIso = new Date(Date.now() - olderThanHours * 60 * 60 * 1000).toISOString();
-    try {
-      const expired = await db
-        .update(serviceOrders)
-        .set({ status: "expired", updatedAt: new Date() })
+
+    // Walk an unknown error chain (drizzle wraps pg errors under `cause`).
+    // We need to detect 23514 whether it's `err.code`, `err.cause.code`, or
+    // `err.cause.cause.code`.
+    const isCheckRejection = (e: any): boolean => {
+      for (let cur = e, depth = 0; cur && depth < 5; cur = cur.cause, depth++) {
+        if (String(cur.code ?? "") === "23514") return true;
+        if (/service_orders_status_check/i.test(String(cur.message ?? ""))) return true;
+        if (/service_orders_status_check/i.test(String(cur.constraint ?? ""))) return true;
+      }
+      return false;
+    };
+
+    // SELF-HEAL: widen the CHECK constraint inline so subsequent runs don't
+    // crash. We also widen the bootup helper in seed.ts, but that one runs
+    // fire-and-forget and races with this loop. This makes the storage layer
+    // itself responsible for ensuring the schema can hold 'expired'.
+    let widenedThisCall = false;
+    const widenConstraintInline = async (): Promise<boolean> => {
+      if (widenedThisCall) return false;
+      widenedThisCall = true;
+      try {
+        console.warn("[storage] widening service_orders_status_check inline to add 'expired'");
+        await pool.query(`ALTER TABLE service_orders DROP CONSTRAINT IF EXISTS service_orders_status_check;`);
+        await pool.query(`
+          ALTER TABLE service_orders
+            ADD CONSTRAINT service_orders_status_check
+            CHECK (status IN (
+              'pending_payment','paid','processing','completed',
+              'failed','cancelled','expired'
+            ));
+        `);
+        console.log("[storage] service_orders_status_check widened — retrying with 'expired'");
+        return true;
+      } catch (alterErr: any) {
+        console.error("[storage] inline widen failed:", alterErr?.message ?? alterErr);
+        return false;
+      }
+    };
+
+    const runUpdate = (status: "expired" | "cancelled") =>
+      db.update(serviceOrders)
+        .set({ status, updatedAt: new Date() })
         .where(
           and(
             eq(serviceOrders.status, "pending_payment"),
-            sql`${serviceOrders.updatedAt} < ${cutoffIso}`
-          )
+            sql`${serviceOrders.updatedAt} < ${cutoffIso}`,
+          ),
         )
         .returning();
-      return expired;
+
+    try {
+      return await runUpdate("expired");
     } catch (err: any) {
-      // The status CHECK constraint may not yet include 'expired' on older
-      // schemas (migration 0005 omitted it; widener runs on boot but may not
-      // have completed when this loop fires for the first time). Fall back
-      // to 'cancelled' which IS in the original constraint set — same
-      // semantic effect for the user (cart goes away), no crash.
-      if (String(err?.code) === "23514" || /service_orders_status_check/i.test(err?.message ?? "")) {
-        console.warn("[storage] expireStaleServiceOrders: status CHECK rejects 'expired', falling back to 'cancelled'");
-        const expired = await db
-          .update(serviceOrders)
-          .set({ status: "cancelled", updatedAt: new Date() })
-          .where(
-            and(
-              eq(serviceOrders.status, "pending_payment"),
-              sql`${serviceOrders.updatedAt} < ${cutoffIso}`
-            )
-          )
-          .returning();
-        return expired;
+      if (!isCheckRejection(err)) throw err;
+
+      // Try widening, then retrying with 'expired'.
+      const widened = await widenConstraintInline();
+      if (widened) {
+        try {
+          return await runUpdate("expired");
+        } catch (retryErr: any) {
+          console.warn("[storage] retry after widen still failed:", retryErr?.message);
+        }
       }
-      throw err;
+
+      // Final fallback — use 'cancelled' so the cleanup loop never crashes
+      // even if we couldn't widen the schema (e.g. role lacks ALTER perms).
+      console.warn("[storage] expireStaleServiceOrders falling back to status='cancelled'");
+      return await runUpdate("cancelled");
     }
   }
   // ───────────────────────────────────────────────────────────────────────────
@@ -5012,17 +5049,10 @@ export class DatabaseStorage implements IStorage {
       await db.insert(scamWallLikes).values({ reportId, fingerprint });
       const [updated] = await db.update(scamReports)
         .set({ likesCount: sql`${scamReports.likesCount} + 1` })
-        .where(eq(scamReports.id, reportId)).returning({ likesCount: scamReports.likesCount });
-      return { liked: true, likesCount: updated?.likesCount ?? 1 };
+        .where(eq(scamReports.id, reportId))
+        .returning({ likesCount: scamReports.likesCount });
+      return { liked: true, likesCount: updated?.likesCount ?? 0 };
     }
-  }
-
-  async hasLikedScamReport(reportId: string, fingerprint: string): Promise<boolean> {
-    const { scamWallLikes } = await import('@shared/schema');
-    const existing = await db.select().from(scamWallLikes)
-      .where(and(eq(scamWallLikes.reportId, reportId), eq(scamWallLikes.fingerprint, fingerprint)))
-      .limit(1);
-    return existing.length > 0;
   }
 
   async getScamWallComments(reportId: string): Promise<import('@shared/schema').ScamWallComment[]> {
