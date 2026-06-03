@@ -35,6 +35,9 @@ exports.ensureIndexes = ensureIndexes;
 exports.syncNeaAgencies = syncNeaAgencies;
 exports.deduplicateNeaAgencies = deduplicateNeaAgencies;
 exports.syncServicePrices = syncServicePrices;
+exports.seedCountryPortals = seedCountryPortals;
+exports.syncPlanPrices = syncPlanPrices;
+exports.ensureServiceOrderStatusCheck = ensureServiceOrderStatusCheck;
 // @ts-nocheck
 const db_1 = require("./db");
 const schema_1 = require("@shared/schema");
@@ -1417,5 +1420,156 @@ async function syncServicePrices() {
     }
     catch (err) {
         console.error("[ServiceSync] Failed to sync service prices:", err.message);
+    }
+}
+// ─── Country portals self-healer ─────────────────────────────────────────────
+// CRITICAL: Migration 0004 used UPPERCASE country codes ('UK', 'CA', 'AU' etc.)
+// but the original seed inserts countries with LOWERCASE codes ('uk', 'canada',
+// 'uae'…). Result: the migration's INSERTs matched zero rows, leaving every
+// country's "Apply on Platforms" tab empty. On top of that, 'australia' was
+// never seeded at all, so /api/countries/australia 404s and the page shows
+// "Access Required".
+//
+// This seed runs on every boot. It is fully idempotent — uses ON CONFLICT
+// for countries and INSERT…WHERE NOT EXISTS for job_links so click counts
+// and lastVerified timestamps are preserved across reboots.
+async function seedCountryPortals() {
+    try {
+        // 1. Ensure all six destination countries exist (lowercase codes).
+        const wantedCountries = [
+            { code: "usa", name: "USA", flag: "🇺🇸" },
+            { code: "canada", name: "Canada", flag: "🇨🇦" },
+            { code: "uae", name: "UAE / Arab Countries", flag: "🇦🇪" },
+            { code: "uk", name: "United Kingdom", flag: "🇬🇧" },
+            { code: "europe", name: "Europe", flag: "🇪🇺" },
+            { code: "australia", name: "Australia", flag: "🇦🇺" },
+        ];
+        for (const c of wantedCountries) {
+            await db_1.pool.query(`INSERT INTO countries (name, code, flag_emoji, is_active)
+         VALUES ($1, $2, $3, true)
+         ON CONFLICT (code) DO NOTHING`, [c.name, c.code, c.flag]);
+        }
+        // 2. Curated portal list lives in server/lib/country-portals.ts (the
+        //    single source of truth). Importing it ensures the seed AND the
+        //    synthetic fallback in /api/countries/:code stay in lockstep.
+        const { COUNTRY_PORTALS: portalsByCode } = await Promise.resolve().then(() => __importStar(require("./lib/country-portals")));
+        // 3. Upsert each portal — INSERT only when (country_id, url) is new, so
+        //    we never wipe click_count or last_verified on existing portals.
+        //    Per-portal logging so failures are visible in Render logs.
+        let inserted = 0;
+        let updated = 0;
+        let skipped = 0;
+        for (const [code, portals] of Object.entries(portalsByCode)) {
+            const cRes = await db_1.pool.query(`SELECT id FROM countries WHERE code = $1 LIMIT 1`, [code]);
+            const countryId = cRes.rows[0]?.id;
+            if (!countryId) {
+                console.warn(`[Portals] No country row for code='${code}' — skipping ${portals.length} portals`);
+                continue;
+            }
+            for (const p of portals) {
+                try {
+                    // First: INSERT if URL not present yet (preserves click_count for existing rows).
+                    const ins = await db_1.pool.query(`INSERT INTO job_links (country_id, name, url, description, is_active, "order")
+             SELECT $1, $2, $3, $4, true, $5
+             WHERE NOT EXISTS (
+               SELECT 1 FROM job_links WHERE country_id = $1 AND url = $3
+             )`, [countryId, p.name, p.url, p.description, p.order]);
+                    if (ins.rowCount && ins.rowCount > 0) {
+                        inserted++;
+                    }
+                    else {
+                        // URL already exists — refresh name/description/order in case they drifted.
+                        const upd = await db_1.pool.query(`UPDATE job_links
+                  SET name = $2, description = $3, "order" = $4, is_active = true
+                WHERE country_id = $1 AND url = $5`, [countryId, p.name, p.description, p.order, p.url]);
+                        if (upd.rowCount && upd.rowCount > 0)
+                            updated++;
+                        else
+                            skipped++;
+                    }
+                }
+                catch (rowErr) {
+                    console.error(`[Portals] insert/update failed for ${code}/${p.name}:`, rowErr?.message ?? rowErr);
+                }
+            }
+        }
+        console.log(`[Portals] Self-heal complete — inserted ${inserted}, refreshed ${updated}, unchanged ${skipped}`);
+    }
+    catch (err) {
+        console.error("[Portals] Self-heal failed:", err?.message ?? err);
+    }
+}
+// ─── Plan price sync — idempotent, runs on every boot ────────────────────────
+// Phase-1 conversion optimisation: monthly plan dropped from KES 1,000 → 600
+// per user feedback. Lower monthly anchor drives more signups while preserving
+// the strong yearly incentive (KES 4,500 vs KES 7,200 if paying monthly).
+//
+// Existing plan rows are UPDATEd in place — no inserts (those are handled by
+// seedPlans on cold start). Safe to re-run; only changes rows whose price
+// actually drifted.
+async function syncPlanPrices() {
+    try {
+        const targets = [
+            { planId: "trial", price: 99, name: "1 Day Trial" },
+            { planId: "monthly", price: 600, name: "Monthly Access" },
+            { planId: "pro", price: 4500, name: "Yearly Access" },
+        ];
+        let updated = 0;
+        for (const t of targets) {
+            const res = await db_1.pool.query(`UPDATE plans SET price = $1, plan_name = COALESCE($2, plan_name)
+          WHERE plan_id = $3 AND price <> $1`, [t.price, t.name ?? null, t.planId]);
+            if (res.rowCount && res.rowCount > 0)
+                updated += res.rowCount;
+        }
+        console.log(`[Plans] Price sync complete — ${updated} row(s) updated`);
+    }
+    catch (err) {
+        console.error("[Plans] Price sync failed:", err?.message ?? err);
+    }
+}
+// ─── Service-orders status CHECK constraint widener ─────────────────────────
+// Migration 0005 declared:
+//   CHECK (status IN ('pending_payment','paid','processing','completed','failed','cancelled'))
+// but storage.expireStaleServiceOrders writes status='expired' every cleanup
+// cycle, which crashes with: 'new row for relation "service_orders" violates
+// check constraint "service_orders_status_check"'. The background loop has
+// been silently dying in prod since launch.
+//
+// This boot-time helper drops the old constraint (if it exists with the
+// outdated value set) and re-creates it with 'expired' added. Idempotent —
+// re-running with the correct constraint in place is a no-op.
+async function ensureServiceOrderStatusCheck() {
+    try {
+        // Check if the constraint already includes 'expired' — if so, do nothing.
+        const probe = await db_1.pool.query(`
+      SELECT pg_get_constraintdef(oid) FROM pg_constraint
+       WHERE conname = 'service_orders_status_check'
+       LIMIT 1
+    `);
+        const def = probe.rows[0]?.pg_get_constraintdef ?? "";
+        if (def.includes("'expired'")) {
+            return; // already widened
+        }
+        console.log("[ServiceOrders] Widening status CHECK to include 'expired'…");
+        await db_1.pool.query(`
+      ALTER TABLE service_orders DROP CONSTRAINT IF EXISTS service_orders_status_check;
+    `);
+        await db_1.pool.query(`
+      ALTER TABLE service_orders
+        ADD CONSTRAINT service_orders_status_check
+        CHECK (status IN (
+          'pending_payment',
+          'paid',
+          'processing',
+          'completed',
+          'failed',
+          'cancelled',
+          'expired'
+        ));
+    `);
+        console.log("[ServiceOrders] status CHECK widened — expireStaleServiceOrders will now succeed");
+    }
+    catch (err) {
+        console.error("[ServiceOrders] ensureServiceOrderStatusCheck failed:", err?.message ?? err);
     }
 }

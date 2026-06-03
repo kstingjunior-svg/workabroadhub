@@ -2283,7 +2283,100 @@ Crawl-delay: 1`);
             if (planId === "free") {
                 return res.status(403).json({ message: "Payment required to access this content" });
             }
-            const country = await storage_1.storage.getCountryWithDetails(req.params.code);
+            const rawCode = String(req.params.code || "").trim();
+            const codeLc = rawCode.toLowerCase();
+            // Known-good country whitelist — for synthetic fallback below.
+            const KNOWN = {
+                usa: { name: "USA", flag: "🇺🇸" },
+                canada: { name: "Canada", flag: "🇨🇦" },
+                uae: { name: "UAE / Arab Countries", flag: "🇦🇪" },
+                uk: { name: "United Kingdom", flag: "🇬🇧" },
+                europe: { name: "Europe", flag: "🇪🇺" },
+                australia: { name: "Australia", flag: "🇦🇺" },
+            };
+            let country = null;
+            try {
+                country = await storage_1.storage.getCountryWithDetails(codeLc);
+            }
+            catch (e) {
+                console.error(`[countries/:code] storage lookup failed for ${codeLc}:`, e);
+            }
+            // Layer 1: case-insensitive — handles UPPERCASE legacy rows.
+            if (!country) {
+                try {
+                    const altRows = await db_1.pool.query(`SELECT code FROM countries WHERE LOWER(code) = $1 LIMIT 1`, [codeLc]);
+                    if (altRows.rows[0]?.code && altRows.rows[0].code !== codeLc) {
+                        country = await storage_1.storage.getCountryWithDetails(altRows.rows[0].code);
+                    }
+                }
+                catch (e) {
+                    console.error("[countries/:code] case-insensitive lookup failed:", e);
+                }
+            }
+            // Layer 2: try to insert the missing row + kick off background seed.
+            if (!country && KNOWN[codeLc]) {
+                const meta = KNOWN[codeLc];
+                try {
+                    console.log(`[countries/:code] hard-inserting missing country row: ${codeLc}`);
+                    await db_1.pool.query(`INSERT INTO countries (name, code, flag_emoji, is_active)
+             VALUES ($1, $2, $3, true)
+             ON CONFLICT (code) DO NOTHING`, [meta.name, codeLc, meta.flag]);
+                    country = await storage_1.storage.getCountryWithDetails(codeLc);
+                    Promise.resolve().then(() => __importStar(require("./seed"))).then((s) => s.seedCountryPortals?.())
+                        .catch((e) => console.error("[countries/:code] bg seed failed:", e));
+                }
+                catch (e) {
+                    console.error("[countries/:code] hard-insert failed:", e);
+                }
+            }
+            // Layer 2b: country row exists but jobLinks is empty for a known
+            // country — block here and force the portal seed so the user gets
+            // real portals on this very request, not on a delayed background
+            // run. Used to drive the urgent Australia heal.
+            if (country && Array.isArray(country.jobLinks) && country.jobLinks.length === 0 && KNOWN[codeLc]) {
+                try {
+                    console.log(`[countries/:code] empty jobLinks for ${codeLc} — forcing portal seed`);
+                    const seed = await Promise.resolve().then(() => __importStar(require("./seed")));
+                    await seed.seedCountryPortals?.();
+                    country = await storage_1.storage.getCountryWithDetails(codeLc);
+                }
+                catch (e) {
+                    console.error(`[countries/:code] forced portal seed failed for ${codeLc}:`, e);
+                }
+            }
+            // Layer 3 (BOMB-PROOF): if everything above failed but the code is in
+            // our known list, synthesize a minimal country object so the page
+            // ALWAYS renders. Now also embeds the canonical portal catalogue as
+            // synthetic jobLinks (syn-<code>-<idx> IDs) — user sees REAL portals
+            // even when the DB is empty. Click handler /api/go/job/:jobId
+            // reverse-resolves the syn-* IDs back to URLs.
+            if (!country && KNOWN[codeLc]) {
+                const meta = KNOWN[codeLc];
+                const { COUNTRY_PORTALS, makeSyntheticPortalId } = await Promise.resolve().then(() => __importStar(require("./lib/country-portals")));
+                const portalCat = COUNTRY_PORTALS[codeLc] || [];
+                console.warn(`[countries/:code] returning synthetic fallback for ${codeLc} with ${portalCat.length} catalogue portals`);
+                country = {
+                    id: `synthetic-${codeLc}`,
+                    name: meta.name,
+                    code: codeLc,
+                    flagEmoji: meta.flag,
+                    isActive: true,
+                    guides: [],
+                    jobLinks: portalCat.map((p, i) => ({
+                        id: makeSyntheticPortalId(codeLc, i + 1),
+                        countryId: `synthetic-${codeLc}`,
+                        name: p.name,
+                        description: p.description,
+                        isActive: true,
+                        order: p.order,
+                        clickCount: 0,
+                        lastVerified: new Date(),
+                        // url intentionally omitted from the type (handled server-side in
+                        // /api/go/job) — client doesn't need it for synthetic rendering.
+                    })),
+                    scamAlerts: [],
+                };
+            }
             if (!country) {
                 return res.status(404).json({ message: "Country not found" });
             }
@@ -2594,7 +2687,7 @@ Crawl-delay: 1`);
         job_url: zod_1.z.string().url("job_url must be a valid URL"),
         application_id: zod_1.z.string().optional(),
     });
-    app.post("/api/jobs/analyze", auth_1.isAuthenticated, async (req, res) => {
+    app.post("/api/jobs/analyze", auth_1.isAuthenticated, requirePlan_1.requireAnyPaidPlan, async (req, res) => {
         try {
             const userId = req.user?.claims?.sub;
             if (!userId)
@@ -2689,13 +2782,25 @@ Crawl-delay: 1`);
                 return res.status(401).json({ message: "Unauthorized" });
             const { jobId } = req.params;
             const jobType = req.query.type || "visa";
-            // ── PRO gate ──────────────────────────────────────────────────────────
-            const planId = await storage_1.storage.getUserPlan(userId);
+            // ── PRO gate (with admin bypass — admins always pass) ──────────────────
+            const adminAccess = await storage_1.storage.isUserAdmin(userId).catch(() => false);
+            const planId = adminAccess ? "pro" : await storage_1.storage.getUserPlan(userId);
             if (planId !== "pro") {
                 return res.status(403).json({
                     error: "upgrade_required",
                     message: "Upgrade to Pro to access job links.",
                 });
+            }
+            // ── Synthetic portal short-circuit ─────────────────────────────────────
+            // IDs in the form `syn-<code>-<index>` come from the synthetic country
+            // fallback above. Resolve them from the in-memory catalogue — no DB hit.
+            if (jobType === "portal" && jobId.startsWith("syn-")) {
+                const { resolveSyntheticPortal } = await Promise.resolve().then(() => __importStar(require("./lib/country-portals")));
+                const syn = resolveSyntheticPortal(jobId);
+                if (!syn) {
+                    return res.status(404).json({ message: "Synthetic portal not found" });
+                }
+                return res.json({ url: syn.url });
             }
             // ── Resolve the external URL ──────────────────────────────────────────
             let externalUrl;
@@ -12305,7 +12410,7 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
         }
     });
     // Trigger AI generation of application materials
-    app.post("/api/user-job-applications/:id/generate", auth_1.isAuthenticated, async (req, res) => {
+    app.post("/api/user-job-applications/:id/generate", auth_1.isAuthenticated, requirePlan_1.requireAnyPaidPlan, async (req, res) => {
         try {
             const { id } = req.params;
             const userId = req.user.claims.sub;
@@ -17261,7 +17366,7 @@ HOW TO REPLY WELL:
    You: "Canada is hot right now, especially nursing and IT. Express Entry is the main path — you basically score points on age, English, qualifications, and a Canadian job offer adds 50 more. Are you nursing, IT, or something else?"
 
    User: "How much does the Pro plan cost?"
-   You: "Pro is KES 4,500 for the year — works out to under 400 bob a month. Gets you unlimited NEA agency checks, all 30+ verified job portals, ATS CV scanner, and direct WhatsApp access to me. Want me to walk you through what unlocks first?"
+   You: "Check the LIVE PRICE OVERRIDE block at the bottom of this prompt for the current Pro plan price and walk the user through what they get."
 
    User: "Thanks!"
    You: "Anytime. Holler if anything else comes up."
@@ -17270,23 +17375,10 @@ HOW TO REPLY WELL:
    You: "Nice choice — UK student visas are pretty straightforward if your offer letter and finances are in order. What level — bachelors, masters, PhD? And do you have a university shortlist already?"
 
 WHAT YOU KNOW:
-- Pro Plan: KES 4,500/year. Unlimited NEA checks, 30+ verified portals, ATS CV scanner, WhatsApp consultation, priority support.
+- Pro Plan benefits: unlimited NEA checks, 30+ verified portals, ATS CV scanner, WhatsApp consultation, priority support. (Price in LIVE PRICE OVERRIDE below.)
 - 566 verified NEA agencies in our database. 728 are expired or fake — we flag them.
 - Countries covered: UK, Canada, Australia, UAE, USA, Germany, plus broader Europe.
-- CV services (all delivered by AI in under 3 minutes):
-   - ATS CV Optimization: KES 3,500
-   - Country-Specific CV Rewrite: KES 3,500
-   - Cover Letter: KES 1,500
-   - Interview Coaching: KES 5,000
-   - Visa Guidance: KES 3,000
-   - LinkedIn Optimization: KES 3,000
-   - Statement of Purpose: KES 4,000
-   - Contract Review: KES 3,500
-   - Employer Verification: KES 2,500
-   - Pre-Departure Orientation: KES 1,500
-- Job Application Packs: Starter KES 2,500 (3 apps), Pro KES 5,500 (8 apps), Premium KES 9,500 (15 apps)
-- Student Packs: Starter KES 3,500 (3 unis), Pro KES 7,500 (6 unis), Premium KES 12,000 (10 unis)
-- Subscriptions: Premium WhatsApp Support KES 1,000/mo, Premium Job Alerts KES 500/mo, Emergency Support KES 300/mo
+- ALL pricing is in the LIVE PRICE OVERRIDE block below. Refer to that, not memory.
 - All prices KES only. Don't quote USD/GBP.
 - CV upload: users can send a PDF or Word doc in this chat — you'll read it and match them to jobs instantly.
 
@@ -17296,7 +17388,7 @@ SAFETY ALWAYS:
 - If unsure or technical issue, say "Let me get a human teammate on this — drop your number at /contact and we'll WhatsApp you within the hour." Don't make stuff up.
 
 KNOWLEDGE BASE — TOPICS YOU HANDLE:
-1. Pro Plan pricing (KES 4,500/year, 360 days)
+1. Pro Plan benefits + pricing (current price is in the LIVE PRICE OVERRIDE block)
 2. NEA agency verification (566 valid, 728 expired/fake in our database)
 3. Countries covered: UK, Canada, Australia, UAE, USA, Germany & Europe
 4. CV services: ATS optimization, country-specific rewrites (all ⚡ instant AI, under 3 minutes)
@@ -17306,32 +17398,7 @@ KNOWLEDGE BASE — TOPICS YOU HANDLE:
 8. CV analysis & job matching — users can send their CV as a PDF or Word document here on WhatsApp and you will analyze it and match them with overseas jobs instantly. When asked about CV analysis, always tell users to *send their CV as a PDF or Word document* and you will analyze it right here.
 
 SERVICES & PRICING:
-- Pro Plan: KES 4,500/year — unlimited NEA checks, 30+ verified portals, ATS CV scanner, WhatsApp consultation, priority support
-- ATS CV Optimization: KES 3,500 (⚡ instant AI delivery)
-- Country-Specific CV Rewrite: KES 3,500 (⚡ instant AI delivery)
-- Cover Letter Writing: KES 1,500 (⚡ instant AI delivery)
-- Interview Coaching: KES 5,000 (⚡ instant AI delivery)
-- Visa Guidance Session: KES 3,000 (⚡ instant AI delivery)
-- LinkedIn Optimization: KES 3,000 (⚡ instant AI delivery)
-- SOP/Statement of Purpose: KES 4,000 (⚡ instant AI delivery)
-- Employment Contract Review: KES 3,500 (⚡ instant AI delivery)
-- Employer Verification Report: KES 2,500 (⚡ instant AI delivery)
-- Pre-Departure Orientation Pack: KES 1,500 (⚡ instant AI delivery)
-
-JOB APPLICATION PACKS:
-- Starter Pack: KES 2,500 (3 applications)
-- Pro Pack: KES 5,500 (8 applications)
-- Premium Pack: KES 9,500 (15 applications)
-
-STUDENT PACKS:
-- Student Starter: KES 3,500 (3 university applications)
-- Student Pro: KES 7,500 (6 university applications)
-- Student Premium: KES 12,000 (10 university applications)
-
-SUBSCRIPTIONS:
-- Premium WhatsApp Support: KES 1,000/month (priority 2-hour response)
-- Premium Job Alerts: KES 500/month (weekly verified jobs via WhatsApp)
-- Abroad Worker Emergency Support: KES 300/month (24/7 emergency line)
+- ALL service, pack, and subscription prices are in the LIVE PRICE OVERRIDE block at the bottom of this prompt. Use those numbers, not any you remember.
 
 COUNTRIES COVERED:
 - United Kingdom (NHS, Tier 2 Visa)
@@ -17361,7 +17428,7 @@ Key facts to share confidently:
 - Every registered user gets a unique referral link from their dashboard at /referrals
 - When someone signs up and pays using their referral link, the affiliate earns *10% commission automatically*
 - Commission is paid out *instantly and automatically via M-Pesa* — no forms, no waiting, no manual process. The moment the referred user's payment clears, the commission lands in the affiliate's M-Pesa
-- Referred users also benefit: they get a *20% discount* on the Pro Plan — KES 3,600 instead of KES 4,500
+- Referred users also benefit: they get a *20% discount* on the Pro Plan (see LIVE PRICE OVERRIDE for current Pro price; the discount applies to that)
 - There are no limits — affiliates can refer as many people as they want and earn on every payment
 - It's ideal for social media influencers, community leaders, church groups, SACCOs, students, and anyone with a network of job seekers
 - To join, simply register at WorkAbroad Hub and go to the Dashboard → Referrals section to get your link
@@ -17782,8 +17849,30 @@ Tone examples:
                         });
                         reply += `\n`;
                     }
+                    // Pull live ATS CV Optimization price from the services table so this
+                    // suggestion never quotes a stale number. (Earlier hardcoded "KES 3,500"
+                    // here was poisoning the chat history — the model then echoed that
+                    // figure back on every subsequent turn even after the LIVE PRICE
+                    // OVERRIDE in the system prompt told it otherwise.)
+                    let atsLiveCopy = "*CV optimization* for ATS systems";
+                    let cvFixCopy = "*CV Fix Lite* — quick polish";
+                    try {
+                        const { rows: priceRows } = await db_1.pool.query(`SELECT slug, price FROM services
+                WHERE slug IN ('ats_cv_optimization','cv_fix_lite')
+                  AND is_active = true`);
+                        const atsRow = priceRows.find((r) => r.slug === "ats_cv_optimization");
+                        const fixRow = priceRows.find((r) => r.slug === "cv_fix_lite");
+                        if (atsRow)
+                            atsLiveCopy = `*CV optimization* for ATS systems (KES ${atsRow.price.toLocaleString("en-KE")})`;
+                        if (fixRow)
+                            cvFixCopy = `*CV Fix Lite* — quick polish (KES ${fixRow.price.toLocaleString("en-KE")})`;
+                    }
+                    catch (e) {
+                        console.warn("[Nanjila CV reply] live price lookup failed:", e?.message);
+                    }
                     reply += `If you wish to apply for a job abroad or find visa-sponsored opportunities, I can help you with:\n`;
-                    reply += `• *CV optimization* for ATS systems (KES 3,500)\n`;
+                    reply += `• ${cvFixCopy}\n`;
+                    reply += `• ${atsLiveCopy}\n`;
                     reply += `• *Job application packs* — we submit on your behalf\n`;
                     reply += `• *Visa guidance* for your target country\n\n`;
                     reply += `What would you like to do next?`;
@@ -17853,6 +17942,60 @@ Tone examples:
             }
             catch { }
             let systemPrompt = WA_BASE_PROMPT;
+            // ── PRICE-OVERRIDE BLOCK ────────────────────────────────────────────────
+            // WA_BASE_PROMPT was written months ago with hardcoded KES 3,500 figures
+            // that are now stale. Pull the live services + plans rows from the DB on
+            // every call and INJECT them after the base prompt with explicit
+            // priority instructions. The model trusts the later override block
+            // (this is consistent OpenAI behaviour) so even though WA_BASE_PROMPT
+            // still contains old numbers, the live ones are what gets quoted.
+            try {
+                // Defensive: only select columns that exist on every prod schema. The
+                // earlier query referenced subscription_period which may not exist on
+                // older Render DBs — that one missing column threw the whole SELECT and
+                // silently disabled the price override. Fall back to a minimal column
+                // set so the override block ALWAYS lands.
+                const livePricesRows = await db_1.pool.query(`
+          SELECT slug, name, price, COALESCE(currency,'KES') AS currency
+            FROM services
+           WHERE is_active = true AND price > 0
+           ORDER BY price ASC
+        `);
+                const livePlansRows = await db_1.pool.query(`
+          SELECT plan_id, plan_name, price, billing_period
+            FROM plans
+           WHERE is_active = true AND price > 0
+           ORDER BY price ASC
+        `);
+                const svcLines = livePricesRows.rows.map((r) => `  - ${r.name}: ${r.currency ?? "KES"} ${r.price.toLocaleString("en-KE")}`).join("\n");
+                const planLines = livePlansRows.rows.map((p) => `  - ${p.plan_name}: KES ${p.price.toLocaleString("en-KE")} (${p.billing_period})`).join("\n");
+                systemPrompt += `
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔒 LIVE PRICE OVERRIDE — pulled from production DB just now.
+   Ignore any older price figures above. THESE are the only correct prices.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+SERVICES (current as of this very message):
+${svcLines || "  (catalogue empty — direct user to /services)"}
+
+SUBSCRIPTION PLANS:
+${planLines || "  (plans temporarily unavailable)"}
+  - Free Plan: KES 0
+
+If anything above contradicts an earlier section in this prompt, the
+LIVE PRICE OVERRIDE wins. Never quote a price not in this list.
+
+━━━ FORBIDDEN NUMBERS (NEVER use these — they're old pre-2026 prices) ━━━
+NEVER quote KES 3,500 / 3500 / "three thousand five hundred" for ANYTHING,
+especially NOT for any CV service. The CORRECT CV prices are in the SERVICES
+block above — typically KES 99 (Fix Lite), KES 499 (ATS), KES 699 (Rewrite).
+Also forbidden: KES 3,000, KES 2,500, KES 1,500, KES 4,500 — all old.
+If your instinct says "3,500", STOP and re-read the SERVICES block above.`;
+            }
+            catch (priceErr) {
+                console.warn("[Nanjila chat] live price override failed:", priceErr?.message);
+            }
             systemPrompt += "\n\nNOTE: You are in the in-site chat widget on WorkAbroad Hub's website. The greeting was already sent to the user — do NOT say 'Hello I'm Nanjila' or introduce yourself again. Start every reply by directly addressing what the user asked. Users can upload CVs directly via the attachment button in this chat.";
             if (dbUser) {
                 const plan = (dbUser.plan || "free").toLowerCase();
@@ -17863,13 +18006,13 @@ Tone examples:
                     systemPrompt += `\n\nUser is PRO — do NOT pitch upgrade. Help them maximise Pro features.`;
                 }
                 else {
-                    systemPrompt += `\n\nUser is FREE — actively encourage upgrade to PRO (Ksh 4,500) at /pricing.`;
+                    systemPrompt += `\n\nUser is FREE — actively encourage upgrade to PRO (price in LIVE PRICE OVERRIDE) at /pricing.`;
                 }
                 if (dbUser.firstName)
                     systemPrompt += `\nUse their first name (${dbUser.firstName}) naturally — not on every line.`;
             }
             else {
-                systemPrompt += `\n\nUnknown visitor — encourage free signup then PRO upgrade (Ksh 4,500).`;
+                systemPrompt += `\n\nUnknown visitor — encourage free signup then PRO upgrade (price in LIVE PRICE OVERRIDE).`;
             }
             let reply = "Samahani, kuna tatizo kidogo. Tafadhali jaribu tena! 🙏";
             try {
@@ -17887,6 +18030,20 @@ Tone examples:
             }
             catch (aiErr) {
                 console.error("[NanjilChat] AI error:", aiErr.message);
+            }
+            // ── Price sanitizer — last line of defence ─────────────────────────────
+            // Even with the LIVE PRICE OVERRIDE block injected into the system
+            // prompt and every KES X,XXX scrubbed from WA_BASE_PROMPT, GPT-4o-mini
+            // still occasionally hallucinates old prices from its training data
+            // (e.g. KES 3,500 for ATS CV Optimization). This validator catches and
+            // corrects them before the reply ever reaches the user OR gets pushed
+            // into session.messages (where it would poison the conversation).
+            try {
+                const { sanitizeReply } = await Promise.resolve().then(() => __importStar(require("./ai/price-sanitizer")));
+                reply = await sanitizeReply(reply);
+            }
+            catch (e) {
+                console.warn("[NanjilChat] price sanitizer failed:", e?.message);
             }
             session.messages.push({ role: "assistant", content: reply });
             let audioUrl = null;

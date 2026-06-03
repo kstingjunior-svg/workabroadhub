@@ -194,12 +194,17 @@ async function requireVerifiedForPayment(req, res, next) {
         // Admins always allowed
         if (u.is_admin || u.role === "ADMIN" || u.role === "SUPER_ADMIN")
             return next();
-        if (!u.email_verified || !u.phone_verified) {
+        // EMAIL-ONLY verification policy (per founder decision).
+        // Phone verification was removed because the user already proves phone
+        // ownership during M-Pesa STK push (PIN confirmation against their own
+        // SIM). Requiring a second SMS-OTP step was redundant and broke when
+        // Twilio's A2P 10DLC for Kenya was pending.
+        if (!u.email_verified) {
             return res.status(403).json({
-                message: "Please verify your email and phone before making a payment.",
+                message: "Please verify your email before making a payment.",
                 verificationRequired: true,
                 emailVerified: u.email_verified,
-                phoneVerified: u.phone_verified,
+                phoneVerified: true, // legacy field — clients ignore it now
             });
         }
         next();

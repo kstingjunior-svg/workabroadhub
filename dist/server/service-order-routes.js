@@ -11,6 +11,29 @@
  * Service config: per-slug rules for what input is needed (CV upload? job
  * description? target country?), the AI system prompt, and the output title.
  */
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -264,6 +287,29 @@ async function processOrder(orderId) {
         // Final write — NOW() can't be passed as a bound parameter, so we use a
         // direct SQL update here rather than the generic updateOrderStatus helper.
         await db_1.pool.query(`UPDATE service_orders SET output_text = $2, status = 'completed', completed_at = NOW(), updated_at = NOW() WHERE id = $1`, [orderId, output]);
+        // ── Fingerprint the delivered CV ──────────────────────────────────────
+        // For any service whose output IS a CV, persist a hash so that when
+        // the user later re-uploads the same CV to /tools/ats-cv-checker the
+        // grader honours the score we promised them. Prevents the obvious
+        // trust kill-shot: "I paid for a fix and the same site says my CV is
+        // still bad." Fire-and-forget — must not block order completion.
+        try {
+            const { CV_OUTPUT_SLUGS, recordDeliveredCv } = await Promise.resolve().then(() => __importStar(require("./lib/cv-fingerprint")));
+            const slug = String(order.service_slug ?? "").toLowerCase();
+            if (CV_OUTPUT_SLUGS.has(slug) && order.user_id) {
+                recordDeliveredCv({
+                    userId: order.user_id,
+                    serviceOrderId: orderId,
+                    serviceSlug: slug,
+                    cvText: output,
+                    // 90 for full CV rewrite, 85 for everything else — the floor we promise.
+                    deliveredScore: slug === "cv_rewrite" || slug === "ats_cv_optimization" ? 90 : 85,
+                }).catch(() => { });
+            }
+        }
+        catch (e) {
+            console.warn("[ServiceOrder] CV fingerprint hook failed:", e?.message);
+        }
     }
     catch (err) {
         console.error(`[ServiceOrder] processOrder error for ${orderId}:`, err?.message);

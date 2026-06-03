@@ -4,6 +4,9 @@ exports.detectLanguage = void 0;
 exports.detectIntent = detectIntent;
 exports.handleUserMessage = handleUserMessage;
 const nanjila_1 = require("./nanjila");
+const user_activity_1 = require("./user-activity");
+const system_catalogue_1 = require("./system-catalogue");
+const admin_kpi_1 = require("./admin-kpi");
 const checkPayment_1 = require("./tools/checkPayment");
 const utils_1 = require("./utils");
 const db_1 = require("../db");
@@ -217,6 +220,46 @@ Ready to proceed?
     if (lower.includes("change language")) {
         return "Choose your language: English, Swahili, Arabic.";
     }
-    // 🔥 DEFAULT AI RESPONSE
-    return await (0, nanjila_1.nanjilaAgent)(user, message);
+    // 🔥 DEFAULT AI RESPONSE — with live context Nanjila uses to be useful:
+    //   - activitySummary  (what THIS user has been doing on-site)
+    //   - systemCatalogue  (full mental model of platform features/routes)
+    //   - adminKpi         (revenue + top sellers — ONLY when admin asks)
+    // Each lookup is independent and fails open: if any fails, Nanjila still
+    // answers from the remaining context.
+    const uid = user?.id != null ? String(user.id) : null;
+    let activitySummary = "";
+    let systemCatalogue = "";
+    let adminKpi = "";
+    let isAdmin = false;
+    try {
+        isAdmin = await (0, admin_kpi_1.isAdminUser)(uid);
+    }
+    catch { }
+    try {
+        const sum = await (0, user_activity_1.buildActivitySummary)(uid);
+        activitySummary = sum.asText;
+    }
+    catch (err) {
+        console.warn("[router] activity summary build failed:", err?.message);
+    }
+    try {
+        systemCatalogue = (0, system_catalogue_1.formatCatalogueBlock)({
+            isAdmin,
+            isPaid: isAdmin, // admins always count as paid
+            isLoggedIn: !!uid,
+        });
+    }
+    catch (err) {
+        console.warn("[router] system catalogue build failed:", err?.message);
+    }
+    if (isAdmin) {
+        try {
+            const kpi = await (0, admin_kpi_1.buildAdminKpiSnapshot)();
+            adminKpi = kpi.asText;
+        }
+        catch (err) {
+            console.warn("[router] admin KPI build failed:", err?.message);
+        }
+    }
+    return await (0, nanjila_1.nanjilaAgent)(user, message, activitySummary, systemCatalogue, adminKpi);
 }

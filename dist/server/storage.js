@@ -339,12 +339,73 @@ class DatabaseStorage {
     }
     async expireStaleServiceOrders(olderThanHours = 48) {
         const cutoffIso = new Date(Date.now() - olderThanHours * 60 * 60 * 1000).toISOString();
-        const expired = await db_1.db
-            .update(schema_1.serviceOrders)
-            .set({ status: "expired", updatedAt: new Date() })
+        // Walk an unknown error chain (drizzle wraps pg errors under `cause`).
+        // We need to detect 23514 whether it's `err.code`, `err.cause.code`, or
+        // `err.cause.cause.code`.
+        const isCheckRejection = (e) => {
+            for (let cur = e, depth = 0; cur && depth < 5; cur = cur.cause, depth++) {
+                if (String(cur.code ?? "") === "23514")
+                    return true;
+                if (/service_orders_status_check/i.test(String(cur.message ?? "")))
+                    return true;
+                if (/service_orders_status_check/i.test(String(cur.constraint ?? "")))
+                    return true;
+            }
+            return false;
+        };
+        // SELF-HEAL: widen the CHECK constraint inline so subsequent runs don't
+        // crash. We also widen the bootup helper in seed.ts, but that one runs
+        // fire-and-forget and races with this loop. This makes the storage layer
+        // itself responsible for ensuring the schema can hold 'expired'.
+        let widenedThisCall = false;
+        const widenConstraintInline = async () => {
+            if (widenedThisCall)
+                return false;
+            widenedThisCall = true;
+            try {
+                console.warn("[storage] widening service_orders_status_check inline to add 'expired'");
+                await db_1.pool.query(`ALTER TABLE service_orders DROP CONSTRAINT IF EXISTS service_orders_status_check;`);
+                await db_1.pool.query(`
+          ALTER TABLE service_orders
+            ADD CONSTRAINT service_orders_status_check
+            CHECK (status IN (
+              'pending_payment','paid','processing','completed',
+              'failed','cancelled','expired'
+            ));
+        `);
+                console.log("[storage] service_orders_status_check widened — retrying with 'expired'");
+                return true;
+            }
+            catch (alterErr) {
+                console.error("[storage] inline widen failed:", alterErr?.message ?? alterErr);
+                return false;
+            }
+        };
+        const runUpdate = (status) => db_1.db.update(schema_1.serviceOrders)
+            .set({ status, updatedAt: new Date() })
             .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.serviceOrders.status, "pending_payment"), (0, drizzle_orm_1.sql) `${schema_1.serviceOrders.updatedAt} < ${cutoffIso}`))
             .returning();
-        return expired;
+        try {
+            return await runUpdate("expired");
+        }
+        catch (err) {
+            if (!isCheckRejection(err))
+                throw err;
+            // Try widening, then retrying with 'expired'.
+            const widened = await widenConstraintInline();
+            if (widened) {
+                try {
+                    return await runUpdate("expired");
+                }
+                catch (retryErr) {
+                    console.warn("[storage] retry after widen still failed:", retryErr?.message);
+                }
+            }
+            // Final fallback — use 'cancelled' so the cleanup loop never crashes
+            // even if we couldn't widen the schema (e.g. role lacks ALTER perms).
+            console.warn("[storage] expireStaleServiceOrders falling back to status='cancelled'");
+            return await runUpdate("cancelled");
+        }
     }
     // ───────────────────────────────────────────────────────────────────────────
     async createMpesaTransaction(data) {
@@ -3610,16 +3671,10 @@ class DatabaseStorage {
             await db_1.db.insert(scamWallLikes).values({ reportId, fingerprint });
             const [updated] = await db_1.db.update(schema_1.scamReports)
                 .set({ likesCount: (0, drizzle_orm_1.sql) `${schema_1.scamReports.likesCount} + 1` })
-                .where((0, drizzle_orm_1.eq)(schema_1.scamReports.id, reportId)).returning({ likesCount: schema_1.scamReports.likesCount });
-            return { liked: true, likesCount: updated?.likesCount ?? 1 };
+                .where((0, drizzle_orm_1.eq)(schema_1.scamReports.id, reportId))
+                .returning({ likesCount: schema_1.scamReports.likesCount });
+            return { liked: true, likesCount: updated?.likesCount ?? 0 };
         }
-    }
-    async hasLikedScamReport(reportId, fingerprint) {
-        const { scamWallLikes } = await Promise.resolve().then(() => __importStar(require('@shared/schema')));
-        const existing = await db_1.db.select().from(scamWallLikes)
-            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(scamWallLikes.reportId, reportId), (0, drizzle_orm_1.eq)(scamWallLikes.fingerprint, fingerprint)))
-            .limit(1);
-        return existing.length > 0;
     }
     async getScamWallComments(reportId) {
         const { scamWallComments } = await Promise.resolve().then(() => __importStar(require('@shared/schema')));

@@ -13,6 +13,7 @@ const email_1 = require("../../email");
 const email_validator_1 = require("../../utils/email-validator");
 const phone_validator_1 = require("../../utils/phone-validator");
 const identityVerification_1 = require("../../services/identityVerification");
+const pwaInstallTracking_1 = require("../../services/pwaInstallTracking");
 // Email + password auth routes (replaces the disabled stub).
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
@@ -265,6 +266,7 @@ function registerAuthRoutes(app) {
         // Real-identity phone validation: format + Twilio Lookup (catches fake/disconnected numbers)
         const phoneCheck = await (0, phone_validator_1.validatePhone)(rawPhone);
         if (!phoneCheck.valid) {
+            console.warn(`[send-phone-code] phone validation failed userId=${userId} raw=${rawPhone} reason=${phoneCheck.reason} msg=${phoneCheck.message}`);
             return res.status(400).json({ message: phoneCheck.message, reason: phoneCheck.reason });
         }
         const e164 = phoneCheck.e164;
@@ -274,8 +276,22 @@ function registerAuthRoutes(app) {
             userId,
         ]);
         const result = await (0, identityVerification_1.sendSmsVerificationCode)(userId, e164);
-        if (!result.ok)
-            return res.status(429).json({ message: result.message });
+        // Map SMS-service failure codes to correct HTTP status codes so the client
+        // shows the user a sensible error, not a misleading "Too Many Requests".
+        if (!result.ok) {
+            console.warn(`[send-phone-code] SMS send failed userId=${userId} phone=${e164} code=${result.code} message=${result.message}`);
+            let status = 500;
+            if (result.code === "rate_limited")
+                status = 429;
+            else if (result.code === "send_failed")
+                status = 502;
+            // If the failure is "SMS service is not configured", expose a clear hint
+            // so admin can act, but keep the user-facing message friendly.
+            const userMessage = result.code === "send_failed" && /not configured/i.test(result.message)
+                ? "We're temporarily unable to send SMS codes. Please contact support@workabroadhub.tech and we'll verify you manually."
+                : result.message;
+            return res.status(status).json({ message: userMessage, code: result.code });
+        }
         res.json({ ok: true, message: "Verification code sent via SMS.", phoneE164: e164 });
     });
     app.post("/api/auth/verify-email", async (req, res) => {
@@ -307,14 +323,99 @@ function registerAuthRoutes(app) {
         if (!u)
             return res.status(404).json({ message: "User not found." });
         const isAdmin = u.is_admin || u.role === "ADMIN" || u.role === "SUPER_ADMIN";
+        // EMAIL-ONLY verification policy: phoneVerified is ALWAYS reported true
+        // so the client never gates anything on it. Phone column is preserved
+        // for M-Pesa STK push but is no longer a verification gate.
         res.json({
             email: u.email,
             phone: u.phone,
             emailVerified: u.email_verified || isAdmin,
-            phoneVerified: u.phone_verified || isAdmin,
+            phoneVerified: true,
             isAdmin,
         });
     });
-    console.log("[Auth] Email/password routes registered: /api/auth/register, /api/auth/login, /api/auth/logout, /api/auth/user, /api/auth/forgot-password, /api/auth/reset-password");
-    console.log("[Auth] Verification routes registered: /api/auth/{send-email-code, send-phone-code, verify-email, verify-phone, verification-status}");
+    // ── Admin override: mark a user phone-verified manually ──────────────────
+    // Use this when SMS delivery is broken (Twilio not configured, account
+    // suspended, A2P 10DLC pending, etc.) AND support has confirmed the user
+    // owns the number through another channel (WhatsApp callback, etc.).
+    app.post("/api/auth/admin/force-verify-phone", async (req, res) => {
+        const userId = req.session?.customUserId;
+        if (!userId)
+            return res.status(401).json({ message: "Please sign in." });
+        const me = await db_1.pool.query(`SELECT is_admin, role FROM users WHERE id = $1`, [userId]);
+        const isAdmin = me.rows[0]?.is_admin || me.rows[0]?.role === "ADMIN" || me.rows[0]?.role === "SUPER_ADMIN";
+        if (!isAdmin)
+            return res.status(403).json({ message: "Admin only." });
+        const targetUserId = String(req.body?.userId ?? "").trim();
+        const phone = String(req.body?.phone ?? "").trim();
+        if (!targetUserId || !phone) {
+            return res.status(400).json({ message: "userId and phone are required." });
+        }
+        await db_1.pool.query(`UPDATE users SET phone = $1, phone_verified = true, updated_at = NOW() WHERE id = $2`, [phone, targetUserId]);
+        console.warn(`[Auth] ADMIN force-verified phone for userId=${targetUserId} phone=${phone} by admin=${userId}`);
+        res.json({ ok: true, message: "Phone marked as verified." });
+    });
+    // ─────────────────────────────────────────────────────────────────────────
+    // PWA install tracking
+    //
+    // The client calls these so we can answer "does this user have the app
+    // installed on this device, or did they install it once and then uninstall?"
+    // — used by the install prompt to swap copy between "Install our app?" and
+    // "Looks like you removed the app — reinstall?".
+    //
+    // Both endpoints are silent no-ops for signed-out users so the client can
+    // call them unconditionally without checking auth first.
+    // ─────────────────────────────────────────────────────────────────────────
+    app.post("/api/pwa/event", async (req, res) => {
+        try {
+            const userId = req.session?.customUserId;
+            const rawType = String(req.body?.type ?? "").trim();
+            const allowed = ["installed", "standalone-open", "uninstall-detected"];
+            if (!allowed.includes(rawType)) {
+                return res.status(400).json({ ok: false, message: "Unknown event type." });
+            }
+            if (!userId) {
+                // Signed-out — silently accept so the client doesn't have to branch.
+                return res.json({ ok: true, recorded: false });
+            }
+            await (0, pwaInstallTracking_1.recordPwaEvent)(userId, rawType);
+            res.json({ ok: true, recorded: true });
+        }
+        catch (err) {
+            console.warn("[Auth] /api/pwa/event error:", err?.message);
+            res.json({ ok: true, recorded: false }); // never break the UI for telemetry
+        }
+    });
+    app.get("/api/pwa/status", async (req, res) => {
+        try {
+            const userId = req.session?.customUserId;
+            if (!userId) {
+                return res.json({
+                    installedAt: null,
+                    lastStandaloneAt: null,
+                    uninstallSeenAt: null,
+                    likelyUninstalled: false,
+                    signedIn: false,
+                });
+            }
+            const status = await (0, pwaInstallTracking_1.getPwaStatus)(userId);
+            res.json({ ...status, signedIn: true });
+        }
+        catch (err) {
+            console.warn("[Auth] /api/pwa/status error:", err?.message);
+            res.json({
+                installedAt: null,
+                lastStandaloneAt: null,
+                uninstallSeenAt: null,
+                likelyUninstalled: false,
+                signedIn: false,
+            });
+        }
+    });
+    // Startup diagnostic — exposes whether SMS delivery is configured.
+    const hasTwilio = Boolean((process.env.TWILIO_ACCOUNT_SID || "").trim() &&
+        (process.env.TWILIO_AUTH_TOKEN || "").trim() &&
+        ((process.env.TWILIO_SMS_FROM || "").trim() || (process.env.TWILIO_WHATSAPP_FROM || "").trim()));
+    console.log(`[Auth] Twilio SMS configured: ${hasTwilio ? "YES" : "NO - phone OTP delivery will fail. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_SMS_FROM (or TWILIO_WHATSAPP_FROM) in Render env."}`);
+    console.log("[Auth] Email/password routes registered: /api/auth/register, /api/auth/login, /api/auth/logout, /api/auth/user, /api/auth/forgot-password, /api/auth/reset-password, /api/auth/send-email-code, /api/auth/verify-email, /api/auth/verification-status, /api/pwa/event, /api/pwa/status");
 }

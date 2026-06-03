@@ -419,6 +419,28 @@ Return ONLY the JSON object, no markdown, no extra text.`;
                     summary: "CV parsing encountered issues.",
                 };
             }
+            // ── Delivered-CV guarantee ─────────────────────────────────────────
+            // If THIS exact CV (or a structurally identical one) was previously
+            // delivered to a user via a paid CV service, the score we promised
+            // them is binding. Honour it now — overrides the raw AI score so
+            // we never tell a customer "the CV we sold you is still bad".
+            // Lookup is content-only so it works for any user, even logged-out.
+            let deliveryMatch = null;
+            try {
+                const { lookupDeliveredCv } = await Promise.resolve().then(() => __importStar(require("../lib/cv-fingerprint")));
+                deliveryMatch = await lookupDeliveredCv(cvText);
+            }
+            catch (e) {
+                console.warn("[ATS] Delivered-CV lookup failed:", e?.message);
+            }
+            if (deliveryMatch && aiResult.score < deliveryMatch.deliveredScore) {
+                console.log(`[ATS] Honouring delivered-CV guarantee: AI=${aiResult.score} → ${deliveryMatch.deliveredScore} (${deliveryMatch.serviceSlug}, ${deliveryMatch.matchType})`);
+                aiResult.score = deliveryMatch.deliveredScore;
+                if (aiResult.score >= 90)
+                    aiResult.grade = "Excellent";
+                else if (aiResult.score >= 80)
+                    aiResult.grade = "Good";
+            }
             // Gate: unauthenticated users get score + summary only
             if (!isLoggedIn) {
                 return res.json({
@@ -427,6 +449,7 @@ Return ONLY the JSON object, no markdown, no extra text.`;
                     summary: aiResult.summary ?? "",
                     locked: true,
                     message: "Sign in to see your full ATS report including strengths, weaknesses, missing keywords, and suggestions.",
+                    ...(deliveryMatch ? { deliveredCv: { score: deliveryMatch.deliveredScore, at: deliveryMatch.deliveredAt, slug: deliveryMatch.serviceSlug } } : {}),
                 });
             }
             // Gate: free-plan users get score + summary + grade only; BASIC/PRO get full report
@@ -456,6 +479,7 @@ Return ONLY the JSON object, no markdown, no extra text.`;
                     locked: true,
                     planGated: true,
                     message: "Upgrade to Basic or Pro to unlock your full ATS report — strengths, weaknesses, missing keywords, and actionable suggestions.",
+                    ...(deliveryMatch ? { deliveredCv: { score: deliveryMatch.deliveredScore, at: deliveryMatch.deliveredAt, slug: deliveryMatch.serviceSlug } } : {}),
                 });
             }
             // Trigger CV email drip + funnel tracking for logged-in paid users (fire-and-forget)
@@ -482,7 +506,11 @@ Return ONLY the JSON object, no markdown, no extra text.`;
                 }).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
             }
             catch { /* non-critical */ }
-            return res.json({ ...aiResult, locked: false });
+            return res.json({
+                ...aiResult,
+                locked: false,
+                ...(deliveryMatch ? { deliveredCv: { score: deliveryMatch.deliveredScore, at: deliveryMatch.deliveredAt, slug: deliveryMatch.serviceSlug } } : {}),
+            });
         }
         catch (err) {
             console.error("[ATS Check]", err.message);
