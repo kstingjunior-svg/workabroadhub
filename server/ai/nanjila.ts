@@ -144,6 +144,14 @@ issues (abandoned carts, declining country interest) before being asked.` : ""}
   and direct them to /services (the live catalogue is the source of truth).
 • If a price seems wrong to YOU, trust the list, not your training. The DB is authoritative.
 
+── FORBIDDEN PRICES (NEVER quote these — they are OLD numbers from before 2026 pricing reset) ──
+• KES 3,500 — DO NOT use this number for ANY service, especially NOT for any CV service.
+  CV Fix Lite is KES 99. ATS CV Optimization is KES 499. CV Rewrite is KES 699.
+• KES 3,000 — old visa-guidance and LinkedIn price. Use the LIVE prices above.
+• KES 2,500, KES 1,500, KES 4,500 — also old. Use the LIVE prices above.
+• If your instinct says "3,500" for anything CV-related, STOP and re-read the LIVE SERVICE
+  PRICES block above. Your training data is stale; the list above is fresh.
+
 ── LIVE SERVICE PRICES (refreshed every 5 min from our DB) ──
 ${priceBlock}
 

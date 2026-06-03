@@ -41,6 +41,88 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { CountryWithDetails } from "@shared/schema";
 
+// ─────────────────────────────────────────────────────────────────────────────
+// CountryServicesGrid — live catalogue card grid pulled from /api/services.
+// Replaces the previously hardcoded "KES 3,500" service list. Filters to the
+// "CV & Documents" + coaching categories so we still show CV-relevant
+// services on the country dashboard (the original handpicked 6 services
+// were all from those two buckets).
+// ─────────────────────────────────────────────────────────────────────────────
+interface LiveService {
+  slug: string;
+  name: string;
+  price: number;
+  finalPrice?: number;
+  currency?: string;
+  category?: string;
+  description?: string;
+}
+
+function CountryServicesGrid() {
+  const { data: services = [], isLoading } = useQuery<LiveService[]>({
+    queryKey: ["/api/services"],
+    queryFn: async () => {
+      const res = await fetch("/api/services", { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <Skeleton key={i} className="h-28 rounded-lg" />
+        ))}
+      </div>
+    );
+  }
+
+  // Hand-picked subset so the dashboard stays tight — these are the
+  // services Kenyans applying abroad ask about most. Keep at 6.
+  const FEATURED_SLUGS = [
+    "cv_fix_lite",
+    "ats_cv_optimization",
+    "cv_rewrite",
+    "cover_letter",
+    "interview_coaching",
+    "linkedin_optimization",
+  ];
+
+  const featured = FEATURED_SLUGS
+    .map((slug) => services.find((s) => s.slug === slug))
+    .filter(Boolean) as LiveService[];
+
+  // Fallback if seed slugs don't match (e.g. legacy DB) — show first 6 by
+  // price ascending so the country page is never empty.
+  const list = featured.length >= 3
+    ? featured
+    : [...services].sort((a, b) => a.price - b.price).slice(0, 6);
+
+  return (
+    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      {list.map((s) => {
+        const shown = (s.finalPrice ?? s.price);
+        const curr = s.currency ?? "KES";
+        return (
+          <Card key={s.slug} className="hover-elevate">
+            <CardContent className="p-4">
+              <h3 className="font-medium">{s.name}</h3>
+              {s.description && (
+                <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{s.description}</p>
+              )}
+              <Badge variant="secondary" className="mt-3">
+                {curr} {shown.toLocaleString("en-KE")}
+              </Badge>
+            </CardContent>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
 const countryData: Record<string, { name: string; flagEmoji: string }> = {
   usa: { name: "USA", flagEmoji: "🇺🇸" },
   canada: { name: "Canada", flagEmoji: "🇨🇦" },
@@ -535,24 +617,16 @@ export default function Country() {
               </CardContent>
             </Card>
 
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {[
-                { name: "CV Rewrite", desc: "Professional CV tailored to international standards", price: "KES 3,500+" },
-                { name: "ATS CV Optimization", desc: "Make your CV pass Applicant Tracking Systems", price: "KES 3,500" },
-                { name: "Cover Letter Writing", desc: "Custom cover letters for each application", price: "KES 1,500" },
-                { name: "Interview Coaching", desc: "One-on-one mock interviews with feedback", price: "KES 5,000" },
-                { name: "Visa Guidance Articles", desc: "Detailed visa process information", price: "KES 3,000" },
-                { name: "LinkedIn Optimization", desc: "Attract international recruiters", price: "KES 3,000" },
-              ].map((service) => (
-                <Card key={service.name} className="hover-elevate">
-                  <CardContent className="p-4">
-                    <h3 className="font-medium">{service.name}</h3>
-                    <p className="text-xs text-muted-foreground mt-1">{service.desc}</p>
-                    <Badge variant="secondary" className="mt-3">{service.price}</Badge>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+            {/*
+              ── LIVE service catalogue ──────────────────────────────────────
+              Previously this list hardcoded "KES 3,500" for CV Rewrite and
+              ATS CV Optimization etc. That meant when the founder updated
+              the real prices in the services table to KES 99 / 499 / 699,
+              the country dashboard kept showing the old marketing numbers
+              — and users would then complain Nanjila wasn't quoting "the
+              dashboard price". The dashboard IS now the live DB.
+            */}
+            <CountryServicesGrid />
 
             <div className="text-center">
               <Link href="/services">
@@ -616,8 +690,8 @@ export default function Country() {
             <Button variant="outline" onClick={() => setTrackDialogOpen(false)} data-testid="button-cancel-quick-track">
               Cancel
             </Button>
-            <Button 
-              onClick={handleQuickTrackSubmit} 
+            <Button
+              onClick={handleQuickTrackSubmit}
               disabled={addTrackedMutation.isPending}
               data-testid="button-save-quick-track"
             >

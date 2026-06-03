@@ -19381,7 +19381,14 @@ ${planLines || "  (plans temporarily unavailable)"}
   - Free Plan: KES 0
 
 If anything above contradicts an earlier section in this prompt, the
-LIVE PRICE OVERRIDE wins. Never quote a price not in this list.`;
+LIVE PRICE OVERRIDE wins. Never quote a price not in this list.
+
+━━━ FORBIDDEN NUMBERS (NEVER use these — they're old pre-2026 prices) ━━━
+NEVER quote KES 3,500 / 3500 / "three thousand five hundred" for ANYTHING,
+especially NOT for any CV service. The CORRECT CV prices are in the SERVICES
+block above — typically KES 99 (Fix Lite), KES 499 (ATS), KES 699 (Rewrite).
+Also forbidden: KES 3,000, KES 2,500, KES 1,500, KES 4,500 — all old.
+If your instinct says "3,500", STOP and re-read the SERVICES block above.`;
       } catch (priceErr: any) {
         console.warn("[Nanjila chat] live price override failed:", priceErr?.message);
       }
@@ -19948,7 +19955,6 @@ LIVE PRICE OVERRIDE wins. Never quote a price not in this list.`;
     res.type("text/xml");
     res.send(twiml.toString());
   });
-
 
   // ── Client-side event tracker ────────────────────────────────────────────────
   app.post("/api/track-event", async (req: any, res) => {

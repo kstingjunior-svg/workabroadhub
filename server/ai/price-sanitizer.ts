@@ -6,10 +6,22 @@
 // still sometimes hallucinates old prices from its training data (which
 // crawled older versions of WorkAbroad Hub marketing material).
 //
-// This module intercepts every Nanjila reply and validates every "KES N,NNN"
+// This module intercepts every Nanjila reply and validates every price-like
 // occurrence against the live whitelist of active service + plan prices.
 // Any number not in the whitelist is rewritten to the closest valid service
 // match based on the surrounding context, or stripped if no good guess.
+//
+// 2026-06 hardening pass (kstingjunior report: Nanjila STILL quotes 3,500):
+//   • FORBIDDEN_PRICES — explicit blacklist that ALWAYS wins, even if the
+//     amount happens to coincide with some other service's real price.
+//     3500 is on this list because Nanjila's training data is full of old
+//     WAH marketing pages quoting "KES 3,500 for ATS CV Optimization".
+//   • Broadened regex — catches "Ksh. 3,500", "Sh 3500", "3500/-", "3500 KES",
+//     "3500 shillings", "3500 bob", and unprefixed "3,500" when it sits next
+//     to a service mention.
+//   • Verbose pre-sanitize log — prints the FIRST 300 chars of every raw AI
+//     reply so production logs show exactly what the model said before
+//     correction (lets us spot new hallucination patterns fast).
 //
 // Wrap any AI reply with:  sanitizeReply(reply) → reply
 // ─────────────────────────────────────────────────────────────────────────────
@@ -24,6 +36,16 @@ interface PriceRow {
 
 let WHITELIST_CACHE: { rows: PriceRow[]; fetchedAt: number } | null = null;
 const TTL_MS = 5 * 60 * 1000;
+
+// ── HARD BLACKLIST ───────────────────────────────────────────────────────────
+// Numbers Nanjila must NEVER quote, regardless of whitelist coincidence.
+// These are old WorkAbroad Hub prices from pre-2026 marketing material that
+// the model continues to regurgitate. Add any newly-discovered hallucinated
+// price here — it will be force-rewritten even if some other service happens
+// to be priced at the same number.
+const FORBIDDEN_PRICES = new Set<number>([3500, 3000, 2500, 1500, 4500]);
+// Note: 4500 was the OLD Pro yearly price; the current Pro plan price lives
+// in the plans table and the sanitizer's whitelist will route it correctly.
 
 async function getPriceWhitelist(): Promise<PriceRow[]> {
   const now = Date.now();
@@ -51,43 +73,49 @@ async function getPriceWhitelist(): Promise<PriceRow[]> {
   }
 }
 
+// Force-invalidate the cache. Call this if you've just updated prices in the
+// admin panel and want sanitiser corrections to reflect the new prices
+// immediately rather than waiting up to 5 min.
+export function invalidatePriceWhitelist(): void {
+  WHITELIST_CACHE = null;
+}
+
 // Map common service keywords → slug, used to guess what the model MEANT to
 // quote when it hallucinates a price. Order matters — earlier matches win.
+// Specific patterns FIRST so they don't get swallowed by broader catch-alls.
 const SLUG_KEYWORDS: Array<{ slug: string; rx: RegExp }> = [
-  // Specific service patterns first
-  { slug: "ats_cv_optimization",  rx: /\bATS\b.*\bCV\b|\bCV\b.*\bATS\b|ATS CV Optim|ATS optim|ATS [Cc]ompat/i },
-  { slug: "cv_rewrite",           rx: /Country[- ]Specific|CV [Rr]ewrite|UAE[- ]format|UK[- ]format|target country/i },
-  { slug: "cv_fix_lite",          rx: /CV Fix Lite|quick polish|CV polish|fix lite|cv fix\b|CV fix\b/i },
-  // Broad CV catch-all — if no specific match but they mention CV, default to
-  // the most popular CV service (CV Fix Lite at KES 99 is the entry tripwire).
-  { slug: "cv_fix_lite",          rx: /\bCV\b|\bresume\b|curriculum/i },
-  { slug: "cover_letter",         rx: /Cover Letter/i },
-  { slug: "ats_cover_bundle",     rx: /ATS \+ Cover|Cover Letter Bundle/i },
+  // ── CV services (most-hallucinated category) ────────────────────────────
+  { slug: "ats_cv_optimization",  rx: /\bATS\b.{0,30}\bCV\b|\bCV\b.{0,30}\bATS\b|ATS CV Optim|ATS optim|ATS [Cc]ompat/i },
+  { slug: "cv_rewrite",           rx: /Country[- ]Specific|CV [Rr]ewrite|UAE[- ]format|UK[- ]format|target country|tailored to.{0,30}country/i },
+  { slug: "cv_fix_lite",          rx: /CV Fix Lite|quick polish|CV polish|fix lite|cv fix\b|CV fix\b|\blight fix\b|lite CV|polish your CV/i },
+  // ── Other documents ────────────────────────────────────────────────────
+  { slug: "cover_letter",         rx: /Cover Letter Writing|cover letter|Cover Letter/i },
+  { slug: "ats_cover_bundle",     rx: /ATS \+ Cover|Cover Letter Bundle|ATS bundle/i },
   { slug: "sop_writing",          rx: /\bSOP\b|Statement of Purpose/i },
   { slug: "motivation_letter",    rx: /Motivation Letter/i },
+  // ── Coaching ───────────────────────────────────────────────────────────
   { slug: "interview_coaching",   rx: /Interview Coach/i },
   { slug: "interview_prep_pack",  rx: /Interview Prep/i },
   { slug: "linkedin_optimization",rx: /LinkedIn/i },
-  { slug: "visa_guidance",        rx: /Visa Guidance/i },
+  // ── Visa & verification ────────────────────────────────────────────────
+  { slug: "visa_guidance",        rx: /Visa Guidance|visa.{0,30}guidance|visa article/i },
   { slug: "contract_review",      rx: /Contract Review/i },
   { slug: "employer_verification",rx: /Employer Verification/i },
   { slug: "pre_departure_pack",   rx: /Pre[- ]Departure|Pre departure/i },
+  // ── Application packs ──────────────────────────────────────────────────
   { slug: "job_pack_5",           rx: /Job Pack|Application Pack/i },
   { slug: "assisted_apply_lite",  rx: /Assisted Apply/i },
   { slug: "guided_apply",         rx: /Guided Apply/i },
   { slug: "application_tracking", rx: /Application Tracking/i },
+  // ── Subscription plans ─────────────────────────────────────────────────
   { slug: "pro",                  rx: /Pro Plan|Yearly|annual subscription|year-long/i },
   { slug: "monthly",              rx: /Monthly Access|monthly subscription/i },
   { slug: "trial",                rx: /1 Day Trial|day trial/i },
+  // ── Broad CV catch-all — only if NO specific match above hit. Since
+  //    the most popular CV entry point is CV Fix Lite (KES 99 tripwire),
+  //    default any vague "CV" mention to its price.
+  { slug: "cv_fix_lite",          rx: /\bCV\b|\bresume\b|curriculum vitae/i },
 ];
-
-function parseKesAmount(raw: string): number | null {
-  // raw like "KES 3,500" or "Ksh 4500" or "KES 99"
-  const m = raw.match(/(?:KES|Ksh|KSh|ksh)\s?([\d,]+)/i);
-  if (!m) return null;
-  const n = parseInt(m[1].replace(/,/g, ""), 10);
-  return Number.isFinite(n) && n > 0 ? n : null;
-}
 
 function formatKes(n: number): string {
   return `KES ${n.toLocaleString("en-KE")}`;
@@ -95,16 +123,11 @@ function formatKes(n: number): string {
 
 /**
  * Public: sanitize a Nanjila reply.
- * For every "KES X" in the reply, look up X in the live whitelist.
- *   • If X is valid (exists in services or plans) → leave it.
- *   • If X is NOT valid:
- *       - Look at the surrounding ~80 chars of context.
- *       - If the context names a specific service, replace the wrong number
- *         with the real one for that service.
- *       - Otherwise replace the whole "KES X" mention with "(see /pricing)".
+ * For every price-like occurrence in the reply, validate it against the live
+ * whitelist AND the explicit forbidden list, then rewrite or strip.
  *
- * Also emits a console warning whenever a correction is made — so you can
- * monitor how often the model is still hallucinating in production.
+ * Emits verbose console output in production so we can see exactly which
+ * code path is still producing 3,500 (or any other stale figure).
  */
 export async function sanitizeReply(reply: string): Promise<string> {
   if (!reply || typeof reply !== "string") return reply;
@@ -112,32 +135,42 @@ export async function sanitizeReply(reply: string): Promise<string> {
   if (whitelist.length === 0) return reply;
   const validPrices = new Set(whitelist.map((r) => r.price));
   const slugToPrice = new Map(whitelist.map((r) => [r.slug, r.price]));
-  const slugToName  = new Map(whitelist.map((r) => [r.slug, r.name]));
 
-  // Find every KES/Ksh price occurrence with its position so we can examine context.
-  const PRICE_RX = /(?:KES|Ksh|KSh|ksh)\s?([\d,]+)/gi;
+  // Pre-sanitize log: print first 300 chars of the raw AI reply so we can
+  // see in Render logs WHAT the model actually said before we rewrote it.
+  const replyPreview = reply.replace(/\s+/g, " ").slice(0, 300);
+  console.log(`[price-sanitizer] raw reply preview: "${replyPreview}${reply.length > 300 ? "..." : ""}"`);
+
+  // Broad price-occurrence regex. Catches: "KES 3,500", "Ksh 3500",
+  // "Ksh. 3,500", "Sh 3500", "3500 KES", "3500 shillings", "3500 bob",
+  // "3500/-", "3500/=". Group 1 = prefix-style amount, group 2 = suffix-style.
+  const PRICE_RX =
+    /(?:(?:KES|Ksh\.?|KSh\.?|Sh\.?|ksh|sh|bei|gharama)\s*[:.]?\s*([\d,]+)|([\d,]+)\s*(?:KES|Ksh\.?|shillings?|bob|\/=|\/-))/gi;
+
   let out = reply;
   let corrections = 0;
 
-  // Walk matches on the ORIGINAL string (positions don't shift while we collect).
   const matches: Array<{ raw: string; amount: number; index: number }> = [];
   let m: RegExpExecArray | null;
   while ((m = PRICE_RX.exec(reply)) !== null) {
-    const amount = parseInt(m[1].replace(/,/g, ""), 10);
+    const numStr = m[1] ?? m[2] ?? "";
+    const amount = parseInt(numStr.replace(/,/g, ""), 10);
     if (!Number.isFinite(amount) || amount <= 0) continue;
+    // Skip salary-range mentions (10k+) — only service prices get hallucinated.
+    if (amount >= 10000) continue;
     matches.push({ raw: m[0], amount, index: m.index });
   }
 
-  // Process matches RIGHT-TO-LEFT so substitutions don't shift earlier indices.
+  // Process matches right-to-left so substitutions don't shift earlier indices.
   for (const hit of matches.reverse()) {
-    if (validPrices.has(hit.amount)) continue; // legitimate price, leave alone
+    const isForbidden = FORBIDDEN_PRICES.has(hit.amount);
+    const isValid = validPrices.has(hit.amount);
+    if (isValid && !isForbidden) continue;
 
-    // Slice the surrounding context: 80 chars before, 80 chars after.
-    const ctxStart = Math.max(0, hit.index - 80);
-    const ctxEnd   = Math.min(reply.length, hit.index + hit.raw.length + 80);
+    const ctxStart = Math.max(0, hit.index - 120);
+    const ctxEnd   = Math.min(reply.length, hit.index + hit.raw.length + 120);
     const context  = reply.slice(ctxStart, ctxEnd);
 
-    // Guess which service the model MEANT to quote.
     let guessedSlug: string | null = null;
     for (const kw of SLUG_KEYWORDS) {
       if (kw.rx.test(context)) { guessedSlug = kw.slug; break; }
@@ -147,10 +180,12 @@ export async function sanitizeReply(reply: string): Promise<string> {
     if (guessedSlug && slugToPrice.has(guessedSlug)) {
       const real = slugToPrice.get(guessedSlug)!;
       replacement = formatKes(real);
-      console.warn(`[price-sanitizer] corrected ${hit.raw} → ${replacement} (guessed slug=${guessedSlug}) context="…${context.slice(60, 140)}…"`);
+      const tag = isForbidden ? "FORBIDDEN" : "stale";
+      console.warn(`[price-sanitizer] ${tag} ${hit.raw} -> ${replacement} (slug=${guessedSlug}) ctx="...${context.slice(80, 200)}..."`);
     } else {
       replacement = "(check /pricing for the current price)";
-      console.warn(`[price-sanitizer] could not guess slug, stripped ${hit.raw} | context="…${context.slice(60, 140)}…"`);
+      const tag = isForbidden ? "FORBIDDEN" : "stale";
+      console.warn(`[price-sanitizer] ${tag} ${hit.raw} unmappable -> stripped | ctx="...${context.slice(80, 200)}..."`);
     }
 
     out = out.slice(0, hit.index) + replacement + out.slice(hit.index + hit.raw.length);
@@ -158,7 +193,7 @@ export async function sanitizeReply(reply: string): Promise<string> {
   }
 
   if (corrections > 0) {
-    console.log(`[price-sanitizer] sanitised reply (${corrections} correction${corrections === 1 ? "" : "s"})`);
+    console.log(`[price-sanitizer] sanitised reply (${corrections} corrections)`);
   }
   return out;
 }
