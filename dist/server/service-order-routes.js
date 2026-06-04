@@ -59,6 +59,50 @@ const cvUpload = (0, multer_1.default)({
         cb(null, ok);
     },
 });
+// ─────────────────────────────────────────────────────────────────────────────
+// workPermitSystemPrompt — generates the system prompt for the Light and Mid
+// tiers of Work Permit Assistance. Light returns a country-specific guide;
+// Mid additionally drafts the visa application form using the user's CV +
+// intake data. Pro tier skips AI entirely (manualOnly=true) and lands in
+// admin queue.
+// ─────────────────────────────────────────────────────────────────────────────
+function workPermitSystemPrompt(country, permitClass, tier) {
+    const formFillBlock = tier === "mid"
+        ? `\n\n## SECTION 5 — APPLICATION FORM DRAFT\nUsing the candidate's CV and intake data above, draft the application form fields they will need to submit. Use the format:\n\n  Field name: drafted value\n\nWhere uncertain, leave the value as "[VERIFY: …]" so the user knows to confirm before submission. Cover ALL standard fields for ${country}'s permit class.`
+        : "";
+    return `You are a senior immigration adviser at WorkAbroad Hub helping a Kenyan applicant prepare for a work permit in ${country}.
+
+The relevant permit class is: ${permitClass}.
+
+Produce a clear, structured guide as plain text with ## section headers. Sections to cover IN THIS ORDER:
+
+## SECTION 1 — WHICH PERMIT CLASS APPLIES TO YOU
+Confirm the permit class, who issues it, and any sub-routes or exceptions relevant to a Kenyan candidate. Mention if a Certificate of Sponsorship / employer pre-approval / agency-route is required BEFORE starting.
+
+## SECTION 2 — DOCUMENT CHECKLIST
+List every document required, in numbered order. For each document say:
+- The full official name
+- Where the user obtains it in Kenya (MFA, KMTC, embassy, etc.)
+- Whether it needs attestation / apostille and by whom
+- Typical cost in KES
+- Typical time to obtain in Kenya
+
+## SECTION 3 — FEES & TIMELINE
+List the official government fees (in the destination currency AND approx KES equivalent at current rates), the typical processing timeline, and any priority/expedited service options with their cost.
+
+## SECTION 4 — COMMON REJECTION REASONS
+List the top 5 reasons Kenyan applicants get rejected for this permit and exactly how to avoid each one.${formFillBlock}
+
+## FINAL — OFFICIAL LINKS
+Provide the official government URLs for the application portal, fee schedule, and document attestation flow. Use real, verifiable URLs only.
+
+RULES:
+- Be specific and concrete. NO generic "consult an immigration lawyer" advice.
+- Use real ${country} terminology (e.g. "Iqama", "CoS", "QID", "NOC code") — not vague translations.
+- Output plain text with ## headers and dashes for bullets. NO markdown code fences. NO emoji.
+- If you don't know a specific figure, write "[VERIFY: …]" rather than inventing it.
+- Length: aim for ~1200 words for Light, ~1800 words for Mid.`;
+}
 const SERVICE_CONFIGS = {
     cv_fix_lite: {
         name: "CV Fix Lite",
@@ -196,6 +240,126 @@ Use ## headers and bullets.`,
 
 Output as plain text. Use ## for the two main section dividers above.`,
     },
+    // ── Work Permit Assistance (5 countries × 3 tiers) ─────────────────────────
+    // Light tier: AI-generated country-specific permit guide. Instant.
+    // Mid tier:   AI guide + form pre-fill draft. Still AI-delivered.
+    // Pro tier:   manualOnly=true → no AI, routed straight to admin queue with
+    //             delivery_status='needs_human_review' for hand-holding.
+    // --- UK ---
+    work_permit_uk_light: {
+        name: "UK Work Permit Guide (Skilled Worker)",
+        needsCv: false,
+        filename: "UK_Work_Permit_Guide",
+        estSeconds: 60,
+        systemPrompt: workPermitSystemPrompt("UK", "Skilled Worker Visa (with Certificate of Sponsorship from a UK employer holding a sponsor licence)", "light"),
+    },
+    work_permit_uk_mid: {
+        name: "UK Work Permit Assist + Form Pre-fill",
+        needsCv: true,
+        filename: "UK_Work_Permit_Assist",
+        estSeconds: 120,
+        systemPrompt: workPermitSystemPrompt("UK", "Skilled Worker Visa (with Certificate of Sponsorship from a UK employer holding a sponsor licence)", "mid"),
+    },
+    work_permit_uk_pro: {
+        name: "UK Work Permit — Full Hand-Holding",
+        needsCv: true,
+        filename: "UK_Work_Permit_Pro",
+        estSeconds: 0,
+        systemPrompt: "",
+        manualOnly: true,
+    },
+    // --- UAE ---
+    work_permit_uae_light: {
+        name: "UAE Work Permit Guide (MOHRE)",
+        needsCv: false,
+        filename: "UAE_Work_Permit_Guide",
+        estSeconds: 60,
+        systemPrompt: workPermitSystemPrompt("UAE", "MOHRE-issued Employer-Sponsored Work Permit + Employment Visa + Emirates ID (mainland) OR free-zone equivalent", "light"),
+    },
+    work_permit_uae_mid: {
+        name: "UAE Work Permit Assist + Form Pre-fill",
+        needsCv: true,
+        filename: "UAE_Work_Permit_Assist",
+        estSeconds: 120,
+        systemPrompt: workPermitSystemPrompt("UAE", "MOHRE-issued Employer-Sponsored Work Permit + Employment Visa + Emirates ID (mainland) OR free-zone equivalent", "mid"),
+    },
+    work_permit_uae_pro: {
+        name: "UAE Work Permit — Full Hand-Holding",
+        needsCv: true,
+        filename: "UAE_Work_Permit_Pro",
+        estSeconds: 0,
+        systemPrompt: "",
+        manualOnly: true,
+    },
+    // --- Saudi Arabia ---
+    work_permit_saudi_light: {
+        name: "Saudi Work Permit Guide (Iqama)",
+        needsCv: false,
+        filename: "Saudi_Work_Permit_Guide",
+        estSeconds: 60,
+        systemPrompt: workPermitSystemPrompt("Saudi Arabia", "Block Visa → Work Visa (via MoFA Enjazit) → Iqama (residence permit)", "light"),
+    },
+    work_permit_saudi_mid: {
+        name: "Saudi Work Permit Assist + Form Pre-fill",
+        needsCv: true,
+        filename: "Saudi_Work_Permit_Assist",
+        estSeconds: 120,
+        systemPrompt: workPermitSystemPrompt("Saudi Arabia", "Block Visa → Work Visa (via MoFA Enjazit) → Iqama (residence permit)", "mid"),
+    },
+    work_permit_saudi_pro: {
+        name: "Saudi Work Permit — Full Hand-Holding",
+        needsCv: true,
+        filename: "Saudi_Work_Permit_Pro",
+        estSeconds: 0,
+        systemPrompt: "",
+        manualOnly: true,
+    },
+    // --- Canada ---
+    work_permit_canada_light: {
+        name: "Canada Work Permit Guide (LMIA)",
+        needsCv: false,
+        filename: "Canada_Work_Permit_Guide",
+        estSeconds: 60,
+        systemPrompt: workPermitSystemPrompt("Canada", "LMIA-supported work permit / IEC / Express Entry route (Federal Skilled Worker / CEC / PNP) — choose the best fit based on the user's profile and NOC code", "light"),
+    },
+    work_permit_canada_mid: {
+        name: "Canada Work Permit Assist + Form Pre-fill",
+        needsCv: true,
+        filename: "Canada_Work_Permit_Assist",
+        estSeconds: 120,
+        systemPrompt: workPermitSystemPrompt("Canada", "LMIA-supported work permit / IEC / Express Entry route (Federal Skilled Worker / CEC / PNP) — choose the best fit based on the user's profile and NOC code", "mid"),
+    },
+    work_permit_canada_pro: {
+        name: "Canada Work Permit — Full Hand-Holding",
+        needsCv: true,
+        filename: "Canada_Work_Permit_Pro",
+        estSeconds: 0,
+        systemPrompt: "",
+        manualOnly: true,
+    },
+    // --- Qatar ---
+    work_permit_qatar_light: {
+        name: "Qatar Work Permit Guide (MOI)",
+        needsCv: false,
+        filename: "Qatar_Work_Permit_Guide",
+        estSeconds: 60,
+        systemPrompt: workPermitSystemPrompt("Qatar", "Qatar Work Visa via the Ministry of Interior + post-arrival Residence Permit (QID), processed through Qatar Visa Center Nairobi", "light"),
+    },
+    work_permit_qatar_mid: {
+        name: "Qatar Work Permit Assist + Form Pre-fill",
+        needsCv: true,
+        filename: "Qatar_Work_Permit_Assist",
+        estSeconds: 120,
+        systemPrompt: workPermitSystemPrompt("Qatar", "Qatar Work Visa via the Ministry of Interior + post-arrival Residence Permit (QID), processed through Qatar Visa Center Nairobi", "mid"),
+    },
+    work_permit_qatar_pro: {
+        name: "Qatar Work Permit — Full Hand-Holding",
+        needsCv: true,
+        filename: "Qatar_Work_Permit_Pro",
+        estSeconds: 0,
+        systemPrompt: "",
+        manualOnly: true,
+    },
 };
 // Each service may also be referenced by its DB UUID; we look up by slug only here.
 function getConfig(slug) {
@@ -255,6 +419,22 @@ async function processOrder(orderId) {
         const config = getConfig(order.service_slug);
         if (!config) {
             await updateOrderStatus(orderId, "failed", { error_message: `Unknown service slug: ${order.service_slug}` });
+            return;
+        }
+        // ── manualOnly tier (Work Permit Pro etc.) — skip AI entirely ──────────
+        // Mark the order as 'processing' so the user UI shows "we're on it",
+        // but set delivery_status='needs_human_review' so the admin queue
+        // surfaces it for hand-holding. The team picks it up from /admin.
+        if (config.manualOnly) {
+            await db_1.pool.query(`UPDATE service_orders
+            SET status           = 'processing',
+                delivery_status  = 'needs_human_review',
+                ai_processed_at  = NOW(),
+                admin_notes      = COALESCE(admin_notes, '') ||
+                                   E'\n[auto] Manual-tier service — awaiting human review.',
+                updated_at       = NOW()
+          WHERE id = $1`, [orderId]);
+            console.log(`[ServiceOrder] manualOnly ${order.service_slug} order ${orderId} routed to admin queue (needs_human_review)`);
             return;
         }
         await updateOrderStatus(orderId, "processing");

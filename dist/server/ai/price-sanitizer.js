@@ -95,6 +95,34 @@ const SLUG_KEYWORDS = [
     { slug: "contract_review", rx: /Contract Review/i },
     { slug: "employer_verification", rx: /Employer Verification/i },
     { slug: "pre_departure_pack", rx: /Pre[- ]Departure|Pre departure/i },
+    // ── Work Permit Assistance — country + tier specific ───────────────────
+    // Order matters: country-specific PRO patterns first, then MID, then LIGHT,
+    // so "UK Work Permit Full Hand-Holding" doesn't accidentally route to the
+    // KES 249 light tier.
+    // UK
+    { slug: "work_permit_uk_pro", rx: /UK.{0,40}(Pro|Full Hand|Hand[- ]Holding|2,?999)|2,?999.{0,40}UK/i },
+    { slug: "work_permit_uk_mid", rx: /UK.{0,40}(Mid|Form Pre[- ]?fill|Assist|599)|599.{0,40}UK/i },
+    { slug: "work_permit_uk_light", rx: /UK.{0,40}(Work Permit|Skilled Worker|CoS|Certificate of Sponsorship)/i },
+    // UAE
+    { slug: "work_permit_uae_pro", rx: /UAE.{0,40}(Pro|Full Hand|Hand[- ]Holding|2,?999)|2,?999.{0,40}UAE/i },
+    { slug: "work_permit_uae_mid", rx: /UAE.{0,40}(Mid|Form Pre[- ]?fill|Assist|599)|599.{0,40}UAE/i },
+    { slug: "work_permit_uae_light", rx: /UAE.{0,40}(Work Permit|MOHRE|Tasheel|Employment Visa|Emirates ID)/i },
+    // Saudi
+    { slug: "work_permit_saudi_pro", rx: /(Saudi|KSA).{0,40}(Pro|Full Hand|Hand[- ]Holding|2,?999)|2,?999.{0,40}(Saudi|KSA)/i },
+    { slug: "work_permit_saudi_mid", rx: /(Saudi|KSA).{0,40}(Mid|Form Pre[- ]?fill|Assist|599)|599.{0,40}(Saudi|KSA)/i },
+    { slug: "work_permit_saudi_light", rx: /(Saudi|KSA|Iqama).{0,40}(Work Permit|Enjazit|MoFA|Wakalah|Block Visa)/i },
+    // Canada
+    { slug: "work_permit_canada_pro", rx: /Canada.{0,40}(Pro|Full Hand|Hand[- ]Holding|2,?999)|2,?999.{0,40}Canada/i },
+    { slug: "work_permit_canada_mid", rx: /Canada.{0,40}(Mid|Form Pre[- ]?fill|Assist|599)|599.{0,40}Canada/i },
+    { slug: "work_permit_canada_light", rx: /Canada.{0,40}(Work Permit|LMIA|Express Entry|NOC code|IRCC|IMM)/i },
+    // Qatar
+    { slug: "work_permit_qatar_pro", rx: /Qatar.{0,40}(Pro|Full Hand|Hand[- ]Holding|2,?999)|2,?999.{0,40}Qatar/i },
+    { slug: "work_permit_qatar_mid", rx: /Qatar.{0,40}(Mid|Form Pre[- ]?fill|Assist|599)|599.{0,40}Qatar/i },
+    { slug: "work_permit_qatar_light", rx: /Qatar.{0,40}(Work Permit|MOI|Hukoomi|QID|Qatar Visa Center)/i },
+    // Generic work-permit fallback — if the model says "work permit" without
+    // naming a country, route to UK light as the cheapest representative price
+    // so the catch-all rewrite uses KES 249 not KES 3,500.
+    { slug: "work_permit_uk_light", rx: /work permit|residence permit|work visa/i },
     // ── Application packs ──────────────────────────────────────────────────
     { slug: "job_pack_5", rx: /Job Pack|Application Pack/i },
     { slug: "assisted_apply_lite", rx: /Assisted Apply/i },
@@ -132,9 +160,7 @@ async function sanitizeReply(reply) {
     // see in Render logs WHAT the model actually said before we rewrote it.
     const replyPreview = reply.replace(/\s+/g, " ").slice(0, 300);
     console.log(`[price-sanitizer] raw reply preview: "${replyPreview}${reply.length > 300 ? "..." : ""}"`);
-    // Broad price-occurrence regex. Catches: "KES 3,500", "Ksh 3500",
-    // "Ksh. 3,500", "Sh 3500", "3500 KES", "3500 shillings", "3500 bob",
-    // "3500/-", "3500/=". Group 1 = prefix-style amount, group 2 = suffix-style.
+    // Broad price-occurrence regex.
     const PRICE_RX = /(?:(?:KES|Ksh\.?|KSh\.?|Sh\.?|ksh|sh|bei|gharama)\s*[:.]?\s*([\d,]+)|([\d,]+)\s*(?:KES|Ksh\.?|shillings?|bob|\/=|\/-))/gi;
     let out = reply;
     let corrections = 0;
@@ -145,12 +171,10 @@ async function sanitizeReply(reply) {
         const amount = parseInt(numStr.replace(/,/g, ""), 10);
         if (!Number.isFinite(amount) || amount <= 0)
             continue;
-        // Skip salary-range mentions (10k+) — only service prices get hallucinated.
         if (amount >= 10000)
             continue;
         matches.push({ raw: m[0], amount, index: m.index });
     }
-    // Process matches right-to-left so substitutions don't shift earlier indices.
     for (const hit of matches.reverse()) {
         const isForbidden = FORBIDDEN_PRICES.has(hit.amount);
         const isValid = validPrices.has(hit.amount);
@@ -171,12 +195,12 @@ async function sanitizeReply(reply) {
             const real = slugToPrice.get(guessedSlug);
             replacement = formatKes(real);
             const tag = isForbidden ? "FORBIDDEN" : "stale";
-            console.warn(`[price-sanitizer] ${tag} ${hit.raw} -> ${replacement} (slug=${guessedSlug}) ctx="...${context.slice(80, 200)}..."`);
+            console.warn(`[price-sanitizer] ${tag} ${hit.raw} -> ${replacement} (slug=${guessedSlug})`);
         }
         else {
             replacement = "(check /pricing for the current price)";
             const tag = isForbidden ? "FORBIDDEN" : "stale";
-            console.warn(`[price-sanitizer] ${tag} ${hit.raw} unmappable -> stripped | ctx="...${context.slice(80, 200)}..."`);
+            console.warn(`[price-sanitizer] ${tag} ${hit.raw} unmappable -> stripped`);
         }
         out = out.slice(0, hit.index) + replacement + out.slice(hit.index + hit.raw.length);
         corrections++;
