@@ -35,6 +35,8 @@ import {
   ClipboardList,
   Plus,
   MessageSquare,
+  FileCheck,
+  ArrowRight,
 } from "lucide-react";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
@@ -56,6 +58,99 @@ interface LiveService {
   currency?: string;
   category?: string;
   description?: string;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WorkPermitHero — country-specific Work Permit Assistance promo card.
+// Maps the /country/{code} slug to the matching work_permit_{cc}_* service
+// slugs and renders a 3-tier ladder (Light / Mid / Pro) with prices and a
+// CTA per tier. Returns null for countries we don't yet have permit SKUs for
+// (usa, australia, europe) so the help tab gracefully omits the section.
+// ─────────────────────────────────────────────────────────────────────────────
+const WORK_PERMIT_COUNTRY_MAP: Record<string, { cc: string; permitClass: string }> = {
+  uk:     { cc: "uk",     permitClass: "Skilled Worker Visa (with Certificate of Sponsorship)" },
+  uae:    { cc: "uae",    permitClass: "MOHRE Employment Visa + Emirates ID" },
+  canada: { cc: "canada", permitClass: "LMIA / Express Entry work permit" },
+  // No /country/saudi or /country/qatar pages yet — those SKUs live on /services only.
+};
+
+function WorkPermitHero({ countryCode }: { countryCode: string }) {
+  const mapped = WORK_PERMIT_COUNTRY_MAP[countryCode];
+
+  const { data: services = [] } = useQuery<LiveService[]>({
+    queryKey: ["/api/services"],
+    queryFn: async () => {
+      const res = await fetch("/api/services", { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    staleTime: 5 * 60 * 1000,
+    enabled: !!mapped,
+  });
+
+  if (!mapped) return null;
+
+  const tiers = ["light", "mid", "pro"]
+    .map((tier) => services.find((s) => s.slug === `work_permit_${mapped.cc}_${tier}`))
+    .filter(Boolean) as LiveService[];
+
+  if (tiers.length < 3) return null; // services not yet seeded — hide silently
+
+  const labelFor = (slug: string) =>
+    slug.endsWith("_light") ? "Quick guide" :
+    slug.endsWith("_mid")   ? "Guide + form pre-fill" :
+                              "Full hand-holding";
+
+  return (
+    <Card className="bg-gradient-to-br from-primary/10 via-blue-50 to-amber-50 dark:from-primary/20 dark:via-blue-950/30 dark:to-amber-950/20 border-primary/30">
+      <CardContent className="p-5 sm:p-6 space-y-5">
+        <div className="flex items-start gap-3">
+          <div className="h-11 w-11 rounded-xl bg-primary/15 flex items-center justify-center flex-shrink-0">
+            <FileCheck className="h-6 w-6 text-primary" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200 border border-amber-300 mb-2 text-[11px]">
+              Most-asked question
+            </Badge>
+            <h3 className="font-bold text-lg leading-tight">
+              Need help with your {countryData[countryCode]?.name ?? "destination"} work permit?
+            </h3>
+            <p className="text-sm text-muted-foreground mt-1">
+              Three tiers of help — from a quick AI guide to full hand-holding through the {mapped.permitClass}.
+            </p>
+          </div>
+        </div>
+
+        <div className="grid sm:grid-cols-3 gap-3">
+          {tiers.map((t) => {
+            const shown = (t.finalPrice ?? t.price);
+            const isPro = t.slug.endsWith("_pro");
+            return (
+              <Card key={t.slug} className={`hover-elevate ${isPro ? "border-amber-400" : ""}`}>
+                <CardContent className="p-4 space-y-2 h-full flex flex-col">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    {labelFor(t.slug)}
+                  </p>
+                  <p className="text-xl font-bold">KES {shown.toLocaleString("en-KE")}</p>
+                  {t.description && (
+                    <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3 flex-1">
+                      {t.description}
+                    </p>
+                  )}
+                  <Link href={`/services?focus=${t.slug}`}>
+                    <Button size="sm" className="w-full mt-1" variant={isPro ? "default" : "outline"}>
+                      Get it
+                      <ArrowRight className="ml-1 h-3 w-3" />
+                    </Button>
+                  </Link>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
 function CountryServicesGrid() {
@@ -600,6 +695,7 @@ export default function Country() {
             )}
           </TabsContent>
 
+
           <TabsContent value="help" className="space-y-6">
             <Card className="bg-gradient-to-r from-primary/5 to-accent/5 border-primary/20">
               <CardContent className="p-6">
@@ -617,14 +713,14 @@ export default function Country() {
               </CardContent>
             </Card>
 
+            {/* Work-permit promo — only renders if this country has SKUs seeded */}
+            <WorkPermitHero countryCode={code} />
+
             {/*
               ── LIVE service catalogue ──────────────────────────────────────
               Previously this list hardcoded "KES 3,500" for CV Rewrite and
-              ATS CV Optimization etc. That meant when the founder updated
-              the real prices in the services table to KES 99 / 499 / 699,
-              the country dashboard kept showing the old marketing numbers
-              — and users would then complain Nanjila wasn't quoting "the
-              dashboard price". The dashboard IS now the live DB.
+              ATS CV Optimization etc. Replaced with live /api/services fetch
+              so admin price updates land here immediately.
             */}
             <CountryServicesGrid />
 
@@ -640,7 +736,7 @@ export default function Country() {
             <Card className="border-muted">
               <CardContent className="p-4">
                 <p className="text-xs text-muted-foreground text-center">
-                  These are optional premium services. WorkAbroad Hub does not guarantee employment. 
+                  These are optional premium services. WorkAbroad Hub does not guarantee employment.
                   Services are designed to improve your application quality and interview readiness.
                 </p>
               </CardContent>
