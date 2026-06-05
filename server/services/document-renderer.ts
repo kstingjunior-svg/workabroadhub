@@ -119,10 +119,14 @@ export async function renderDocx(input: RenderInput): Promise<Buffer> {
     );
   }
 
+  // File-properties metadata: keep it neutral so the recruiter cannot
+  // read "CV Fix Lite" from the Word file Properties pane. Even if a
+  // title arg is passed, we override it to a generic value here — the
+  // visible body is what matters and that's already controlled above.
   const doc = new Document({
     creator: "WorkAbroad Hub",
-    title: input.title ?? "WorkAbroad Hub Document",
-    description: "AI-generated career document",
+    title: "Document",
+    description: "Career document",
     sections: [{ children: paragraphs }],
   });
 
@@ -212,8 +216,4 @@ export function renderPdf(input: RenderInput): Promise<Buffer> {
       reject(err);
     }
   });
-}
-
-function isLast<T>(arr: T[], item: T): boolean {
-  return arr.indexOf(item) === arr.length - 1;
 }
