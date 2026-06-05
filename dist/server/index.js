@@ -130,6 +130,33 @@ httpServer.listen(PORT, "0.0.0.0", () => {
 // ─────────────────────────────────────────────────────────────────────────────
 (0, socket_1.initSocketIO)(httpServer);
 // ─────────────────────────────────────────────────────────────────────────────
+// /ws/* SHORT-CIRCUIT — MUST come before every other middleware
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// /ws/analytics and /ws/user are WebSocket endpoints (see server/websocket.ts).
+// They're handled by the `ws` library via the httpServer 'upgrade' event,
+// NOT by Express's HTTP routing. When a client sends a plain HTTP GET to
+// /ws/analytics (e.g. a stale browser tab, a probe, or a misconfigured
+// monitoring agent), Express still tries to route it — and one of our many
+// middlewares (DDOS protection, CSRF, rate limiter, helmet) ends up returning
+// 500 instead of a clean 404/426. That floods production logs with hundreds
+// of thousands of red 500s per day.
+//
+// Short-circuit here, BEFORE any other middleware runs, with HTTP 426
+// (Upgrade Required) — the correct response for "this endpoint is only
+// reachable via WebSocket Upgrade". No middleware downstream gets a chance
+// to touch these requests.
+app.use((req, res, next) => {
+    if (req.path.startsWith("/ws/")) {
+        res.status(426).set("Upgrade", "websocket").json({
+            message: "This endpoint is reachable only via WebSocket Upgrade.",
+            path: req.path,
+        });
+        return;
+    }
+    next();
+});
+// ─────────────────────────────────────────────────────────────────────────────
 // SECURITY
 // ─────────────────────────────────────────────────────────────────────────────
 const allowedOrigins = new Set([
@@ -398,7 +425,6 @@ app.use((req, res, next) => {
                     : err.message,
             });
         });
-        // ───────────────────────────────────────────────────────────────────────
         // DATABASE AUDIT
         // ────────────────────────────────────────────────────────────────────────
         try {

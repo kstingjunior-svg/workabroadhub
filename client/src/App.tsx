@@ -692,16 +692,3 @@ function App() {
 }
 
 export default App;
-              <InstallAppPrompt />
-            </AgeVerificationGate>
-          </UpgradeModalProvider>
-        </TooltipProvider>
-      </AccessibilityProvider>
-    </QueryClientProvider>
-  );
-}
-
-export default App;
-}
-
-export default App;
