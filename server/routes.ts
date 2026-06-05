@@ -19134,16 +19134,11 @@ Tone examples:
   const chatUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
   // ───────────────────────────────────────────────────────────────────────────
-  // Voice Mock Interview — adaptive AI interview simulator with voice in/out.
+  // Voice Mock Interview — adaptive AI interview simulator.
+  // Voice in + voice out are handled CLIENT-SIDE via Web Speech API.
+  // Server only deals in TEXT (questions, answers, scores).
   // Documentation in server/services/voiceInterview.ts.
   // ───────────────────────────────────────────────────────────────────────────
-  const interviewAudioUpload = multer({
-    storage: multer.diskStorage({
-      destination: (_req, _file, cb) => cb(null, "/tmp"),
-      filename: (_req, file, cb) => cb(null, `interview_${Date.now()}_${Math.random().toString(36).slice(2)}_${file.originalname}`),
-    }),
-    limits: { fileSize: 25 * 1024 * 1024 }, // 25MB matches Whisper max
-  });
 
   // POST /api/interview/start — body: { country, role }
   app.post("/api/interview/start", async (req: any, res: Response) => {
@@ -19162,28 +19157,18 @@ Tone examples:
     }
   });
 
-  // POST /api/interview/respond — body: { sessionId } + audio file OR { answerText }
-  // If audio is uploaded, we Whisper-transcribe it server-side. If answerText
-  // is sent, we use it directly. Either path works.
-  app.post("/api/interview/respond", interviewAudioUpload.single("audio"), async (req: any, res: Response) => {
+  // POST /api/interview/respond — body: { sessionId, answerText }
+  // Audio is transcribed in the BROWSER via Web Speech API. Server only
+  // ever sees the resulting text string.
+  app.post("/api/interview/respond", async (req: any, res: Response) => {
     try {
       const userId = (req.session as any)?.customUserId as string | undefined;
       if (!userId) return res.status(401).json({ message: "Please sign in first." });
-      const sessionId = String(req.body?.sessionId ?? "").trim();
-      if (!sessionId) return res.status(400).json({ message: "sessionId is required." });
-      const { transcribeAudio, respondToSession } = await import("./services/voiceInterview");
-
-      let answerText = String(req.body?.answerText ?? "").trim();
-      if (req.file?.path) {
-        try {
-          answerText = await transcribeAudio(req.file.path);
-        } finally {
-          // Clean up the audio file regardless of outcome.
-          import("fs/promises").then((fsp) => fsp.unlink(req.file.path).catch(() => {}));
-        }
-      }
-      if (!answerText) return res.status(400).json({ message: "Please provide an answer (audio or text)." });
-
+      const sessionId  = String(req.body?.sessionId ?? "").trim();
+      const answerText = String(req.body?.answerText ?? "").trim();
+      if (!sessionId)  return res.status(400).json({ message: "sessionId is required." });
+      if (!answerText) return res.status(400).json({ message: "Please provide an answer." });
+      const { respondToSession } = await import("./services/voiceInterview");
       const sess = await respondToSession({ sessionId, userId, answerText });
       res.json(sess);
     } catch (err: any) {

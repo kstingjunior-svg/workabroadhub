@@ -1,40 +1,42 @@
 "use strict";
 // ─────────────────────────────────────────────────────────────────────────────
-// Voice Mock Interview — adaptive, AI-driven interview simulator.
+// Voice Mock Interview — adaptive AI interview simulator.
+//
+// VOICE LAYER:
+//   Voice in + voice out are handled CLIENT-SIDE using the browser's Web
+//   Speech APIs (SpeechSynthesis for the AI question, SpeechRecognition
+//   for the user's spoken answer). The server only sees TEXT — no
+//   ElevenLabs cost, no Whisper cost, no /tmp file management, lower
+//   latency, and the same approach Nanjila already uses on this site.
 //
 // FLOW:
 //   1. User picks target country + role -> startSession()
-//   2. AI generates question #1, ElevenLabs voices it to /audio/<uuid>.mp3
-//   3. User records audio response -> client sends to respondToSession()
-//   4. Whisper transcribes -> GPT scores the answer + generates question #2
-//   5. Repeat until 5 questions answered -> getSummary() returns
+//   2. AI generates question #1 (text only)
+//   3. Browser speaks the question aloud locally
+//   4. User speaks their answer -> browser transcribes to text -> POST text
+//   5. GPT scores the answer + generates question #2 (text)
+//   6. Repeat until 5 questions answered -> getSummary() returns
 //      transcript + 4-dimension scores (relevance, structure, specificity,
 //      confidence) plus a one-paragraph coaching recap.
 //
-// COSTS (per session, gpt-4o-mini + Whisper + ElevenLabs):
-//   ~$0.02 in tokens, ~$0.03 in TTS audio, ~$0.005 in transcription
-//   = ~$0.06 per full session. Well under the KES 999 we'd charge once
-//   this becomes a paid SKU.
+// COSTS (per session):
+//   ~$0.02 in tokens. That's it. Browser TTS + STT cost the user nothing.
 //
 // PRIVACY:
-//   We do NOT store the raw audio after transcription — only the text
-//   transcripts. interview_sessions table has a JSONB transcript column
-//   shaped as: [{ q, a, scores }] per question.
+//   Audio NEVER leaves the user's device. The server only ever sees
+//   the transcribed text. interview_sessions table has a JSONB transcript
+//   column shaped as: [{ q, a, scores }] per question.
 // ─────────────────────────────────────────────────────────────────────────────
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.transcribeAudio = transcribeAudio;
 exports.startSession = startSession;
 exports.respondToSession = respondToSession;
 exports.getSession = getSession;
 const db_1 = require("../db");
 const openai_1 = require("../lib/openai");
-const elevenlabs_1 = require("../lib/elevenlabs");
 const crypto_1 = __importDefault(require("crypto"));
-const promises_1 = __importDefault(require("fs/promises"));
-const path_1 = __importDefault(require("path"));
 const TOTAL_QUESTIONS = 5;
 const SCHEMA_INIT = { done: false };
 async function ensureSchema() {
@@ -118,26 +120,14 @@ Cover:
 Output plain prose. No lists, no headers, no markdown.`;
 }
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-async function generateQuestionWithAudio(country, role, history) {
+async function generateQuestion(country, role, history) {
     const completion = await openai_1.openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [{ role: "user", content: questionPrompt(country, role, history) }],
         temperature: 0.7,
         max_tokens: 80,
     });
-    const text = completion.choices[0]?.message?.content?.trim() || "Tell me about yourself.";
-    let audioUrl = null;
-    if (process.env.ELEVENLABS_API_KEY) {
-        try {
-            const filename = await (0, elevenlabs_1.generateVoiceFile)(text);
-            if (filename)
-                audioUrl = `/audio/${filename}`;
-        }
-        catch (err) {
-            console.warn("[voiceInterview] TTS failed:", err?.message);
-        }
-    }
-    return { text, audioUrl };
+    return completion.choices[0]?.message?.content?.trim() || "Tell me about yourself.";
 }
 async function scoreAnswer(country, role, question, answer) {
     const completion = await openai_1.openai.chat.completions.create({
@@ -162,39 +152,13 @@ async function scoreAnswer(country, role, question, answer) {
         return { relevance: 5, structure: 5, specificity: 5, confidence: 5, feedback: "Scoring unavailable — try again." };
     }
 }
-/**
- * Transcribe an uploaded audio file via Whisper. Returns the text or
- * throws on failure. Caller must clean up the file regardless.
- */
-async function transcribeAudio(filePath) {
-    const file = await promises_1.default.readFile(filePath);
-    const blob = new Blob([file]);
-    const formData = new FormData();
-    formData.append("file", blob, path_1.default.basename(filePath));
-    formData.append("model", "whisper-1");
-    formData.append("language", "en");
-    const apiKey = (process.env.OPENAI_API_KEY || "").trim();
-    if (!apiKey)
-        throw new Error("OPENAI_API_KEY not configured");
-    const res = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${apiKey}` },
-        body: formData,
-    });
-    if (!res.ok) {
-        const body = await res.text().catch(() => "");
-        throw new Error(`Whisper transcription failed: ${res.status} ${body.slice(0, 200)}`);
-    }
-    const data = await res.json();
-    return (data.text ?? "").trim();
-}
 // ─── Public API ──────────────────────────────────────────────────────────────
 async function startSession(args) {
     await ensureSchema();
     const id = crypto_1.default.randomUUID();
-    const first = await generateQuestionWithAudio(args.country, args.role, []);
+    const firstQ = await generateQuestion(args.country, args.role, []);
     await db_1.pool.query(`INSERT INTO interview_sessions (id, user_id, country, role, transcript, question_number)
-     VALUES ($1, $2, $3, $4, $5::jsonb, 0)`, [id, args.userId, args.country, args.role, JSON.stringify([{ q: first.text, a: "" }])]);
+     VALUES ($1, $2, $3, $4, $5::jsonb, 0)`, [id, args.userId, args.country, args.role, JSON.stringify([{ q: firstQ, a: "" }])]);
     return {
         id,
         userId: args.userId,
@@ -202,9 +166,8 @@ async function startSession(args) {
         role: args.role,
         status: "in_progress",
         questionNumber: 1,
-        transcript: [{ q: first.text, a: "" }],
-        nextQuestion: first.text,
-        nextAudioUrl: first.audioUrl ?? undefined,
+        transcript: [{ q: firstQ, a: "" }],
+        nextQuestion: firstQ,
         createdAt: new Date().toISOString(),
     };
 }
@@ -259,8 +222,8 @@ async function respondToSession(args) {
     }
     else {
         // Generate the next question and append a blank turn for it.
-        nextQ = await generateQuestionWithAudio(sess.country, sess.role, transcript);
-        transcript.push({ q: nextQ.text, a: "" });
+        nextQ = await generateQuestion(sess.country, sess.role, transcript);
+        transcript.push({ q: nextQ, a: "" });
     }
     await db_1.pool.query(`UPDATE interview_sessions
         SET transcript      = $2::jsonb,
@@ -278,8 +241,7 @@ async function respondToSession(args) {
         status,
         questionNumber: answered + (status === "in_progress" ? 1 : 0),
         transcript,
-        nextQuestion: nextQ?.text,
-        nextAudioUrl: nextQ?.audioUrl ?? undefined,
+        nextQuestion: nextQ ?? undefined,
         finalScore: finalScore ?? undefined,
         finalSummary: finalSummary ?? undefined,
         createdAt: sess.created_at.toISOString(),
