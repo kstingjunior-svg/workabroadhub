@@ -39,7 +39,8 @@ process.on("unhandledRejection", (reason: unknown) => {
           : String(reason),
     })
   );
-
+  // Forward to Sentry (no-op if SENTRY_DSN is not set).
+  try { captureException(reason, { source: "unhandledRejection" }); } catch {}
   // DO NOT CRASH THE SERVER
 });
 
@@ -105,6 +106,12 @@ import { createServer } from "http";
 
 import { db, pool } from "./db";
 import { registerRoutes } from "./routes";
+import { initSentry, attachSentryErrorHandler, captureException } from "./lib/sentry";
+
+// Initialise Sentry as early as possible (before Express is constructed)
+// so import-time errors in any route module can still be captured.
+// No-op when SENTRY_DSN is not set.
+initSentry();
 import { serveStatic } from "./static";
 import { initSocketIO } from "./socket";
 
@@ -320,6 +327,10 @@ app.use((req, res, next) => {
     // NOT registerRoutes(httpServer, app)
 
     await registerRoutes(httpServer, app);
+
+    // Wire Sentry's Express error handler AFTER all routes are registered
+    // but BEFORE any custom 500 middleware. No-op if Sentry isn't initialised.
+    attachSentryErrorHandler(app);
 
     // ────────────────────────────────────────────────────────────────────────
     // BACKGROUND STARTUP TASKS (NON-BLOCKING)

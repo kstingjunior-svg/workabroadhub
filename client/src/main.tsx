@@ -2,6 +2,12 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { initClientSentry } from "@/lib/sentry";
+
+// Initialise Sentry as early as possible — before React renders, so import
+// errors and React-internal crashes are captured. No-op when
+// VITE_SENTRY_DSN isn't set (local dev / preview / DSN missing).
+initClientSentry();
 
 // ─── Service Worker Cleanup ───────────────────────────────────────────────────
 // This app does not use a service worker. Any previously registered SW (from an
