@@ -89,6 +89,7 @@ const VisaAssistant = lazy(() => import("@/pages/visa-assistant"));
 const BulkApply = lazy(() => import("@/pages/bulk-apply"));
 const UploadCV = lazy(() => import("@/pages/upload-cv"));
 const AutoApply = lazy(() => import("@/pages/tools/auto-apply"));
+const InterviewPractice = lazy(() => import("@/pages/tools/interview-practice"));
 const ErrorRoute = lazy(() => import("@/pages/error"));
 const MyPayments = lazy(() => import("@/pages/my-payments"));
 const PayPage = lazy(() => import("@/pages/pay"));
@@ -492,6 +493,7 @@ function AuthenticatedRoutes() {
       <Route path="/bulk-apply" component={LazyBulkApply} />
       <Route path="/upload-cv" component={LazyUploadCV} />
       <Route path="/tools/auto-apply" component={LazyAutoApply} />
+      <Route path="/tools/interview-practice" component={InterviewPractice} />
       <Route path="/tools" component={LazyToolsHub} />
       <Route path="/tools/ats-cv-checker" component={LazyATSCVChecker} />
       <Route path="/tools/job-scam-checker" component={LazyJobScamChecker} />
@@ -621,6 +623,7 @@ function Router() {
         <Route path="/bulk-apply" component={LazyBulkApply} />
         <Route path="/upload-cv" component={LazyUploadCV} />
         <Route path="/tools/auto-apply" component={LazyAutoApply} />
+      <Route path="/tools/interview-practice" component={InterviewPractice} />
         <Route path="/services" component={LazyServices} />
         <Route path="/country/:code" component={LazyCountry} />
         <Route path="/forum/:country" component={LazyForum} />
@@ -686,6 +689,19 @@ function App() {
       </AccessibilityProvider>
     </QueryClientProvider>
   );
+}
+
+export default App;
+              <InstallAppPrompt />
+            </AgeVerificationGate>
+          </UpgradeModalProvider>
+        </TooltipProvider>
+      </AccessibilityProvider>
+    </QueryClientProvider>
+  );
+}
+
+export default App;
 }
 
 export default App;

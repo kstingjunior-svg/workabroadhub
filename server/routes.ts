@@ -19133,6 +19133,80 @@ Tone examples:
 
   const chatUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
+  // ───────────────────────────────────────────────────────────────────────────
+  // Voice Mock Interview — adaptive AI interview simulator with voice in/out.
+  // Documentation in server/services/voiceInterview.ts.
+  // ───────────────────────────────────────────────────────────────────────────
+  const interviewAudioUpload = multer({
+    storage: multer.diskStorage({
+      destination: (_req, _file, cb) => cb(null, "/tmp"),
+      filename: (_req, file, cb) => cb(null, `interview_${Date.now()}_${Math.random().toString(36).slice(2)}_${file.originalname}`),
+    }),
+    limits: { fileSize: 25 * 1024 * 1024 }, // 25MB matches Whisper max
+  });
+
+  // POST /api/interview/start — body: { country, role }
+  app.post("/api/interview/start", async (req: any, res: Response) => {
+    try {
+      const userId = (req.session as any)?.customUserId as string | undefined;
+      if (!userId) return res.status(401).json({ message: "Please sign in first." });
+      const country = String(req.body?.country ?? "").trim();
+      const role    = String(req.body?.role    ?? "").trim();
+      if (!country || !role) return res.status(400).json({ message: "country and role are required." });
+      const { startSession } = await import("./services/voiceInterview");
+      const sess = await startSession({ userId, country: country.slice(0, 60), role: role.slice(0, 200) });
+      res.json(sess);
+    } catch (err: any) {
+      console.error("[interview/start]", err?.message);
+      res.status(500).json({ message: "Could not start interview. Please try again." });
+    }
+  });
+
+  // POST /api/interview/respond — body: { sessionId } + audio file OR { answerText }
+  // If audio is uploaded, we Whisper-transcribe it server-side. If answerText
+  // is sent, we use it directly. Either path works.
+  app.post("/api/interview/respond", interviewAudioUpload.single("audio"), async (req: any, res: Response) => {
+    try {
+      const userId = (req.session as any)?.customUserId as string | undefined;
+      if (!userId) return res.status(401).json({ message: "Please sign in first." });
+      const sessionId = String(req.body?.sessionId ?? "").trim();
+      if (!sessionId) return res.status(400).json({ message: "sessionId is required." });
+      const { transcribeAudio, respondToSession } = await import("./services/voiceInterview");
+
+      let answerText = String(req.body?.answerText ?? "").trim();
+      if (req.file?.path) {
+        try {
+          answerText = await transcribeAudio(req.file.path);
+        } finally {
+          // Clean up the audio file regardless of outcome.
+          import("fs/promises").then((fsp) => fsp.unlink(req.file.path).catch(() => {}));
+        }
+      }
+      if (!answerText) return res.status(400).json({ message: "Please provide an answer (audio or text)." });
+
+      const sess = await respondToSession({ sessionId, userId, answerText });
+      res.json(sess);
+    } catch (err: any) {
+      console.error("[interview/respond]", err?.message);
+      res.status(500).json({ message: err?.message ?? "Could not process response." });
+    }
+  });
+
+  // GET /api/interview/:id — fetch session snapshot
+  app.get("/api/interview/:id", async (req: any, res: Response) => {
+    try {
+      const userId = (req.session as any)?.customUserId as string | undefined;
+      if (!userId) return res.status(401).json({ message: "Please sign in first." });
+      const { getSession } = await import("./services/voiceInterview");
+      const sess = await getSession(String(req.params.id), userId);
+      if (!sess) return res.status(404).json({ message: "Session not found." });
+      res.json(sess);
+    } catch (err: any) {
+      console.error("[interview/get]", err?.message);
+      res.status(500).json({ message: "Could not fetch session." });
+    }
+  });
+
   app.post("/api/nanjila/chat", chatUpload.single("cv"), async (req: any, res: Response) => {
     try {
       const sessionId: string = req.body.sessionId || `web_${Date.now()}_${Math.random().toString(36).slice(2)}`;
@@ -19828,7 +19902,6 @@ If your instinct says "3,500", STOP and re-read the SERVICES block above.`;
       });
     }
   });
-
   // ── Unmatched-payment retry engine ──────────────────────────────────────────
   // Every 5 minutes: re-run smartMatchUser on payments that haven't matched yet
   // and have been retried fewer than 5 times.
