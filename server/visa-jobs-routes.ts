@@ -34,7 +34,7 @@ export interface VisaJob {
 // ── 50+ curated visa-sponsored jobs ──────────────────────────────────────────
 // Mix tuned for Kenyan audience: heavy on Gulf casual work + skilled trades,
 // plus Western healthcare/transport that sponsor visas. Updated as needed.
-const VISA_JOBS: VisaJob[] = [
+export const VISA_JOBS: VisaJob[] = [
   // ── TRANSPORT ─────────────────────────────────────────────────────────────
   { id: "tr-01", title: "Long-Haul Truck Driver", employer: "Bison Transport", country: "Canada", countryFlag: "🇨🇦", city: "Calgary", salary: "CAD 65,000–80,000/yr", visaType: "TFW Program · LMIA", postedAgo: "2 days ago", category: "Transport", applyUrl: "https://www.jobbank.gc.ca/jobsearch/jobsearch?searchstring=truck+driver+lmia" },
   { id: "tr-02", title: "Class 1 HGV Driver", employer: "Eddie Stobart", country: "United Kingdom", countryFlag: "🇬🇧", city: "Manchester", salary: "£35,000–42,000/yr", visaType: "Skilled Worker Visa", postedAgo: "1 day ago", category: "Transport", applyUrl: "https://www.indeed.co.uk/jobs?q=HGV+driver+visa+sponsorship" },

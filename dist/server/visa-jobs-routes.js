@@ -15,12 +15,13 @@
  *   GET  /api/visa-jobs/:id/apply         pro-only — 302 to the real portal
  */
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.VISA_JOBS = void 0;
 exports.registerVisaJobsRoutes = registerVisaJobsRoutes;
 const db_1 = require("./db");
 // ── 50+ curated visa-sponsored jobs ──────────────────────────────────────────
 // Mix tuned for Kenyan audience: heavy on Gulf casual work + skilled trades,
 // plus Western healthcare/transport that sponsor visas. Updated as needed.
-const VISA_JOBS = [
+exports.VISA_JOBS = [
     // ── TRANSPORT ─────────────────────────────────────────────────────────────
     { id: "tr-01", title: "Long-Haul Truck Driver", employer: "Bison Transport", country: "Canada", countryFlag: "🇨🇦", city: "Calgary", salary: "CAD 65,000–80,000/yr", visaType: "TFW Program · LMIA", postedAgo: "2 days ago", category: "Transport", applyUrl: "https://www.jobbank.gc.ca/jobsearch/jobsearch?searchstring=truck+driver+lmia" },
     { id: "tr-02", title: "Class 1 HGV Driver", employer: "Eddie Stobart", country: "United Kingdom", countryFlag: "🇬🇧", city: "Manchester", salary: "£35,000–42,000/yr", visaType: "Skilled Worker Visa", postedAgo: "1 day ago", category: "Transport", applyUrl: "https://www.indeed.co.uk/jobs?q=HGV+driver+visa+sponsorship" },
@@ -79,7 +80,7 @@ const VISA_JOBS = [
     { id: "sk-06", title: "Quality Control Inspector", employer: "Sadara Chemical", country: "Saudi Arabia", countryFlag: "🇸🇦", city: "Jubail", salary: "SAR 5,500–7,500/month", visaType: "Iqama · Camp Accommodation", postedAgo: "5 days ago", category: "Skilled", applyUrl: "https://www.bayt.com/en/saudi-arabia/jobs/quality-control-jobs/" },
 ];
 function applyUrlForJob(jobId) {
-    return VISA_JOBS.find((j) => j.id === jobId)?.applyUrl ?? null;
+    return exports.VISA_JOBS.find((j) => j.id === jobId)?.applyUrl ?? null;
 }
 /** Resolve whether the requesting user is Pro (or admin) — same logic as elsewhere. */
 async function isUserPro(userId) {
@@ -101,7 +102,7 @@ async function isUserPro(userId) {
 function registerVisaJobsRoutes(app, isAuthenticated) {
     // GET /api/visa-jobs — public list, no applyUrl leaked
     app.get("/api/visa-jobs", (_req, res) => {
-        const sanitised = VISA_JOBS.map(({ applyUrl, ...rest }) => rest);
+        const sanitised = exports.VISA_JOBS.map(({ applyUrl, ...rest }) => rest);
         res.json({ jobs: sanitised, total: sanitised.length });
     });
     // GET /api/visa-jobs/:id/apply — Pro-gated redirect
@@ -122,5 +123,5 @@ function registerVisaJobsRoutes(app, isAuthenticated) {
             return res.status(404).json({ message: "Job not found." });
         res.redirect(302, url);
     });
-    console.log(`[VisaJobs] Routes registered: GET /api/visa-jobs (${VISA_JOBS.length} jobs), GET /api/visa-jobs/:id/apply (Pro-gated)`);
+    console.log(`[VisaJobs] Routes registered: GET /api/visa-jobs (${exports.VISA_JOBS.length} jobs), GET /api/visa-jobs/:id/apply (Pro-gated)`);
 }

@@ -19134,6 +19134,45 @@ Tone examples:
   const chatUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
   // ───────────────────────────────────────────────────────────────────────────
+  // Job match — semantic similarity between candidate CV and the visa-jobs
+  // catalogue using OpenAI embeddings. See server/services/jobMatchEmbeddings.ts.
+  // ───────────────────────────────────────────────────────────────────────────
+  app.post("/api/jobs/match-my-cv", async (req: any, res: Response) => {
+    try {
+      const cvText = String(req.body?.cvText ?? "").trim();
+      if (!cvText || cvText.length < 100) {
+        return res.status(400).json({ message: "Please paste at least 100 characters of your CV." });
+      }
+      const limit = Math.min(20, Math.max(1, Number(req.body?.limit ?? 10)));
+      const { VISA_JOBS } = await import("./visa-jobs-routes");
+      const { findMatchesForCv } = await import("./services/jobMatchEmbeddings");
+      const matches = await findMatchesForCv(cvText, VISA_JOBS, limit);
+
+      // Strip applyUrl for non-signed-in users so they have to sign up to apply
+      // (mirrors the existing /api/visa-jobs paywall in visa-jobs-routes.ts).
+      const userId = (req.session as any)?.customUserId as string | undefined;
+      const cleaned = matches.map((m) => userId ? m : { ...m, applyUrl: undefined });
+      res.json({ matches: cleaned, signedIn: !!userId });
+    } catch (err: any) {
+      console.error("[jobs/match-my-cv]", err?.message);
+      res.status(500).json({ message: err?.message ?? "Could not run match." });
+    }
+  });
+
+  // Boot-time: ensure every job in the catalogue has an embedding.
+  // Fire-and-forget so it doesn't slow boot. First run on a fresh DB takes
+  // ~10 seconds; subsequent boots are no-op.
+  (async () => {
+    try {
+      const { VISA_JOBS } = await import("./visa-jobs-routes");
+      const { refreshJobEmbeddings } = await import("./services/jobMatchEmbeddings");
+      await refreshJobEmbeddings(VISA_JOBS);
+    } catch (err: any) {
+      console.warn("[job-match] boot-time refresh skipped:", err?.message);
+    }
+  })().catch(() => {});
+
+  // ───────────────────────────────────────────────────────────────────────────
   // Voice Mock Interview — adaptive AI interview simulator.
   // Voice in + voice out are handled CLIENT-SIDE via Web Speech API.
   // Server only deals in TEXT (questions, answers, scores).
