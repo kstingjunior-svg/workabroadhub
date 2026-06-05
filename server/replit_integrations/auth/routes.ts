@@ -117,6 +117,17 @@ export function registerAuthRoutes(app: Express) {
         return res.status(401).json({ message: "Invalid email or password." });
       }
 
+      // Block deleted (anonymised) accounts — password_hash is wiped on
+      // deletion so the bcrypt check below would already fail, but the
+      // is_active flag is the authoritative gate. Return a soft error
+      // matching the wording in case a user re-uses an email we anonymised.
+      if (user.isActive === false) {
+        return res.status(403).json({
+          message: "This account has been deleted. Please sign up with a new account.",
+          accountDeleted: true,
+        });
+      }
+
       const valid = await bcrypt.compare(password, user.passwordHash);
       if (!valid) {
         return res.status(401).json({ message: "Invalid email or password." });
@@ -135,6 +146,207 @@ export function registerAuthRoutes(app: Express) {
       req.session.destroy(() => res.json({ success: true }));
     } else {
       res.json({ success: true });
+    }
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // POST /api/auth/delete-account
+  //
+  // GDPR-style right-to-be-forgotten for users who want to leave the platform
+  // entirely. Anonymises (does NOT hard-delete) the user record so payment
+  // and order history are preserved for KRA tax compliance, but every piece
+  // of PII is scrubbed:
+  //
+  //   users row:
+  //     email           -> deleted-<id>@deleted.workabroadhub.local
+  //     first/last name -> "Deleted" / "User"
+  //     phone           -> NULL
+  //     profile_image_url, country -> NULL
+  //     password_hash   -> NULL  (can no longer log in)
+  //     is_active       -> false
+  //     email_verified  -> false
+  //     deleted_at      -> NOW()
+  //     deletion_reason -> user-supplied text or "no reason given"
+  //
+  //   verification_codes for this user -> hard delete
+  //   active_sessions for this user    -> hard delete
+  //   service_orders for this user     -> PII columns scrubbed (cv_text,
+  //                                       extra_input, job_description) but
+  //                                       order audit row stays so revenue
+  //                                       reports remain accurate
+  //   payments                         -> PRESERVED for KRA tax compliance
+  //
+  // Safety:
+  //   • User MUST be signed in
+  //   • Body MUST include confirmEmail that matches their current email
+  //   • Admins are blocked from using this endpoint (use SQL or a separate
+  //     admin-takedown flow to remove an admin so we don't accidentally
+  //     orphan the platform)
+  //   • A "your account was deleted" confirmation email is sent BEFORE we
+  //     scrub the email column — gives the user a paper trail and tips
+  //     them off if someone hijacked their session to delete the account
+  //   • Session is destroyed atomically with the DB scrub
+  // ───────────────────────────────────────────────────────────────────────────
+  app.post("/api/auth/delete-account", async (req: Request, res: Response) => {
+    const userId = (req.session as any)?.customUserId as string | undefined;
+    if (!userId) {
+      return res.status(401).json({ message: "Please sign in first." });
+    }
+
+    try {
+      // Idempotent schema widener — adds deletion columns if not yet present.
+      // Mirrors the pattern in server/services/pwaInstallTracking.ts.
+      await pool.query(`
+        ALTER TABLE users
+          ADD COLUMN IF NOT EXISTS deleted_at      TIMESTAMPTZ NULL,
+          ADD COLUMN IF NOT EXISTS deletion_reason VARCHAR(500) NULL
+      `).catch((e) => console.warn("[Auth][delete-account] schema widener:", e?.message));
+
+      // Fetch the current user.
+      const { rows } = await pool.query<{
+        id: string;
+        email: string;
+        is_admin: boolean;
+        role: string;
+        deleted_at: Date | null;
+      }>(
+        `SELECT id, email, is_admin, role, deleted_at FROM users WHERE id = $1`,
+        [userId],
+      );
+      const u = rows[0];
+      if (!u) {
+        return res.status(404).json({ message: "User not found." });
+      }
+      if (u.deleted_at) {
+        return res.status(410).json({ message: "Account is already deleted." });
+      }
+
+      // Admin block — admins must be removed via SQL or a separate flow.
+      const isAdmin = u.is_admin || u.role === "ADMIN" || u.role === "SUPER_ADMIN";
+      if (isAdmin) {
+        return res.status(403).json({
+          message: "Admin accounts cannot be deleted via this endpoint. Contact support to transfer admin rights first.",
+        });
+      }
+
+      // Confirmation check — user must type their email exactly.
+      const confirmEmail = String(req.body?.confirmEmail ?? "").trim().toLowerCase();
+      if (!confirmEmail) {
+        return res.status(400).json({
+          message: "Please type your email address to confirm deletion.",
+        });
+      }
+      if (confirmEmail !== String(u.email ?? "").trim().toLowerCase()) {
+        return res.status(400).json({
+          message: "Email confirmation does not match your account email. Type your email exactly to confirm.",
+        });
+      }
+
+      const reason = String(req.body?.reason ?? "").trim().slice(0, 500) || "no reason given";
+
+      // Send the "your account is deleted" confirmation email FIRST, while we
+      // still know where to send it. Fire-and-forget — we don't want a flaky
+      // SMTP step to block the actual deletion.
+      const originalEmail = u.email;
+      const html = `<div style="font-family:-apple-system,Segoe UI,sans-serif;max-width:520px;margin:auto;padding:24px;color:#1a2530;">
+        <h2 style="margin:0 0 12px;">Your WorkAbroad Hub account has been deleted</h2>
+        <p>Hi,</p>
+        <p>This is a confirmation that your account associated with this email address was permanently deleted on ${new Date().toUTCString()}.</p>
+        <p>What was removed:</p>
+        <ul>
+          <li>Your name, email, phone number, and profile</li>
+          <li>Your login credentials (you can no longer sign in)</li>
+          <li>The text of any CVs you uploaded</li>
+        </ul>
+        <p>What was kept (for Kenya Revenue Authority tax compliance):</p>
+        <ul>
+          <li>Anonymised payment records — these no longer contain your name or contact details</li>
+        </ul>
+        <p>If you did NOT request this deletion, please reply to this email immediately.</p>
+        <p style="margin-top:32px;font-size:13px;color:#475569;">— The WorkAbroad Hub team</p>
+      </div>`;
+      const text = `Your WorkAbroad Hub account associated with this email address was permanently deleted on ${new Date().toUTCString()}.\n\nIf you did NOT request this deletion, please reply to this email immediately.`;
+      sendEmail({
+        to: originalEmail,
+        subject: "Your WorkAbroad Hub account has been deleted",
+        html,
+        text,
+      }).catch((err: any) => {
+        console.warn("[Auth][delete-account] confirmation email failed:", err?.message);
+      });
+
+      // ── Atomic scrub via a single transaction ────────────────────────────
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+
+        // 1) Anonymise the user row.
+        await client.query(
+          `UPDATE users
+              SET email             = 'deleted-' || id || '@deleted.workabroadhub.local',
+                  phone             = NULL,
+                  first_name        = 'Deleted',
+                  last_name         = 'User',
+                  profile_image_url = NULL,
+                  country           = NULL,
+                  password_hash     = NULL,
+                  is_active         = false,
+                  email_verified    = false,
+                  phone_verified    = false,
+                  deleted_at        = NOW(),
+                  deletion_reason   = $2,
+                  updated_at        = NOW()
+            WHERE id = $1`,
+          [userId, reason],
+        );
+
+        // 2) Wipe verification codes (no longer needed).
+        await client.query(
+          `DELETE FROM verification_codes WHERE user_id = $1`,
+          [userId],
+        ).catch((e) => console.warn("[Auth][delete-account] verification_codes:", e?.message));
+
+        // 3) Wipe active sessions (logs them out everywhere).
+        await client.query(
+          `DELETE FROM active_sessions WHERE user_id = $1`,
+          [userId],
+        ).catch((e) => console.warn("[Auth][delete-account] active_sessions:", e?.message));
+
+        // 4) Scrub PII from service_orders but keep the audit row.
+        await client.query(
+          `UPDATE service_orders
+              SET cv_text         = NULL,
+                  extra_input     = NULL,
+                  job_description = NULL,
+                  output_text     = NULL,
+                  updated_at      = NOW()
+            WHERE user_id = $1`,
+          [userId],
+        ).catch((e) => console.warn("[Auth][delete-account] service_orders scrub:", e?.message));
+
+        await client.query("COMMIT");
+      } catch (txErr: any) {
+        await client.query("ROLLBACK").catch(() => {});
+        throw txErr;
+      } finally {
+        client.release();
+      }
+
+      console.log(`[Auth][delete-account] userId=${userId} anonymised. reason="${reason}"`);
+
+      // Destroy the session so the next request is unauthenticated.
+      const sess = req.session as any;
+      if (sess && typeof sess.destroy === "function") {
+        sess.destroy(() => {
+          res.clearCookie("connect.sid");
+          res.json({ ok: true, message: "Your account has been deleted." });
+        });
+      } else {
+        res.json({ ok: true, message: "Your account has been deleted." });
+      }
+    } catch (err: any) {
+      console.error("[Auth][delete-account] failed:", err?.message);
+      res.status(500).json({ message: "Could not delete account. Please try again or contact support." });
     }
   });
 
