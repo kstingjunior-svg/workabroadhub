@@ -25,6 +25,22 @@ function serveStatic(app) {
             }
         },
     }));
+    // ── API / WS short-circuit ────────────────────────────────────────────────
+    // Any request to /api/* or /ws/* that wasn't matched by an earlier route
+    // is a genuine 404 — NOT a client-side route. If we let those fall through
+    // to the SPA fallback below, the server happily sends index.html back, the
+    // client tries to parse HTML as JSON, and we get cascading 500s + log noise.
+    //
+    // Fix: return a clean JSON 404 here so misdirected clients (analytics
+    // pollers, stale SDKs, scrapers hitting /api/track-live with GET, etc.)
+    // get a fast, honest response and never poison the log.
+    app.use(["/api", "/api/*", "/ws", "/ws/*"], (req, res) => {
+        res.status(404).json({
+            message: "Not found",
+            method: req.method,
+            path: req.originalUrl,
+        });
+    });
     // SPA fallback: any non-API GET should return index.html so wouter handles
     // client-side routing. NEVER cache index.html — it points at the current JS.
     app.use("*", (_req, res) => {
