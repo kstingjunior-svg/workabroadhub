@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# ─────────────────────────────────────────────────────────────────────────────
+# pre-push — block pushes that contain NUL-poisoned files or a stale dist/.
+#
+# Installed into .git/hooks/pre-push by scripts/install-git-hooks.mjs on
+# every npm install. Skipable with: SKIP_PREPUSH=1 git push
+# ─────────────────────────────────────────────────────────────────────────────
+
+if [ "${SKIP_PREPUSH:-0}" = "1" ]; then
+  echo "[pre-push] SKIP_PREPUSH=1 set — skipping checks."
+  exit 0
+fi
+
+echo "[pre-push] running NUL-byte check..."
+if ! node scripts/check-nuls.mjs; then
+  echo ""
+  echo "Push aborted. Fix NUL-poisoned files above, or run with SKIP_PREPUSH=1 to bypass."
+  exit 1
+fi
+
+echo "[pre-push] running dist-freshness check..."
+if ! node scripts/check-dist-fresh.mjs; then
+  echo ""
+  echo "Push aborted. dist/server/ is stale. Run 'npx tsc -p tsconfig.server.json' and commit dist/server, or set SKIP_PREPUSH=1 to bypass."
+  exit 1
+fi
+
+echo "[pre-push] all checks passed."
+exit 0
