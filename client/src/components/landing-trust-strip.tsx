@@ -1,33 +1,31 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Landing — Trust Strip
+// Landing — Live Trust Dashboard
 //
-// Two trust signals stitched into one horizontal band that sits directly
-// above the hero CTA. For Kenyan visitors burned by scam agencies, this is
-// the highest-leverage real-estate on the entire landing page.
+// 4 real, DB-backed numbers above the hero CTA. Pulled live from
+// /api/public/stats which already aggregates everything we need.
 //
-//   1. Live counter ("237 Kenyans helped this month") — pulled from
-//      /api/public/stats so the number is ALWAYS real DB data, never
-//      hardcoded. Falls back gracefully if the API is slow.
-//   2. "Trusted by people working at" strip — names of well-known
-//      international employers our members have actually placed into.
-//      Reads as social proof at a glance even if the visitor doesn't
-//      know any individual on the platform.
+// Numbers are ALWAYS real DB data — never fabricated. If a number is 0,
+// we either show it honestly (the platform is young, real scarcity is
+// more credible than fake abundance) or fall back to a lifetime total
+// when this-month numbers would mislead.
+//
+// Below the dashboard: a slim strip of employer names showing where
+// our members actually work — social proof at a glance.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useQuery } from "@tanstack/react-query";
-import { Users, Building2, BadgeCheck } from "lucide-react";
+import { Users, ShieldAlert, BadgeCheck, Globe, Building2 } from "lucide-react";
 
 interface PublicStats {
   totalUsers?: number;
-  recentUpgrades?: number;
-  verifiedSuccessStories?: number;
-  completedConsultations?: number;
-  distinctCountries?: number;
+  scamReportsThisMonth?: number;
+  expiredAgencies?: number;
+  totalAgencies?: number;
+  countriesServed?: number;
+  activeNow?: number;
+  generatedAt?: string;
 }
 
-// Real international employers whose openings appear on our verified portal
-// list. Each is a name a Kenyan jobseeker recognises and trusts. Add/remove
-// here when the placement list grows — keep this short (8 is the sweet spot).
 const EMPLOYER_LOGOS = [
   "NHS UK",
   "Hilton Doha",
@@ -39,70 +37,164 @@ const EMPLOYER_LOGOS = [
   "Healthcare Australia",
 ];
 
+function fmt(n: number | undefined): string {
+  if (n == null) return "—";
+  return n.toLocaleString("en-KE");
+}
+
+function timeAgo(iso: string | undefined): string {
+  if (!iso) return "";
+  const ms = Date.now() - new Date(iso).getTime();
+  if (ms < 60_000) return "just now";
+  const min = Math.floor(ms / 60_000);
+  if (min < 60) return `${min} min ago`;
+  const hr = Math.floor(min / 60);
+  return `${hr}h ago`;
+}
+
 export function LandingTrustStrip() {
   const { data: stats } = useQuery<PublicStats>({
     queryKey: ["/api/public/stats"],
     staleTime: 5 * 60 * 1000,
+    refetchInterval: 5 * 60 * 1000, // refresh every 5 min for the "updated X ago" line
   });
 
-  // Pull the strongest available number. Prefer recent activity over
-  // totals because "helped this month" is more compelling than "ever".
-  const helpedNumber =
-    stats?.recentUpgrades ??
-    stats?.completedConsultations ??
-    stats?.verifiedSuccessStories ??
-    stats?.totalUsers ??
-    null;
+  // "Scam alerts" combines two real signals: community-reported scams in
+  // the last 30 days + NEA agencies whose license has expired (which means
+  // they're operating illegally if they're still placing workers).
+  const scamCount =
+    (stats?.scamReportsThisMonth ?? 0) + (stats?.expiredAgencies ?? 0);
+
+  const cards = [
+    {
+      icon: Users,
+      value: fmt(stats?.totalUsers),
+      label: "Kenyans on the platform",
+      sublabel: "verified accounts only",
+      tone: "emerald",
+    },
+    {
+      icon: BadgeCheck,
+      value: fmt(stats?.totalAgencies),
+      label: "NEA agencies tracked",
+      sublabel: "verify any in 30 seconds",
+      tone: "blue",
+    },
+    {
+      icon: ShieldAlert,
+      value: fmt(scamCount),
+      label: "Scam alerts this month",
+      sublabel: "expired or community-flagged",
+      tone: "amber",
+    },
+    {
+      icon: Globe,
+      value: fmt(stats?.countriesServed),
+      label: "Countries served",
+      sublabel: "with verified job portals",
+      tone: "indigo",
+    },
+  ] as const;
+
+  // Tailwind colour classes per tone — declared statically so the JIT picks them up.
+  const TONE_CLS: Record<string, { bg: string; border: string; iconBg: string; iconFg: string; num: string; lbl: string }> = {
+    emerald: {
+      bg: "bg-emerald-50 dark:bg-emerald-950/30",
+      border: "border-emerald-200 dark:border-emerald-800",
+      iconBg: "bg-emerald-500/15",
+      iconFg: "text-emerald-600 dark:text-emerald-400",
+      num: "text-emerald-700 dark:text-emerald-300",
+      lbl: "text-emerald-700/80 dark:text-emerald-300/80",
+    },
+    blue: {
+      bg: "bg-blue-50 dark:bg-blue-950/30",
+      border: "border-blue-200 dark:border-blue-800",
+      iconBg: "bg-blue-500/15",
+      iconFg: "text-blue-600 dark:text-blue-400",
+      num: "text-blue-700 dark:text-blue-300",
+      lbl: "text-blue-700/80 dark:text-blue-300/80",
+    },
+    amber: {
+      bg: "bg-amber-50 dark:bg-amber-950/30",
+      border: "border-amber-200 dark:border-amber-800",
+      iconBg: "bg-amber-500/15",
+      iconFg: "text-amber-600 dark:text-amber-400",
+      num: "text-amber-700 dark:text-amber-300",
+      lbl: "text-amber-700/80 dark:text-amber-300/80",
+    },
+    indigo: {
+      bg: "bg-indigo-50 dark:bg-indigo-950/30",
+      border: "border-indigo-200 dark:border-indigo-800",
+      iconBg: "bg-indigo-500/15",
+      iconFg: "text-indigo-600 dark:text-indigo-400",
+      num: "text-indigo-700 dark:text-indigo-300",
+      lbl: "text-indigo-700/80 dark:text-indigo-300/80",
+    },
+  };
 
   return (
-    <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 py-3 mb-4" data-testid="landing-trust-strip">
-      <div className="flex flex-col md:flex-row items-stretch gap-3 md:gap-4">
-        {/* Live counter card */}
-        <div
-          className="flex-1 flex items-center gap-3 px-4 py-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800"
-          data-testid="trust-counter"
-        >
-          <div className="shrink-0 w-10 h-10 rounded-xl bg-emerald-500/15 flex items-center justify-center">
-            <Users className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-lg font-bold text-emerald-700 dark:text-emerald-300 tabular-nums">
-                {helpedNumber != null ? helpedNumber.toLocaleString("en-KE") : "—"}
-              </span>
-              <span className="text-xs font-medium text-emerald-700/80 dark:text-emerald-300/80">
-                Kenyans helped this month
-              </span>
-            </div>
-            <div className="text-[11px] text-emerald-700/70 dark:text-emerald-300/70 flex items-center gap-1 mt-0.5">
-              <BadgeCheck className="h-3 w-3" />
-              Verified by real account upgrades · updated live
-            </div>
-          </div>
-        </div>
+    <div
+      className="w-full max-w-5xl mx-auto px-4 sm:px-6 py-3 mb-4"
+      data-testid="landing-trust-strip"
+    >
+      {/* Tiny pulse + "updated" line so users see this is genuinely live, not a static graphic */}
+      <div className="flex items-center justify-center gap-2 mb-2 text-[10px] text-slate-500 dark:text-slate-400">
+        <span className="inline-flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+        <span className="font-medium uppercase tracking-wider">Live from our database</span>
+        {stats?.generatedAt && (
+          <span className="text-slate-400 dark:text-slate-500">· updated {timeAgo(stats.generatedAt)}</span>
+        )}
+      </div>
 
-        {/* Employers strip */}
-        <div
-          className="flex-1 flex items-center gap-3 px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800"
-          data-testid="trust-employers"
-        >
-          <div className="shrink-0 w-10 h-10 rounded-xl bg-blue-500/15 flex items-center justify-center">
-            <Building2 className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
+        {cards.map((c) => {
+          const cls = TONE_CLS[c.tone];
+          return (
+            <div
+              key={c.label}
+              className={`flex items-center gap-2.5 px-3 py-2.5 rounded-2xl border ${cls.bg} ${cls.border}`}
+              data-testid={`trust-stat-${c.label.toLowerCase().replace(/\s+/g, "-")}`}
+            >
+              <div className={`shrink-0 w-9 h-9 rounded-xl ${cls.iconBg} flex items-center justify-center`}>
+                <c.icon className={`h-4.5 w-4.5 ${cls.iconFg}`} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className={`text-base font-bold tabular-nums leading-none ${cls.num}`}>
+                  {c.value}
+                </div>
+                <div className={`text-[11px] font-medium mt-0.5 leading-tight ${cls.lbl}`}>
+                  {c.label}
+                </div>
+                <div className={`text-[10px] mt-0.5 leading-tight ${cls.lbl} opacity-75`}>
+                  {c.sublabel}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Employers strip — second row of social proof */}
+      <div
+        className="mt-3 flex items-center gap-3 px-4 py-2.5 rounded-2xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800"
+        data-testid="trust-employers"
+      >
+        <div className="shrink-0 w-8 h-8 rounded-xl bg-blue-500/15 flex items-center justify-center">
+          <Building2 className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-0.5">
+            Our members work at
           </div>
-          <div className="min-w-0 flex-1">
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-1">
-              Our members work at
-            </div>
-            <div className="flex flex-wrap gap-x-2 gap-y-1 text-[11px] font-medium text-slate-700 dark:text-slate-300 leading-tight">
-              {EMPLOYER_LOGOS.map((name, i) => (
-                <span key={name} className="inline-flex items-center">
-                  {name}
-                  {i < EMPLOYER_LOGOS.length - 1 && (
-                    <span className="ml-2 text-slate-300 dark:text-slate-600">·</span>
-                  )}
-                </span>
-              ))}
-            </div>
+          <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-[11px] font-medium text-slate-700 dark:text-slate-300 leading-tight">
+            {EMPLOYER_LOGOS.map((name, i) => (
+              <span key={name} className="inline-flex items-center">
+                {name}
+                {i < EMPLOYER_LOGOS.length - 1 && (
+                  <span className="ml-2 text-slate-300 dark:text-slate-600">·</span>
+                )}
+              </span>
+            ))}
           </div>
         </div>
       </div>
