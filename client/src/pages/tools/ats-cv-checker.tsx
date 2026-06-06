@@ -13,6 +13,7 @@ import { UpgradePrompt } from "@/components/upgrade-prompt";
 import { SeoHead, buildArticleSchema, buildFaqSchema } from "@/components/seo-head";
 import { trackPageView } from "@/lib/analytics";
 import { ReportShareBar } from "@/components/report-share-bar";
+import { CvFixLiteInstantPayModal } from "@/components/cv-fix-lite-instant-pay";
 import {
   FileText,
   Upload,
@@ -99,6 +100,7 @@ export default function ATSCVChecker() {
   const [dragOver, setDragOver] = useState(false);
   const [reportId, setReportId] = useState<string | null>(null);
   const [returnedFromLogin, setReturnedFromLogin] = useState(false);
+  const [instantPayOpen, setInstantPayOpen] = useState(false);
 
   useEffect(() => {
     trackPageView("ats_cv_checker");
@@ -390,14 +392,14 @@ export default function ATSCVChecker() {
                       </div>
 
                       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1">
-                        <a
-                          href="/services/order/cv_fix_lite"
+                        <button
+                          onClick={() => setInstantPayOpen(true)}
                           className="flex-1 inline-flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-bold text-sm py-3 px-4 rounded-xl shadow-md hover:shadow-lg transition-all"
                           data-testid="button-tripwire-cv-fix"
                         >
                           🎯 Fix My CV for KES 99
                           <ChevronRight className="h-4 w-4" />
-                        </a>
+                        </button>
                         <a
                           href="/services"
                           className="text-xs text-center sm:text-left text-muted-foreground hover:text-foreground transition-colors px-2 py-2"
@@ -454,14 +456,14 @@ export default function ATSCVChecker() {
                         </p>
                       </div>
                     </div>
-                    <a
-                      href="/services/order/cv_fix_lite"
+                    <button
+                      onClick={() => setInstantPayOpen(true)}
                       className="inline-flex w-full items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-bold text-sm py-3 px-4 rounded-xl shadow-md hover:shadow-lg transition-all"
                       data-testid="button-locked-cv-fix"
                     >
                       🎯 Fix My CV for KES 99
                       <ChevronRight className="h-4 w-4" />
-                    </a>
+                    </button>
                   </CardContent>
                 </Card>
               )
@@ -666,6 +668,14 @@ export default function ATSCVChecker() {
           <Link href="/login?next=/tools/ats-cv-checker"><span className="text-xs text-blue-600 dark:text-blue-400 underline underline-offset-2">Create Free Account</span></Link>
         </div>
       </div>
+
+      {/* ── Instant-pay modal — opens when user taps "Fix My CV for KES 99" ── */}
+      <CvFixLiteInstantPayModal
+        open={instantPayOpen}
+        onOpenChange={setInstantPayOpen}
+        cvFile={file}
+        score={result?.score}
+      />
     </div>
   );
 }
