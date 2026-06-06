@@ -1459,7 +1459,7 @@ export default function Dashboard() {
 
           <Link
             href="/green-card"
-            className="group relative overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-600 via-green-600 to-teal-500 p-5 shadow-xl hover:shadow-2xl hover:scale-[1.02] active:scale-[0.98] transition-all duration-200"
+            className="group relative overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-600 via-green-600 to-teal-500 p-5 shadow-xl hover:shadow-2xl hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 sm:col-span-1"
             data-testid="widget-green-card"
           >
             <div className="absolute -top-12 -right-12 w-40 h-40 rounded-full bg-white/10 blur-xl pointer-events-none" />
@@ -1494,6 +1494,62 @@ export default function Dashboard() {
             </div>
           </Link>
         </div>
+
+        {/* ── STUDENT VISA HERO — third primary action widget ──────────────
+            Founder ask: surface a big, prominent Student Visa entry point
+            on the homepage. Style mirrors the Visa Application + Green Card
+            cards above but spans full width so it stays equally prominent.
+            Destination /student-visas page gates the full content on Pro
+            (KES 4,500/yr) — paid users unlock step-by-step guidance for
+            USA, Canada, UK, Australia, UAE, Germany student visas. */}
+        <Link
+          href="/student-visas"
+          className="group relative overflow-hidden rounded-3xl bg-gradient-to-br from-violet-600 via-purple-600 to-fuchsia-500 p-5 shadow-xl hover:shadow-2xl hover:scale-[1.01] active:scale-[0.99] transition-all duration-200 block"
+          data-testid="widget-student-visa"
+        >
+          {/* Decorative orbs */}
+          <div className="absolute -top-12 -right-12 w-40 h-40 rounded-full bg-white/10 blur-xl pointer-events-none" />
+          <div className="absolute -bottom-8 -left-8 w-32 h-32 rounded-full bg-white/5 blur-xl pointer-events-none" />
+
+          <div className="relative flex flex-col sm:flex-row gap-4 text-white">
+            <div className="shrink-0 w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center text-3xl shadow-inner">
+              🎓
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                <h2 className="text-2xl font-extrabold leading-tight">
+                  Student Visa Application
+                </h2>
+                <span className="inline-flex items-center gap-1 bg-white/20 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full backdrop-blur-sm">
+                  ⚡ Step-by-step · 6 countries
+                </span>
+              </div>
+              <p className="text-sm text-white/90 leading-snug mb-3">
+                Apply to study in USA, Canada, UK, Australia, UAE or Germany.
+                Pick your country, follow our step-by-step guide, submit your
+                application — by yourself, no agent needed.
+              </p>
+              <div className="flex flex-wrap items-center gap-3 text-[11px] text-white/95">
+                <span className="inline-flex items-center gap-1"><CheckCircle className="h-3.5 w-3.5" /> University list per country</span>
+                <span className="inline-flex items-center gap-1"><CheckCircle className="h-3.5 w-3.5" /> Document checklist</span>
+                <span className="inline-flex items-center gap-1"><CheckCircle className="h-3.5 w-3.5" /> Direct apply links</span>
+              </div>
+            </div>
+            <div className="shrink-0 flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-2 sm:gap-3 mt-1">
+              <div className="text-base flex sm:flex-col items-center -space-x-1 sm:space-x-0 sm:space-y-0">
+                <span title="USA">🇺🇸</span>
+                <span title="Canada">🇨🇦</span>
+                <span title="UK">🇬🇧</span>
+                <span title="Australia">🇦🇺</span>
+                <span title="UAE">🇦🇪</span>
+                <span title="Germany">🇩🇪</span>
+              </div>
+              <span className="inline-flex items-center gap-1.5 bg-white text-violet-700 text-sm font-bold px-3 py-1.5 rounded-xl group-hover:bg-violet-50 transition-colors whitespace-nowrap">
+                Start <ArrowRight className="h-4 w-4" />
+              </span>
+            </div>
+          </div>
+        </Link>
 
         {/* ── RECENT SIGNUPS (LIVE) ────────────────────────────────────── */}
         <RecentSignupsPanel />

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "@/hooks/use-auth";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -613,9 +614,94 @@ function CountryVisaContent({ countryCode, country }: { countryCode: string; cou
   );
 }
 
+// ── Paywall component shown to non-Pro users ──────────────────────────────
+// Founder decision: Student Visa application content is Pro-only (KES 4,500/yr
+// or KES 600/mo). Free users see the country list + first overview but the
+// detailed step-by-step is gated. Aligned with the homepage widget framing.
+function StudentVisaPaywall() {
+  return (
+    <div className="min-h-screen bg-background">
+      <header className="sticky top-0 z-50 bg-background/95 backdrop-blur-md border-b">
+        <div className="container max-w-3xl mx-auto px-4 py-3">
+          <Link href="/">
+            <Button variant="ghost" size="sm" data-testid="button-back">
+              <ArrowLeft className="h-4 w-4 mr-2" /> Home
+            </Button>
+          </Link>
+        </div>
+      </header>
+      <main className="container max-w-2xl mx-auto px-4 py-8 sm:py-12 space-y-6">
+        <div className="text-center space-y-3">
+          <div className="inline-flex h-16 w-16 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 items-center justify-center mb-1">
+            <GraduationCap className="h-8 w-8 text-white" />
+          </div>
+          <h1 className="text-3xl font-bold tracking-tight">Student Visa Application</h1>
+          <p className="text-base text-muted-foreground leading-relaxed">
+            Step-by-step guidance to apply for a student visa to study in USA,
+            Canada, UK, Australia, UAE, or Germany — by yourself, no agent.
+          </p>
+        </div>
+
+        <Card className="border-violet-200 dark:border-violet-900/60 bg-gradient-to-b from-violet-50/60 to-white dark:from-violet-950/30 dark:to-slate-950">
+          <CardContent className="p-5 sm:p-6 space-y-4">
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wider text-violet-700 dark:text-violet-300">
+                What's inside
+              </p>
+              <ul className="space-y-1.5 text-sm">
+                <li className="flex items-start gap-2"><CheckCircle2 className="h-4 w-4 text-violet-600 dark:text-violet-400 mt-0.5 shrink-0" /> Country-by-country visa requirements (USA, Canada, UK, Australia, UAE, Germany)</li>
+                <li className="flex items-start gap-2"><CheckCircle2 className="h-4 w-4 text-violet-600 dark:text-violet-400 mt-0.5 shrink-0" /> Document checklist per country with KES costs</li>
+                <li className="flex items-start gap-2"><CheckCircle2 className="h-4 w-4 text-violet-600 dark:text-violet-400 mt-0.5 shrink-0" /> Step-by-step application instructions you can follow yourself</li>
+                <li className="flex items-start gap-2"><CheckCircle2 className="h-4 w-4 text-violet-600 dark:text-violet-400 mt-0.5 shrink-0" /> Direct apply links to official government portals</li>
+                <li className="flex items-start gap-2"><CheckCircle2 className="h-4 w-4 text-violet-600 dark:text-violet-400 mt-0.5 shrink-0" /> University & college shortlists per country</li>
+                <li className="flex items-start gap-2"><CheckCircle2 className="h-4 w-4 text-violet-600 dark:text-violet-400 mt-0.5 shrink-0" /> Minimum-wage + part-time work rules so you can plan finances</li>
+              </ul>
+            </div>
+
+            <div className="rounded-xl bg-white dark:bg-slate-900 border border-violet-200 dark:border-violet-900 p-4 space-y-3">
+              <div className="flex items-baseline justify-between gap-3 flex-wrap">
+                <div>
+                  <div className="text-3xl font-bold">KES 4,500<span className="text-base font-normal text-muted-foreground"> / year</span></div>
+                  <p className="text-xs text-muted-foreground">or KES 600/month — same access</p>
+                </div>
+                <Badge className="bg-violet-600 text-white border-0">Pro plan</Badge>
+              </div>
+              <Link href="/pricing">
+                <Button className="w-full bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white font-bold" size="lg" data-testid="button-upgrade-pro">
+                  Unlock student visas → see plans
+                </Button>
+              </Link>
+              <p className="text-[11px] text-muted-foreground text-center">
+                Pro also includes job alerts, CV tools, NEA agency verification, and WhatsApp support.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <p className="text-xs text-muted-foreground text-center">
+          Already have Pro? Sign in to unlock the full student-visa guide.
+        </p>
+      </main>
+    </div>
+  );
+}
+
 export default function StudentVisas() {
+  const { user } = useAuth();
+  const { data: userPlan } = useQuery<{ planId: string } | null>({
+    queryKey: ["/api/user/plan"],
+    enabled: !!user,
+  });
+  // Pro access: yearly (planId="pro"), monthly (planId="monthly"), or one-day trial.
+  const isPaidTier = !!userPlan && ["pro", "monthly", "trial"].includes(userPlan.planId);
+
   const [selectedCountry, setSelectedCountry] = useState("usa");
   const currentCountry = countryData.find(c => c.code === selectedCountry) || countryData[0];
+
+  // Block access for everyone who's NOT signed-in or who's on a free plan.
+  if (!user || !isPaidTier) {
+    return <StudentVisaPaywall />;
+  }
 
   return (
     <div className="min-h-screen bg-background">
