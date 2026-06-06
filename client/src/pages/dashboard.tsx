@@ -29,6 +29,7 @@ import { DashboardHeroCTA } from "@/components/dashboard-hero-cta";
 import { DashboardServicesGrid } from "@/components/dashboard-services-grid";
 import { DashboardProUpsell } from "@/components/dashboard-pro-upsell";
 import { DashboardSuccessStories } from "@/components/dashboard-success-stories";
+import { DashboardBestMatch } from "@/components/dashboard-best-match";
 import { DashboardVisaJobsLocked } from "@/components/dashboard-visa-jobs-locked";
 import { LiveActivityStrip } from "@/components/live-activity-strip";
 import { AgencyAlertBanner } from "@/components/agency-alert-banner";
@@ -1494,6 +1495,14 @@ export default function Dashboard() {
             </div>
           </Link>
         </div>
+
+        {/* ── TODAY'S BEST MATCH — personalized AI job recommendation ──────
+            For paid users who've previously run the CV job matcher, this
+            shows their #1 semantic match with a live apply link. For users
+            who haven't run the matcher yet, shows today's featured job
+            with a CTA to personalize. For non-Pro users, the apply link
+            is replaced with an upgrade prompt. Updates daily. */}
+        <DashboardBestMatch />
 
         {/* ── STUDENT VISA HERO — third primary action widget ──────────────
             Founder ask: surface a big, prominent Student Visa entry point

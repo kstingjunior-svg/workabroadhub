@@ -17748,17 +17748,90 @@ Tone examples:
             }
             const limit = Math.min(20, Math.max(1, Number(req.body?.limit ?? 10)));
             const { VISA_JOBS } = await Promise.resolve().then(() => __importStar(require("./visa-jobs-routes")));
-            const { findMatchesForCv } = await Promise.resolve().then(() => __importStar(require("./services/jobMatchEmbeddings")));
+            const { findMatchesForCv, rememberUserCvEmbedding } = await Promise.resolve().then(() => __importStar(require("./services/jobMatchEmbeddings")));
             const matches = await findMatchesForCv(cvText, VISA_JOBS, limit);
             // Strip applyUrl for non-signed-in users so they have to sign up to apply
             // (mirrors the existing /api/visa-jobs paywall in visa-jobs-routes.ts).
             const userId = req.session?.customUserId;
             const cleaned = matches.map((m) => userId ? m : { ...m, applyUrl: undefined });
+            // Persist the embedding for signed-in users so the dashboard
+            // "Today's Best Match" widget can run without a re-upload. Fire and
+            // forget — never block the response if the cache write fails.
+            if (userId) {
+                rememberUserCvEmbedding(userId, cvText).catch((err) => {
+                    console.warn("[jobs/match-my-cv] cache write failed:", err?.message);
+                });
+            }
             res.json({ matches: cleaned, signedIn: !!userId });
         }
         catch (err) {
             console.error("[jobs/match-my-cv]", err?.message);
             res.status(500).json({ message: err?.message ?? "Could not run match." });
+        }
+    });
+    // ───────────────────────────────────────────────────────────────────────────
+    // Dashboard: "Today's Best Match" widget.
+    //
+    // Returns ONE personalized job match for signed-in users who have run
+    // /api/jobs/match-my-cv at least once (and thus have a cached embedding).
+    // For everyone else, returns a generic featured job from the catalogue so
+    // the widget never shows empty.
+    //
+    // applyUrl is stripped for non-Pro users — they see the match details but
+    // need to upgrade to actually click through. Pro/Monthly/Trial users get
+    // the live apply link.
+    // ───────────────────────────────────────────────────────────────────────────
+    app.get("/api/dashboard/best-match", async (req, res) => {
+        try {
+            const { VISA_JOBS } = await Promise.resolve().then(() => __importStar(require("./visa-jobs-routes")));
+            const { findMatchesFromCachedEmbedding } = await Promise.resolve().then(() => __importStar(require("./services/jobMatchEmbeddings")));
+            const userId = req.session?.customUserId;
+            let personalized = false;
+            let topMatch = null;
+            if (userId) {
+                const matches = await findMatchesFromCachedEmbedding(userId, VISA_JOBS, 1).catch(() => null);
+                if (matches && matches.length > 0) {
+                    personalized = true;
+                    topMatch = matches[0];
+                }
+            }
+            // Fallback: rotate through the catalogue by day so a non-personalized
+            // visitor gets a different featured job every 24h instead of always
+            // seeing the same first row.
+            if (!topMatch) {
+                const dayIndex = Math.floor(Date.now() / (24 * 60 * 60 * 1000));
+                const featured = VISA_JOBS[dayIndex % VISA_JOBS.length];
+                topMatch = featured
+                    ? { ...featured, score: 0, scorePct: 0 }
+                    : null;
+            }
+            if (!topMatch) {
+                return res.json({ match: null, personalized: false, signedIn: !!userId, canApply: false });
+            }
+            // Is this user on a paid tier? (mirrors Student Visa paywall logic.)
+            let canApply = false;
+            if (userId) {
+                try {
+                    const userPlan = await storage_1.storage.getUserPlan?.(userId);
+                    const planId = userPlan?.planId ?? null;
+                    canApply = !!planId && ["pro", "monthly", "trial"].includes(planId);
+                }
+                catch { }
+            }
+            // Hide applyUrl from non-paid users to force them through the upgrade.
+            const safeMatch = canApply
+                ? topMatch
+                : { ...topMatch, applyUrl: undefined };
+            res.json({
+                match: safeMatch,
+                personalized,
+                signedIn: !!userId,
+                canApply,
+            });
+        }
+        catch (err) {
+            console.error("[dashboard/best-match]", err?.message);
+            res.status(500).json({ message: err?.message ?? "Could not load best match." });
         }
     });
     // Boot-time: ensure every job in the catalogue has an embedding.

@@ -9,6 +9,9 @@
 //   2. At match time: we embed the candidate's CV text once (~$0.00002),
 //      load ALL job embeddings into memory (~50-200 rows, microseconds),
 //      compute cosine similarity in Node, and return the top-K.
+//   3. We also UPSERT the user's CV embedding into user_cv_embeddings so
+//      the dashboard "Today's Best Match" widget can run on every page
+//      load without ever asking them to re-upload.
 //
 // WHY NOT pgvector:
 //   Render's managed Postgres doesn't enable pgvector by default and
@@ -44,8 +47,8 @@ interface JobLike {
 }
 
 interface MatchResult extends JobLike {
-  score: number; // 0..1 cosine similarity
-  scorePct: number; // 0..100 rounded
+  score: number;
+  scorePct: number;
 }
 
 const SCHEMA_INIT = { done: false };
@@ -61,13 +64,20 @@ async function ensureSchema(): Promise<void> {
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
     `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS user_cv_embeddings (
+        user_id     VARCHAR(60) PRIMARY KEY,
+        text_hash   VARCHAR(64) NOT NULL,
+        embedding   DOUBLE PRECISION[] NOT NULL,
+        cv_preview  TEXT,
+        updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
     SCHEMA_INIT.done = true;
   } catch (err: any) {
     console.error("[job-match] ensureSchema failed:", err?.message ?? err);
   }
 }
-
-// ─── Embedding helper ────────────────────────────────────────────────────────
 
 async function embedText(text: string): Promise<number[]> {
   const apiKey = (process.env.OPENAI_API_KEY || "").trim();
@@ -77,10 +87,7 @@ async function embedText(text: string): Promise<number[]> {
 
   const res = await fetch("https://api.openai.com/v1/embeddings", {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({ model: EMBED_MODEL, input: clean }),
   });
   if (!res.ok) {
@@ -95,8 +102,6 @@ async function embedText(text: string): Promise<number[]> {
   return vec;
 }
 
-// ─── Cosine similarity ───────────────────────────────────────────────────────
-
 function cosine(a: number[], b: number[]): number {
   let dot = 0, na = 0, nb = 0;
   for (let i = 0; i < a.length; i++) {
@@ -108,48 +113,19 @@ function cosine(a: number[], b: number[]): number {
   return dot / (Math.sqrt(na) * Math.sqrt(nb));
 }
 
-// ─── Job text builder ────────────────────────────────────────────────────────
-
 function jobText(j: JobLike): string {
-  return [
-    j.title,
-    j.employer,
-    j.country,
-    j.city ?? "",
-    j.salary ?? "",
-    j.visaType ?? "",
-    j.category ?? "",
-  ].filter(Boolean).join(" · ");
+  return [j.title, j.employer, j.country, j.city ?? "", j.salary ?? "", j.visaType ?? "", j.category ?? ""].filter(Boolean).join(" · ");
 }
 
 function hash(s: string): string {
   return crypto.createHash("sha256").update(s).digest("hex");
 }
 
-// ─── Boot-time embedding of the in-memory catalogue ──────────────────────────
-
-/**
- * Ensure every job in the catalogue has a fresh embedding in the DB.
- * Re-embeds whenever the underlying text changes (detected via text_hash).
- *
- * Idempotent — safe to call on every boot. The first ever boot will spend
- * ~5-10 seconds embedding the whole catalogue (~$0.001 total); subsequent
- * boots are no-op.
- */
-export async function refreshJobEmbeddings(jobs: JobLike[]): Promise<{
-  inserted: number;
-  updated: number;
-  unchanged: number;
-}> {
+export async function refreshJobEmbeddings(jobs: JobLike[]): Promise<{ inserted: number; updated: number; unchanged: number }> {
   await ensureSchema();
   let inserted = 0, updated = 0, unchanged = 0;
-
-  // Fetch current cached hashes in one query.
-  const { rows: existing } = await pool.query<{ job_id: string; text_hash: string }>(
-    `SELECT job_id, text_hash FROM job_embeddings`,
-  );
+  const { rows: existing } = await pool.query<{ job_id: string; text_hash: string }>(`SELECT job_id, text_hash FROM job_embeddings`);
   const cached = new Map(existing.map((r) => [r.job_id, r.text_hash]));
-
   for (const job of jobs) {
     const text = jobText(job);
     const h = hash(text);
@@ -158,15 +134,11 @@ export async function refreshJobEmbeddings(jobs: JobLike[]): Promise<{
     try {
       const vec = await embedText(text);
       if (prev) {
-        await pool.query(
-          `UPDATE job_embeddings SET text_hash = $2, embedding = $3, updated_at = NOW() WHERE job_id = $1`,
-          [job.id, h, vec],
-        );
+        await pool.query(`UPDATE job_embeddings SET text_hash = $2, embedding = $3, updated_at = NOW() WHERE job_id = $1`, [job.id, h, vec]);
         updated++;
       } else {
         await pool.query(
-          `INSERT INTO job_embeddings (job_id, text_hash, embedding) VALUES ($1, $2, $3)
-             ON CONFLICT (job_id) DO UPDATE SET text_hash = EXCLUDED.text_hash, embedding = EXCLUDED.embedding, updated_at = NOW()`,
+          `INSERT INTO job_embeddings (job_id, text_hash, embedding) VALUES ($1, $2, $3) ON CONFLICT (job_id) DO UPDATE SET text_hash = EXCLUDED.text_hash, embedding = EXCLUDED.embedding, updated_at = NOW()`,
           [job.id, h, vec],
         );
         inserted++;
@@ -181,31 +153,61 @@ export async function refreshJobEmbeddings(jobs: JobLike[]): Promise<{
   return { inserted, updated, unchanged };
 }
 
-// ─── Match a CV against the catalogue ────────────────────────────────────────
-
-export async function findMatchesForCv(
-  cvText: string,
-  allJobs: JobLike[],
-  limit = 10,
-): Promise<MatchResult[]> {
+export async function findMatchesForCv(cvText: string, allJobs: JobLike[], limit = 10): Promise<MatchResult[]> {
   await ensureSchema();
   const cvVec = await embedText(cvText);
-
-  const { rows } = await pool.query<JobEmbeddingRow>(
-    `SELECT job_id, text_hash, embedding FROM job_embeddings`,
-  );
+  const { rows } = await pool.query<JobEmbeddingRow>(`SELECT job_id, text_hash, embedding FROM job_embeddings`);
   const byId = new Map(allJobs.map((j) => [j.id, j]));
-
   const scored: MatchResult[] = [];
   for (const r of rows) {
     const job = byId.get(r.job_id);
-    if (!job) continue; // stale row for a removed job — skip
+    if (!job) continue;
     const s = cosine(cvVec, r.embedding);
-    scored.push({
-      ...job,
-      score: s,
-      scorePct: Math.round(s * 100),
-    });
+    scored.push({ ...job, score: s, scorePct: Math.round(s * 100) });
+  }
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, limit);
+}
+
+// ─── Per-user CV embedding cache (for dashboard widget) ──────────────────────
+
+export async function rememberUserCvEmbedding(userId: string, cvText: string): Promise<void> {
+  if (!userId) return;
+  await ensureSchema();
+  const clean = cvText.replace(/\s+/g, " ").trim().slice(0, 8000);
+  if (clean.length < 100) return;
+  const h = hash(clean);
+  try {
+    const existing = await pool.query<{ text_hash: string }>(`SELECT text_hash FROM user_cv_embeddings WHERE user_id = $1`, [userId]);
+    if (existing.rows[0]?.text_hash === h) return;
+  } catch {}
+  const vec = await embedText(clean);
+  const preview = clean.slice(0, 300);
+  await pool.query(
+    `INSERT INTO user_cv_embeddings (user_id, text_hash, embedding, cv_preview) VALUES ($1, $2, $3, $4) ON CONFLICT (user_id) DO UPDATE SET text_hash = EXCLUDED.text_hash, embedding = EXCLUDED.embedding, cv_preview = EXCLUDED.cv_preview, updated_at = NOW()`,
+    [userId, h, vec, preview],
+  );
+}
+
+export async function getUserCvEmbedding(userId: string): Promise<{ embedding: number[]; updatedAt: Date } | null> {
+  if (!userId) return null;
+  await ensureSchema();
+  const { rows } = await pool.query<{ embedding: number[]; updated_at: Date }>(`SELECT embedding, updated_at FROM user_cv_embeddings WHERE user_id = $1`, [userId]);
+  if (!rows.length) return null;
+  return { embedding: rows[0].embedding, updatedAt: rows[0].updated_at };
+}
+
+export async function findMatchesFromCachedEmbedding(userId: string, allJobs: JobLike[], limit = 3): Promise<MatchResult[] | null> {
+  const cached = await getUserCvEmbedding(userId);
+  if (!cached) return null;
+  const { rows } = await pool.query<JobEmbeddingRow>(`SELECT job_id, text_hash, embedding FROM job_embeddings`);
+  const byId = new Map(allJobs.map((j) => [j.id, j]));
+  const scored: MatchResult[] = [];
+  for (const r of rows) {
+    const job = byId.get(r.job_id);
+    if (!job) continue;
+    const s = cosine(cached.embedding, r.embedding);
+    scored.push({ ...job, score: s, scorePct: Math.round(s * 100) });
   }
   scored.sort((a, b) => b.score - a.score);
   return scored.slice(0, limit);
