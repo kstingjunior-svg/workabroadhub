@@ -1583,22 +1583,81 @@ export async function seedCountryPortals(): Promise<void> {
 // actually drifted.
 export async function syncPlanPrices(): Promise<void> {
   try {
-    const targets: Array<{ planId: string; price: number; name?: string }> = [
-      { planId: "trial",   price: 99,   name: "1 Day Trial" },
-      { planId: "monthly", price: 600,  name: "Monthly Access" },
-      { planId: "pro",     price: 4500, name: "Yearly Access" },
+    // FULL plan definitions — used for both UPDATE (price drift) and INSERT
+    // (when a deployment has been running since before a tier existed).
+    //
+    // 2026-06: founder decision — monthly is the default door now. Kenyans
+    // think weekly, not yearly. Pro yearly stays but is framed as a savings
+    // play ("Save KES 2,700 — pay once, done") rather than the primary tier.
+    const targets = [
+      {
+        planId: "trial",
+        price: 99,
+        name: "1 Day Trial",
+        description: "24-hour full access — perfect for testing",
+        badge: "Try It",
+        features: ["full_tools", "ai_job_assistant", "job_matching", "ats_cv_checker", "application_tracker"],
+        billingPeriod: "one-time",
+        displayOrder: 2,
+      },
+      {
+        planId: "monthly",
+        price: 600,
+        name: "Monthly Access",
+        description: "30 days full access — renew when you want",
+        badge: "Most Flexible",
+        features: ["full_tools", "ai_job_assistant", "job_matching", "priority_listings", "unlimited_access", "whatsapp_consultation", "ats_cv_checker", "application_tracker"],
+        billingPeriod: "monthly",
+        displayOrder: 3,
+      },
+      {
+        planId: "pro",
+        price: 4500,
+        name: "Yearly Access",
+        description: "365 days full access — save KES 2,700 vs paying monthly",
+        badge: "Save KES 2,700",
+        features: ["full_tools", "ai_job_assistant", "job_matching", "priority_listings", "unlimited_access", "whatsapp_consultation", "ats_cv_checker", "application_tracker"],
+        billingPeriod: "yearly",
+        displayOrder: 4,
+      },
     ];
 
-    let updated = 0;
+    let inserted = 0, updated = 0;
     for (const t of targets) {
-      const res = await pool.query(
-        `UPDATE plans SET price = $1, plan_name = COALESCE($2, plan_name)
-          WHERE plan_id = $3 AND price <> $1`,
-        [t.price, t.name ?? null, t.planId]
+      // Try UPDATE first (preserves all fields not touched here).
+      const upd = await pool.query(
+        `UPDATE plans
+            SET price = $1,
+                plan_name = $2,
+                description = $3,
+                badge = $4,
+                billing_period = $5,
+                display_order = $6,
+                is_active = true,
+                updated_at = NOW()
+          WHERE plan_id = $7`,
+        [t.price, t.name, t.description, t.badge, t.billingPeriod, t.displayOrder, t.planId],
       );
-      if (res.rowCount && res.rowCount > 0) updated += res.rowCount;
+      if (upd.rowCount && upd.rowCount > 0) {
+        updated += upd.rowCount;
+        continue;
+      }
+      // No existing row → INSERT.
+      try {
+        await pool.query(
+          `INSERT INTO plans
+             (plan_id, plan_name, price, currency, features, description, badge,
+              billing_period, is_active, display_order)
+           VALUES ($1, $2, $3, 'KES', $4, $5, $6, $7, true, $8)
+           ON CONFLICT (plan_id) DO NOTHING`,
+          [t.planId, t.name, t.price, JSON.stringify(t.features), t.description, t.badge, t.billingPeriod, t.displayOrder],
+        );
+        inserted++;
+      } catch (err: any) {
+        console.warn(`[Plans] insert ${t.planId} failed:`, err?.message);
+      }
     }
-    console.log(`[Plans] Price sync complete — ${updated} row(s) updated`);
+    console.log(`[Plans] Price sync complete — ${updated} updated, ${inserted} inserted`);
   } catch (err: any) {
     console.error("[Plans] Price sync failed:", err?.message ?? err);
   }
