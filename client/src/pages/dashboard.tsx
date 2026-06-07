@@ -1409,12 +1409,15 @@ export default function Dashboard() {
         </div>
 
 
-        {/* ── PRIMARY ACTION WIDGETS — big bold visa + green-card heroes
-            Replaces the old Quick Actions grid (WhatsApp / CV Services /
-            Verify Agency / etc) per user request: those duplicate the
-            landing-page footer/banners. The two CTAs people travel here
-            for are Visa Application help and Green Card Lottery. Make
-            them impossible to miss. */}
+        {/* ── PRIMARY ACTION WIDGETS — big bold visa + passport heroes
+            Founder ask: pair Visa Application (work visa) with a new
+            Passport Application widget (eCitizen guide) so the two
+            primary KE travel documents sit side-by-side at the top of
+            the homepage. Green Card Lottery moved to its own
+            full-width row below so it stays prominent without
+            competing for the same "let's apply" attention.
+            Both widgets now show a 3-step micro-stepper so users
+            instantly understand how short the journey is. */}
         <div className="grid sm:grid-cols-2 gap-3" data-testid="section-primary-widgets">
           <Link
             href="/visa-guides"
@@ -1425,22 +1428,38 @@ export default function Dashboard() {
             <div className="absolute -top-12 -right-12 w-40 h-40 rounded-full bg-white/10 blur-xl pointer-events-none" />
             <div className="absolute -bottom-8 -left-8 w-32 h-32 rounded-full bg-white/5 blur-xl pointer-events-none" />
 
-            <div className="relative flex flex-col gap-4 text-white min-h-[170px]">
+            <div className="relative flex flex-col gap-4 text-white min-h-[200px]">
               <div className="flex items-start justify-between gap-3">
                 <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center text-3xl shadow-inner">
                   🛂
                 </div>
                 <span className="inline-flex items-center gap-1 bg-white/20 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full backdrop-blur-sm">
-                  ⚡ Step-by-step
+                  ⚡ 3 simple steps
                 </span>
               </div>
               <div>
                 <h2 className="text-2xl font-extrabold leading-tight mb-1">
-                  Visa Application
+                  Work Visa Application
                 </h2>
-                <p className="text-sm text-white/90 leading-snug">
-                  Apply for a real work visa — UK, Canada, Australia, USA, UAE, Schengen. We walk you through every form, every document, every fee.
+                <p className="text-sm text-white/90 leading-snug mb-3">
+                  Apply for a real work visa to UK, Canada, Australia, USA, UAE
+                  or Schengen — by yourself, no agent.
                 </p>
+                {/* Micro-stepper — shows how short the journey is */}
+                <div className="grid grid-cols-3 gap-1.5 text-[10px] font-semibold">
+                  <div className="rounded-lg bg-white/15 px-2 py-1.5 leading-tight">
+                    <div className="text-white/70">1.</div>
+                    Pick your country
+                  </div>
+                  <div className="rounded-lg bg-white/15 px-2 py-1.5 leading-tight">
+                    <div className="text-white/70">2.</div>
+                    Get the checklist
+                  </div>
+                  <div className="rounded-lg bg-white/15 px-2 py-1.5 leading-tight">
+                    <div className="text-white/70">3.</div>
+                    Apply step-by-step
+                  </div>
+                </div>
               </div>
               <div className="flex items-center justify-between gap-2 mt-auto">
                 <div className="flex items-center -space-x-1 text-base">
@@ -1458,9 +1477,74 @@ export default function Dashboard() {
             </div>
           </Link>
 
+          {/* ── PASSPORT APPLICATION (new) ──────────────────────────────────
+              eCitizen step-by-step guide for getting a Kenyan passport.
+              Paywalled at /passport-application behind the Pro tier
+              (KES 4,500/yr or KES 600/mo). Kenya-flag-themed gradient
+              (black → red → green) for instant national recognition. */}
+          <Link
+            href="/passport-application"
+            className="group relative overflow-hidden rounded-3xl bg-gradient-to-br from-gray-900 via-red-600 to-emerald-600 p-5 shadow-xl hover:shadow-2xl hover:scale-[1.02] active:scale-[0.98] transition-all duration-200"
+            data-testid="widget-passport-application"
+          >
+            <div className="absolute -top-12 -right-12 w-40 h-40 rounded-full bg-white/10 blur-xl pointer-events-none" />
+            <div className="absolute -bottom-8 -left-8 w-32 h-32 rounded-full bg-white/5 blur-xl pointer-events-none" />
+
+            <div className="relative flex flex-col gap-4 text-white min-h-[200px]">
+              <div className="flex items-start justify-between gap-3">
+                <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center text-3xl shadow-inner">
+                  📕
+                </div>
+                <span className="inline-flex items-center gap-1 bg-white/20 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full backdrop-blur-sm">
+                  🇰🇪 eCitizen guide
+                </span>
+              </div>
+              <div>
+                <h2 className="text-2xl font-extrabold leading-tight mb-1">
+                  Kenyan Passport
+                </h2>
+                <p className="text-sm text-white/90 leading-snug mb-3">
+                  Apply via eCitizen yourself — no broker, no extra fees. 10
+                  clear steps, ~10 working days, KES 7,550 government fee.
+                </p>
+                {/* Micro-stepper for passport — symmetry with visa widget */}
+                <div className="grid grid-cols-3 gap-1.5 text-[10px] font-semibold">
+                  <div className="rounded-lg bg-white/15 px-2 py-1.5 leading-tight">
+                    <div className="text-white/70">1.</div>
+                    Fill the form
+                  </div>
+                  <div className="rounded-lg bg-white/15 px-2 py-1.5 leading-tight">
+                    <div className="text-white/70">2.</div>
+                    Pay on M-Pesa
+                  </div>
+                  <div className="rounded-lg bg-white/15 px-2 py-1.5 leading-tight">
+                    <div className="text-white/70">3.</div>
+                    Biometrics + collect
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center justify-between gap-2 mt-auto">
+                <span className="text-[11px] font-semibold text-white/90 inline-flex items-center gap-1">
+                  <CheckCircle className="h-3.5 w-3.5" />
+                  Skip the broker fees
+                </span>
+                <span className="inline-flex items-center gap-1.5 bg-white text-red-700 text-sm font-bold px-3 py-1.5 rounded-xl group-hover:bg-red-50 transition-colors">
+                  Start <ArrowRight className="h-4 w-4" />
+                </span>
+              </div>
+            </div>
+          </Link>
+
+        </div>
+
+        {/* ── GREEN CARD LOTTERY (full-width row) ────────────────────────
+            Moved out of the old 2-col visa+green-card grid so it has the
+            spotlight on its own row — Pro Monthly subscribers tell us
+            this is the #1 reason new Kenyans land on the platform. */}
+        <div>
           <Link
             href="/green-card"
-            className="group relative overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-600 via-green-600 to-teal-500 p-5 shadow-xl hover:shadow-2xl hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 sm:col-span-1"
+            className="group relative overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-600 via-green-600 to-teal-500 p-5 shadow-xl hover:shadow-2xl hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 block"
             data-testid="widget-green-card"
           >
             <div className="absolute -top-12 -right-12 w-40 h-40 rounded-full bg-white/10 blur-xl pointer-events-none" />
