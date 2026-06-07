@@ -240,7 +240,7 @@ export function InstallAppPrompt() {
   if (iosFlow) {
     return (
       <div
-        className="fixed inset-x-0 bottom-0 z-[100] pb-[calc(env(safe-area-inset-bottom)+12px)] pointer-events-none"
+        className="fixed inset-x-0 bottom-28 sm:bottom-28 z-[1001] pb-[env(safe-area-inset-bottom)] pointer-events-none"
         data-testid="install-app-prompt-ios"
       >
         <div className="mx-auto w-full max-w-sm px-3 pointer-events-auto">
@@ -275,7 +275,7 @@ export function InstallAppPrompt() {
 
   return (
     <div
-      className="fixed inset-x-0 bottom-0 z-[100] pb-[calc(env(safe-area-inset-bottom)+12px)] pointer-events-none"
+      className="fixed inset-x-0 bottom-28 z-[1001] pb-[env(safe-area-inset-bottom)] pointer-events-none"
       data-testid="install-app-prompt"
     >
       <div className="mx-auto w-full max-w-sm px-3 pointer-events-auto">
