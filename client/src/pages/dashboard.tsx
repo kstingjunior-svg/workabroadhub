@@ -1726,6 +1726,52 @@ export default function Dashboard() {
           </div>
         </Link>
 
+        {/* ── REFER & EARN (compact full-width row) ─────────────────────
+            Surfaces the referral program from the home screen instead
+            of burying it under Account. Two-tier reward badges (KES 100
+            monthly, KES 450 yearly) shown inline so the value is
+            immediately obvious. Routes to /referrals. */}
+        <Link
+          href="/referrals"
+          className="group relative overflow-hidden rounded-3xl bg-gradient-to-br from-fuchsia-600 via-pink-600 to-orange-500 p-4 shadow-xl hover:shadow-2xl hover:scale-[1.01] active:scale-[0.99] transition-all duration-200 block"
+          data-testid="widget-referrals"
+        >
+          <div className="absolute -top-10 -right-10 w-32 h-32 rounded-full bg-white/10 blur-2xl pointer-events-none" />
+
+          <div className="relative flex items-center gap-3 text-white">
+            <div className="shrink-0 w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center text-2xl shadow-inner">
+              🎁
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                <h2 className="text-base sm:text-lg font-extrabold leading-tight">
+                  Refer a friend, earn cash
+                </h2>
+                <span className="inline-flex items-center gap-1 bg-yellow-300 text-fuchsia-900 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full">
+                  M-Pesa next morning
+                </span>
+              </div>
+              <p className="text-[12px] text-white/90 leading-snug mb-1.5">
+                Send your link to one WhatsApp group. They save KES 100 on Pro.
+                You earn KES 100 (Monthly) or KES 450 (Yearly).
+              </p>
+              <div className="flex items-center gap-2 text-[11px]">
+                <span className="inline-flex items-center gap-1 bg-white/15 px-2 py-0.5 rounded-full font-semibold">
+                  KES 100 · Pro Monthly
+                </span>
+                <span className="inline-flex items-center gap-1 bg-white/15 px-2 py-0.5 rounded-full font-semibold">
+                  KES 450 · Pro Yearly
+                </span>
+              </div>
+            </div>
+            <div className="shrink-0">
+              <span className="inline-flex items-center gap-1 bg-white text-fuchsia-700 text-xs font-bold px-3 py-1.5 rounded-xl group-hover:bg-fuchsia-50 transition-colors whitespace-nowrap">
+                Share <ArrowRight className="h-3.5 w-3.5" />
+              </span>
+            </div>
+          </div>
+        </Link>
+
         {/* ── TODAY'S BEST MATCH — personalized AI job recommendation ──────
             For paid users who've previously run the CV job matcher, this
             shows their #1 semantic match with a live apply link. For users
