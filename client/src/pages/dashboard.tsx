@@ -1629,6 +1629,54 @@ export default function Dashboard() {
           </div>
         </Link>
 
+        {/* ── KRA TAX COMPLIANCE CERTIFICATE (full-width row) ──────────
+            iTax step-by-step guide for TCC — KES 0 government fee,
+            required for nearly every embassy visa application and
+            every Kenyan government job. Emerald gradient matches our
+            "money/finance" visual language. Same Pro paywall. */}
+        <Link
+          href="/tax-compliance-certificate"
+          className="group relative overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-700 via-emerald-600 to-cyan-600 p-5 shadow-xl hover:shadow-2xl hover:scale-[1.01] active:scale-[0.99] transition-all duration-200 block"
+          data-testid="widget-tax-compliance"
+        >
+          <div className="absolute -top-12 -right-12 w-40 h-40 rounded-full bg-white/10 blur-xl pointer-events-none" />
+          <div className="absolute -bottom-8 -left-8 w-32 h-32 rounded-full bg-white/5 blur-xl pointer-events-none" />
+
+          <div className="relative flex flex-col sm:flex-row gap-4 text-white">
+            <div className="shrink-0 w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center text-3xl shadow-inner">
+              📑
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                <h2 className="text-2xl font-extrabold leading-tight">
+                  KRA Tax Compliance Certificate
+                </h2>
+                <span className="inline-flex items-center gap-1 bg-yellow-300 text-emerald-900 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full">
+                  ⚡ KES 0 — actually free
+                </span>
+              </div>
+              <p className="text-sm text-white/90 leading-snug mb-3">
+                Required by every embassy + every government job application.
+                Download via iTax, no broker, no fee — most Kenyans just
+                don't know how. 8 clear steps, ~30 minutes if returns are clean.
+              </p>
+              <div className="flex flex-wrap items-center gap-3 text-[11px] text-white/95">
+                <span className="inline-flex items-center gap-1"><CheckCircle className="h-3.5 w-3.5" /> Visa applications</span>
+                <span className="inline-flex items-center gap-1"><CheckCircle className="h-3.5 w-3.5" /> Government jobs</span>
+                <span className="inline-flex items-center gap-1"><CheckCircle className="h-3.5 w-3.5" /> 12-month validity</span>
+              </div>
+            </div>
+            <div className="shrink-0 flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-2 sm:gap-3 mt-1">
+              <span className="text-[11px] font-bold uppercase tracking-wider bg-white/15 px-2 py-1 rounded-full">
+                Online only
+              </span>
+              <span className="inline-flex items-center gap-1.5 bg-white text-emerald-700 text-sm font-bold px-3 py-1.5 rounded-xl group-hover:bg-emerald-50 transition-colors whitespace-nowrap">
+                Start <ArrowRight className="h-4 w-4" />
+              </span>
+            </div>
+          </div>
+        </Link>
+
         {/* ── TODAY'S BEST MATCH — personalized AI job recommendation ──────
             For paid users who've previously run the CV job matcher, this
             shows their #1 semantic match with a live apply link. For users
