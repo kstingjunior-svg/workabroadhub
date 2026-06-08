@@ -60,6 +60,7 @@ const StudentVisas = lazy(() => import("@/pages/student-visas"));
 const PassportApplication = lazy(() => import("@/pages/passport-application"));
 const GoodConduct = lazy(() => import("@/pages/good-conduct"));
 const TaxComplianceCertificate = lazy(() => import("@/pages/tax-compliance-certificate"));
+const HelbClearance = lazy(() => import("@/pages/helb-clearance"));
 const AssistedApply = lazy(() => import("@/pages/assisted-apply"));
 const ApplicationTracker = lazy(() => import("@/pages/application-tracker"));
 const PrivacyPolicy = lazy(() => import("@/pages/privacy-policy"));
@@ -280,6 +281,7 @@ const LazyStudentVisas = withSuspense(StudentVisas);
 const LazyPassportApplication = withSuspense(PassportApplication);
 const LazyGoodConduct = withSuspense(GoodConduct);
 const LazyTaxComplianceCertificate = withSuspense(TaxComplianceCertificate);
+const LazyHelbClearance = withSuspense(HelbClearance);
 const LazyAssistedApply = withSuspense(AssistedApply);
 const LazyApplicationTracker = withSuspense(ApplicationTracker);
 const LazyPrivacyPolicy = withSuspense(PrivacyPolicy);
@@ -403,6 +405,7 @@ function AuthenticatedRoutes() {
       <Route path="/passport-application" component={LazyPassportApplication} />
       <Route path="/good-conduct" component={LazyGoodConduct} />
       <Route path="/tax-compliance-certificate" component={LazyTaxComplianceCertificate} />
+      <Route path="/helb-clearance" component={LazyHelbClearance} />
       <Route path="/assisted-apply/purchase/:packId" component={LazyAssistedApply} />
       <Route path="/assisted-apply/new" component={LazyAssistedApply} />
       <Route path="/assisted-apply/application/:applicationId" component={LazyAssistedApply} />
@@ -602,6 +605,7 @@ function Router() {
         <Route path="/passport-application" component={LazyPassportApplication} />
       <Route path="/good-conduct" component={LazyGoodConduct} />
       <Route path="/tax-compliance-certificate" component={LazyTaxComplianceCertificate} />
+      <Route path="/helb-clearance" component={LazyHelbClearance} />
         <Route path="/assisted-apply/purchase/:packId" component={LazyAssistedApply} />
         <Route path="/assisted-apply" component={LazyAssistedApply} />
         <Route path="/admin/login" component={LazyAdminLogin} />
@@ -688,6 +692,13 @@ function App() {
               <Toaster />
               <AdminQuickPanel />
               <FirebaseConnectionBanner />
+              <SessionGuard />
+              <DataConsentBanner />
+              <PhoneCompletionModal />
+              <main id="main-content" tabIndex={-1} className="pb-bottom-nav">
+                <Router />
+              </main>
+              <UpgradeModal />
               <SessionGuard />
               <DataConsentBanner />
               <PhoneCompletionModal />
