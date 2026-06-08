@@ -58,6 +58,7 @@ const MyAccountPage = lazy(() => import("@/pages/my-account"));
 const OrderDetail = lazy(() => import("@/pages/order-detail"));
 const StudentVisas = lazy(() => import("@/pages/student-visas"));
 const PassportApplication = lazy(() => import("@/pages/passport-application"));
+const GoodConduct = lazy(() => import("@/pages/good-conduct"));
 const AssistedApply = lazy(() => import("@/pages/assisted-apply"));
 const ApplicationTracker = lazy(() => import("@/pages/application-tracker"));
 const PrivacyPolicy = lazy(() => import("@/pages/privacy-policy"));
@@ -276,6 +277,7 @@ const LazyMyOrders = withSuspense(MyOrders);
 const LazyOrderDetail = withSuspense(OrderDetail);
 const LazyStudentVisas = withSuspense(StudentVisas);
 const LazyPassportApplication = withSuspense(PassportApplication);
+const LazyGoodConduct = withSuspense(GoodConduct);
 const LazyAssistedApply = withSuspense(AssistedApply);
 const LazyApplicationTracker = withSuspense(ApplicationTracker);
 const LazyPrivacyPolicy = withSuspense(PrivacyPolicy);
@@ -397,6 +399,7 @@ function AuthenticatedRoutes() {
       <Route path="/agencies/:agencyId" component={LazyAgencyProfilePage} />
       <Route path="/student-visas" component={LazyStudentVisas} />
       <Route path="/passport-application" component={LazyPassportApplication} />
+      <Route path="/good-conduct" component={LazyGoodConduct} />
       <Route path="/assisted-apply/purchase/:packId" component={LazyAssistedApply} />
       <Route path="/assisted-apply/new" component={LazyAssistedApply} />
       <Route path="/assisted-apply/application/:applicationId" component={LazyAssistedApply} />
@@ -594,6 +597,7 @@ function Router() {
         <Route path="/agencies/:agencyId" component={LazyAgencyProfilePage} />
         <Route path="/student-visas" component={LazyStudentVisas} />
         <Route path="/passport-application" component={LazyPassportApplication} />
+      <Route path="/good-conduct" component={LazyGoodConduct} />
         <Route path="/assisted-apply/purchase/:packId" component={LazyAssistedApply} />
         <Route path="/assisted-apply" component={LazyAssistedApply} />
         <Route path="/admin/login" component={LazyAdminLogin} />

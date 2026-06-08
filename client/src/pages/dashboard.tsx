@@ -1580,6 +1580,55 @@ export default function Dashboard() {
           </Link>
         </div>
 
+        {/* ── CERTIFICATE OF GOOD CONDUCT (full-width row) ────────────────
+            DCI Police Clearance Certificate via eCitizen. Required for
+            almost every visa, work permit, and serious employer. Same
+            Pro paywall as passport + student visa — one subscription
+            covers all government-doc assistants. Slate-blue gradient
+            signals "serious legal document". */}
+        <Link
+          href="/good-conduct"
+          className="group relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-800 via-slate-700 to-blue-700 p-5 shadow-xl hover:shadow-2xl hover:scale-[1.01] active:scale-[0.99] transition-all duration-200 block"
+          data-testid="widget-good-conduct"
+        >
+          <div className="absolute -top-12 -right-12 w-40 h-40 rounded-full bg-white/10 blur-xl pointer-events-none" />
+          <div className="absolute -bottom-8 -left-8 w-32 h-32 rounded-full bg-white/5 blur-xl pointer-events-none" />
+
+          <div className="relative flex flex-col sm:flex-row gap-4 text-white">
+            <div className="shrink-0 w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center text-3xl shadow-inner">
+              🛡️
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                <h2 className="text-2xl font-extrabold leading-tight">
+                  Certificate of Good Conduct
+                </h2>
+                <span className="inline-flex items-center gap-1 bg-white/20 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full backdrop-blur-sm">
+                  ⚡ 10 steps · 2 weeks
+                </span>
+              </div>
+              <p className="text-sm text-white/90 leading-snug mb-3">
+                DCI Police Clearance via eCitizen — required for almost every
+                visa, work permit, and serious employer. Pay KES 1,050,
+                fingerprints once, download in ~2 weeks.
+              </p>
+              <div className="flex flex-wrap items-center gap-3 text-[11px] text-white/95">
+                <span className="inline-flex items-center gap-1"><CheckCircle className="h-3.5 w-3.5" /> Apply on eCitizen</span>
+                <span className="inline-flex items-center gap-1"><CheckCircle className="h-3.5 w-3.5" /> One DCI visit</span>
+                <span className="inline-flex items-center gap-1"><CheckCircle className="h-3.5 w-3.5" /> 6-month validity</span>
+              </div>
+            </div>
+            <div className="shrink-0 flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-2 sm:gap-3 mt-1">
+              <span className="text-[11px] font-bold uppercase tracking-wider bg-white/15 px-2 py-1 rounded-full">
+                KES 1,050 gov
+              </span>
+              <span className="inline-flex items-center gap-1.5 bg-white text-slate-800 text-sm font-bold px-3 py-1.5 rounded-xl group-hover:bg-slate-100 transition-colors whitespace-nowrap">
+                Start <ArrowRight className="h-4 w-4" />
+              </span>
+            </div>
+          </div>
+        </Link>
+
         {/* ── TODAY'S BEST MATCH — personalized AI job recommendation ──────
             For paid users who've previously run the CV job matcher, this
             shows their #1 semantic match with a live apply link. For users
