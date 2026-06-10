@@ -585,4 +585,51 @@ export default function PricingPage() {
               </Button>
               <Button
                 size="lg"
-                className="bg-white text-amber-700 hover:b
+                className="bg-white text-amber-700 hover:bg-amber-50 font-bold shadow-xl px-10 text-base h-12"
+                onClick={() => goToPayment("pro")}
+                data-testid="btn-bottom-cta"
+              >
+                <Crown className="h-5 w-5 mr-2" />
+                Best Value — KES 4,500/year
+              </Button>
+            </div>
+            <p className="text-white/60 text-xs mt-3">
+              🔒 Secure payment · Instant access · 7-day money-back guarantee
+            </p>
+          </div>
+        )}
+      </section>
+
+      {/* ── STICKY BOTTOM BAR ── */}
+      {stickyVisible && !isActive && (
+        <div
+          className="fixed bottom-0 left-0 right-0 z-50 bg-gradient-to-r from-amber-500 to-orange-500 text-white py-3 px-4 flex items-center justify-between shadow-2xl"
+          data-testid="sticky-cta"
+        >
+          <div className="flex flex-col">
+            <span className="text-sm font-bold flex items-center gap-1.5">
+              <Flame className="h-4 w-4" /> From KES 99 — limited access remaining
+            </span>
+            <span className="text-white/70 text-xs">Verified jobs · AI tools · Career guidance</span>
+          </div>
+          <div className="flex gap-2 shrink-0">
+            <Button
+              className="bg-white/20 border border-white/40 text-white hover:bg-white/30 font-semibold h-9 px-4 text-xs"
+              onClick={() => goToPayment("trial")}
+              data-testid="btn-sticky-trial"
+            >
+              Try KES 99
+            </Button>
+            <Button
+              className="bg-white text-amber-700 hover:bg-amber-50 font-bold h-9 px-4 text-xs"
+              onClick={() => goToPayment("pro")}
+              data-testid="btn-sticky-cta"
+            >
+              <Crown className="h-3.5 w-3.5 mr-1" /> KES 4,500/yr
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
