@@ -789,4 +789,18 @@ export default function Country() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setTrackDialogOpen(false)} data-testid="button-cancel-quick-track">
-              
+              Cancel
+            </Button>
+            <Button
+              onClick={handleQuickTrackSubmit}
+              disabled={addTrackedMutation.isPending}
+              data-testid="button-save-quick-track"
+            >
+              {addTrackedMutation.isPending ? "Saving..." : "Track Application"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
