@@ -1726,6 +1726,52 @@ export default function Dashboard() {
           </div>
         </Link>
 
+        {/* ── COMMUNITY CHAT (compact full-width row) ────────────────────
+            Real-time chat with other Kenyans applying abroad. 8 country
+            rooms (UAE, Saudi, UK, USA, Canada, Australia, Europe + General).
+            Reading is free; posting is Pro or referrer-quota. */}
+        <Link
+          href="/community"
+          className="group relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-700 via-violet-700 to-purple-700 p-4 shadow-xl hover:shadow-2xl hover:scale-[1.01] active:scale-[0.99] transition-all duration-200 block"
+          data-testid="widget-community"
+        >
+          <div className="absolute -top-10 -right-10 w-32 h-32 rounded-full bg-white/10 blur-2xl pointer-events-none" />
+
+          <div className="relative flex items-center gap-3 text-white">
+            <div className="shrink-0 w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center text-2xl shadow-inner">
+              💬
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                <h2 className="text-base sm:text-lg font-extrabold leading-tight">
+                  Community Chat
+                </h2>
+                <span className="inline-flex items-center gap-1 bg-emerald-400/30 text-white text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full backdrop-blur-sm">
+                  🟢 Live
+                </span>
+              </div>
+              <p className="text-[12px] text-white/90 leading-snug mb-1.5">
+                Talk to Kenyans applying to the same country as you. 8 rooms,
+                moderated — no phone numbers or emails allowed.
+              </p>
+              <div className="flex items-center gap-1.5 text-base">
+                <span title="UAE">🇦🇪</span>
+                <span title="Saudi">🇸🇦</span>
+                <span title="UK">🇬🇧</span>
+                <span title="USA">🇺🇸</span>
+                <span title="Canada">🇨🇦</span>
+                <span title="Australia">🇦🇺</span>
+                <span title="Europe">🇪🇺</span>
+              </div>
+            </div>
+            <div className="shrink-0">
+              <span className="inline-flex items-center gap-1 bg-white text-indigo-700 text-xs font-bold px-3 py-1.5 rounded-xl group-hover:bg-indigo-50 transition-colors whitespace-nowrap">
+                Join <ArrowRight className="h-3.5 w-3.5" />
+              </span>
+            </div>
+          </div>
+        </Link>
+
         {/* ── REFER & EARN (compact full-width row) ─────────────────────
             Surfaces the referral program from the home screen instead
             of burying it under Account. Two-tier reward badges (KES 100
