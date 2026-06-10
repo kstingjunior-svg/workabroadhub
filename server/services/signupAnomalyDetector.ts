@@ -22,7 +22,7 @@ const GLOBAL_LIMIT   = parseInt(process.env.ANOMALY_GLOBAL_LIMIT   || "10",     
 const PER_IP_LIMIT   = parseInt(process.env.ANOMALY_PER_IP_LIMIT   || "3",       10);
 const ALERT_COOLDOWN = parseInt(process.env.ANOMALY_ALERT_COOLDOWN || "600000",  10); // 10 min
 
-const ADMIN_EMAIL    = process.env.ADMIN_EMAIL || process.env.GMAIL_USER || "";
+const ADMIN_EMAIL    = process.env.ADMIN_EMAIL || "support@workabroadhub.tech";
 const DB_URL         = process.env.VITE_FIREBASE_DATABASE_URL || "";
 
 // ─── In-memory buffer ─────────────────────────────────────────────────────────

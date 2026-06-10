@@ -65,12 +65,15 @@ export function clearEmailCache() {
 }
 
 function getFromAddress(): string {
+  // Prefer the explicit business-mail env vars over GMAIL_USER, so emails
+  // appear FROM support@workabroadhub.tech instead of the SMTP-auth Gmail.
+  // Note: for this to actually work end-to-end the Gmail account must have
+  // "Send mail as: support@workabroadhub.tech" configured (Gmail Settings →
+  // Accounts → Send mail as). Otherwise Gmail rewrites the From: header.
   return (
     process.env.SMTP_FROM ||
     process.env.EMAIL_FROM ||
-    process.env.GMAIL_USER ||
-    process.env.SMTP_USER ||
-    "noreply@workabroadhub.tech"
+    "support@workabroadhub.tech"
   );
 }
 

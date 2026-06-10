@@ -17673,7 +17673,7 @@ Tone examples:
             // Email notification to admin
             const { sendEmail } = await Promise.resolve().then(() => __importStar(require("./email")));
             await sendEmail({
-                to: process.env.GMAIL_USER ?? "kstingjunior@gmail.com",
+                to: process.env.ADMIN_EMAIL ?? "support@workabroadhub.tech",
                 subject: `[WorkAbroad Hub] New Contact: ${entry.topic} — ${entry.fullName}`,
                 html: `
           <h2 style="font-family:sans-serif">New Contact Form Submission</h2>
@@ -17847,6 +17847,131 @@ Tone examples:
             console.warn("[job-match] boot-time refresh skipped:", err?.message);
         }
     })().catch(() => { });
+    // ───────────────────────────────────────────────────────────────────────────
+    // Community chat — country-based rooms with real-time delivery via
+    // Socket.IO. See server/services/community.ts for moderation rules.
+    // ───────────────────────────────────────────────────────────────────────────
+    app.get("/api/chat/rooms", async (_req, res) => {
+        try {
+            const { fetchRoomsSummary } = await Promise.resolve().then(() => __importStar(require("./services/community")));
+            res.json({ rooms: await fetchRoomsSummary() });
+        }
+        catch (err) {
+            console.error("[chat/rooms]", err?.message);
+            res.status(500).json({ message: "Could not load rooms." });
+        }
+    });
+    app.get("/api/chat/rooms/:slug/messages", async (req, res) => {
+        try {
+            const { fetchMessages, isValidRoomSlug } = await Promise.resolve().then(() => __importStar(require("./services/community")));
+            const slug = String(req.params.slug || "").toLowerCase();
+            if (!isValidRoomSlug(slug))
+                return res.status(400).json({ message: "invalid_room" });
+            const limit = Number(req.query.limit) || 50;
+            const beforeId = req.query.before ? Number(req.query.before) : undefined;
+            const messages = await fetchMessages(slug, limit, beforeId);
+            res.json({ messages });
+        }
+        catch (err) {
+            console.error("[chat/messages]", err?.message);
+            res.status(500).json({ message: "Could not load messages." });
+        }
+    });
+    app.get("/api/chat/eligibility", async (req, res) => {
+        try {
+            const userId = req.session?.customUserId;
+            const { checkEligibility } = await Promise.resolve().then(() => __importStar(require("./services/community")));
+            const eligibility = await checkEligibility(userId);
+            res.json(eligibility);
+        }
+        catch (err) {
+            console.error("[chat/eligibility]", err?.message);
+            res.status(500).json({ message: "Could not check eligibility." });
+        }
+    });
+    app.post("/api/chat/rooms/:slug/messages", async (req, res) => {
+        try {
+            const userId = req.session?.customUserId;
+            if (!userId)
+                return res.status(401).json({ message: "not_signed_in" });
+            const { checkEligibility, postMessage, isValidRoomSlug } = await Promise.resolve().then(() => __importStar(require("./services/community")));
+            const slug = String(req.params.slug || "").toLowerCase();
+            if (!isValidRoomSlug(slug))
+                return res.status(400).json({ message: "invalid_room" });
+            const eligibility = await checkEligibility(userId);
+            if (!eligibility.canPost) {
+                return res.status(403).json({ message: eligibility.reason ?? "not_allowed", eligibility });
+            }
+            const rawBody = String(req.body?.body ?? "");
+            const message = await postMessage(userId, slug, rawBody);
+            // Real-time broadcast to anyone in this room's Socket.IO channel.
+            // Only broadcast if the message isn't auto-hidden (scam signal).
+            if (!message.hidden) {
+                try {
+                    const { getIO } = await Promise.resolve().then(() => __importStar(require("./socket")));
+                    getIO().to(`chat:${slug}`).emit("chat:message", message);
+                }
+                catch { /* socket not ready — REST clients still get the response */ }
+            }
+            res.json({ message, eligibility });
+        }
+        catch (err) {
+            console.error("[chat/post]", err?.message);
+            const status = err?.message === "empty_message" ? 400 : 500;
+            res.status(status).json({ message: err?.message ?? "Could not post message." });
+        }
+    });
+    app.post("/api/chat/messages/:id/report", async (req, res) => {
+        try {
+            const userId = req.session?.customUserId;
+            if (!userId)
+                return res.status(401).json({ message: "not_signed_in" });
+            const id = Number(req.params.id);
+            if (!Number.isFinite(id))
+                return res.status(400).json({ message: "invalid_id" });
+            const { reportMessage } = await Promise.resolve().then(() => __importStar(require("./services/community")));
+            await reportMessage(id);
+            res.json({ ok: true });
+        }
+        catch (err) {
+            console.error("[chat/report]", err?.message);
+            res.status(500).json({ message: "Could not report message." });
+        }
+    });
+    // Admin: see ALL recent messages (incl. hidden) with user profile join.
+    app.get("/api/admin/chat/recent", async (req, res) => {
+        try {
+            const userId = req.session?.customUserId;
+            const isAdmin = !!userId && await (storage_1.storage.isUserAdmin?.(userId) ?? Promise.resolve(false));
+            if (!isAdmin)
+                return res.status(403).json({ message: "admin_only" });
+            const { adminFetchRecent } = await Promise.resolve().then(() => __importStar(require("./services/community")));
+            const limit = Number(req.query.limit) || 100;
+            res.json({ messages: await adminFetchRecent(limit) });
+        }
+        catch (err) {
+            console.error("[admin/chat/recent]", err?.message);
+            res.status(500).json({ message: "Could not load admin queue." });
+        }
+    });
+    app.delete("/api/admin/chat/messages/:id", async (req, res) => {
+        try {
+            const userId = req.session?.customUserId;
+            const isAdmin = !!userId && await (storage_1.storage.isUserAdmin?.(userId) ?? Promise.resolve(false));
+            if (!isAdmin)
+                return res.status(403).json({ message: "admin_only" });
+            const id = Number(req.params.id);
+            if (!Number.isFinite(id))
+                return res.status(400).json({ message: "invalid_id" });
+            const { adminDeleteMessage } = await Promise.resolve().then(() => __importStar(require("./services/community")));
+            await adminDeleteMessage(id, String(req.body?.reason ?? "admin_delete"));
+            res.json({ ok: true });
+        }
+        catch (err) {
+            console.error("[admin/chat/delete]", err?.message);
+            res.status(500).json({ message: "Could not delete." });
+        }
+    });
     // ───────────────────────────────────────────────────────────────────────────
     // Voice Mock Interview — adaptive AI interview simulator.
     // Voice in + voice out are handled CLIENT-SIDE via Web Speech API.
