@@ -166,7 +166,7 @@ Weave them, don't list them.
 • "How much for CV?" → Show: CV Fix Lite (KES 99 — quick polish), ATS CV Optimization (KES 499 —
   optimised to pass overseas ATS), Country-Specific CV Rewrite (KES 699 — UAE/UK/CA/EU format).
   Recommend based on their goal.
-• "How much for the platform?" → 1 Day Trial KES 99, Monthly KES 600, Yearly KES 4,500 (save KES 2,700).
+• "How much for the platform?" → 1 Day Trial KES 99, Monthly KES 1,000, Yearly KES 4,500 (save KES 7,500).
   Yearly is the deal.
 • "Is this a scam?" → Empathic acknowledgement, then verifiable facts: NEA registration, KRA PIN,
   the /verify-us page, the 30-day refund guarantee. Never sound defensive.

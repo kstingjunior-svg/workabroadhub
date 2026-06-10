@@ -6,7 +6,7 @@
 //     process via eCitizen (ecitizen.go.ke) and Immigration Services.
 //   - Shows current fees, processing times, document checklist, and a
 //     direct "Start on eCitizen" button.
-//   - Gated behind Pro tier (KES 4,500/yr or KES 600/mo) — same paywall as
+//   - Gated behind Pro tier (KES 4,500/yr or KES 1,000/mo) — same paywall as
 //     /student-visas. Free users see a teaser + upgrade CTA.
 //
 // Why we charge:
@@ -15,7 +15,7 @@
 //     - Student visa (USA, Canada, UK, AU, UAE, Germany)
 //     - Passport application (this page)
 //     - Work permit assistance (Kenyan migrants)
-//   The KES 600/mo or 4,500/yr fee covers the curation + step-by-step
+//   The KES 1,000/mo or 4,500/yr fee covers the curation + step-by-step
 //   guidance. The government fees go directly to eCitizen, not to us.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -139,7 +139,7 @@ function PassportPaywall() {
         </div>
 
         <div className="rounded-xl bg-black/20 p-3 text-sm mb-5">
-          <div className="font-bold mb-0.5">KES 4,500 / year — or KES 600 / month</div>
+          <div className="font-bold mb-0.5">KES 4,500 / year — or KES 1,000 / month</div>
           <div className="text-xs text-white/80 leading-snug">
             Same Pro plan also unlocks visa application, student visa, work
             permit assistant, NEA verification, WhatsApp support and job alerts.

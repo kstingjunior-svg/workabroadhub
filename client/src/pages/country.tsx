@@ -259,7 +259,7 @@ export default function Country() {
     u?.role === "SUPER_ADMIN";
 
   // 2026-06 audit fix: previously only "basic" and "pro" were recognised,
-  // so Pro Monthly (KES 600) and Trial (KES 99) subscribers couldn't unlock
+  // so Pro Monthly (KES 1,000) and Trial (KES 99) subscribers couldn't unlock
   // country pages. Now consistent with the other paywall checks across
   // student-visas, passport, good-conduct, KRA TCC, HELB clearance.
   const PAID_PLAN_IDS = new Set(["basic", "pro", "monthly", "trial", "yearly"]);
@@ -789,18 +789,4 @@ export default function Country() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setTrackDialogOpen(false)} data-testid="button-cancel-quick-track">
-              Cancel
-            </Button>
-            <Button
-              onClick={handleQuickTrackSubmit}
-              disabled={addTrackedMutation.isPending}
-              data-testid="button-save-quick-track"
-            >
-              {addTrackedMutation.isPending ? "Saving..." : "Track Application"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
-}
+              

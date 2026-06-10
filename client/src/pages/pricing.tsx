@@ -32,8 +32,8 @@ const TRUST_ITEMS = [
 
 const FAQ_ITEMS = [
   {
-    q: "What's the difference between the 3 plans?",
-    a: "1 Day Trial (KES 99) gives you 24-hour full access — perfect for testing the platform. Monthly Access (KES 600) gives you 30 days of everything. Yearly Access (KES 4,500) is the best value — pay yearly and save KES 2,700 vs paying month-by-month.",
+    q: "What's the difference between the 4 plans?",
+    a: "Free (KES 0) gives you a limited preview of the platform — a few job listings, all visa guides, and one-time AI tool usage. 1 Day Trial (KES 99) gives you 24-hour full access — perfect for testing. Monthly Access (KES 1,000) gives you 30 days of everything. Yearly Access (KES 4,500) is the best value — pay yearly and save KES 7,500 vs paying month-by-month.",
   },
   {
     q: "How does M-Pesa payment work?",
@@ -113,7 +113,7 @@ const PLAN_UI: Omit<PlanConfig, "price">[] = [
     urgency:   "Try before you commit",
   },
   // 2026-06 reframe (founder decision): monthly is now the DEFAULT door.
-  // Kenyans think weekly, not yearly — KES 600 survives a bad week. Yearly
+  // Kenyans think weekly, not yearly — KES 1,000 survives a bad week. Yearly
   // is reframed as a savings play for those who already trust the platform.
   {
     id:        "monthly",
@@ -135,7 +135,7 @@ const PLAN_UI: Omit<PlanConfig, "price">[] = [
     name:      "Yearly Access",
     period:    "/ year",
     duration:  "365 days full access · pay once, done",
-    badge:     "Save KES 2,700",
+    badge:     "Save KES 7,500",
     badgeColor:"bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
     icon:      Crown,
     iconBg:    "bg-amber-100 dark:bg-amber-900/30",
@@ -143,7 +143,7 @@ const PLAN_UI: Omit<PlanConfig, "price">[] = [
     cardClass: "border-amber-300 dark:border-amber-800",
     btnClass:  "bg-amber-600 hover:bg-amber-700 text-white",
     highlight: false,
-    urgency:   "Save KES 2,700 vs paying month-by-month",
+    urgency:   "Save KES 7,500 vs paying month-by-month",
   },
 ];
 
@@ -172,7 +172,7 @@ export default function PricingPage() {
     const extra: Pick<PlanConfig, "perMonth" | "urgency"> = { urgency: ui.urgency };
     if (ui.id === "pro" && price > 0) {
       extra.perMonth = `KES ${Math.round(price / 12).toLocaleString("en-KE")}/mo`;
-      extra.urgency  = `Save KES ${(600 * 12 - price).toLocaleString("en-KE")} vs paying month-by-month`;
+      extra.urgency  = `Save KES ${(1000 * 12 - price).toLocaleString("en-KE")} vs paying month-by-month`;
     }
     if (ui.id === "trial" && price > 0) {
       extra.urgency = `Try before you commit — just KES ${price}`;
@@ -239,9 +239,33 @@ export default function PricingPage() {
               : "Choose the plan that fits your timeline."}
           </p>
 
-          <p className="text-white/80 text-sm mb-8">
-            Try for KES 99 · Go monthly for KES 600 · Save KES 2,700 with yearly
+          {/* 2026-06 update: surface all 4 tiers in the hero so users see
+              they have options below KES 4,500. Founder feedback: too many
+              people canceled the M-Pesa STK when only the KES 4,500 figure
+              was visible — they couldn't see the KES 99 / KES 1,000 entry
+              points. */}
+          <p className="text-white/85 text-sm mb-6 max-w-md mx-auto leading-snug">
+            <strong className="text-white">Free</strong> to browse · <strong className="text-white">KES 99</strong> for a day · <strong className="text-white">KES 1,000</strong> for a month · <strong className="text-white">KES 4,500</strong> for a year
           </p>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 max-w-2xl mx-auto mb-8 text-[11px]">
+            <div className="rounded-xl bg-white/15 backdrop-blur-sm border border-white/20 px-3 py-2">
+              <div className="font-bold text-base text-white">Free</div>
+              <div className="text-white/70">Browse & preview</div>
+            </div>
+            <div className="rounded-xl bg-white/15 backdrop-blur-sm border border-white/20 px-3 py-2">
+              <div className="font-bold text-base text-white">KES 99</div>
+              <div className="text-white/70">1 Day full access</div>
+            </div>
+            <div className="rounded-xl bg-blue-500/30 backdrop-blur-sm border-2 border-blue-300 px-3 py-2 ring-2 ring-blue-300/40">
+              <div className="font-bold text-base text-white">KES 1,000</div>
+              <div className="text-white/85">1 Month — most popular</div>
+            </div>
+            <div className="rounded-xl bg-white/15 backdrop-blur-sm border border-white/20 px-3 py-2">
+              <div className="font-bold text-base text-white">KES 4,500</div>
+              <div className="text-white/70">1 Year · save 7,500</div>
+            </div>
+          </div>
 
           {isActive ? (
             <div className="inline-flex items-center gap-2 bg-green-500/20 border border-green-400/40 rounded-full px-6 py-3 text-green-200 font-semibold">
@@ -561,51 +585,4 @@ export default function PricingPage() {
               </Button>
               <Button
                 size="lg"
-                className="bg-white text-amber-700 hover:bg-amber-50 font-bold shadow-xl px-10 text-base h-12"
-                onClick={() => goToPayment("pro")}
-                data-testid="btn-bottom-cta"
-              >
-                <Crown className="h-5 w-5 mr-2" />
-                Best Value — KES 4,500/year
-              </Button>
-            </div>
-            <p className="text-white/60 text-xs mt-3">
-              🔒 Secure payment · Instant access · 7-day money-back guarantee
-            </p>
-          </div>
-        )}
-      </section>
-
-      {/* ── STICKY BOTTOM BAR ── */}
-      {stickyVisible && !isActive && (
-        <div
-          className="fixed bottom-0 left-0 right-0 z-50 bg-gradient-to-r from-amber-500 to-orange-500 text-white py-3 px-4 flex items-center justify-between shadow-2xl"
-          data-testid="sticky-cta"
-        >
-          <div className="flex flex-col">
-            <span className="text-sm font-bold flex items-center gap-1.5">
-              <Flame className="h-4 w-4" /> From KES 99 — limited access remaining
-            </span>
-            <span className="text-white/70 text-xs">Verified jobs · AI tools · Career guidance</span>
-          </div>
-          <div className="flex gap-2 shrink-0">
-            <Button
-              className="bg-white/20 border border-white/40 text-white hover:bg-white/30 font-semibold h-9 px-4 text-xs"
-              onClick={() => goToPayment("trial")}
-              data-testid="btn-sticky-trial"
-            >
-              Try KES 99
-            </Button>
-            <Button
-              className="bg-white text-amber-700 hover:bg-amber-50 font-bold h-9 px-4 text-xs"
-              onClick={() => goToPayment("pro")}
-              data-testid="btn-sticky-cta"
-            >
-              <Crown className="h-3.5 w-3.5 mr-1" /> KES 4,500/yr
-            </Button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+                className="bg-white text-amber-700 hover:b

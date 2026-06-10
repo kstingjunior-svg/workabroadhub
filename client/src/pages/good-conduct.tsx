@@ -9,7 +9,7 @@
 //     banking, security, child-related work, government, adoption,
 //     and most employer onboarding processes.
 //   - Same paywall as /passport-application and /student-visas — Pro
-//     tier (KES 4,500/yr or KES 600/mo) unlocks the full guide.
+//     tier (KES 4,500/yr or KES 1,000/mo) unlocks the full guide.
 //
 // Fee structure (as of 2026):
 //   - Government fee: KES 1,050 (eCitizen)
@@ -141,7 +141,7 @@ function GoodConductPaywall() {
         </div>
 
         <div className="rounded-xl bg-black/30 p-3 text-sm mb-5">
-          <div className="font-bold mb-0.5">KES 4,500 / year — or KES 600 / month</div>
+          <div className="font-bold mb-0.5">KES 4,500 / year — or KES 1,000 / month</div>
           <div className="text-xs text-white/80 leading-snug">
             Same Pro plan also unlocks passport, visa, student visa, work
             permit assistance, NEA verification, WhatsApp support and job alerts.

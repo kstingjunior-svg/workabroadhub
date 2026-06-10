@@ -616,7 +616,7 @@ function CountryVisaContent({ countryCode, country }: { countryCode: string; cou
 
 // ── Paywall component shown to non-Pro users ──────────────────────────────
 // Founder decision: Student Visa application content is Pro-only (KES 4,500/yr
-// or KES 600/mo). Free users see the country list + first overview but the
+// or KES 1,000/mo). Free users see the country list + first overview but the
 // detailed step-by-step is gated. Aligned with the homepage widget framing.
 function StudentVisaPaywall() {
   return (
@@ -662,7 +662,7 @@ function StudentVisaPaywall() {
               <div className="flex items-baseline justify-between gap-3 flex-wrap">
                 <div>
                   <div className="text-3xl font-bold">KES 4,500<span className="text-base font-normal text-muted-foreground"> / year</span></div>
-                  <p className="text-xs text-muted-foreground">or KES 600/month — same access</p>
+                  <p className="text-xs text-muted-foreground">or KES 1,000/month — same access</p>
                 </div>
                 <Badge className="bg-violet-600 text-white border-0">Pro plan</Badge>
               </div>

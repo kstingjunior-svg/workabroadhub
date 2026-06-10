@@ -1480,7 +1480,7 @@ export default function Dashboard() {
           {/* ── PASSPORT APPLICATION (new) ──────────────────────────────────
               eCitizen step-by-step guide for getting a Kenyan passport.
               Paywalled at /passport-application behind the Pro tier
-              (KES 4,500/yr or KES 600/mo). Kenya-flag-themed gradient
+              (KES 4,500/yr or KES 1,000/mo). Kenya-flag-themed gradient
               (black → red → green) for instant national recognition. */}
           <Link
             href="/passport-application"

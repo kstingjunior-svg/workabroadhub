@@ -401,7 +401,7 @@ export default function Community() {
                       <Link href="/pricing">
                         <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white text-xs" data-testid="cta-upgrade">
                           <Crown className="h-3 w-3 mr-1" />
-                          Go Pro · KES 600/mo
+                          Go Pro · KES 1,000/mo
                         </Button>
                       </Link>
                       <Link href="/referrals">

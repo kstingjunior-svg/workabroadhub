@@ -2,14 +2,14 @@
 // Referrals — earn KES every time a friend goes Pro on WorkAbroad Hub.
 //
 // 2026-06 upgrade (founder ask: "referral program improvements"):
-//   - Two reward tiers: KES 100 when friend buys Pro Monthly (KES 600),
+//   - Two reward tiers: KES 100 when friend buys Pro Monthly (KES 1,000),
 //     KES 450 when friend buys Pro Yearly (KES 4,500). Previous version
 //     only paid out on yearly — referrals dried up after we made monthly
 //     the default door.
 //   - Concrete WhatsApp / Telegram / SMS share copy that actually sells:
 //     specific value props (visa-sponsorship jobs, government doc
 //     guides, AI matcher) instead of vague "career consultation".
-//   - Friend benefit: their first month is KES 100 off (KES 600 -> 500)
+//   - Friend benefit: their first month is KES 100 off (KES 1,000 -> 900)
 //     when they use the referral link. Encodes via ?ref=CODE which the
 //     pricing page already understands.
 //   - QR code via qrserver.com (no dependency added) so people can

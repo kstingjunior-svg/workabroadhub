@@ -35,9 +35,32 @@ export function LandingFinalCta({ onStartClick }: LandingFinalCtaProps) {
           </h2>
 
           <p className="text-base sm:text-lg text-gray-700 dark:text-gray-300 mt-3 max-w-2xl mx-auto leading-relaxed">
-            Skip fake agencies. Get the verified portals, NEA license checker, CV templates, and a 1-on-1 WhatsApp guidance session — all for{" "}
-            <strong className="text-gray-900 dark:text-white">KES 4,500</strong>.
+            Skip fake agencies. Get verified portals, NEA license checker, CV templates, and 1-on-1 WhatsApp guidance — at{" "}
+            <strong className="text-gray-900 dark:text-white">your own pace</strong>.
           </p>
+
+          {/* 2026-06: surface all 4 tiers so users see Free + KES 99 + KES 1,000
+              + KES 4,500 BEFORE they get the M-Pesa STK prompt. Founder feedback:
+              too many cancellations because only the KES 4,500 figure was
+              visible on the landing CTA. */}
+          <div className="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-2 max-w-2xl mx-auto text-[11px]">
+            <div className="rounded-xl bg-white/70 dark:bg-gray-900/50 border border-emerald-200 dark:border-emerald-900/40 px-3 py-2">
+              <div className="font-bold text-base text-gray-900 dark:text-white">Free</div>
+              <div className="text-gray-500 dark:text-gray-400">Browse & preview</div>
+            </div>
+            <div className="rounded-xl bg-white/70 dark:bg-gray-900/50 border border-emerald-200 dark:border-emerald-900/40 px-3 py-2">
+              <div className="font-bold text-base text-gray-900 dark:text-white">KES 99</div>
+              <div className="text-gray-500 dark:text-gray-400">1 Day full access</div>
+            </div>
+            <div className="rounded-xl bg-blue-50 dark:bg-blue-950/40 border-2 border-blue-400 dark:border-blue-600 px-3 py-2 ring-2 ring-blue-200/40 dark:ring-blue-900/30">
+              <div className="font-bold text-base text-blue-700 dark:text-blue-300">KES 1,000</div>
+              <div className="text-gray-700 dark:text-gray-300">1 Month — popular</div>
+            </div>
+            <div className="rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 px-3 py-2">
+              <div className="font-bold text-base text-amber-700 dark:text-amber-300">KES 4,500</div>
+              <div className="text-gray-700 dark:text-gray-300">1 Year · save 7,500</div>
+            </div>
+          </div>
 
           {/* Action buttons */}
           <div className="mt-7 flex flex-col sm:flex-row gap-3 justify-center items-center">
@@ -47,7 +70,7 @@ export function LandingFinalCta({ onStartClick }: LandingFinalCtaProps) {
               data-testid="final-cta-start"
             >
               <MessageCircle className="h-5 w-5" />
-              Start now — KES 4,500
+              Start free — choose your plan
             </button>
             <Link
               href="/pricing"
@@ -55,7 +78,7 @@ export function LandingFinalCta({ onStartClick }: LandingFinalCtaProps) {
               data-testid="final-cta-pricing"
             >
               <CreditCard className="h-5 w-5" />
-              See payment options
+              See all 4 plans
             </Link>
           </div>
 
