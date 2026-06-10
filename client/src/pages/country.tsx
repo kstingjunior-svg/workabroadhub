@@ -258,11 +258,16 @@ export default function Country() {
     u?.role === "ADMIN" ||
     u?.role === "SUPER_ADMIN";
 
+  // 2026-06 audit fix: previously only "basic" and "pro" were recognised,
+  // so Pro Monthly (KES 600) and Trial (KES 99) subscribers couldn't unlock
+  // country pages. Now consistent with the other paywall checks across
+  // student-visas, passport, good-conduct, KRA TCC, HELB clearance.
+  const PAID_PLAN_IDS = new Set(["basic", "pro", "monthly", "trial", "yearly"]);
   const isPaidPlan =
     isAdminUser ||
-    userPlan?.planId === "basic" ||
-    userPlan?.planId === "pro" ||
+    (userPlan?.planId ? PAID_PLAN_IDS.has(userPlan.planId) : false) ||
     u?.plan === "pro" ||
+    u?.plan === "monthly" ||
     u?.subscriptionStatus === "active";
 
   useEffect(() => {

@@ -4798,7 +4798,12 @@ Crawl-delay: 1`);
         // 5a. Plan amount guard — verify Safaricom-reported amount matches canonical DB price.
         //     Must run BEFORE the payment row update so we don't overwrite amount with a
         //     tampered or wrong value if the check fails.
-        if (newStatus === "completed" && amountPaid != null && payment.planId) {
+        //
+        // 2026-06 BUG FIX: previously this checked `newStatus === "completed"` but
+        // newStatus is set to "success" | "failed" at line 4796 — so the entire
+        // fraud guard was dead code and every payment skipped canonical-price
+        // verification. Now correctly gates on "success".
+        if (newStatus === "success" && amountPaid != null && payment.planId) {
           // Guard 5a-i — plan identity: serviceId-derived planId must equal payment.planId.
           // Discrepancy means the payment row was mutated after creation.
           const serviceIdOnPayment = String((payment as any).serviceId ?? "");
@@ -5285,102 +5290,54 @@ Crawl-delay: 1`);
   
   // EXPECTED_AMOUNT removed — each payment is validated against payment.amount (the amount stored at STK push time)
   
+  // ──────────────────────────────────────────────────────────────────────────
+  // LEGACY M-Pesa callback — DEPRECATED. DO NOT USE.
+  //
+  // This older handler:
+  //   1. Always activated 'pro' plan regardless of what was paid
+  //   2. Created users via phone-only (no email tie-in)
+  //   3. Inserted into a stripped-down payments table schema
+  //
+  // The proper callback is /api/payments/mpesa/callback (line ~4711), which:
+  //   - Verifies canonical price against Safaricom-reported amount
+  //   - Looks up the original payment row by CheckoutRequestID
+  //   - Activates the CORRECT plan (Pro Monthly KES 600 vs Pro Yearly 4,500)
+  //   - Handles service-order purchases (CV Fix Lite, etc.) properly
+  //   - Has atomic processed flag for duplicate-callback protection
+  //
+  // This endpoint is preserved only so Safaricom retries to the OLD URL don't
+  // 404 — but it is a no-op now. If Safaricom is still configured to hit this
+  // URL in the Daraja developer portal, update the portal's CallBackURL to:
+  //     {APP_URL}/api/payments/mpesa/callback
+  //
+  // 2026-06 audit: previously this handler always set plan='pro', causing
+  // KES 99 CV Fix Lite payments to silently grant 30 days of Pro. That bug
+  // is now neutralised.
+  // ──────────────────────────────────────────────────────────────────────────
   app.post("/api/mpesa/callback", async (req, res) => {
+    const stkCallback = req.body?.Body?.stkCallback;
+    const checkoutId = stkCallback?.CheckoutRequestID;
+    const resultCode = stkCallback?.ResultCode;
+    console.warn(
+      `[MPESA/LEGACY CALLBACK] Hit deprecated endpoint — payment NOT processed. ` +
+      `CheckoutRequestID=${checkoutId} ResultCode=${resultCode}. ` +
+      `Update Safaricom Daraja CallBackURL to /api/payments/mpesa/callback.`
+    );
+    // Forward the body to the proper handler so the payment still gets
+    // processed if Safaricom is mis-configured. Fire-and-forget on error.
     try {
-      const body = req.body;
-
-      // 🔍 Extract data safely
-      const stkCallback = body?.Body?.stkCallback;
-
-      if (!stkCallback) return res.sendStatus(200);
-
-      const resultCode = stkCallback.ResultCode;
-
-      if (resultCode !== 0) {
-        console.log("❌ Payment failed");
-        return res.sendStatus(200);
-      }
-
-      const metadata = stkCallback.CallbackMetadata.Item;
-
-      const getValue = (name: string) => {
-        const item = metadata.find((i: any) => i.Name === name);
-        return item ? item.Value : null;
-      };
-
-      const amount   = getValue("Amount");
-      const mpesaCode = getValue("MpesaReceiptNumber");
-      let phone      = String(getValue("PhoneNumber") ?? "");
-
-      // Normalize: 254XXXXXXXXX → 0XXXXXXXXX
-      if (phone.startsWith("254")) {
-        phone = "0" + phone.slice(3);
-      }
-
-      console.log("✅ PAYMENT RECEIVED:", { phone, amount, mpesaCode });
-
-      // 💾 1. Save payment — skip if this mpesa_code already recorded (duplicate callback guard)
-      const existingPayment = await pool.query(
-        `SELECT id FROM payments WHERE mpesa_code = $1 LIMIT 1`,
-        [mpesaCode]
-      );
-      if (existingPayment.rows.length === 0) {
-        await pool.query(
-          `INSERT INTO payments (mpesa_code, phone, amount, status)
-           VALUES ($1, $2, $3, 'completed')`,
-          [mpesaCode, phone, amount]
-        );
-      }
-
-      // 👤 2. Find or create user
-      let userRes = await pool.query(
-        `SELECT id FROM users WHERE phone = $1 LIMIT 1`,
-        [phone]
-      );
-
-      let userId: string;
-
-      if (userRes.rows.length === 0) {
-        const newUser = await pool.query(
-          `INSERT INTO users (phone, email)
-           VALUES ($1, $1 || '@mpesa.workabroad.hub')
-           RETURNING id`,
-          [phone]
-        );
-        userId = newUser.rows[0].id;
-      } else {
-        userId = userRes.rows[0].id;
-      }
-
-      // 🔓 3. Activate subscription (30 days)
-      const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + 30);
-
-      // SELECT → UPDATE or INSERT (no UNIQUE constraint on user_id)
-      const existingSub = await pool.query(
-        `SELECT id FROM user_subscriptions WHERE user_id = $1 AND status = 'active' ORDER BY end_date DESC NULLS LAST LIMIT 1`,
-        [userId]
-      );
-      if (existingSub.rows.length > 0) {
-        await pool.query(
-          `UPDATE user_subscriptions SET status = 'active', end_date = $1, updated_at = NOW() WHERE id = $2`,
-          [expiresAt, existingSub.rows[0].id]
-        );
-      } else {
-        await pool.query(
-          `INSERT INTO user_subscriptions (user_id, plan, status, end_date) VALUES ($1, 'pro', 'active', $2)`,
-          [userId, expiresAt]
-        );
-      }
-
-      console.log("🔥 USER UNLOCKED:", userId);
-
-      return res.sendStatus(200);
-
-    } catch (err) {
-      console.error("❌ CALLBACK ERROR:", err);
-      return res.sendStatus(200);
+      const appUrl = process.env.APP_URL || "https://workabroadhub.tech";
+      void fetch(`${appUrl}/api/payments/mpesa/callback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(req.body),
+      }).catch((err) => {
+        console.error("[MPESA/LEGACY CALLBACK] Forward to unified handler failed:", err?.message);
+      });
+    } catch (err: any) {
+      console.error("[MPESA/LEGACY CALLBACK] Forward error:", err?.message);
     }
+    return res.sendStatus(200);
   });
 
   app.get("/api/admin/mpesa/test", isAuthenticated, isAdmin, async (req: any, res) => {
