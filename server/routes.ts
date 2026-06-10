@@ -2328,9 +2328,12 @@ Crawl-delay: 1`);
       if (!userId) return res.status(401).json({ message: "Unauthorized" });
 
       const { planId, phoneNumber, promoCode } = req.body;
-      const VALID_PLAN_IDS = ["pro", "pro_referral"];
+      // 2026-06: expanded to include the 4-tier pricing (trial, monthly, pro).
+      // Founder shipped Monthly KES 1,000 + Trial KES 99 as new entry points.
+      // pro_referral kept for backward compat with the 20% referral discount flow.
+      const VALID_PLAN_IDS = ["trial", "monthly", "pro", "pro_referral"];
       if (!planId || !VALID_PLAN_IDS.includes(planId)) {
-        return res.status(400).json({ message: "planId must be 'pro' or 'pro_referral'" });
+        return res.status(400).json({ message: "planId must be one of: trial, monthly, pro, pro_referral" });
       }
       if (!phoneNumber) {
         return res.status(400).json({ message: "phoneNumber is required" });
@@ -5459,8 +5462,9 @@ Crawl-delay: 1`);
       const { userId } = req.params;
       const { planId, transactionCode, note } = req.body;
 
-      if (!planId || planId !== "pro") {
-        return res.status(400).json({ message: "planId must be 'pro'" });
+      const ADMIN_GRANT_VALID = ["trial", "monthly", "pro"];
+      if (!planId || !ADMIN_GRANT_VALID.includes(planId)) {
+        return res.status(400).json({ message: "planId must be one of: trial, monthly, pro" });
       }
       if (!transactionCode) {
         return res.status(400).json({ message: "transactionCode is required (M-Pesa receipt or PayPal order ID)" });
@@ -6283,8 +6287,9 @@ Crawl-delay: 1`);
       if (!receipt || typeof receipt !== "string") {
         return res.status(400).json({ message: "receipt is required" });
       }
-      if (planId !== "pro") {
-        return res.status(400).json({ message: "planId must be 'pro'" });
+      const PAYMENT_SUCCESS_VALID = ["trial", "monthly", "pro"];
+      if (!PAYMENT_SUCCESS_VALID.includes(planId)) {
+        return res.status(400).json({ message: "planId must be one of: trial, monthly, pro" });
       }
 
       // Resolve target user
@@ -6948,8 +6953,9 @@ Crawl-delay: 1`);
       if (!identifier || typeof identifier !== "string") {
         return res.status(400).json({ message: "identifier (email or phone) is required" });
       }
-      if (planId !== "pro") {
-        return res.status(400).json({ message: "planId must be 'pro'" });
+      const MANUAL_GRANT_VALID = ["trial", "monthly", "pro"];
+      if (!MANUAL_GRANT_VALID.includes(planId)) {
+        return res.status(400).json({ message: "planId must be one of: trial, monthly, pro" });
       }
 
       const raw = identifier.trim();
@@ -7067,8 +7073,9 @@ Crawl-delay: 1`);
       if (!raw) {
         return res.status(400).json({ message: "identifier (email or phone) is required" });
       }
-      if (!plan || plan !== "pro") {
-        return res.status(400).json({ message: "plan must be 'pro'" });
+      const ADMIN_UPGRADE_VALID = ["trial", "monthly", "pro"];
+      if (!plan || !ADMIN_UPGRADE_VALID.includes(plan)) {
+        return res.status(400).json({ message: "plan must be one of: trial, monthly, pro" });
       }
 
       const lookupType = raw.includes("@") ? "email" : "phone";
