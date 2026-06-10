@@ -75,6 +75,10 @@ export function UpgradeModal() {
   const queryClient = useQueryClient();
 
   const [step, setStep] = useState<Step>("compare");
+  // 2026-06: modal now offers all 3 paid tiers. Founder feedback — too many
+  // signups cancelled when only KES 4,500 was shown. Default to Monthly
+  // (Kenya's most-loved entry point), let user click through to Trial or Yearly.
+  const [selectedPlan, setSelectedPlan] = useState<"trial" | "monthly" | "pro">("monthly");
   const [phone, setPhone] = useState("");
   const [paymentId, setPaymentId] = useState<string | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(70);
@@ -88,20 +92,18 @@ export function UpgradeModal() {
     enabled: state.open,
   });
 
-  const { data: resolvedProPrice } = useQuery<{ finalPrice: number } | null>({
-    queryKey: ["/api/price", "pro"],
-    queryFn: async () => {
-      const res = await fetch("/api/price", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ planId: "pro" }),
-      });
-      if (!res.ok) return null;
-      return res.json();
-    },
+  // Resolve canonical prices for all 3 paid tiers from the server pricing
+  // engine. /api/plans is a public endpoint returning the live DB rows.
+  const { data: allPlans } = useQuery<Array<{ plan_id: string; price: number }>>({
+    queryKey: ["/api/plans"],
     staleTime: 30_000,
     enabled: state.open,
   });
+  const planPrice = (id: string): number | undefined =>
+    allPlans?.find((p) => p.plan_id === id)?.price;
+  const trialPrice   = planPrice("trial");
+  const monthlyPrice = planPrice("monthly");
+  const yearlyPrice  = planPrice("pro");
 
   const { data: profile } = useQuery<{ phone?: string }>({
     queryKey: ["/api/profile"],
@@ -109,7 +111,12 @@ export function UpgradeModal() {
     enabled: state.open,
   });
 
-  const proFinalPrice = resolvedProPrice?.finalPrice;
+  // Single price used by FeeBreakdown + receipt summary. Tracks the selected
+  // tier so the breakdown updates when the user toggles between plans.
+  const proFinalPrice =
+    selectedPlan === "trial"   ? trialPrice :
+    selectedPlan === "monthly" ? monthlyPrice :
+                                 yearlyPrice;
 
   useEffect(() => {
     if (state.open && profile?.phone && !phone) {
@@ -175,7 +182,7 @@ export function UpgradeModal() {
   const payMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/subscriptions/upgrade", {
-        planId: "pro",
+        planId: selectedPlan,
         phoneNumber: formatPhone(phone),
       });
       return res.json();
@@ -257,60 +264,135 @@ export function UpgradeModal() {
           <p className="text-sm text-muted-foreground">{subheadline}</p>
         </div>
 
-        {/* ── STEP: compare ─────────────────────────────────────────────────── */}
+        {/* ── STEP: compare (4-tier picker) ──────────────────────────────────
+            Founder feedback (2026-06): when only Free + Pro (KES 4,500) were
+            visible, 80%+ of users canceled the M-Pesa STK because they
+            couldn't see the KES 99 + KES 1,000 options. Now shows all 4
+            tiers as clickable cards. Default selection = Monthly KES 1,000
+            (the strongest entry-level commitment). */}
         {step === "compare" && (
           <div className="p-4 sm:p-6">
-            <div className="grid grid-cols-2 gap-3 sm:gap-4 mb-5">
-              {/* Free plan */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-4">
+              {/* Free plan — informational */}
               <div className="relative rounded-xl border-2 border-border overflow-hidden flex flex-col" data-testid="plan-card-free">
-                <div className="bg-muted/50 px-3 py-3 text-center">
-                  <div className="h-5 mb-1.5" />
-                  <div className="font-bold text-sm sm:text-base text-foreground">Free</div>
-                  <div className="text-lg sm:text-xl font-black mt-1 text-foreground">KES 0</div>
+                <div className="bg-muted/50 px-2 py-3 text-center">
+                  <div className="font-bold text-sm text-foreground">Free</div>
+                  <div className="text-base sm:text-lg font-black mt-1 text-foreground">KES 0</div>
+                  <div className="text-[9px] text-muted-foreground">Browse & preview</div>
                 </div>
-                <div className="p-2 sm:p-3 flex-1 space-y-1.5">
-                  {UPGRADE_MODAL_FREE.map((f) => (
-                    <div key={f.label} className="flex items-start gap-1.5">
-                      {f.included
-                        ? <Check className="h-3.5 w-3.5 text-green-500 flex-shrink-0 mt-0.5" />
-                        : <X className="h-3.5 w-3.5 text-muted-foreground/40 flex-shrink-0 mt-0.5" />}
-                      <span className={`text-[10px] sm:text-xs leading-tight ${f.included ? "text-foreground" : "text-muted-foreground/60"}`}>{f.label}</span>
-                    </div>
-                  ))}
+                <div className="p-2 flex-1 text-center text-[10px] text-muted-foreground">
+                  Limited preview
                 </div>
-                <div className="p-2 sm:p-3 pt-0">
-                  <div className="w-full text-center text-xs text-muted-foreground py-2 font-medium">Current Plan</div>
+                <div className="p-2 pt-0">
+                  <div className="w-full text-center text-[10px] text-muted-foreground py-1.5 font-medium">Current</div>
                 </div>
               </div>
 
-              {/* Pro plan */}
-              <div className="relative rounded-xl border-2 border-amber-400 shadow-xl shadow-amber-100/60 dark:shadow-amber-900/30 scale-[1.03] overflow-hidden flex flex-col z-10" data-testid="plan-card-pro">
-                <div className="bg-gradient-to-br from-amber-500 to-orange-500 px-3 py-3 text-center">
-                  <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-full mb-1.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white border border-white/30">👑 Best Value</span>
-                  <div className="font-bold text-sm sm:text-base text-white">Pro</div>
-                  <div className="text-lg sm:text-xl font-black mt-1 text-white">
-                    {proFinalPrice ? `KES ${proFinalPrice.toLocaleString("en-KE")}` : "—"}
-                    <span className="text-xs font-normal text-white/80">/year</span>
+              {/* Trial plan — KES 99 / 1 day */}
+              <button
+                type="button"
+                onClick={() => setSelectedPlan("trial")}
+                className={`relative rounded-xl border-2 overflow-hidden flex flex-col text-left transition-all ${
+                  selectedPlan === "trial"
+                    ? "border-green-500 shadow-lg shadow-green-200/60 dark:shadow-green-900/40 ring-2 ring-green-300/40"
+                    : "border-border hover:border-green-300"
+                }`}
+                data-testid="plan-card-trial"
+              >
+                <div className={`px-2 py-3 text-center ${selectedPlan === "trial" ? "bg-green-500 text-white" : "bg-green-100 dark:bg-green-900/30 text-green-900 dark:text-green-200"}`}>
+                  <div className="font-bold text-sm">1 Day Trial</div>
+                  <div className="text-base sm:text-lg font-black mt-1">
+                    {trialPrice ? `KES ${trialPrice.toLocaleString("en-KE")}` : "—"}
                   </div>
+                  <div className={`text-[9px] ${selectedPlan === "trial" ? "text-white/80" : "text-green-700/80 dark:text-green-300/80"}`}>24-hour access</div>
                 </div>
-                <div className="p-2 sm:p-3 flex-1 space-y-1.5">
-                  {UPGRADE_MODAL_PRO.map((f) => (
-                    <div key={f.label} className="flex items-start gap-1.5">
-                      <Check className="h-3.5 w-3.5 text-green-500 flex-shrink-0 mt-0.5" />
-                      <span className="text-[10px] sm:text-xs leading-tight text-foreground">{f.label}</span>
-                    </div>
-                  ))}
+                <div className="p-2 flex-1 text-[10px] text-muted-foreground text-center">
+                  Try everything for a day
                 </div>
-                <div className="p-2 sm:p-3 pt-0">
-                  <button
-                    onClick={handleUpgradeClick}
-                    className="w-full text-xs sm:text-sm font-bold py-2 sm:py-2.5 rounded-lg transition-all duration-200 hover:scale-[1.03] active:scale-[0.97] bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-md shadow-amber-200 dark:shadow-amber-900/40"
-                    data-testid="btn-upgrade-pro"
-                  >
-                    Upgrade to Pro 🚀
-                  </button>
+                <div className="p-2 pt-0 text-center text-[10px] font-bold text-green-700 dark:text-green-300">
+                  {selectedPlan === "trial" ? "✓ Selected" : "Tap to pick"}
                 </div>
-              </div>
+              </button>
+
+              {/* Monthly plan — KES 1,000 / 30 days — DEFAULT */}
+              <button
+                type="button"
+                onClick={() => setSelectedPlan("monthly")}
+                className={`relative rounded-xl border-2 overflow-hidden flex flex-col text-left transition-all ${
+                  selectedPlan === "monthly"
+                    ? "border-blue-500 shadow-xl shadow-blue-200/60 dark:shadow-blue-900/40 ring-2 ring-blue-300/40 scale-[1.03] z-10"
+                    : "border-border hover:border-blue-300"
+                }`}
+                data-testid="plan-card-monthly"
+              >
+                <div className={`px-2 py-3 text-center ${selectedPlan === "monthly" ? "bg-gradient-to-br from-blue-600 to-indigo-600 text-white" : "bg-blue-100 dark:bg-blue-900/30 text-blue-900 dark:text-blue-200"}`}>
+                  <span className="inline-block text-[8px] font-bold px-1.5 py-0.5 rounded-full mb-1 bg-white/20 backdrop-blur-sm border border-white/30">⭐ POPULAR</span>
+                  <div className="font-bold text-sm">Monthly</div>
+                  <div className="text-base sm:text-lg font-black mt-1">
+                    {monthlyPrice ? `KES ${monthlyPrice.toLocaleString("en-KE")}` : "—"}
+                  </div>
+                  <div className={`text-[9px] ${selectedPlan === "monthly" ? "text-white/80" : "text-blue-700/80 dark:text-blue-300/80"}`}>30 days · cancel anytime</div>
+                </div>
+                <div className="p-2 flex-1 text-[10px] text-muted-foreground text-center">
+                  Full Pro access
+                </div>
+                <div className="p-2 pt-0 text-center text-[10px] font-bold text-blue-700 dark:text-blue-300">
+                  {selectedPlan === "monthly" ? "✓ Selected" : "Tap to pick"}
+                </div>
+              </button>
+
+              {/* Yearly plan — KES 4,500 / year */}
+              <button
+                type="button"
+                onClick={() => setSelectedPlan("pro")}
+                className={`relative rounded-xl border-2 overflow-hidden flex flex-col text-left transition-all ${
+                  selectedPlan === "pro"
+                    ? "border-amber-500 shadow-xl shadow-amber-200/60 dark:shadow-amber-900/40 ring-2 ring-amber-300/40"
+                    : "border-border hover:border-amber-300"
+                }`}
+                data-testid="plan-card-pro"
+              >
+                <div className={`px-2 py-3 text-center ${selectedPlan === "pro" ? "bg-gradient-to-br from-amber-500 to-orange-500 text-white" : "bg-amber-100 dark:bg-amber-900/30 text-amber-900 dark:text-amber-200"}`}>
+                  <span className="inline-block text-[8px] font-bold px-1.5 py-0.5 rounded-full mb-1 bg-white/20 backdrop-blur-sm border border-white/30">👑 SAVE 7,500</span>
+                  <div className="font-bold text-sm">Yearly</div>
+                  <div className="text-base sm:text-lg font-black mt-1">
+                    {yearlyPrice ? `KES ${yearlyPrice.toLocaleString("en-KE")}` : "—"}
+                  </div>
+                  <div className={`text-[9px] ${selectedPlan === "pro" ? "text-white/80" : "text-amber-700/80 dark:text-amber-300/80"}`}>365 days · best value</div>
+                </div>
+                <div className="p-2 flex-1 text-[10px] text-muted-foreground text-center">
+                  Pay once, done
+                </div>
+                <div className="p-2 pt-0 text-center text-[10px] font-bold text-amber-700 dark:text-amber-300">
+                  {selectedPlan === "pro" ? "✓ Selected" : "Tap to pick"}
+                </div>
+              </button>
+            </div>
+
+            {/* Single proceed button at full width — uses whichever tier the user picked */}
+            <button
+              onClick={handleUpgradeClick}
+              disabled={!proFinalPrice}
+              className={`w-full text-sm font-bold py-3 rounded-xl transition-all duration-200 hover:scale-[1.01] active:scale-[0.99] text-white shadow-lg disabled:opacity-50 disabled:cursor-not-allowed mb-5 ${
+                selectedPlan === "trial"   ? "bg-gradient-to-r from-green-600 to-emerald-600 shadow-green-200 dark:shadow-green-900/40" :
+                selectedPlan === "monthly" ? "bg-gradient-to-r from-blue-600 to-indigo-600 shadow-blue-200 dark:shadow-blue-900/40" :
+                                             "bg-gradient-to-r from-amber-500 to-orange-500 shadow-amber-200 dark:shadow-amber-900/40"
+              }`}
+              data-testid="btn-upgrade-proceed"
+            >
+              {proFinalPrice
+                ? `Continue with ${selectedPlan === "trial" ? "1 Day Trial" : selectedPlan === "monthly" ? "Monthly" : "Yearly"} — KES ${proFinalPrice.toLocaleString("en-KE")}`
+                : "Loading prices…"}
+            </button>
+
+            {/* Tiny what-you-get bullets (shared across paid tiers) */}
+            <div className="mb-4 p-3 rounded-xl bg-muted/30 grid grid-cols-2 gap-1.5">
+              {UPGRADE_MODAL_PRO.map((f) => (
+                <div key={f.label} className="flex items-start gap-1.5">
+                  <Check className="h-3 w-3 text-green-500 flex-shrink-0 mt-0.5" />
+                  <span className="text-[10px] leading-tight text-foreground">{f.label}</span>
+                </div>
+              ))}
             </div>
 
             <div className="grid grid-cols-2 gap-2 mb-4">
@@ -378,6 +460,7 @@ export function UpgradeModal() {
               </div>
               <p className="text-xs text-muted-foreground">You'll receive a PIN prompt on this number</p>
             </div>
+
 
             <button
               onClick={handleSendPrompt}
