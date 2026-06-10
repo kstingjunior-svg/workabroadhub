@@ -1505,7 +1505,7 @@ export default function Dashboard() {
                 </h2>
                 <p className="text-sm text-white/90 leading-snug mb-3">
                   Apply via eCitizen yourself — no broker, no extra fees. 10
-                  clear steps, ~10 working days, KES 7,550 government fee.
+                  clear steps, ~10 working days, KES 7,500 government fee.
                 </p>
                 {/* Micro-stepper for passport — symmetry with visa widget */}
                 <div className="grid grid-cols-3 gap-1.5 text-[10px] font-semibold">

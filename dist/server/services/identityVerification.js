@@ -202,15 +202,9 @@ async function requireVerifiedForPayment(req, res, next) {
         if (!u.email_verified) {
             return res.status(403).json({
                 message: "Please verify your email before making a payment.",
-                verificationRequired: true,
-                emailVerified: u.email_verified,
-                phoneVerified: true, // legacy field — clients ignore it now
+                verificationRe
             });
         }
-        next();
     }
-    catch (err) {
-        console.error("[requireVerifiedForPayment] DB error:", err.message);
-        res.status(500).json({ message: "Could not verify your account status." });
-    }
+    finally { }
 }

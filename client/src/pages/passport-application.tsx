@@ -37,11 +37,12 @@ const IMMIGRATION_PASSPORT_URL = "https://immigration.ecitizen.go.ke";
 // Exact passport fees as of 2026 (KES) — published by Directorate of
 // Immigration Services. These get refreshed only when the government does.
 const PASSPORT_FEES = [
-  { label: "Ordinary Passport — 34 pages (Class A)", price: "KES 7,550", note: "Most common — work, study, holiday" },
-  { label: "Ordinary Passport — 50 pages (Class B)", price: "KES 9,550", note: "Frequent travellers" },
-  { label: "Ordinary Passport — 66 pages (Class C)", price: "KES 12,550", note: "Heavy travellers, multiple visas" },
-  { label: "Diplomatic Passport",                     price: "KES 15,000", note: "Government officials only" },
-  { label: "Mutilated / Lost Passport replacement",   price: "KES 12,050", note: "Penalty included" },
+  { label: "Ordinary Passport — 34 pages (Class A)", price: "KES 7,500", note: "Most common — work, study, holiday" },
+  { label: "Ordinary Passport — 50 pages (Class B)", price: "KES 9,500", note: "Frequent travellers" },
+  { label: "Ordinary Passport — 66 pages (Class C)", price: "KES 12,500", note: "Heavy travellers, multiple visas" },
+  { label: "Diplomatic Passport (50 page)",           price: "KES 15,000", note: "Government officials only" },
+  { label: "Mutilated Passport replacement",          price: "KES 20,000", note: "Penalty fee for damaged passport" },
+  { label: "Lost Passport replacement",               price: "KES 20,000", note: "Penalty fee for lost passport" },
 ];
 
 const REQUIRED_DOCUMENTS = [
@@ -69,7 +70,7 @@ const STEPS = [
   {
     n: 3,
     title: "Pick the right passport class",
-    body: "For 99% of Kenyans applying for travel or work abroad, choose the 34-page Class A ordinary passport at KES 7,550. Class B (50 pages) is worth the extra KES 2,000 if you'll get many visa stamps. Don't pick Diplomatic unless you genuinely qualify — they'll reject it.",
+    body: "For 99% of Kenyans applying for travel or work abroad, choose the 34-page Class A ordinary passport at KES 7,500. Class B (50 pages) is worth the extra KES 2,000 if you'll get many visa stamps. Don't pick Diplomatic unless you genuinely qualify — they'll reject it.",
   },
   {
     n: 4,
@@ -130,7 +131,7 @@ function PassportPaywall() {
           <ul className="space-y-1.5 text-sm">
             <li className="flex items-start gap-2"><CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" /> Exact eCitizen click-by-click walkthrough (10 steps)</li>
             <li className="flex items-start gap-2"><CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" /> Document checklist with example formats</li>
-            <li className="flex items-start gap-2"><CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" /> Current fees: Class A KES 7,550 / Class B 9,550 / Class C 12,550</li>
+            <li className="flex items-start gap-2"><CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" /> Current fees: Class A KES 7,500 / Class B 9,500 / Class C 12,500</li>
             <li className="flex items-start gap-2"><CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" /> Photo specs (so you don't get rejected)</li>
             <li className="flex items-start gap-2"><CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" /> Common rejection reasons + how to avoid them</li>
             <li className="flex items-start gap-2"><CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" /> Biometric appointment booking tips</li>
@@ -157,7 +158,7 @@ function PassportPaywall() {
 
         <p className="mt-4 text-[11px] text-white/70 leading-snug">
           The KES 4,500 covers our Pro plan. Government passport fees
-          (KES 7,550+) are paid separately on eCitizen — that money goes to the
+          (KES 7,500+) are paid separately on eCitizen — that money goes to the
           Kenya Government, not to us.
         </p>
       </div>
@@ -212,7 +213,7 @@ export default function PassportApplication() {
           </div>
           <div className="rounded-xl bg-white/15 px-3 py-2">
             <div className="text-white/70 uppercase tracking-wider text-[10px]">Cost (gov)</div>
-            <div className="font-bold text-sm">KES 7,550+</div>
+            <div className="font-bold text-sm">KES 7,500+</div>
           </div>
           <div className="rounded-xl bg-white/15 px-3 py-2">
             <div className="text-white/70 uppercase tracking-wider text-[10px]">Time</div>
