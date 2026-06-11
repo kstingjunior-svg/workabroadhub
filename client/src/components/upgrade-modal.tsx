@@ -94,13 +94,15 @@ export function UpgradeModal() {
 
   // Resolve canonical prices for all 3 paid tiers from the server pricing
   // engine. /api/plans is a public endpoint returning the live DB rows.
-  const { data: allPlans } = useQuery<Array<{ plan_id: string; price: number }>>({
+  // Drizzle returns camelCase keys (planId, not plan_id) — accept both
+  // shapes defensively in case the API surface ever changes.
+  const { data: allPlans } = useQuery<Array<{ planId?: string; plan_id?: string; price: number }>>({
     queryKey: ["/api/plans"],
     staleTime: 30_000,
     enabled: state.open,
   });
   const planPrice = (id: string): number | undefined =>
-    allPlans?.find((p) => p.plan_id === id)?.price;
+    allPlans?.find((p) => (p.planId ?? p.plan_id) === id)?.price;
   const trialPrice   = planPrice("trial");
   const monthlyPrice = planPrice("monthly");
   const yearlyPrice  = planPrice("pro");
