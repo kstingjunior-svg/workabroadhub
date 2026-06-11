@@ -20,6 +20,7 @@ import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
+import { useUpgradeModal } from "@/contexts/upgrade-modal-context";
 import { Lock, ExternalLink, MapPin, DollarSign, Plane, ChevronRight, Briefcase, Loader2 } from "lucide-react";
 
 interface VisaJob {
@@ -188,6 +189,7 @@ export function DashboardVisaJobsLocked() {
 // ─── Individual Job Card ──────────────────────────────────────────────────────
 
 function JobCard({ job, isPro }: { job: VisaJob; isPro: boolean }) {
+  const { openUpgradeModal } = useUpgradeModal();
   const CategoryBadge = (
     <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${CATEGORY_COLORS[job.category]}`}>
       {job.category}
@@ -255,17 +257,19 @@ function JobCard({ job, isPro }: { job: VisaJob; isPro: boolean }) {
         )}
       </div>
 
-      {/* Lock overlay for non-Pro */}
+      {/* Lock overlay for non-Pro — opens the in-page upgrade modal (4-tier
+          picker → M-Pesa STK push) instead of detouring to /pricing. */}
       {!isPro && (
         <div className="absolute inset-0 bg-gradient-to-t from-background/95 via-background/40 to-transparent rounded-xl flex items-end p-3 pointer-events-none">
           <div className="w-full text-center">
-            <Link
-              href="/pricing"
+            <button
+              type="button"
+              onClick={() => openUpgradeModal("jobs_locked", job.title)}
               className="inline-flex items-center justify-center gap-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-md pointer-events-auto transition-transform hover:scale-105"
               data-testid={`lock-cta-${job.id}`}
             >
               <Lock className="h-3 w-3" /> Upgrade to apply
-            </Link>
+            </button>
           </div>
         </div>
       )}
