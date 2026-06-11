@@ -703,13 +703,6 @@ function App() {
                 <Router />
               </main>
               <UpgradeModal />
-              <SessionGuard />
-              <DataConsentBanner />
-              <PhoneCompletionModal />
-              <main id="main-content" tabIndex={-1} className="pb-bottom-nav">
-                <Router />
-              </main>
-              <UpgradeModal />
               <LiveActivityFeed />
               <NanjilaChatWidget />
               <InstallAppPrompt />
