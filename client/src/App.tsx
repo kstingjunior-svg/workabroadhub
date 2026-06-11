@@ -480,11 +480,6 @@ function AuthenticatedRoutes() {
       <Route path="/privacy-policy" component={LazyPrivacyPolicy} />
       <Route path="/terms-of-service" component={LazyTermsOfService} />
       <Route path="/refund-policy" component={LazyRefundPolicy} />
-        <Route path="/verify-us" component={LazyVerifyUs} />
-        <Route path="/guides/:slug" component={LazyGuidePage} />
-        <Route path="/guides" component={LazyGuidesIndex} />
-      <Route path="/guides/:slug" component={LazyGuidePage} />
-      <Route path="/guides" component={LazyGuidesIndex} />
       <Route path="/verify-us" component={LazyVerifyUs} />
       <Route path="/guides/:slug" component={LazyGuidePage} />
       <Route path="/guides" component={LazyGuidesIndex} />
