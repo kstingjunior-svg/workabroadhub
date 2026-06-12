@@ -568,13 +568,25 @@ class DatabaseStorage {
          ORDER BY end_date DESC NULLS LAST
          LIMIT 1
          FOR UPDATE`, [userId]);
-            // Extension logic (mirrors reference implementation):
-            // • If the user already has time left → add 360 days to their current expiry
-            //   (they don't lose remaining days when they renew early)
+            // Extension logic:
+            // • If the user already has time left → add the new plan's duration to
+            //   their current expiry (they don't lose remaining days when they renew early)
             // • If the subscription has lapsed → use the fresh expiresAt passed in
+            //
+            // 2026-06 hardening: the previous code defaulted to 360 days if the
+            // caller forgot to pass expiresAt — that's a silent footgun that would
+            // give a KES 99 trial user 360 days of access. Now we compute the
+            // correct default per-plan: trial=1d, monthly=30d, yearly/pro=365d.
+            const PLAN_DAYS = {
+                trial: 1,
+                monthly: 30,
+                yearly: 365,
+                pro: 365,
+            };
+            const defaultDays = PLAN_DAYS[planId] ?? PLAN_DAYS.pro;
             const now = new Date();
-            const freshExpiry = expiresAt ?? new Date(Date.now() + 360 * 86400000);
-            const duration = freshExpiry.getTime() - now.getTime(); // 360d in ms
+            const freshExpiry = expiresAt ?? new Date(Date.now() + defaultDays * 86400000);
+            const duration = freshExpiry.getTime() - now.getTime();
             const currentExpiry = existing?.end_date ? new Date(existing.end_date) : null;
             const finalExpiry = (currentExpiry && currentExpiry > now)
                 ? new Date(currentExpiry.getTime() + duration) // extend
