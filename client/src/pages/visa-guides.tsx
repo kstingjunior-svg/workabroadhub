@@ -305,7 +305,7 @@ export default function VisaGuidesPage() {
             {!user && (
               <div className="mt-8 text-center">
                 <p className="text-gray-500 mb-3">Create a free account to access all career tools</p>
-                <a href="/api/login">
+                <a href="/">
                   <Button className="bg-blue-600 hover:bg-blue-700 text-white px-8" data-testid="button-signup-visa-guides">
                     Get Started Free <ArrowRight className="ml-2 h-4 w-4" />
                   </Button>

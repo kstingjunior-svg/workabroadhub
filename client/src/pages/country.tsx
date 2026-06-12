@@ -287,7 +287,7 @@ export default function Country() {
           variant: "destructive",
         });
         setTimeout(() => {
-          window.location.href = "/api/login";
+          window.location.href = "/?redirect=" + encodeURIComponent(window.location.pathname);
         }, 500);
       }
     }

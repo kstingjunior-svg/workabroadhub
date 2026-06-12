@@ -54,7 +54,7 @@ export default function AdminLogin() {
   };
 
   const handleLogin = () => {
-    window.location.href = "/api/login";
+    window.location.href = "/?redirect=" + encodeURIComponent(window.location.pathname);
   };
 
   if (isLoading || isLoggingIn) {

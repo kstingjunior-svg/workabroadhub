@@ -1032,7 +1032,7 @@ export default function NeaAgenciesPage() {
                   <div className="text-center py-4 space-y-3">
                     <ShieldCheck className="h-12 w-12 text-muted-foreground mx-auto" />
                     <p className="text-sm text-muted-foreground">You need to sign in to claim this agency listing.</p>
-                    <a href="/api/login" className="inline-block">
+                    <a href="/" className="inline-block">
                       <Button className="w-full" data-testid="button-signin-claim">Sign In to Continue</Button>
                     </a>
                   </div>

@@ -1059,7 +1059,7 @@ export default function Landing() {
                   </div>
                   <div className="flex-shrink-0 w-full lg:w-auto">
                     <Button size="lg" className="w-full lg:w-auto min-w-[240px] text-lg py-6 shadow-lg shadow-primary/25" asChild data-testid="button-pricing-cta">
-                      <a href="/api/login">
+                      <a href="/pricing">
                         Get Started Now
                         <ArrowRight className="ml-2 h-5 w-5" />
                       </a>
@@ -1282,7 +1282,7 @@ export default function Landing() {
             
             <div className="mt-12 text-center">
               <Button size="lg" className="text-base px-8 py-6 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-lg" asChild data-testid="button-how-it-works-cta">
-                <a href="/api/login">
+                <a href="/pricing">
                   Start Your Journey Today
                   <ArrowRight className="ml-2 h-5 w-5" />
                 </a>
@@ -1569,6 +1569,4 @@ export default function Landing() {
         defaultTab={authModalTab}
         redirectPath={authRedirectPath}
       />
-    </div>
-  );
-}
+    

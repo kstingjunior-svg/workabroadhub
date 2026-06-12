@@ -569,7 +569,7 @@ export default function GreenCardPage() {
               {!user && (
                 <div className="mt-6 text-center">
                   <p className="text-gray-500 text-sm mb-3">Create a free account to access all career tools</p>
-                  <a href="/api/login">
+                  <a href="/">
                     <Button
                       className="bg-blue-600 hover:bg-blue-700 text-white px-8"
                       data-testid="button-signup-green-card"

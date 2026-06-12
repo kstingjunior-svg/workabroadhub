@@ -336,7 +336,7 @@ export default function VisaAssistantPage() {
                   <p className="text-gray-500 mb-6 text-sm">
                     Free accounts get 3 AI questions per day. Basic gets 20. Pro gets unlimited questions.
                   </p>
-                  <a href="/api/login">
+                  <a href="/">
                     <Button className="bg-blue-600 hover:bg-blue-700 text-white w-full" data-testid="button-login-visa-assistant">
                       Sign In Free <ArrowRight className="ml-2 h-4 w-4" />
                     </Button>

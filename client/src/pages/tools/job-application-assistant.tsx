@@ -123,7 +123,7 @@ export default function JobApplicationAssistant() {
     onError: (err: Error) => {
       if (err.message === "__AUTH__") {
         toast({ title: "Sign in required", description: "Please sign in to use the AI assistant.", variant: "destructive" });
-        setLocation("/api/login");
+        setLocation("/?redirect=" + encodeURIComponent(window.location.pathname));
         return;
       }
       if (err.message === "__UPGRADE__") return;

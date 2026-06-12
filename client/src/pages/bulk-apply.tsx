@@ -334,7 +334,7 @@ export default function BulkApply() {
                 </p>
               </div>
               <div className="flex flex-col gap-2">
-                <a href="/api/login?next=/bulk-apply" className="w-full">
+                <a href="/?redirect=/bulk-apply" className="w-full">
                   <Button className="w-full gap-2 bg-blue-600 hover:bg-blue-700 text-white" data-testid="button-login-bulk">
                     <Zap className="h-4 w-4" /> Sign In &amp; Continue
                   </Button>

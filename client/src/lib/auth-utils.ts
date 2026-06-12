@@ -12,6 +12,6 @@ export function redirectToLogin(toast?: (options: { title: string; description: 
     });
   }
   setTimeout(() => {
-    window.location.href = "/api/login";
+    window.location.href = "/?redirect=" + encodeURIComponent(window.location.pathname);
   }, 500);
 }

@@ -795,7 +795,7 @@ export default function VisaSponsorshipJobs() {
             <span className="text-xs text-muted-foreground">·</span>
             <Link href="/services"><span className="text-xs text-blue-600 dark:text-blue-400 underline underline-offset-2">Career Consultation</span></Link>
             <span className="text-xs text-muted-foreground">·</span>
-            <a href="/api/login"><span className="text-xs text-blue-600 dark:text-blue-400 underline underline-offset-2">Sign Up Free</span></a>
+            <a href="/"><span className="text-xs text-blue-600 dark:text-blue-400 underline underline-offset-2">Sign Up Free</span></a>
           </div>
         </div>
       </div>

@@ -596,7 +596,7 @@ export default function JobScamChecker() {
             <span className="text-xs text-muted-foreground">·</span>
             <Link href="/tools/ats-cv-checker"><span className="text-xs text-blue-600 dark:text-blue-400 underline underline-offset-2">ATS CV Checker</span></Link>
             <span className="text-xs text-muted-foreground">·</span>
-            <a href="/api/login"><span className="text-xs text-blue-600 dark:text-blue-400 underline underline-offset-2">Create Free Account</span></a>
+            <a href="/"><span className="text-xs text-blue-600 dark:text-blue-400 underline underline-offset-2">Create Free Account</span></a>
           </div>
         </div>
       </div>

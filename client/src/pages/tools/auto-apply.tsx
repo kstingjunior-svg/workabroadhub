@@ -314,7 +314,7 @@ export default function AutoApply() {
                   Create a free account to let AI match you to the best overseas jobs and generate applications automatically.
                 </p>
               </div>
-              <a href="/api/login?next=/tools/auto-apply" className="block w-full">
+              <a href="/?redirect=/tools/auto-apply" className="block w-full">
                 <Button className="w-full gap-2 bg-blue-600 hover:bg-blue-700 text-white" data-testid="button-login-autoapply">
                   <Zap className="h-4 w-4" /> Sign In &amp; Continue
                 </Button>

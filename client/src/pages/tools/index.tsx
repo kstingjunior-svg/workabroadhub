@@ -359,7 +359,7 @@ export default function ToolsHub() {
                 </div>
               </div>
               <div className="flex gap-2">
-                <a href="/api/login" className="flex-1">
+                <a href="/" className="flex-1">
                   <Button
                     size="sm"
                     className="w-full h-9 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 border-0"
@@ -369,7 +369,7 @@ export default function ToolsHub() {
                     <ChevronRight className="h-3 w-3" />
                   </Button>
                 </a>
-                <a href="/api/login" className="flex-1">
+                <a href="/" className="flex-1">
                   <Button
                     variant="outline"
                     size="sm"
