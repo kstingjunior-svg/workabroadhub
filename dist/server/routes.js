@@ -2365,8 +2365,12 @@ Crawl-delay: 1`);
             if (!country) {
                 return res.status(404).json({ message: "Country not found" });
             }
-            // Strip job portals for non-Pro users (admins always count as Pro above)
-            const isPaidPlan = planId === "pro";
+            // Strip job portals for non-paying users (admins always count as Pro above).
+            // 2026-06: any active paid tier (trial / monthly / yearly / pro / pro_referral / basic)
+            // unlocks jobLinks. Previously only strict planId === "pro" passed, which
+            // wrongly hid jobs from KES 99 trial and KES 1,000 monthly customers.
+            const PAID_TIERS = new Set(["trial", "basic", "monthly", "yearly", "pro", "pro_referral"]);
+            const isPaidPlan = PAID_TIERS.has((planId || "").toLowerCase());
             if (!isPaidPlan) {
                 return res.json({ ...country, jobLinks: [] });
             }
@@ -5666,9 +5670,12 @@ Crawl-delay: 1`);
     // User provides: M-Pesa receipt (e.g. "QHJ8QKXYZ") + plan + phone
     // We verify no duplicate, store it, activate their plan.
     // ═══════════════════════════════════════════════════════════════════════════
+    // 2026-06: previously z.enum(["pro"]) only — rejected manual-receipt
+    // submissions for KES 99 trial and KES 1,000 monthly even though those tiers
+    // ship via the same M-Pesa flow. Now accepts every paid SKU.
     const verifyReceiptSchema = zod_1.z.object({
         receipt: zod_1.z.string().min(8).max(20).regex(/^[A-Z0-9]+$/, "Invalid receipt format"),
-        planId: zod_1.z.enum(["pro"]),
+        planId: zod_1.z.enum(["trial", "basic", "monthly", "yearly", "pro", "pro_referral"]),
         phone: zod_1.z.string().min(9).max(15),
     });
     app.post("/api/mpesa/verify-receipt", auth_1.isAuthenticated, async (req, res) => {
@@ -16561,7 +16568,21 @@ Rules:
             apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
             baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
         });
-        const BULK_LIMITS = { free: 0, basic: 5, pro: Infinity };
+        // 2026-06: previously { free: 0, basic: 5, pro: Infinity } left trial,
+        // monthly and yearly tiers falling through to `?? 0` — i.e. KES 99 and
+        // KES 1,000 paying customers couldn't use Bulk Apply at all. Now every
+        // paying tier gets unlimited, with the legacy "basic" SKU capped at 5/day
+        // and trial getting a generous 10/day taste.
+        const BULK_LIMITS = {
+            free: 0,
+            trial: 10,
+            basic: 5, // legacy KES 500 SKU
+            monthly: Infinity, // KES 1,000
+            yearly: Infinity, // KES 4,500
+            pro: Infinity, // alias for yearly
+            pro_referral: Infinity, // yearly via referral
+        };
+        const UNLIMITED_TIERS = new Set(["monthly", "yearly", "pro", "pro_referral"]);
         const BULK_TOOL = "bulk_apply";
         function getTodayStr() {
             return new Date().toISOString().split("T")[0];
@@ -16574,7 +16595,7 @@ Rules:
                     return res.status(401).json({ message: "Unauthorised" });
                 const planId = (await storage_1.storage.getUserPlan(userId) || "free").toLowerCase();
                 const dailyLimit = BULK_LIMITS[planId] ?? 0;
-                const unlimited = planId === "pro";
+                const unlimited = UNLIMITED_TIERS.has(planId);
                 const today = getTodayStr();
                 const row = await storage_1.storage.getAiUsageToday(userId, BULK_TOOL, today);
                 const usedToday = row?.questionsUsed ?? 0;
@@ -16607,7 +16628,7 @@ Rules:
                 const row = await storage_1.storage.getAiUsageToday(userId, BULK_TOOL, today);
                 const usedToday = row?.questionsUsed ?? 0;
                 const dailyLimit = BULK_LIMITS[planId] ?? 0;
-                const unlimited = planId === "pro";
+                const unlimited = UNLIMITED_TIERS.has(planId);
                 if (!unlimited) {
                     const remaining = dailyLimit - usedToday;
                     if (remaining <= 0) {
@@ -16625,7 +16646,7 @@ Rules:
                         });
                     }
                 }
-                const MAX_PER_BATCH = planId === "pro" ? 20 : 5;
+                const MAX_PER_BATCH = UNLIMITED_TIERS.has(planId) ? 20 : 5;
                 const jobsBatch = jobs.slice(0, MAX_PER_BATCH);
                 // Generate in parallel (cap at MAX_PER_BATCH)
                 const generateForJob = async (job) => {
@@ -16700,7 +16721,7 @@ Format as JSON: { "coverLetter": "...", "answers": [{"question": "...", "answer"
                 }
                 const planId = ((await storage_1.storage.getUserPlan(userId)) || "free").toLowerCase();
                 const today = getTodayStr();
-                const unlimited = planId === "pro";
+                const unlimited = UNLIMITED_TIERS.has(planId);
                 if (!unlimited) {
                     const row = await storage_1.storage.getAiUsageToday(userId, BULK_TOOL, today);
                     const usedToday = row?.questionsUsed ?? 0;

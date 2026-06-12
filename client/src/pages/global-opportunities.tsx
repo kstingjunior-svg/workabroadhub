@@ -16,6 +16,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import type { VerifiedPortal } from "@shared/schema";
+import { isPaidUser } from "@/lib/plan";
 
 // ─── Country config ───────────────────────────────────────────────────────────
 
@@ -489,7 +490,7 @@ function VerifiedPortalsSection() {
 export default function GlobalOpportunitiesPage() {
   const [, navigate] = useLocation();
   const { user } = useAuth();
-  const isPro = user?.plan === "pro";
+  const isPro = isPaidUser((user as any)?.plan);
 
   useEffect(() => { trackEvent("view_jobs"); }, []);
   const [view, setView] = useState<"compact" | "expanded">("compact");

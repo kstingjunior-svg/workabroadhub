@@ -10,6 +10,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useJobRedirect } from "@/hooks/use-job-redirect";
 import { Link, useLocation } from "wouter";
 import {
+import { isPaidUser, planLabel } from "@/lib/plan";
   Zap,
   ArrowLeft,
   CheckCircle2,
@@ -282,7 +283,7 @@ export default function BulkApply() {
           {usage && (
             <div className="ml-auto text-right">
               <Badge className="bg-white/20 text-white border-0 text-xs" data-testid="badge-plan">
-                {usage.planId === "pro" ? "PRO ∞" : usage.planId === "basic" ? `BASIC ${usage.remaining}/${usage.dailyLimit} left` : "FREE"}
+                {isPaidUser(usage.planId) ? `${planLabel(usage.planId)} ${usage.dailyLimit === Infinity || (usage.dailyLimit ?? 0) > 1000 ? "∞" : `${usage.remaining}/${usage.dailyLimit} left`}` : "FREE"}
               </Badge>
             </div>
           )}

@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { fetchCsrfToken } from "@/lib/queryClient";
 import {
+import { isPaidUser } from "@/lib/plan";
   Upload,
   FileText,
   CheckCircle,
@@ -71,7 +72,7 @@ export default function UploadCVPage() {
     queryKey: ["/api/user/plan"],
     enabled: !!user,
   });
-  const isPro = userPlan?.planId === "pro";
+  const isPro = isPaidUser(userPlan?.planId);
 
   const { mutate: analyseCV, isPending } = useMutation({
     mutationFn: async (f: File) => {

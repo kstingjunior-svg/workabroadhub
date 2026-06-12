@@ -13,6 +13,7 @@ import { Brain, Sparkles, Target, CheckCircle, Globe, Briefcase, GraduationCap, 
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
+import { isPaidUser } from "@/lib/plan";
 
 interface UserCareerProfile {
   id: string;
@@ -64,7 +65,7 @@ export default function CareerMatch() {
     queryKey: ["/api/user/plan"],
   });
   const planId = (planData?.planId || "free").toLowerCase();
-  const isPaidPlan = planId === "basic" || planId === "pro";
+  const isPaidPlan = isPaidUser(planId);
 
   // Pre-fill profession from dashboard AI match box (stored in sessionStorage)
   const [formData, setFormData] = useState(() => {

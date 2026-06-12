@@ -13,6 +13,7 @@ import { SeoHead, buildArticleSchema, buildFaqSchema } from "@/components/seo-he
 import { trackPageView } from "@/lib/analytics";
 import { ReportShareBar } from "@/components/report-share-bar";
 import {
+import { isPaidUser } from "@/lib/plan";
   ShieldAlert,
   ShieldCheck,
   AlertTriangle,
@@ -106,7 +107,7 @@ export default function JobScamChecker() {
     queryKey: ["/api/user/plan"],
     enabled: !!user,
   });
-  const isPaidUser = userPlan?.planId === "pro";
+  const isPaid = isPaidUser(userPlan?.planId);
 
   useEffect(() => {
     trackPageView("job_scam_checker");
@@ -456,7 +457,7 @@ export default function JobScamChecker() {
             {reportId && <ReportShareBar toolName="scam" reportId={reportId} />}
 
             {/* Warning signals + recommendations — locked for free users */}
-            {isPaidUser ? (
+            {isPaid ? (
               <>
                 {result.warningSignals.length > 0 ? (
                   <Card>
@@ -544,7 +545,7 @@ export default function JobScamChecker() {
             )}
 
             {/* Post-result upgrade prompt for free users */}
-            {!isPaidUser && user && (
+            {!isPaid && user && (
               <UpgradePrompt
                 triggerType="tool_used"
                 title="See every scam warning signal"

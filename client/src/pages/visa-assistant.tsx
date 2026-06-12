@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest } from "@/lib/queryClient";
 import {
+import { isPaidUser } from "@/lib/plan";
   Send,
   Loader2,
   Bot,
@@ -251,7 +252,7 @@ export default function VisaAssistantPage() {
     setBlockMessage("");
   }
 
-  const isPro = usage?.planId === "pro";
+  const isPro = isPaidUser(usage?.planId);
   const isBasic = usage?.planId === "basic";
   const isPaid = isPro || isBasic;
   const remaining = usage?.remaining ?? 0;

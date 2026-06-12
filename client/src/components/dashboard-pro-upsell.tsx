@@ -8,6 +8,7 @@
  * Hides automatically for users who already have Pro.
  */
 import { Link } from "wouter";
+import { isPaidUser } from "@/lib/plan";
 import { useAuth } from "@/hooks/use-auth";
 import { Crown, CheckCircle2, ArrowRight, Sparkles } from "lucide-react";
 
@@ -23,7 +24,7 @@ const PRO_FEATURES = [
 export function DashboardProUpsell() {
   const { user } = useAuth();
   const isAlreadyPro =
-    (user as any)?.plan === "pro" ||
+    isPaidUser((user as any)?.plan) ||
     (user as any)?.subscriptionStatus === "active" ||
     (user as any)?.isAdmin === true;
 

@@ -47,6 +47,7 @@ import {
   Send,
 } from "lucide-react";
 import {
+import { isPaidUser } from "@/lib/plan";
   Sheet,
   SheetContent,
   SheetHeader,
@@ -127,7 +128,7 @@ function JobCard({
   selected,
   onToggle,
   selectionMode,
-  isPaidUser,
+  isPaid,
   onUpgradeRequired,
   onSave,
   isSaved,
@@ -139,7 +140,7 @@ function JobCard({
   selected: boolean;
   onToggle: (id: string) => void;
   selectionMode: boolean;
-  isPaidUser: boolean;
+  isPaid: boolean;
   onUpgradeRequired: () => void;
   onSave: (job: Job) => void;
   isSaved: boolean;
@@ -164,7 +165,7 @@ function JobCard({
   }, [showSimilar, job.id]);
 
   const handleToggle = () => {
-    if (!isPaidUser) {
+    if (!isPaid) {
       onUpgradeRequired();
       return;
     }
@@ -187,7 +188,7 @@ function JobCard({
             className="mt-1 flex-shrink-0 cursor-pointer"
             onClick={handleToggle}
           >
-            {isPaidUser ? (
+            {isPaid ? (
               <Checkbox
                 checked={selected}
                 onCheckedChange={handleToggle}
@@ -282,7 +283,7 @@ function JobCard({
               <button
                 onClick={handleToggle}
                 className={`text-xs font-medium px-2 py-1 rounded-md transition-colors ${
-                  isPaidUser
+                  isPaid
                     ? selected
                       ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
                       : "text-muted-foreground hover:text-foreground hover:bg-muted"
@@ -290,7 +291,7 @@ function JobCard({
                 }`}
                 data-testid={`button-select-job-${job.id}`}
               >
-                {selected ? "✓ Selected" : isPaidUser ? "+ Select" : <span className="flex items-center gap-1"><Lock className="h-2.5 w-2.5" /> Select</span>}
+                {selected ? "✓ Selected" : isPaid ? "+ Select" : <span className="flex items-center gap-1"><Lock className="h-2.5 w-2.5" /> Select</span>}
               </button>
               <button
                 onClick={(e) => { e.stopPropagation(); setShowSimilar(v => !v); }}
@@ -301,10 +302,10 @@ function JobCard({
                 Similar
               </button>
               <button
-                onClick={(e) => { e.stopPropagation(); isPaidUser ? onPrepare(job) : onUpgradeRequired(); }}
+                onClick={(e) => { e.stopPropagation(); isPaid ? onPrepare(job) : onUpgradeRequired(); }}
                 disabled={isPreparing}
                 className={`flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-md transition-colors ${
-                  isPaidUser
+                  isPaid
                     ? "text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20"
                     : "text-muted-foreground/50"
                 }`}
@@ -312,7 +313,7 @@ function JobCard({
               >
                 {isPreparing
                   ? <><Loader2 className="h-3 w-3 animate-spin" /> Preparing…</>
-                  : isPaidUser
+                  : isPaid
                   ? <><Sparkles className="h-3 w-3" /> AI Prep</>
                   : <><Lock className="h-2.5 w-2.5" /> AI Prep</>}
               </button>
@@ -375,7 +376,7 @@ export default function VisaSponsorshipJobs() {
   });
 
   const planId = (userPlan?.planId || "free").toLowerCase();
-  const isPaidUser = planId === "pro";
+  const isPaid = isPaidUser(planId);
 
   const saveToTrackerMutation = useMutation({
     mutationFn: (job: Job) =>
@@ -529,7 +530,7 @@ export default function VisaSponsorshipJobs() {
   }, []);
 
   const selectAll = () => {
-    if (!isPaidUser) {
+    if (!isPaid) {
       handleUpgradeRequired();
       return;
     }
@@ -540,7 +541,7 @@ export default function VisaSponsorshipJobs() {
   const clearAll = () => setSelectedIds(new Set());
 
   const handleBulkApply = () => {
-    if (!isPaidUser) {
+    if (!isPaid) {
       handleUpgradeRequired();
       return;
     }
@@ -628,7 +629,7 @@ export default function VisaSponsorshipJobs() {
         </div>
 
         {/* Upgrade prompt for free/unauthenticated users */}
-        {!isPaidUser && (
+        {!isPaid && (
           <div className="bg-gradient-to-r from-blue-600 to-teal-600 rounded-xl p-4 text-white" data-testid="banner-upgrade-jobs">
             <div className="flex items-center gap-2 mb-2">
               <Lock className="h-4 w-4 text-yellow-300" />
@@ -684,7 +685,7 @@ export default function VisaSponsorshipJobs() {
                 className="flex items-center gap-1 hover:text-foreground transition-colors"
                 data-testid="button-select-all"
               >
-                {isPaidUser
+                {isPaid
                   ? <><CheckSquare className="h-3.5 w-3.5" /> Select all</>
                   : <><Lock className="h-3.5 w-3.5" /> Select all</>
                 }
@@ -730,7 +731,7 @@ export default function VisaSponsorshipJobs() {
                 selected={selectedIds.has(job.id)}
                 onToggle={toggleJob}
                 selectionMode={selectionCount > 0}
-                isPaidUser={isPaidUser}
+                isPaid={isPaidUser}
                 onUpgradeRequired={handleUpgradeRequired}
                 onSave={handleSaveJob}
                 isSaved={savedJobIds.has(job.id)}

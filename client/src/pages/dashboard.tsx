@@ -45,6 +45,7 @@ import {
   useLatestSignupFeed,
 } from "@/lib/firebase-presence";
 import {
+import { isPaidUser } from "@/lib/plan";
   useUserCredits,
   useUserApplicationsFB,
   type CreditType,
@@ -1191,7 +1192,7 @@ export default function Dashboard() {
   const isAdmin = adminCheckSuccess && !adminError && typeof adminStats?.totalUsers === "number";
   const currentPlanId = userPlan?.planId || "free";
   const isPro = currentPlanId === "pro";
-  const isPaid = currentPlanId === "pro" || currentPlanId === "basic";
+  const isPaid = isPaidUser(currentPlanId);
   const { openUpgradeModal } = useUpgradeModal();
 
   const orders = ordersData || [];

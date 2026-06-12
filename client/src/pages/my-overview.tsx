@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/use-auth";
 import {
+import { isPaidUser } from "@/lib/plan";
   useUserData,
   completedPaymentsKES,
   pendingCommissionKES,
@@ -211,7 +212,7 @@ export default function MyOverview() {
     ? referralStats.pendingCommission + referralStats.paidCommission
     : null;
 
-  const isPro       = plan?.planId === "pro";
+  const isPro       = isPaidUser(plan?.planId);
   const planLabel   = isPro ? "Pro" : plan?.planId === "basic" ? "Basic" : "Free";
   const planColor   = isPro
     ? "text-amber-700 bg-amber-100 dark:text-amber-300 dark:bg-amber-900/30"

@@ -15,6 +15,7 @@ import { trackPageView } from "@/lib/analytics";
 import { ReportShareBar } from "@/components/report-share-bar";
 import { CvFixLiteInstantPayModal } from "@/components/cv-fix-lite-instant-pay";
 import {
+import { isPaidUser } from "@/lib/plan";
   FileText,
   Upload,
   CheckCircle,
@@ -95,7 +96,7 @@ export default function ATSCVChecker() {
     queryKey: ["/api/user/plan"],
     enabled: !!user,
   });
-  const isPaidUser = userPlan?.planId === "pro";
+  const isPaid = isPaidUser(userPlan?.planId);
   const [result, setResult] = useState<ATSResult | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [reportId, setReportId] = useState<string | null>(null);
@@ -357,7 +358,7 @@ export default function ATSCVChecker() {
                 free tool, while the pain is fresh, converts dramatically
                 better than asking them to navigate to /services later.
                 Hidden once user is paid (no need to upsell). */}
-            {!result.locked && !isPaidUser && result.score < 90 && !result.deliveredCv && (
+            {!result.locked && !isPaid && result.score < 90 && !result.deliveredCv && (
               <Card className="border-2 border-amber-300 dark:border-amber-700 bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-50 dark:from-amber-950/40 dark:via-orange-950/40 dark:to-yellow-950/40 shadow-md">
                 <CardContent className="p-5 sm:p-6">
                   <div className="flex flex-col sm:flex-row items-start gap-4">
@@ -511,7 +512,7 @@ export default function ATSCVChecker() {
                 )}
 
                 {/* Weaknesses, Keywords & Suggestions — locked for free users */}
-                {isPaidUser ? (
+                {isPaid ? (
                   <>
                     {result.weaknesses && result.weaknesses.length > 0 && (
                       <Card>
@@ -603,7 +604,7 @@ export default function ATSCVChecker() {
                 )}
 
                 {/* Post-result upgrade prompt for free users */}
-                {!isPaidUser && user && (
+                {!isPaid && user && (
                   <UpgradePrompt
                     triggerType="tool_used"
                     title="Your ATS report is ready — unlock it all"

@@ -22,6 +22,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useUpgradeModal } from "@/contexts/upgrade-modal-context";
 import { Lock, ExternalLink, MapPin, DollarSign, Plane, ChevronRight, Briefcase, Loader2 } from "lucide-react";
+import { isPaidUser } from "@/lib/plan";
 
 interface VisaJob {
   id: string;
@@ -55,7 +56,7 @@ export function DashboardVisaJobsLocked() {
   const [showAll, setShowAll] = useState(false);
 
   const isPro =
-    (user as any)?.plan === "pro" ||
+    isPaidUser((user as any)?.plan) ||
     (user as any)?.subscriptionStatus === "active" ||
     (user as any)?.isAdmin === true ||
     (user as any)?.role === "ADMIN" ||
