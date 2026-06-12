@@ -31,8 +31,14 @@ export function getAccessViolations(limit = 100): AccessViolation[] {
 
 /**
  * requireAnyPaidPlan — blocks FREE users.
- * Requires planId = "pro" (or legacy "basic") with an active, non-expired subscription.
+ * Requires an active, non-expired paid plan (trial, monthly, pro, or pro_referral).
  * Applies after isAuthenticated.
+ *
+ * 2026-06 hardening: previously read denormalized users.subscription_status +
+ * users.plan, which DO NOT auto-update when end_date passes. An expired KES 99
+ * trial user could keep hitting Pro endpoints for hours until something else
+ * triggered the lazy plan sync. Now calls storage.getUserPlan() which does
+ * the fresh end_date check + auto-downgrades to "free" on expiry.
  */
 export const requireAnyPaidPlan: RequestHandler = async (req: any, res, next) => {
   const userId: string | undefined = req.user?.claims?.sub;
@@ -50,33 +56,33 @@ export const requireAnyPaidPlan: RequestHandler = async (req: any, res, next) =>
   }
 
   try {
-    const { rows } = await pool.query<{ plan: string; subscription_status: string; is_admin: boolean; role: string }>(
-      `SELECT plan, subscription_status, is_admin, role FROM users WHERE id = $1`,
+    // ── Admin bypass ────────────────────────────────────────────────────────
+    // Admins (is_admin=true OR role in ADMIN/SUPER_ADMIN) get free access.
+    const { rows } = await pool.query<{ is_admin: boolean; role: string }>(
+      `SELECT is_admin, role FROM users WHERE id = $1`,
       [userId],
     );
     const user = rows[0];
-
-    // ── Admin bypass ────────────────────────────────────────────────────────
-    // Admins (is_admin=true OR role in ADMIN/SUPER_ADMIN) get free access to
-    // every gated feature so they can manage/QA the platform without paying.
     if (user && (user.is_admin === true || user.role === "ADMIN" || user.role === "SUPER_ADMIN")) {
       req.planId = "pro";
       return next();
     }
 
-    if (!user || user.subscription_status !== "active") {
-      const planId = user?.plan ?? "free";
-      logViolation({ userId, endpoint, method, ip, reason: "free_plan", planId, timestamp: ts });
+    // ── Fresh plan check (does end_date expiration enforcement) ─────────────
+    const planId = await storage.getUserPlan(userId);
+    const PAID_PLANS = ["trial", "monthly", "pro", "pro_referral", "basic", "yearly"];
+    if (!PAID_PLANS.includes(planId)) {
+      logViolation({ userId, endpoint, method, ip, reason: "no_active_plan", planId, timestamp: ts });
       return res.status(403).json({
         error: "Upgrade required",
-        message: "🚫 This is a premium feature. Upgrade to Pro to unlock full access.",
+        message: "🚫 This is a premium feature. Upgrade to unlock full access.",
         upgradeRequired: true,
         currentPlan: planId,
         upgradeUrl: "/pricing",
       });
     }
 
-    req.planId = user.plan;
+    req.planId = planId;
     next();
   } catch (err) {
     console.error("[requireAnyPaidPlan] Error checking plan:", err);
@@ -105,25 +111,31 @@ export const requireProPlan: RequestHandler = async (req: any, res, next) => {
   }
 
   try {
-    const { rows } = await pool.query<{ plan: string; subscription_status: string; is_admin: boolean; role: string }>(
-      `SELECT plan, subscription_status, is_admin, role FROM users WHERE id = $1`,
+    // ── Admin bypass — admins always count as Pro ───────────────────────────
+    const { rows } = await pool.query<{ is_admin: boolean; role: string }>(
+      `SELECT is_admin, role FROM users WHERE id = $1`,
       [userId],
     );
     const user = rows[0];
-    const planId = user?.plan ?? "free";
-
-    // Admin bypass — admins always count as Pro.
     if (user && (user.is_admin === true || user.role === "ADMIN" || user.role === "SUPER_ADMIN")) {
       req.planId = "pro";
       return next();
     }
 
-    if (!user || user.subscription_status !== "active" || planId !== "pro") {
-      const reason = !user || planId === "free" ? "free_plan" : user.subscription_status !== "active" ? "expired_plan" : "insufficient_plan";
+    // ── Fresh plan check with end_date expiration enforcement ───────────────
+    const planId = await storage.getUserPlan(userId);
+
+    // 2026-06: requireProPlan now blocks trial users from Pro-only endpoints
+    // explicitly. Trial = quick taste, monthly + pro = full access.
+    const PRO_TIER_PLANS = ["monthly", "pro", "pro_referral", "yearly"];
+    if (!PRO_TIER_PLANS.includes(planId)) {
+      const reason = planId === "free" ? "free_plan" : planId === "trial" ? "trial_blocked_from_pro" : "insufficient_plan";
       logViolation({ userId, endpoint, method, ip, reason, planId, timestamp: ts });
       return res.status(403).json({
         error: "Pro plan required",
-        message: "🚫 This feature requires an active Pro plan. Upgrade to unlock unlimited access.",
+        message: planId === "trial"
+          ? "🚫 This feature needs Monthly or Yearly access. Upgrade to unlock."
+          : "🚫 This feature requires an active Monthly or Yearly plan. Upgrade to unlock unlimited access.",
         upgradeRequired: true,
         currentPlan: planId,
         upgradeUrl: "/pricing",

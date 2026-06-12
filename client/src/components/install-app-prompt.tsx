@@ -275,7 +275,7 @@ export function InstallAppPrompt() {
 
   return (
     <div
-      className="fixed inset-x-0 bottom-28 z-[1001] pb-[env(safe-area-inset-bottom)] pointer-events-none"
+      className="fixed inset-x-0 top-4 z-[1001] pt-[env(safe-area-inset-top)] pointer-events-none"
       data-testid="install-app-prompt"
     >
       <div className="mx-auto w-full max-w-sm px-3 pointer-events-auto">
