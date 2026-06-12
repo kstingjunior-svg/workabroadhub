@@ -2252,11 +2252,6 @@ export default function Dashboard() {
                 data-testid="button-submit-placement"
               >
                 <Send className="h-3.5 w-3.5" />
-                {placementSubmitting || !placementJobTitle.trim() || !placementDestination.trim()}
-                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white h-9 text-sm gap-2"
-                data-testid="button-submit-placement"
-              >
-                <Send className="h-3.5 w-3.5" />
                 {placementSubmitting ? "Submitting…" : "Submit Story"}
               </Button>
             </form>
