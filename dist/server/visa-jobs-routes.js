@@ -18,6 +18,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.VISA_JOBS = void 0;
 exports.registerVisaJobsRoutes = registerVisaJobsRoutes;
 const db_1 = require("./db");
+const storage_1 = require("./storage");
 // ── 50+ curated visa-sponsored jobs ──────────────────────────────────────────
 // Mix tuned for Kenyan audience: heavy on Gulf casual work + skilled trades,
 // plus Western healthcare/transport that sponsor visas. Updated as needed.
@@ -82,20 +83,35 @@ exports.VISA_JOBS = [
 function applyUrlForJob(jobId) {
     return exports.VISA_JOBS.find((j) => j.id === jobId)?.applyUrl ?? null;
 }
-/** Resolve whether the requesting user is Pro (or admin) — same logic as elsewhere. */
-async function isUserPro(userId) {
+// ─── Paid-tier gate ─────────────────────────────────────────────────────────
+// 2026-06 fix: previously this checked only `plan === "pro" && status === "active"`
+// against the DENORMALISED users.plan column, which (a) doesn't include monthly
+// or trial subscribers and (b) goes stale when end_date passes. KES 99 trial
+// and KES 1,000 monthly customers were getting "Pro membership required" 403s
+// even with active subscriptions.
+//
+// New logic mirrors `requireAnyPaidPlan` in server/middleware/requirePlan.ts:
+//   - admins always pass
+//   - otherwise calls storage.getUserPlan() which does a fresh end_date check
+//     and auto-downgrades on expiry
+//   - allows any active paid tier: trial / monthly / yearly / pro / pro_referral
+const PAID_TIERS = new Set(["trial", "monthly", "yearly", "pro", "pro_referral", "basic"]);
+async function userHasPaidAccess(userId) {
     if (!userId)
         return false;
     try {
-        const { rows } = await db_1.pool.query(`SELECT plan, subscription_status, is_admin, role FROM users WHERE id = $1`, [userId]);
+        // Admin bypass
+        const { rows } = await db_1.pool.query(`SELECT is_admin, role FROM users WHERE id = $1`, [userId]);
         const u = rows[0];
-        if (!u)
-            return false;
-        if (u.is_admin || u.role === "ADMIN" || u.role === "SUPER_ADMIN")
+        if (u && (u.is_admin === true || u.role === "ADMIN" || u.role === "SUPER_ADMIN")) {
             return true;
-        return u.plan === "pro" && u.subscription_status === "active";
+        }
+        // Fresh plan check (with end_date expiration enforcement)
+        const planId = await storage_1.storage.getUserPlan(userId);
+        return PAID_TIERS.has(planId);
     }
-    catch {
+    catch (err) {
+        console.error("[visa-jobs] userHasPaidAccess error:", err);
         return false;
     }
 }
@@ -105,17 +121,18 @@ function registerVisaJobsRoutes(app, isAuthenticated) {
         const sanitised = exports.VISA_JOBS.map(({ applyUrl, ...rest }) => rest);
         res.json({ jobs: sanitised, total: sanitised.length });
     });
-    // GET /api/visa-jobs/:id/apply — Pro-gated redirect
+    // GET /api/visa-jobs/:id/apply — paid-tier gated redirect
     app.get("/api/visa-jobs/:id/apply", isAuthenticated, async (req, res) => {
         const userId = req.user?.claims?.sub ?? req.user?.id;
         if (!userId) {
             return res.status(401).json({ message: "Please sign in." });
         }
-        const pro = await isUserPro(userId);
-        if (!pro) {
+        const hasAccess = await userHasPaidAccess(userId);
+        if (!hasAccess) {
             return res.status(403).json({
-                message: "Pro membership required to apply.",
+                message: "An active plan is required to apply. Upgrade to unlock visa-sponsored jobs.",
                 upgradeUrl: "/pricing",
+                upgradeRequired: true,
             });
         }
         const url = applyUrlForJob(String(req.params.id || ""));
@@ -123,5 +140,5 @@ function registerVisaJobsRoutes(app, isAuthenticated) {
             return res.status(404).json({ message: "Job not found." });
         res.redirect(302, url);
     });
-    console.log(`[VisaJobs] Routes registered: GET /api/visa-jobs (${exports.VISA_JOBS.length} jobs), GET /api/visa-jobs/:id/apply (Pro-gated)`);
+    console.log(`[VisaJobs] Routes registered: GET /api/visa-jobs (${exports.VISA_JOBS.length} jobs), GET /api/visa-jobs/:id/apply (paid-tier gated)`);
 }
