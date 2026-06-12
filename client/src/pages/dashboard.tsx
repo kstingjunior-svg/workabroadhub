@@ -1726,6 +1726,53 @@ export default function Dashboard() {
           </div>
         </Link>
 
+        {/* ── BIRTH CERTIFICATE (full-width row) ───────────────────────
+            Three flows in one guide: new/late registration, replacement,
+            and Apostille/MoFA authentication for abroad. Emerald/teal/cyan
+            gradient to differentiate from HELB. Routes to /birth-certificate. */}
+        <Link
+          href="/birth-certificate"
+          className="group relative overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-500 p-5 shadow-xl hover:shadow-2xl hover:scale-[1.01] active:scale-[0.99] transition-all duration-200 block"
+          data-testid="widget-birth-certificate"
+        >
+          <div className="absolute -top-12 -right-12 w-40 h-40 rounded-full bg-white/10 blur-xl pointer-events-none" />
+          <div className="absolute -bottom-8 -left-8 w-32 h-32 rounded-full bg-white/5 blur-xl pointer-events-none" />
+
+          <div className="relative flex flex-col sm:flex-row gap-4 text-white">
+            <div className="shrink-0 w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center text-3xl shadow-inner">
+              📜
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                <h2 className="text-2xl font-extrabold leading-tight">
+                  Birth Certificate
+                </h2>
+                <span className="inline-flex items-center gap-1 bg-white/20 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full backdrop-blur-sm">
+                  3 flows in 1
+                </span>
+              </div>
+              <p className="text-sm text-white/90 leading-snug mb-3">
+                Register a new birth, replace a lost certificate via eCitizen,
+                or get an Apostille / MoFA stamp for embassies, foreign
+                employers and overseas schools.
+              </p>
+              <div className="flex flex-wrap items-center gap-3 text-[11px] text-white/95">
+                <span className="inline-flex items-center gap-1"><CheckCircle className="h-3.5 w-3.5" /> New / late registration</span>
+                <span className="inline-flex items-center gap-1"><CheckCircle className="h-3.5 w-3.5" /> Replace lost copy (KES 200)</span>
+                <span className="inline-flex items-center gap-1"><CheckCircle className="h-3.5 w-3.5" /> Apostille for abroad</span>
+              </div>
+            </div>
+            <div className="shrink-0 flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-2 sm:gap-3 mt-1">
+              <span className="text-[11px] font-bold uppercase tracking-wider bg-white/15 px-2 py-1 rounded-full">
+                KES 50 – 1,500 gov
+              </span>
+              <span className="inline-flex items-center gap-1.5 bg-white text-emerald-800 text-sm font-bold px-3 py-1.5 rounded-xl group-hover:bg-emerald-50 transition-colors whitespace-nowrap">
+                Start <ArrowRight className="h-4 w-4" />
+              </span>
+            </div>
+          </div>
+        </Link>
+
         {/* ── COMMUNITY CHAT (compact full-width row) ────────────────────
             Real-time chat with other Kenyans applying abroad. 8 country
             rooms (UAE, Saudi, UK, USA, Canada, Australia, Europe + General).
@@ -2201,6 +2248,11 @@ export default function Dashboard() {
               <Button
                 type="submit"
                 disabled={placementSubmitting || !placementJobTitle.trim() || !placementDestination.trim()}
+                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white h-9 text-sm gap-2"
+                data-testid="button-submit-placement"
+              >
+                <Send className="h-3.5 w-3.5" />
+                {placementSubmitting || !placementJobTitle.trim() || !placementDestination.trim()}
                 className="w-full bg-emerald-600 hover:bg-emerald-700 text-white h-9 text-sm gap-2"
                 data-testid="button-submit-placement"
               >

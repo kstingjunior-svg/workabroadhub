@@ -61,6 +61,7 @@ const PassportApplication = lazy(() => import("@/pages/passport-application"));
 const GoodConduct = lazy(() => import("@/pages/good-conduct"));
 const TaxComplianceCertificate = lazy(() => import("@/pages/tax-compliance-certificate"));
 const HelbClearance = lazy(() => import("@/pages/helb-clearance"));
+const BirthCertificate = lazy(() => import("@/pages/birth-certificate"));
 const Community = lazy(() => import("@/pages/community"));
 const AssistedApply = lazy(() => import("@/pages/assisted-apply"));
 const ApplicationTracker = lazy(() => import("@/pages/application-tracker"));
@@ -283,6 +284,7 @@ const LazyPassportApplication = withSuspense(PassportApplication);
 const LazyGoodConduct = withSuspense(GoodConduct);
 const LazyTaxComplianceCertificate = withSuspense(TaxComplianceCertificate);
 const LazyHelbClearance = withSuspense(HelbClearance);
+const LazyBirthCertificate = withSuspense(BirthCertificate);
 const LazyCommunity = withSuspense(Community);
 const LazyAssistedApply = withSuspense(AssistedApply);
 const LazyApplicationTracker = withSuspense(ApplicationTracker);
@@ -408,6 +410,7 @@ function AuthenticatedRoutes() {
       <Route path="/good-conduct" component={LazyGoodConduct} />
       <Route path="/tax-compliance-certificate" component={LazyTaxComplianceCertificate} />
       <Route path="/helb-clearance" component={LazyHelbClearance} />
+      <Route path="/birth-certificate" component={LazyBirthCertificate} />
       <Route path="/community" component={LazyCommunity} />
       <Route path="/assisted-apply/purchase/:packId" component={LazyAssistedApply} />
       <Route path="/assisted-apply/new" component={LazyAssistedApply} />
@@ -604,6 +607,7 @@ function Router() {
       <Route path="/good-conduct" component={LazyGoodConduct} />
       <Route path="/tax-compliance-certificate" component={LazyTaxComplianceCertificate} />
       <Route path="/helb-clearance" component={LazyHelbClearance} />
+      <Route path="/birth-certificate" component={LazyBirthCertificate} />
       <Route path="/community" component={LazyCommunity} />
         <Route path="/assisted-apply/purchase/:packId" component={LazyAssistedApply} />
         <Route path="/assisted-apply" component={LazyAssistedApply} />
