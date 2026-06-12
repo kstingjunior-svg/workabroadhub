@@ -1569,4 +1569,6 @@ export default function Landing() {
         defaultTab={authModalTab}
         redirectPath={authRedirectPath}
       />
-    
+    </div>
+  );
+}
