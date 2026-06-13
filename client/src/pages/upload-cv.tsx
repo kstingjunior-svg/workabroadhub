@@ -5,7 +5,6 @@ import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { fetchCsrfToken } from "@/lib/queryClient";
 import {
-import { isPaidUser } from "@/lib/plan";
   Upload,
   FileText,
   CheckCircle,
@@ -16,6 +15,7 @@ import { isPaidUser } from "@/lib/plan";
   Globe,
   ChevronRight,
 } from "lucide-react";
+import { isPaidUser } from "@/lib/plan";
 
 /** Fire-and-forget CV funnel event — never throws, never blocks UI. */
 async function trackFunnelEvent(event: string, meta: Record<string, unknown> = {}) {

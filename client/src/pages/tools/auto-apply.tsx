@@ -13,7 +13,6 @@ import { useAuth } from "@/hooks/use-auth";
 import { useJobRedirect } from "@/hooks/use-job-redirect";
 import { useUpgradeModal } from "@/contexts/upgrade-modal-context";
 import {
-import { isPaidUser } from "@/lib/plan";
   Zap,
   ArrowLeft,
   CheckCircle2,
@@ -32,6 +31,7 @@ import { isPaidUser } from "@/lib/plan";
   RefreshCw,
   Send,
 } from "lucide-react";
+import { isPaidUser } from "@/lib/plan";
 
 const COUNTRIES = [
   { code: "UK", label: "🇬🇧 United Kingdom" },

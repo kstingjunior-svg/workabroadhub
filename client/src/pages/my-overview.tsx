@@ -13,7 +13,6 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/use-auth";
 import {
-import { isPaidUser } from "@/lib/plan";
   useUserData,
   completedPaymentsKES,
   pendingCommissionKES,
@@ -23,6 +22,7 @@ import { isPaidUser } from "@/lib/plan";
   type UserService,
   type ServiceRequest,
 } from "@/hooks/use-user-data";
+import { isPaidUser } from "@/lib/plan";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 

@@ -47,13 +47,13 @@ import {
   Send,
 } from "lucide-react";
 import {
-import { isPaidUser } from "@/lib/plan";
   Sheet,
   SheetContent,
   SheetHeader,
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
+import { isPaidUser } from "@/lib/plan";
 import {
   Accordion,
   AccordionContent,

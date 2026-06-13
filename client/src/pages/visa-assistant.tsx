@@ -9,7 +9,6 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest } from "@/lib/queryClient";
 import {
-import { isPaidUser } from "@/lib/plan";
   Send,
   Loader2,
   Bot,
@@ -26,6 +25,7 @@ import { isPaidUser } from "@/lib/plan";
   RotateCcw,
   Star,
 } from "lucide-react";
+import { isPaidUser } from "@/lib/plan";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface ChatMessage {

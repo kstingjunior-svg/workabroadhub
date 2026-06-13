@@ -13,7 +13,6 @@ import { SeoHead, buildArticleSchema, buildFaqSchema } from "@/components/seo-he
 import { trackPageView } from "@/lib/analytics";
 import { ReportShareBar } from "@/components/report-share-bar";
 import {
-import { isPaidUser } from "@/lib/plan";
   ShieldAlert,
   ShieldCheck,
   AlertTriangle,
@@ -27,6 +26,7 @@ import { isPaidUser } from "@/lib/plan";
   FileText,
   X,
 } from "lucide-react";
+import { isPaidUser } from "@/lib/plan";
 
 const SCAM_FAQS = [
   { q: "How common are overseas job scams targeting Kenyans?", a: "Job scams targeting Kenyans seeking overseas employment are extremely common. Fraudsters impersonate legitimate employers in the UK, UAE, Saudi Arabia, and Canada, charging fake processing fees, visa fees, or training fees. Thousands of Kenyans lose money every year. Our free checker helps you detect red flags before engaging with any employer." },

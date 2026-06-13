@@ -15,7 +15,6 @@ import { trackPageView } from "@/lib/analytics";
 import { ReportShareBar } from "@/components/report-share-bar";
 import { CvFixLiteInstantPayModal } from "@/components/cv-fix-lite-instant-pay";
 import {
-import { isPaidUser } from "@/lib/plan";
   FileText,
   Upload,
   CheckCircle,
@@ -28,6 +27,7 @@ import { isPaidUser } from "@/lib/plan";
   ChevronRight,
   HelpCircle,
 } from "lucide-react";
+import { isPaidUser } from "@/lib/plan";
 
 const ATS_FAQS = [
   { q: "What is an ATS and why does it matter for overseas jobs?", a: "ATS (Applicant Tracking System) is software used by 99% of large employers in the UK, Canada, UAE, and Australia to filter CVs before a human reads them. A CV that fails ATS parsing is rejected automatically, even if you are qualified. Our checker analyses your CV against ATS criteria so you can fix issues before applying." },

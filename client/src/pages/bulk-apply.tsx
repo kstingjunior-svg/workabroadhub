@@ -10,7 +10,6 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useJobRedirect } from "@/hooks/use-job-redirect";
 import { Link, useLocation } from "wouter";
 import {
-import { isPaidUser, planLabel } from "@/lib/plan";
   Zap,
   ArrowLeft,
   CheckCircle2,
@@ -29,6 +28,7 @@ import { isPaidUser, planLabel } from "@/lib/plan";
   Sparkles,
   X,
 } from "lucide-react";
+import { isPaidUser, planLabel } from "@/lib/plan";
 
 interface Job {
   id: string;
