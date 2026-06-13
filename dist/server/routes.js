@@ -42,8 +42,6 @@ const identityVerification_1 = require("./services/identityVerification");
 const zod_1 = require("zod");
 const auth_2 = require("@shared/models/auth");
 const router_1 = require("./ai/router");
-const nanjila_1 = require("./ai/nanjila");
-const utils_1 = require("./ai/utils");
 const exceljs_1 = __importDefault(require("exceljs"));
 const pdfkit_1 = __importDefault(require("pdfkit"));
 const multer_1 = __importDefault(require("multer"));
@@ -17928,35 +17926,59 @@ Tone examples:
         }
     });
     app.post("/api/chat/rooms/:slug/messages", async (req, res) => {
+        // 2026-06: tightened error logging — admin user couldn't post even with
+        // composer unlocked, and the generic 500 swallowed the real cause. Now
+        // every failure path logs WHERE it broke and includes the userId+slug.
+        const slugForLog = String(req.params.slug || "").toLowerCase();
+        const userIdForLog = req.session?.customUserId;
         try {
-            const userId = req.session?.customUserId;
-            if (!userId)
+            const userId = userIdForLog;
+            if (!userId) {
+                console.warn(`[chat/post] no_session slug=${slugForLog}`);
                 return res.status(401).json({ message: "not_signed_in" });
+            }
             const { checkEligibility, postMessage, isValidRoomSlug } = await Promise.resolve().then(() => __importStar(require("./services/community")));
-            const slug = String(req.params.slug || "").toLowerCase();
-            if (!isValidRoomSlug(slug))
+            if (!isValidRoomSlug(slugForLog)) {
+                console.warn(`[chat/post] invalid_room slug=${slugForLog} userId=${userId}`);
                 return res.status(400).json({ message: "invalid_room" });
-            const eligibility = await checkEligibility(userId);
+            }
+            let eligibility;
+            try {
+                eligibility = await checkEligibility(userId);
+            }
+            catch (eligErr) {
+                console.error(`[chat/post] checkEligibility threw for userId=${userId}:`, eligErr?.stack || eligErr?.message);
+                return res.status(500).json({ message: "Eligibility check failed. Please retry." });
+            }
             if (!eligibility.canPost) {
+                console.info(`[chat/post] denied userId=${userId} reason=${eligibility.reason ?? "unknown"} tier=${eligibility.tier}`);
                 return res.status(403).json({ message: eligibility.reason ?? "not_allowed", eligibility });
             }
             const rawBody = String(req.body?.body ?? "");
-            const message = await postMessage(userId, slug, rawBody);
+            let message;
+            try {
+                message = await postMessage(userId, slugForLog, rawBody);
+            }
+            catch (postErr) {
+                const msg = postErr?.message ?? "unknown";
+                console.error(`[chat/post] postMessage threw userId=${userId} slug=${slugForLog} bodyLen=${rawBody.length} err=${msg}`, postErr?.stack);
+                const status = msg === "empty_message" || msg === "invalid_room" ? 400 : 500;
+                return res.status(status).json({ message: msg });
+            }
             // Real-time broadcast to anyone in this room's Socket.IO channel.
             // Only broadcast if the message isn't auto-hidden (scam signal).
             if (!message.hidden) {
                 try {
                     const { getIO } = await Promise.resolve().then(() => __importStar(require("./socket")));
-                    getIO().to(`chat:${slug}`).emit("chat:message", message);
+                    getIO().to(`chat:${slugForLog}`).emit("chat:message", message);
                 }
                 catch { /* socket not ready — REST clients still get the response */ }
             }
             res.json({ message, eligibility });
         }
         catch (err) {
-            console.error("[chat/post]", err?.message);
-            const status = err?.message === "empty_message" ? 400 : 500;
-            res.status(status).json({ message: err?.message ?? "Could not post message." });
+            console.error(`[chat/post] OUTER catch userId=${userIdForLog ?? "?"} slug=${slugForLog} err=${err?.message ?? err}`, err?.stack);
+            res.status(500).json({ message: err?.message ?? "Could not post message." });
         }
     });
     app.post("/api/chat/messages/:id/report", async (req, res) => {
@@ -18782,30 +18804,6 @@ If your instinct says "3,500", STOP and re-read the SERVICES block above.`;
             action: "/api/voice/process",
             speechTimeout: "auto",
         });
-        res.type("text/xml");
-        res.send(twiml.toString());
-    });
-    // ── Twilio Voice — process spoken response ───────────────────────────────────
-    app.post("/api/voice/process", async (req, res) => {
-        const caller = req.body.From;
-        const userSpeech = req.body.SpeechResult || "No speech detected";
-        const user = await db_1.pool.query("SELECT * FROM users WHERE phone = $1", [caller]);
-        const lang = user.rows[0]?.language || (0, utils_1.detectLanguage)(userSpeech);
-        const voice = (0, utils_1.getVoice)(lang);
-        const intent = (0, router_1.detectIntent)(userSpeech);
-        let reply = "";
-        if (intent === "payment") {
-            reply = "Let me check your payment status. Please provide your phone number.";
-        }
-        else if (intent === "cv") {
-            reply = "I can help you with your CV. Would you like me to generate one now?";
-        }
-        else {
-            reply = await (0, nanjila_1.nanjilaAgent)(null, userSpeech);
-        }
-        const twiml = new VoiceResponse();
-        twiml.say({ voice }, reply);
-        twiml.redirect("/api/voice");
         res.type("text/xml");
         res.send(twiml.toString());
     });

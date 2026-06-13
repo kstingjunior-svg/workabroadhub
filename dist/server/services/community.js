@@ -219,10 +219,20 @@ async function postMessage(userId, roomSlug, rawBody) {
     const { sanitized, stripCount } = sanitize(trimmed);
     const hidden = stripCount >= 3;
     const hiddenReason = hidden ? "pii_overload" : null;
-    const { rows } = await db_1.pool.query(`INSERT INTO chat_messages
-       (room_slug, user_id, body, original_body, strip_count, hidden, hidden_reason)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
-     RETURNING id, created_at`, [roomSlug, userId, sanitized, trimmed, stripCount, hidden, hiddenReason]);
+    // 2026-06: log INSERT failures explicitly with the param shape so we
+    // can diagnose schema drift / FK violations / pool exhaustion etc.
+    let rows;
+    try {
+        const result = await db_1.pool.query(`INSERT INTO chat_messages
+         (room_slug, user_id, body, original_body, strip_count, hidden, hidden_reason)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id, created_at`, [roomSlug, userId, sanitized, trimmed, stripCount, hidden, hiddenReason]);
+        rows = result.rows;
+    }
+    catch (dbErr) {
+        console.error(`[community] chat_messages INSERT failed for userId=${userId} slug=${roomSlug} bodyLen=${trimmed.length}:`, dbErr?.code, dbErr?.message, dbErr?.detail ? `detail=${dbErr.detail}` : "");
+        throw new Error("db_insert_failed");
+    }
     // Stamp the room stats — best-effort.
     db_1.pool.query(`UPDATE chat_rooms SET message_count = message_count + 1, last_message_at = NOW() WHERE slug = $1`, [roomSlug]).catch(() => { });
     lastPostAt.set(userId, Date.now());
