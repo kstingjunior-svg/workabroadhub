@@ -265,6 +265,10 @@ export interface PostedMessage {
   hiddenReason: string | null;
   reportedCount: number;
   createdAt: string;
+  // 2026-06: client renders avatar initial-circle + first name above
+  // the message bubble. Falls back to "Friend" if the user has no
+  // firstName on file. Never returns email/phone — privacy.
+  firstName: string | null;
 }
 
 export async function postMessage(
@@ -315,10 +319,21 @@ export async function postMessage(
   lastPostAt.set(userId, Date.now());
   bumpQuota(userId).catch(() => {});
 
+  // Look up firstName for the avatar — best-effort, never throws.
+  let firstName: string | null = null;
+  try {
+    const userResult = await pool.query<{ first_name: string | null }>(
+      `SELECT first_name FROM users WHERE id = $1`,
+      [userId],
+    );
+    firstName = userResult.rows[0]?.first_name ?? null;
+  } catch { /* fall through with firstName = null */ }
+
   return {
     id: rows[0].id,
     roomSlug,
     userId,
+    firstName,
     body: sanitized,
     originalBody: trimmed,
     stripCount,
@@ -355,6 +370,7 @@ export async function fetchMessages(
     id: Number(r.id),
     roomSlug: r.room_slug,
     userId: r.user_id,
+    firstName: r.first_name ?? null,
     body: r.body,
     originalBody: r.original_body,
     stripCount: r.strip_count,
@@ -430,6 +446,4 @@ export async function adminFetchRecent(limit = 100): Promise<Array<PostedMessage
     reportedCount: r.reported_count,
     createdAt: typeof r.created_at === "string" ? r.created_at : r.created_at.toISOString(),
     userName: [r.first_name, r.last_name].filter(Boolean).join(" ") || null,
-    userEmail: r.email || null,
-  }));
-}
+    

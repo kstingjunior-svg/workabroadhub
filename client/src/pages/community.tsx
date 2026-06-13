@@ -36,6 +36,7 @@ interface Room {
 }
 
 interface ChatMessage {
+  firstName?: string | null;
   id: number;
   roomSlug: string;
   userId: string;
@@ -95,8 +96,25 @@ function userAvatarColor(userId: string): string {
   return hues[h % hues.length];
 }
 
-function userInitials(userId: string): string {
+// 2026-06: was returning first 2 chars of the user UUID (e.g. "0F" for an
+// admin) — looked random and impersonal. Now uses the user's firstName
+// when available, falling back to the UUID prefix only when they haven't
+// set a name yet.
+function userInitials(userId: string, firstName?: string | null): string {
+  if (firstName && firstName.trim().length > 0) {
+    const parts = firstName.trim().split(/\s+/);
+    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+    return firstName.trim().slice(0, 2).toUpperCase();
+  }
   return userId.slice(0, 2).toUpperCase();
+}
+
+// Display name shown above each message bubble. "Friend" is the fallback
+// for legacy messages from users whose firstName is null (deleted users
+// or users who never set their name).
+function userDisplayName(firstName?: string | null): string {
+  const trimmed = (firstName ?? "").trim();
+  return trimmed.length > 0 ? trimmed : "Friend";
 }
 
 export default function Community() {
@@ -346,10 +364,23 @@ export default function Community() {
                 const mine = user?.id === m.userId;
                 return (
                   <div key={m.id} className={`flex gap-2 ${mine ? "flex-row-reverse" : ""}`} data-testid={`message-${m.id}`}>
-                    <div className={`shrink-0 w-8 h-8 rounded-full ${userAvatarColor(m.userId)} text-white text-[10px] font-bold flex items-center justify-center`}>
-                      {userInitials(m.userId)}
+                    <div
+                      className={`shrink-0 w-8 h-8 rounded-full ${userAvatarColor(m.userId)} text-white text-[10px] font-bold flex items-center justify-center`}
+                      title={userDisplayName(m.firstName)}
+                    >
+                      {userInitials(m.userId, m.firstName)}
                     </div>
                     <div className={`max-w-[80%] min-w-0 ${mine ? "items-end" : "items-start"} flex flex-col`}>
+                      {/* 2026-06: show poster's first name above the bubble.
+                          "You" for the signed-in viewer, "Friend" fallback
+                          for users who haven't set firstName yet. */}
+                      <div className={`text-[11px] font-semibold mb-0.5 px-1 ${
+                        mine
+                          ? "text-indigo-600 dark:text-indigo-300"
+                          : "text-gray-700 dark:text-gray-300"
+                      }`}>
+                        {mine ? "You" : userDisplayName(m.firstName)}
+                      </div>
                       <div className={`rounded-2xl px-3 py-2 text-sm leading-snug whitespace-pre-wrap break-words ${
                         mine
                           ? "bg-indigo-600 text-white rounded-tr-sm"

@@ -237,10 +237,18 @@ async function postMessage(userId, roomSlug, rawBody) {
     db_1.pool.query(`UPDATE chat_rooms SET message_count = message_count + 1, last_message_at = NOW() WHERE slug = $1`, [roomSlug]).catch(() => { });
     lastPostAt.set(userId, Date.now());
     bumpQuota(userId).catch(() => { });
+    // Look up firstName for the avatar — best-effort, never throws.
+    let firstName = null;
+    try {
+        const userResult = await db_1.pool.query(`SELECT first_name FROM users WHERE id = $1`, [userId]);
+        firstName = userResult.rows[0]?.first_name ?? null;
+    }
+    catch { /* fall through with firstName = null */ }
     return {
         id: rows[0].id,
         roomSlug,
         userId,
+        firstName,
         body: sanitized,
         originalBody: trimmed,
         stripCount,
@@ -270,6 +278,7 @@ async function fetchMessages(roomSlug, limit = 50, beforeId) {
         id: Number(r.id),
         roomSlug: r.room_slug,
         userId: r.user_id,
+        firstName: r.first_name ?? null,
         body: r.body,
         originalBody: r.original_body,
         stripCount: r.strip_count,
@@ -329,6 +338,5 @@ async function adminFetchRecent(limit = 100) {
         reportedCount: r.reported_count,
         createdAt: typeof r.created_at === "string" ? r.created_at : r.created_at.toISOString(),
         userName: [r.first_name, r.last_name].filter(Boolean).join(" ") || null,
-        userEmail: r.email || null,
     }));
 }
