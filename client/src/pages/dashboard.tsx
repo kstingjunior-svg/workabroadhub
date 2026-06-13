@@ -45,11 +45,11 @@ import {
   useLatestSignupFeed,
 } from "@/lib/firebase-presence";
 import {
-import { isPaidUser } from "@/lib/plan";
   useUserCredits,
   useUserApplicationsFB,
   type CreditType,
 } from "@/lib/firebase-credits";
+import { isPaidUser } from "@/lib/plan";
 import {
   useUserData,
   totalCommissionKES,
