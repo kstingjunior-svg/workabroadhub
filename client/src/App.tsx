@@ -360,6 +360,14 @@ const LazyAdminLicenseReminders = withSuspense(AdminLicenseReminders);
 const LazyAdminExpiryHeatmap = withSuspense(AdminExpiryHeatmap);
 const LazyAdminAgencyAddOns = withSuspense(AdminAgencyAddOns);
 const LazyAdminServiceOrders = withSuspense(AdminServiceOrders);
+// 2026-06: AdminRevenue + AdminRevenueLive were eagerly imported before c8d30ff
+// — they pushed ~70 KB into the main bundle. Made lazy with Suspense wrappers
+// to match the pattern used by every other admin route. Without these
+// wrappers, the routes below were rendering raw lazy() components without a
+// Suspense boundary, which threw and tripped the "Just a small detour" error
+// boundary on /admin/revenue and /admin/revenue-live.
+const LazyAdminRevenue = withSuspense(AdminRevenue);
+const LazyAdminRevenueLive = withSuspense(AdminRevenueLive);
 const LazyAdminJobApplications = withSuspense(AdminJobApplications);
 const LazyAdminReviewDashboard = withSuspense(AdminReviewDashboard);
 const LazyAdminTrustDashboard = withSuspense(AdminTrustDashboard);
@@ -475,8 +483,8 @@ function AuthenticatedRoutes() {
       <Route path="/admin/compliance-monitor" component={LazyAdminComplianceMonitor} />
       <Route path="/admin/security" component={LazyAdminSecurity} />
       <Route path="/admin/refunds" component={LazyAdminRefunds} />
-      <Route path="/admin/revenue" component={AdminRevenue} />
-      <Route path="/admin/revenue-live" component={AdminRevenueLive} />
+      <Route path="/admin/revenue" component={LazyAdminRevenue} />
+      <Route path="/admin/revenue-live" component={LazyAdminRevenueLive} />
       <Route path="/admin/plans" component={LazyAdminPlans} />
       <Route path="/admin/logs" component={LazyAdminLogs} />
       <Route path="/admin/error-monitor" component={AdminErrorMonitor} />
