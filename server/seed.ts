@@ -1541,9 +1541,12 @@ export async function seedCountryPortals(): Promise<void> {
       for (const p of portals) {
         try {
           // First: INSERT if URL not present yet (preserves click_count for existing rows).
+          // 2026-06: explicit ::type casts on the SELECT side. Without them
+          // Postgres throws "inconsistent types deduced for parameter $1"
+          // because $1 appears bare in SELECT $1 AND typed in WHERE country_id = $1.
           const ins = await pool.query(
             `INSERT INTO job_links (country_id, name, url, description, is_active, "order")
-             SELECT $1, $2, $3, $4, true, $5
+             SELECT $1::varchar, $2::text, $3::text, $4::text, true, $5::int
              WHERE NOT EXISTS (
                SELECT 1 FROM job_links WHERE country_id = $1 AND url = $3
              )`,

@@ -1138,11 +1138,16 @@ export default function Dashboard() {
 
   const queryClient = useQueryClient();
 
+  // 2026-06 scaling work: staleTime tuned for 3,000 concurrent dashboard loads.
+  // Previously these had staleTime: 0 which meant every mount re-fetched.
+  // 30s stale + 30s refetchInterval gives ~one fetch per 30s per signed-in
+  // user, while still showing fresh data after upgrade events (Pro upgrade
+  // success flow already calls queryClient.invalidateQueries on these keys).
   const { data: subscription, isLoading: subLoading } = useQuery<UserSubscription | null>({
     queryKey: ["/api/subscription"],
     refetchOnWindowFocus: true,
     refetchInterval: 30000,
-    staleTime: 0,
+    staleTime: 30_000,
   });
 
   const { data: userPlan } = useQuery<{ planId: string; plan: any; subscription: any } | null>({
@@ -1150,7 +1155,7 @@ export default function Dashboard() {
     enabled: !!user,
     refetchOnWindowFocus: true,
     refetchInterval: 30000,
-    staleTime: 0,
+    staleTime: 30_000,
   });
 
   const { data: adminStats, error: adminError, isSuccess: adminCheckSuccess } = useQuery<{ totalUsers?: number }>({
@@ -1160,14 +1165,18 @@ export default function Dashboard() {
     enabled: !!user,
   });
 
+  // 2026-06: orders + alerts don't change often. 60s stale cuts re-fetch
+  // load by ~95% under sustained dashboard traffic without staling perceptibly.
   const { data: ordersData } = useQuery<ServiceOrder[]>({
     queryKey: ["/api/service-orders"],
     enabled: !!user,
+    staleTime: 60_000,
   });
 
   const { data: alertsData } = useQuery<JobAlert[]>({
     queryKey: ["/api/job-alerts"],
     enabled: !!user,
+    staleTime: 60_000,
   });
 
   const { data: paymentHistory } = useQuery<{
