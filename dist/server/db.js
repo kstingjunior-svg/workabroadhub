@@ -45,14 +45,30 @@ if (!process.env.DATABASE_URL) {
 const sslConfig = process.env.DATABASE_URL?.includes("localhost")
     ? false
     : { rejectUnauthorized: false };
+// 2026-06 scaling work: bumped defaults for 3,000 concurrent users.
+// At 2 Render instances * max 25 = 50 total connections, well under the
+// 100 default Postgres connection limit. Override via env in Render if
+// the Postgres tier changes.
+//
+// Settings:
+//   max 25                : per-instance peak
+//   min 5                 : keep warm connections to skip first-req handshake
+//   idleTimeout 30s       : reclaim idle conns
+//   connectionTimeout 5s  : fail fast under load
+//   statement_timeout 25s : kill runaway queries before pool exhaustion
+//   query_timeout 25s     : node-side ceiling
+//   keepAlive             : prevents Render LB from silently dropping conns
 exports.pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: sslConfig,
-    max: parseInt(process.env.DB_POOL_MAX || "20", 10),
-    min: parseInt(process.env.DB_POOL_MIN || "2", 10),
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 10000,
-    statement_timeout: 30000,
+    max: parseInt(process.env.DB_POOL_MAX || "25", 10),
+    min: parseInt(process.env.DB_POOL_MIN || "5", 10),
+    idleTimeoutMillis: parseInt(process.env.DB_IDLE_TIMEOUT_MS || "30000", 10),
+    connectionTimeoutMillis: parseInt(process.env.DB_CONN_TIMEOUT_MS || "5000", 10),
+    statement_timeout: parseInt(process.env.DB_STATEMENT_TIMEOUT_MS || "25000", 10),
+    query_timeout: parseInt(process.env.DB_QUERY_TIMEOUT_MS || "25000", 10),
+    keepAlive: true,
+    keepAliveInitialDelayMillis: 10000,
 });
 exports.db = (0, node_postgres_1.drizzle)(exports.pool, { schema });
 // Pool observability (restored Batch D).

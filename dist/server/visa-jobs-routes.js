@@ -117,9 +117,15 @@ async function userHasPaidAccess(userId) {
 }
 function registerVisaJobsRoutes(app, isAuthenticated) {
     // GET /api/visa-jobs — public list, no applyUrl leaked
+    // The job catalogue is a const array — it doesn't change between deploys —
+    // so we can cache aggressively at the CDN. 5 min browser, 10 min CDN with
+    // stale-while-revalidate so users effectively never wait on this.
+    const SANITISED_JOBS = exports.VISA_JOBS.map(({ applyUrl, ...rest }) => rest);
+    const SANITISED_PAYLOAD = { jobs: SANITISED_JOBS, total: SANITISED_JOBS.length };
     app.get("/api/visa-jobs", (_req, res) => {
-        const sanitised = exports.VISA_JOBS.map(({ applyUrl, ...rest }) => rest);
-        res.json({ jobs: sanitised, total: sanitised.length });
+        res.setHeader("Cache-Control", "public, max-age=300, s-maxage=600, stale-while-revalidate=1800");
+        res.setHeader("Vary", "Accept-Encoding");
+        res.json(SANITISED_PAYLOAD);
     });
     // GET /api/visa-jobs/:id/apply — paid-tier gated redirect
     app.get("/api/visa-jobs/:id/apply", isAuthenticated, async (req, res) => {

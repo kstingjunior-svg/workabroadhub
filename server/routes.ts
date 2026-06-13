@@ -2645,51 +2645,62 @@ Crawl-delay: 1`);
 
   app.get("/api/services", async (req, res) => {
     try {
-      const result = await pool.query(`
-        SELECT id,
-               code,
-               slug,
-               name, price,
-               is_active                              AS active,
-               category, badge, description, features,
-               is_subscription                        AS "isSubscription",
-               subscription_period                    AS "subscriptionPeriod",
-               "order",
-               flash_sale                             AS "flashSale",
-               discount_percent                       AS "discountPercent",
-               sale_start                             AS "saleStart",
-               sale_end                               AS "saleEnd"
-        FROM services
-        WHERE is_active = true
-          AND code IS NOT NULL
-          AND name IS NOT NULL
-          AND category IS NOT NULL
-        ORDER BY "order" ASC, name ASC
-      `);
+      // 2026-06 scaling work: previously this query hit Postgres on EVERY
+      // request (the explicit no-store header guaranteed it). At 3,000
+      // concurrent users that's 3,000 sequential scans per second on the
+      // services table — Postgres would melt. Now cached for 30s in shared
+      // memory; admin price updates call cache.invalidate(CACHE_KEYS.SERVICES)
+      // (see admin/services endpoints) so changes propagate within 30s max.
+      const payload = await withCache(CACHE_KEYS.SERVICES, CACHE_TTL.SERVICES, async () => {
+        const result = await pool.query(`
+          SELECT id,
+                 code,
+                 slug,
+                 name, price,
+                 is_active                              AS active,
+                 category, badge, description, features,
+                 is_subscription                        AS "isSubscription",
+                 subscription_period                    AS "subscriptionPeriod",
+                 "order",
+                 flash_sale                             AS "flashSale",
+                 discount_percent                       AS "discountPercent",
+                 sale_start                             AS "saleStart",
+                 sale_end                               AS "saleEnd"
+          FROM services
+          WHERE is_active = true
+            AND code IS NOT NULL
+            AND name IS NOT NULL
+            AND category IS NOT NULL
+          ORDER BY "order" ASC, name ASC
+        `);
 
-      // Embed computed final price into every row (server is authoritative)
-      const { calcFinalPrice } = await import("./price-engine");
-      const rows = result.rows.map((svc: any) => {
-        const pr = calcFinalPrice({
-          price: svc.price, flashSale: svc.flashSale, discountPercent: svc.discountPercent,
-          saleStart: svc.saleStart, saleEnd: svc.saleEnd,
+        const { calcFinalPrice } = await import("./price-engine");
+        const rows = result.rows.map((svc: any) => {
+          const pr = calcFinalPrice({
+            price: svc.price, flashSale: svc.flashSale, discountPercent: svc.discountPercent,
+            saleStart: svc.saleStart, saleEnd: svc.saleEnd,
+          });
+          return { ...svc, ...pr };
         });
-        return { ...svc, ...pr };
+
+        // Seed version from data on first request (survives restarts unchanged).
+        if (!SERVICES_VERSION) {
+          bumpServicesVersion(rows as Array<{ code: string; price: number }>);
+        }
+        console.log(
+          `[services] DB hit (cache miss): ${rows.length} active services`
+        );
+        return { rows, version: SERVICES_VERSION };
       });
 
-      // Seed version from data on first request (survives restarts unchanged).
-      if (!SERVICES_VERSION) {
-        bumpServicesVersion(rows as Array<{ code: string; price: number }>);
-      }
-      console.log(
-        `✅ SERVICES LOADED FROM DB: ${rows.map((s: any) => `${s.code}=KES${s.finalPrice}${s.isFlashSale ? `(FLASH-${s.discountPercent}%OFF)` : ""}`).join(", ")}`
-      );
-      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
-      res.setHeader("Pragma", "no-cache");
+      // Tell browsers + CDN they can hold this for 30s. Keeps the cache
+      // working even at the edge — Vercel/Cloudflare won't proxy to us.
+      res.setHeader("Cache-Control", "public, max-age=30, s-maxage=30, stale-while-revalidate=120");
+      res.setHeader("Vary", "Accept-Encoding");
       res.json({
         success:      true,
-        services:     rows,
-        last_updated: SERVICES_VERSION,
+        services:     payload.rows,
+        last_updated: payload.version,
       });
     } catch (error) {
       console.error("Error fetching services:", error);

@@ -265,4 +265,14 @@ export async function requireVerifiedForPayment(req: any, res: any, next: any) {
     if (!u.email_verified) {
       return res.status(403).json({
         message: "Please verify your email before making a payment.",
-        verificationRe
+        verificationRequired: true,
+        verificationStep: "email",
+      });
+    }
+
+    return next();
+  } catch (err: any) {
+    console.error("[requireVerifiedForPayment] error:", err?.message ?? err);
+    return res.status(500).json({ message: "Verification check failed." });
+  }
+}

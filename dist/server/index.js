@@ -234,13 +234,62 @@ function rateLimitKey(req) {
         req.socket?.remoteAddress ||
         "unknown");
 }
+// 2026-06 scaling work: tier rate limits per-endpoint instead of one
+// blanket /api limit. Order matters — Express picks the FIRST matching
+// app.use. The mpesa/auth/ai limiters are mounted ABOVE the catch-all
+// /api one so they win for their paths.
+//
+// Calibrated for 3,000 concurrent users:
+//   - Auth endpoints: 20 req/15min/IP — prevents credential stuffing
+//   - M-Pesa callback: 240 req/min/IP — Safaricom retries can burst,
+//     but no legit caller hits it 4×/sec
+//   - AI tools: 60 req/15min/user — keeps abuse off OpenAI bill
+//   - General API: bumped to 2000/15min/session so signed-in users with
+//     a hot dashboard don't hit the ceiling
+const authLimiter = (0, express_rate_limit_1.default)({
+    windowMs: 15 * 60 * 1000,
+    max: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: rateLimitKey,
+    message: { error: "Too many login attempts. Please wait 15 minutes." },
+});
+const mpesaCallbackLimiter = (0, express_rate_limit_1.default)({
+    windowMs: 60 * 1000,
+    max: 240,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: rateLimitKey,
+    // Don't include success — Safaricom legitimate retries shouldn't be punished
+    skipSuccessfulRequests: true,
+});
+const aiLimiter = (0, express_rate_limit_1.default)({
+    windowMs: 15 * 60 * 1000,
+    max: 60,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: rateLimitKey,
+    message: { error: "AI quota reached. Try again in 15 minutes." },
+});
 const apiLimiter = (0, express_rate_limit_1.default)({
     windowMs: 15 * 60 * 1000,
-    max: 1000,
+    max: 2000,
     standardHeaders: true,
     legacyHeaders: false,
     keyGenerator: rateLimitKey,
 });
+// Mount tier-specific limiters BEFORE the catch-all /api limit
+app.use("/api/login", authLimiter);
+app.use("/api/auth/login", authLimiter);
+app.use("/api/auth/register", authLimiter);
+app.use("/api/auth/signup", authLimiter);
+app.use("/api/forgot-password", authLimiter);
+app.use("/api/reset-password", authLimiter);
+app.use("/api/mpesa/callback", mpesaCallbackLimiter);
+app.use("/api/payments/mpesa/callback", mpesaCallbackLimiter);
+app.use("/api/ai", aiLimiter);
+app.use("/api/tools", aiLimiter);
+app.use("/api/bulk-apply", aiLimiter);
 app.use("/api", apiLimiter);
 // ─────────────────────────────────────────────────────────────────────────────
 // SAFE BODY PARSERS
@@ -292,6 +341,11 @@ app.use((req, res, next) => {
         // Wire Sentry's Express error handler AFTER all routes are registered
         // but BEFORE any custom 500 middleware. No-op if Sentry isn't initialised.
         (0, sentry_1.attachSentryErrorHandler)(app);
+        // 2026-06 scaling work — fire-and-forget boot-time index creation.
+        // Idempotent (CREATE INDEX IF NOT EXISTS) so safe to run every deploy.
+        // Non-blocking so cold-start latency isn't affected.
+        Promise.resolve().then(() => __importStar(require("./db/indexes"))).then((m) => m.ensureScalingIndexes().catch((e) => console.warn("[indexes] ensure failed (non-fatal):", e?.message)))
+            .catch(() => { });
         // ────────────────────────────────────────────────────────────────────────
         // BACKGROUND STARTUP TASKS (NON-BLOCKING)
         // ────────────────────────────────────────────────────────────────────────
