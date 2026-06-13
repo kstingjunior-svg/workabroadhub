@@ -131,11 +131,24 @@ function sanitize(body) {
 }
 const FREE_QUOTA_PER_DAY = 3;
 const RATE_LIMIT_SECONDS = 8; // min gap between posts per user
+// 2026-06: previously allowlisted only ["pro", "monthly", "trial"] which
+// silently denied posting to YEARLY (KES 4,500) subscribers, pro_referral
+// users, and — critically — admins. Now matches the unified PAID_TIERS set
+// used in server/visa-jobs-routes.ts and requireAnyPaidPlan middleware, and
+// adds an explicit admin bypass so support staff can always moderate.
+const PAID_TIERS = new Set(["trial", "basic", "monthly", "yearly", "pro", "pro_referral"]);
 async function isPaidTier(userId) {
     try {
+        // Admin bypass — admins always count as paid for posting purposes
+        const { rows } = await db_1.pool.query(`SELECT is_admin, role FROM users WHERE id = $1`, [userId]);
+        const u = rows[0];
+        if (u && (u.is_admin === true || u.role === "ADMIN" || u.role === "SUPER_ADMIN")) {
+            return true;
+        }
+        // Fresh plan check (does end_date expiration enforcement)
         const userPlan = await storage_1.storage.getUserPlan?.(userId);
         const planId = typeof userPlan === "string" ? userPlan : userPlan?.planId;
-        return !!planId && ["pro", "monthly", "trial"].includes(planId);
+        return !!planId && PAID_TIERS.has(planId);
     }
     catch {
         return false;
