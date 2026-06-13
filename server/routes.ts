@@ -6915,8 +6915,15 @@ Crawl-delay: 1`);
       const adminId = req.user?.claims?.sub;
       const { id: userId } = req.params;
       const { plan } = req.body;
-      if (!plan || !["free", "pro"].includes(plan)) {
-        return res.status(400).json({ message: "plan must be 'free' or 'pro'" });
+      // 2026-06: previously only allowed 'free' | 'pro' which meant admins
+      // could not manually grant trial / monthly / yearly / pro_referral tiers
+      // via the admin UI — they had to use the upgrade endpoint instead. Now
+      // accepts every real plan ID.
+      const VALID_ADMIN_PLANS = ["free", "trial", "basic", "monthly", "yearly", "pro", "pro_referral"];
+      if (!plan || !VALID_ADMIN_PLANS.includes(plan)) {
+        return res.status(400).json({
+          message: `plan must be one of: ${VALID_ADMIN_PLANS.join(", ")}`,
+        });
       }
       if (plan === "free") {
         // Downgrade: deactivate all subscriptions AND reset plan column
@@ -19211,12 +19218,14 @@ Tone examples:
       }
 
       // Is this user on a paid tier? (mirrors Student Visa paywall logic.)
+      // 2026-06: was ["pro", "monthly", "trial"] which excluded yearly + pro_referral.
+      // Now matches the unified PAID_TIERS allowlist used everywhere else.
       let canApply = false;
       if (userId) {
         try {
-          const userPlan = await storage.getUserPlan?.(userId);
-          const planId = (userPlan as any)?.planId ?? null;
-          canApply = !!planId && ["pro", "monthly", "trial"].includes(planId);
+          const planId = await storage.getUserPlan(userId);
+          const PAID = new Set(["trial", "basic", "monthly", "yearly", "pro", "pro_referral"]);
+          canApply = !!planId && PAID.has(planId);
         } catch {}
       }
 

@@ -452,10 +452,13 @@ Return ONLY the JSON object, no markdown, no extra text.`;
                     ...(deliveryMatch ? { deliveredCv: { score: deliveryMatch.deliveredScore, at: deliveryMatch.deliveredAt, slug: deliveryMatch.serviceSlug } } : {}),
                 });
             }
-            // Gate: free-plan users get score + summary + grade only; BASIC/PRO get full report
+            // Gate: free-plan users get score + summary + grade only; paid tiers get full report.
+            // 2026-06: was strict (basic | pro) check, denying trial/monthly/yearly/pro_referral.
+            // Now uses the unified PAID_TIERS allowlist matching server/visa-jobs-routes.ts.
             const userId = req.user?.claims?.sub ?? req.user?.id;
             const atsPlanId = userId ? (await storage_1.storage.getUserPlan(userId) || "free").toLowerCase() : "free";
-            const atsIsPaid = atsPlanId === "basic" || atsPlanId === "pro";
+            const ATS_PAID_TIERS = new Set(["trial", "basic", "monthly", "yearly", "pro", "pro_referral"]);
+            const atsIsPaid = ATS_PAID_TIERS.has(atsPlanId);
             // Persist parsed CV text to career profile (fire-and-forget) so every
             // subsequent application generation has access to the user's real CV content.
             // Only save when we have clean extracted text — not for the base64 GPT path.
@@ -896,20 +899,6 @@ Return ONLY this JSON (no markdown): { "content": "<numbered Q&A with each quest
                 jobs: matches,
                 totalJobs: matches.length,
             });
-        }
-        catch (err) {
-            console.error("[Job Match]", err.message);
-            res.status(500).json({ message: "Job matching failed. Please try again." });
-        }
-    });
-    // ════════════════════════════════════════════════════════════════════════════
-    // STEP 9: ADMIN TOOLS ANALYTICS
-    // GET /api/admin/tools-analytics
-    // ════════════════════════════════════════════════════════════════════════════
-    app.get("/api/admin/tools-analytics", isAuthenticated, isAdmin, async (_req, res) => {
-        try {
-            const analytics = await storage_1.storage.getToolsAnalytics();
-            res.json(analytics);
         }
         catch (err) {
             res.status(500).json({ message: "Failed to fetch tools analytics." });
