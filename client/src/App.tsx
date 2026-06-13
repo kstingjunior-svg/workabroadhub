@@ -15,8 +15,6 @@ import { UpgradeModalProvider } from "@/contexts/upgrade-modal-context";
 import { UpgradeModal } from "@/components/upgrade-modal";
 import { PhoneCompletionModal } from "@/components/phone-completion-modal";
 import "@/lib/i18n";
-import AdminRevenue from "@/pages/admin/revenue";
-import AdminRevenueLive from "@/pages/admin/revenue-live";
 import { AdminQuickPanel } from "@/components/admin-quick-panel";
 import { FirebaseConnectionBanner } from "@/components/firebase-connection-banner";
 import { SessionGuard } from "@/components/session-guard";
@@ -28,17 +26,32 @@ import { useHeartbeat } from "@/hooks/use-heartbeat";
 import { useBehaviorTracker } from "@/hooks/use-behavior-tracker";
 import { useNanjilaIdleNudge } from "@/hooks/use-nanjila-idle-nudge";
 import { LiveActivityFeed } from "@/components/live-activity-feed";
-import NanjilaChatWidget from "@/components/NanjilaChatWidget";
 import { InstallAppPrompt } from "@/components/install-app-prompt";
 
 // =============================================================================
 // PERFORMANCE: Lazy load ALL pages for code splitting
-// Critical pages (Landing, Dashboard) are loaded with prefetch hints
-// Admin pages only load when accessing /admin/* routes
+//
+// 2026-06 main-bundle slim-down: the previous setup eagerly imported Landing,
+// AdminRevenue, AdminRevenueLive and NanjilaChatWidget — pushing the main
+// bundle to ~1.5 MB / 470 KB gzipped. Now ALL non-critical UI is lazy,
+// including:
+//   - Landing (first-time visitor only, gets prefetched on idle anyway)
+//   - AdminRevenue + AdminRevenueLive (admin-only pages)
+//   - NanjilaChatWidget (loads after first interaction, not on first paint)
 // =============================================================================
 
-// Critical path - loaded immediately for fast initial render
-import Landing from "@/pages/landing";
+// Lazy load Landing — it's the home page but we prefetch it on idle so
+// returning visitors still get instant render. First-time visitors pay one
+// chunk download but save 200+ KB on the main bundle.
+const Landing = lazy(() => import("@/pages/landing"));
+
+// Lazy load admin pages — only ever loaded by admins on /admin/* routes.
+const AdminRevenue = lazy(() => import("@/pages/admin/revenue"));
+const AdminRevenueLive = lazy(() => import("@/pages/admin/revenue-live"));
+
+// Lazy load Nanjila chat widget — defer to after first interaction so first
+// paint isn't blocked by the AI widget code.
+const NanjilaChatWidget = lazy(() => import("@/components/NanjilaChatWidget"));
 
 // Lazy load all other pages with meaningful chunk names
 const Dashboard = lazy(() => import("@/pages/dashboard"));
