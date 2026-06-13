@@ -361,14 +361,16 @@ const LazyAdminLicenseReminders = withSuspense(AdminLicenseReminders);
 const LazyAdminExpiryHeatmap = withSuspense(AdminExpiryHeatmap);
 const LazyAdminAgencyAddOns = withSuspense(AdminAgencyAddOns);
 const LazyAdminServiceOrders = withSuspense(AdminServiceOrders);
-// 2026-06: AdminRevenue + AdminRevenueLive were eagerly imported before c8d30ff
-// — they pushed ~70 KB into the main bundle. Made lazy with Suspense wrappers
-// to match the pattern used by every other admin route. Without these
-// wrappers, the routes below were rendering raw lazy() components without a
-// Suspense boundary, which threw and tripped the "Just a small detour" error
-// boundary on /admin/revenue and /admin/revenue-live.
+// 2026-06: AdminRevenue + AdminRevenueLive + Landing + NanjilaChatWidget were
+// eagerly imported before c8d30ff — they pushed ~250 KB into the main bundle.
+// Made lazy with Suspense wrappers to match the pattern used by every other
+// admin route. Without these wrappers, the components below render raw lazy()
+// without a Suspense boundary, which throws and trips the "Just a small detour"
+// error boundary on /admin/revenue, /admin/revenue-live, AND the homepage /.
 const LazyAdminRevenue = withSuspense(AdminRevenue);
 const LazyAdminRevenueLive = withSuspense(AdminRevenueLive);
+const LazyLanding = withSuspense(Landing);
+const LazyNanjilaChatWidget = withSuspense(NanjilaChatWidget);
 const LazyAdminJobApplications = withSuspense(AdminJobApplications);
 const LazyAdminReviewDashboard = withSuspense(AdminReviewDashboard);
 const LazyAdminTrustDashboard = withSuspense(AdminTrustDashboard);
@@ -614,7 +616,7 @@ function Router() {
   if (!user) {
     return (
       <Switch>
-        <Route path="/" component={Landing} />
+        <Route path="/" component={LazyLanding} />
         <Route path="/privacy-policy" component={LazyPrivacyPolicy} />
         <Route path="/terms-of-service" component={LazyTermsOfService} />
         <Route path="/refund-policy" component={LazyRefundPolicy} />
@@ -725,7 +727,7 @@ function App() {
               </main>
               <UpgradeModal />
               <LiveActivityFeed />
-              <NanjilaChatWidget />
+              <LazyNanjilaChatWidget />
               <InstallAppPrompt />
             </AgeVerificationGate>
           </UpgradeModalProvider>
@@ -735,4 +737,4 @@ function App() {
   );
 }
 
-export default App;
+export default App
