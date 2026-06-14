@@ -483,10 +483,12 @@ export default function Services() {
                   {subscriptionServices.map(renderCard)}
                 </div>
               </section>
+            )}
+          </>
+        )}
       </main>
 
       <ConsultationBookingModal open={bookingOpen} onOpenChange={setBookingOpen} />
     </div>
   );
 }
-     
