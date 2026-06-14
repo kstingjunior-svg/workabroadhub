@@ -18,6 +18,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { io as socketIO, Socket } from "socket.io-client";
+import { fetchCsrfToken } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -220,10 +221,17 @@ export default function Community() {
     if (body.length < 2 || posting) return;
     setPosting(true);
     try {
+      // 2026-06: include CSRF token — the server's validateCsrf middleware
+      // rejects any POST to /api/* that's missing X-CSRF-Token. Forgetting
+      // this was the root cause of the 'Couldn't post' 403 spam.
+      const csrfToken = await fetchCsrfToken();
       const res = await fetch(`/api/chat/rooms/${activeSlug}/messages`, {
         method: "POST",
         credentials: "include",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
+        },
         body: JSON.stringify({ body }),
       });
       const data = await res.json();
@@ -270,9 +278,11 @@ export default function Community() {
 
   async function handleReport(messageId: number) {
     try {
+      const csrfToken = await fetchCsrfToken();
       const res = await fetch(`/api/chat/messages/${messageId}/report`, {
         method: "POST",
         credentials: "include",
+        headers: csrfToken ? { "X-CSRF-Token": csrfToken } : {},
       });
       if (res.ok) {
         toast({ title: "Reported", description: "We'll review it shortly." });
@@ -488,23 +498,5 @@ export default function Community() {
                     <Send className="h-4 w-4" />
                   </Button>
                 </div>
-                <div className="mt-1.5 flex items-center justify-between text-[10px] text-gray-500 dark:text-gray-400">
-                  <span>
-                    {tier === "pro" ? (
-                      <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-300">
-                        <CheckCircle2 className="h-3 w-3" /> Pro — unlimited posts
-                      </span>
-                    ) : tier === "referrer" ? (
-                      <span>{eligibility?.quotaRemaining ?? 0} free posts left today</span>
-                    ) : null}
-                  </span>
-                  <span>{composer.length}/800</span>
-                </div>
-              </div>
-            )}
-          </div>
-        </main>
-      </div>
-    </div>
   );
 }
