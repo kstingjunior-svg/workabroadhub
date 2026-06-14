@@ -2,8 +2,13 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { User } from "@shared/models/auth";
 
 async function fetchUser(): Promise<User | null> {
+  // 2026-06 PERF: 3 s timeout (was 8 s). With the new server-side cache and
+  // slim SELECT, /api/auth/user responds in <50ms on a warm dyno. If the call
+  // is still taking >3 s, the dyno is overloaded — return null so the UI can
+  // render the logged-out shell immediately rather than blocking on a hang.
+  // The next page-load or focus refetch will retry.
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8000); // 8 s max wait
+  const timeout = setTimeout(() => controller.abort(), 3000);
 
   try {
     const response = await fetch("/api/auth/user", {

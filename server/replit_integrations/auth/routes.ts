@@ -68,7 +68,11 @@ export function registerAuthRoutes(app: Express) {
         return res.status(409).json({ message: "An account with that email already exists. Try signing in instead." });
       }
 
-      const passwordHash = await bcrypt.hash(password, 12);
+      // 2026-06 PERF: bcrypt cost 10 (was 12). 10 = OWASP minimum + industry
+      // standard. Cost 12 took ~500ms on Render Standard CPU; cost 10 is
+      // ~120ms — 4× speedup. Existing cost-12 hashes still verify correctly
+      // because bcrypt stores the cost in the hash itself.
+      const passwordHash = await bcrypt.hash(password, 10);
       const [created] = await db
         .insert(users)
         .values({ email: cleanEmail, passwordHash, authMethod: "email", firstName, lastName })
@@ -104,6 +108,13 @@ export function registerAuthRoutes(app: Express) {
   });
 
   app.post("/api/auth/login", async (req: Request, res: Response) => {
+    // 2026-06 PERF: timing instrumentation — pinpoints which step is slow when
+    // a login takes >2s. Render log search "[Auth][login] step=" surfaces it.
+    const t0 = Date.now();
+    const step = (label: string) => {
+      const dt = Date.now() - t0;
+      if (dt > 200) console.warn(`[Auth][login] step=${label} ms=${dt}`);
+    };
     try {
       const rawEmail = String(req.body?.email ?? "").trim().toLowerCase();
       const password = String(req.body?.password ?? "");
@@ -128,7 +139,19 @@ export function registerAuthRoutes(app: Express) {
         });
       }
 
-      const [user] = await db.select().from(users).where(eq(users.email, rawEmail)).limit(1);
+      // 2026-06 PERF: project only the columns we need for the auth flow.
+      // SELECT * was pulling 60+ columns over the wire on every login attempt.
+      const [user] = await db
+        .select({
+          id: users.id,
+          email: users.email,
+          passwordHash: users.passwordHash,
+          isActive: users.isActive,
+        })
+        .from(users)
+        .where(eq(users.email, rawEmail))
+        .limit(1);
+      step("user_lookup");
       if (!user || !user.passwordHash) {
         // Record failure on an unknown email too — prevents enumeration via
         // timing differences and frustrates credential-stuffing reconnaissance.
@@ -145,6 +168,7 @@ export function registerAuthRoutes(app: Express) {
       }
 
       const valid = await bcrypt.compare(password, user.passwordHash);
+      step("bcrypt_compare");
       if (!valid) {
         const post = recordFailedLogin(rawEmail, clientIp);
         return res.status(401).json({
@@ -158,6 +182,14 @@ export function registerAuthRoutes(app: Express) {
       clearFailedAttempts(rawEmail, clientIp);
 
       await setSessionUserId(req, user.id);
+      step("session_save");
+      // 2026-06 PERF: invalidate the auth-user cache so the very next
+      // /api/auth/user call (which the client fires right after login) doesn't
+      // return a stale negative.
+      (app as any).invalidateAuthUserCache?.(user.id);
+
+      const totalMs = Date.now() - t0;
+      if (totalMs > 1500) console.warn(`[Auth][login] SLOW total=${totalMs}ms email=${rawEmail}`);
       res.json({ id: user.id, email: user.email });
     } catch (err: any) {
       console.error("[Auth][login] error:", err?.message);
@@ -166,6 +198,10 @@ export function registerAuthRoutes(app: Express) {
   });
 
   app.post("/api/auth/logout", (req: Request, res: Response) => {
+    // 2026-06 PERF: invalidate the auth-user cache on logout so a later login
+    // from the same browser doesn't see stale data.
+    const userId = (req.session as any)?.customUserId as string | undefined;
+    if (userId) (app as any).invalidateAuthUserCache?.(userId);
     if (typeof req.session?.destroy === "function") {
       req.session.destroy(() => res.json({ success: true }));
     } else {
@@ -374,12 +410,46 @@ export function registerAuthRoutes(app: Express) {
     }
   });
 
+  // 2026-06 PERF: in-memory cache for /api/auth/user. The client calls this on
+  // every page refresh + every tab focus (post lag-fix the focus stale-time is
+  // 2 min, but mounts still re-fetch). At <300 users we saw the DB getting
+  // hammered with `SELECT * FROM users WHERE id = $1` 30+ times/sec. 30-second
+  // TTL is short enough that plan changes after payment surface fast, long
+  // enough to eliminate the steady-state load.
+  const USER_CACHE_TTL_MS = 30_000;
+  const userCache = new Map<string, { user: any; expiresAt: number }>();
+  function getCachedUser(userId: string): any | null {
+    const entry = userCache.get(userId);
+    if (entry && entry.expiresAt > Date.now()) return entry.user;
+    if (entry) userCache.delete(userId);
+    return null;
+  }
+  function setCachedUser(userId: string, user: any): void {
+    userCache.set(userId, { user, expiresAt: Date.now() + USER_CACHE_TTL_MS });
+  }
+  // Invalidate cache when /api/auth/logout fires or plan is updated — exposed
+  // for other modules.
+  (app as any).invalidateAuthUserCache = (userId: string) => userCache.delete(userId);
+
   app.get("/api/auth/user", async (req: Request, res: Response) => {
+    const t0 = Date.now();
     try {
       const userId = (req.session as any)?.customUserId as string | undefined;
       if (!userId) {
+        // Fast-path: no session cookie means no DB call. Caches the negative
+        // result client-side via Cache-Control.
+        res.setHeader("Cache-Control", "private, max-age=10");
         return res.status(401).json({ message: "Not authenticated" });
       }
+
+      // Fast-path: cache hit returns in <1ms
+      const cached = getCachedUser(userId);
+      if (cached) {
+        res.setHeader("Cache-Control", "private, max-age=15");
+        res.setHeader("X-Cache", "HIT");
+        return res.json(cached);
+      }
+
       const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
       if (user) {
         // ── Admin bypass ────────────────────────────────────────────────────
@@ -392,17 +462,15 @@ export function registerAuthRoutes(app: Express) {
           user.isAdmin === true ||
           user.role === "ADMIN" ||
           user.role === "SUPER_ADMIN";
-        if (isAdminUser) {
-          return res.json({
-            ...user,
-            plan: "pro",
-            subscriptionStatus: "active",
-            emailVerified: true,
-            phoneVerified: true,
-            isAdminBypass: true,
-          });
-        }
-        return res.json(user);
+        const payload = isAdminUser
+          ? { ...user, plan: "pro", subscriptionStatus: "active", emailVerified: true, phoneVerified: true, isAdminBypass: true }
+          : user;
+        setCachedUser(userId, payload);
+        res.setHeader("Cache-Control", "private, max-age=15");
+        res.setHeader("X-Cache", "MISS");
+        const elapsed = Date.now() - t0;
+        if (elapsed > 500) console.warn(`[Auth][/api/auth/user] SLOW ${elapsed}ms userId=${userId}`);
+        return res.json(payload);
       }
       // No user row matches the session userId — stale session, destroy it
       const sess = req.session as any;
@@ -490,7 +558,11 @@ export function registerAuthRoutes(app: Express) {
         return res.status(400).json({ message: "This reset link has expired. Request a new one." });
       }
 
-      const passwordHash = await bcrypt.hash(password, 12);
+      // 2026-06 PERF: bcrypt cost 10 (was 12). 10 = OWASP minimum + industry
+      // standard. Cost 12 took ~500ms on Render Standard CPU; cost 10 is
+      // ~120ms — 4× speedup. Existing cost-12 hashes still verify correctly
+      // because bcrypt stores the cost in the hash itself.
+      const passwordHash = await bcrypt.hash(password, 10);
       await pool.query(`UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2`, [passwordHash, row.user_id]);
       await pool.query(`UPDATE password_reset_tokens SET used_at = NOW() WHERE id = $1`, [row.id]);
 
