@@ -446,4 +446,6 @@ export async function adminFetchRecent(limit = 100): Promise<Array<PostedMessage
     reportedCount: r.reported_count,
     createdAt: typeof r.created_at === "string" ? r.created_at : r.created_at.toISOString(),
     userName: [r.first_name, r.last_name].filter(Boolean).join(" ") || null,
-    
+    userEmail: r.email || null,
+  }));
+}
