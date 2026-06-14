@@ -19714,7 +19714,12 @@ If your instinct says "3,500", STOP and re-read the SERVICES block above.`;
       }
       systemPrompt += "\n\nNOTE: You are in the in-site chat widget on WorkAbroad Hub's website. The greeting was already sent to the user — do NOT say 'Hello I'm Nanjila' or introduce yourself again. Start every reply by directly addressing what the user asked. Users can upload CVs directly via the attachment button in this chat.";
       if (dbUser) {
-        const plan = (dbUser.plan || "free").toLowerCase();
+        // 2026-06 EXPIRATION FIX: dbUser.plan is the denormalised column —
+        // can be stale until lazy sync fires. Use storage.getUserPlan() which
+        // does the fresh end_date check + auto-downgrades expired subs to
+        // "free". So a KES 99 trial user 25 hours after payment correctly
+        // shows as "free" here even if the column still says "trial".
+        const plan = (await storage.getUserPlan(dbUser.id) || "free").toLowerCase();
         systemPrompt += `\n\n--- USER CONTEXT ---\nName: ${dbUser.firstName || "unknown"}\nPlan: ${plan.toUpperCase()}\nAccount: ${dbUser.isActive ? "active" : "inactive"}`;
         if (recentPayment) systemPrompt += `\nLast payment: KES ${recentPayment.amount} via ${recentPayment.method} on ${new Date(recentPayment.createdAt).toDateString()}`;
         // 2026-06: was "if plan === 'pro'" — that pitched upgrade to

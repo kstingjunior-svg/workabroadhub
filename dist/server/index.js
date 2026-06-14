@@ -346,6 +346,30 @@ app.use((req, res, next) => {
         // Non-blocking so cold-start latency isn't affected.
         Promise.resolve().then(() => __importStar(require("./db/indexes"))).then((m) => m.ensureScalingIndexes().catch((e) => console.warn("[indexes] ensure failed (non-fatal):", e?.message)))
             .catch(() => { });
+        // 2026-06 EXPIRATION ENFORCEMENT — scheduled sweep of expired subscriptions.
+        // The lazy check in storage.getUserPlan() already prevents access for
+        // expired users on their next request, but that leaves stale flags in
+        // both Postgres + Supabase until the user comes back. Now a sweep runs
+        // every 5 minutes server-side to proactively flip status='active' →
+        // 'expired' when expires_at < now(). Ensures admin counts are accurate
+        // and downgrades take effect even for offline users.
+        //
+        // Plan durations (per server/utils/plans.ts and storage.activateUserPlan):
+        //   trial    KES 99       1 day    (24 hours)
+        //   monthly  KES 1,000   30 days
+        //   yearly   KES 4,500  365 days
+        //   pro      alias for yearly
+        Promise.resolve().then(() => __importStar(require("./services/subscriptionRenewal"))).then((m) => {
+            const SWEEP_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+            // Run once at boot so freshly-deployed servers immediately catch
+            // anything that expired while they were rebuilding.
+            m.runSubscriptionExpirySweep().catch((e) => console.warn("[subscriptionRenewal] boot sweep failed:", e?.message));
+            setInterval(() => {
+                m.runSubscriptionExpirySweep().catch((e) => console.warn("[subscriptionRenewal] scheduled sweep failed:", e?.message));
+            }, SWEEP_INTERVAL_MS);
+            console.log("[subscriptionRenewal] scheduled sweep every 5 min — expired KES 99 / 1000 / 4500 subs auto-downgrade");
+        })
+            .catch(() => { });
         // ────────────────────────────────────────────────────────────────────────
         // BACKGROUND STARTUP TASKS (NON-BLOCKING)
         // ────────────────────────────────────────────────────────────────────────
