@@ -322,6 +322,19 @@ const apiLimiter = rateLimit({
   keyGenerator: rateLimitKey,
 });
 
+// 2026-06 SECURITY: payment-initiate limiter. An attacker who can fire STK
+// pushes at will can harass a victim's phone number with PIN prompts (or
+// run a brute-force across a list of stolen card/phone pairs). 10 per 15 min
+// per session/IP is plenty for any legit user — usually 1-2 retries max.
+const paymentInitiateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: rateLimitKey,
+  message: { error: "Too many payment attempts. Please wait a few minutes before trying again." },
+});
+
 // Mount tier-specific limiters BEFORE the catch-all /api limit
 app.use("/api/login", authLimiter);
 app.use("/api/auth/login", authLimiter);
@@ -331,6 +344,11 @@ app.use("/api/forgot-password", authLimiter);
 app.use("/api/reset-password", authLimiter);
 app.use("/api/mpesa/callback", mpesaCallbackLimiter);
 app.use("/api/payments/mpesa/callback", mpesaCallbackLimiter);
+// Payment-initiate endpoints — block STK-push harassment / brute force
+app.use("/api/payments/initiate", paymentInitiateLimiter);
+app.use("/api/payments/mpesa/stk-push", paymentInitiateLimiter);
+app.use("/api/mpesa/stk", paymentInitiateLimiter);
+app.use("/api/payments/retry", paymentInitiateLimiter);
 app.use("/api/ai", aiLimiter);
 app.use("/api/tools", aiLimiter);
 app.use("/api/bulk-apply", aiLimiter);

@@ -104,9 +104,14 @@ export default function Landing() {
       setAuthModalOpen(true);
     }
     // Auto-open login modal when redirected from a protected page
+    // SECURITY: only relative same-origin paths are honoured. Reject
+    // protocol-relative (//evil.com), scheme (https://...), and backslash
+    // bypass (/\\evil.com) to prevent open-redirect / phishing attacks.
     const redirect = urlParams.get("redirect");
-    if (redirect && redirect !== "/" && redirect !== "/dashboard") {
-      setAuthRedirectPath(redirect);
+    const isSafeRedirect = (p: string | null) =>
+      !!p && /^\/(?![/\\])/.test(p) && !/^\s*(javascript:|data:|vbscript:)/i.test(p);
+    if (isSafeRedirect(redirect) && redirect !== "/" && redirect !== "/dashboard") {
+      setAuthRedirectPath(redirect!);
       setAuthModalTab("login");
       setAuthModalOpen(true);
       // Clean the redirect param from the URL bar

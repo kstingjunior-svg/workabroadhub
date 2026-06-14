@@ -124,13 +124,29 @@ const PHONE_REGEX = /(\+?254\s?[17]\d{2}\s?\d{3}\s?\d{3})|(\b0[17]\d{2}\s?\d{3}\
 const EMAIL_REGEX = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
 const MPESA_REGEX = /\b(?:paybill|till|buy\s*goods|account)[\s#:]*\d{4,7}\b|\b\d{5,7}\s*(?:paybill|till)\b/gi;
 
+// 2026-06 SECURITY: HTML/script tag patterns for defence-in-depth XSS scrub.
+// React currently escapes chat bodies at render time, but a future feature
+// (markdown rendering, link previews, an admin tool that emails the body)
+// could change that. Stripping at write time means the DB never holds
+// executable HTML.
+const SCRIPT_TAG_REGEX = /<\/?(script|iframe|embed|object|svg|style|link|meta|form|input|textarea)\b[^>]*>/gi;
+const EVENT_HANDLER_REGEX = /\s(on[a-z]+)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi;
+const JAVASCRIPT_URI_REGEX = /javascript:|vbscript:|data:text\/html/gi;
+
 export function sanitize(body: string): { sanitized: string; stripCount: number } {
   let stripCount = 0;
   let out = body;
 
+  // PII/payment scrubbing
   out = out.replace(PHONE_REGEX, () => { stripCount++; return "[phone removed]"; });
   out = out.replace(EMAIL_REGEX, () => { stripCount++; return "[email removed]"; });
   out = out.replace(MPESA_REGEX, () => { stripCount++; return "[payment info removed]"; });
+
+  // HTML/JS sanitisation — defence-in-depth. React escapes text on render,
+  // but never let an executable payload reach the DB in the first place.
+  out = out.replace(SCRIPT_TAG_REGEX, () => { stripCount++; return ""; });
+  out = out.replace(EVENT_HANDLER_REGEX, () => { stripCount++; return ""; });
+  out = out.replace(JAVASCRIPT_URI_REGEX, () => { stripCount++; return ""; });
 
   return { sanitized: out, stripCount };
 }

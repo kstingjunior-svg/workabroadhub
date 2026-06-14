@@ -11,7 +11,12 @@ export default function LoginRedirect() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const redirect = params.get("redirect");
-    const target = redirect ? `/?redirect=${encodeURIComponent(redirect)}` : "/";
+    // SECURITY: only honour relative-path redirects. An attacker could craft
+    // /login?redirect=https://evil.com hoping landing.tsx forwards there
+    // after a successful login. Reject anything that doesn't start with a
+    // single forward slash (so `//evil.com` and `https://...` are both out).
+    const safe = redirect && /^\/(?![/\\])/.test(redirect) ? redirect : null;
+    const target = safe ? `/?redirect=${encodeURIComponent(safe)}` : "/";
     navigate(target, { replace: true });
   }, []);
   return null;

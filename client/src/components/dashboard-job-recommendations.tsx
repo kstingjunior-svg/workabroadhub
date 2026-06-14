@@ -233,8 +233,27 @@ export function DashboardJobRecommendations() {
         credentials: "include",
         body: form,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message ?? "Matching failed.");
+      // 2026-06: surface the actual server response so we can diagnose
+      // without Render dashboard access. Same pattern as the chat fix.
+      let data: any = null;
+      let rawText = "";
+      try {
+        data = await res.clone().json();
+      } catch {
+        try { rawText = await res.text(); } catch {}
+      }
+      if (!res.ok) {
+        const friendly =
+          res.status === 401 ? "Please sign in again." :
+          res.status === 403 ? (data?.message ?? "Pro / Basic plan required.") :
+          res.status === 404 ? "Server route not deployed yet. Wait ~2 minutes then retry." :
+          res.status === 413 ? "File too large (server limit 5 MB)." :
+          res.status === 415 ? "Wrong file type. Please upload a PDF or .docx." :
+          (data?.message ?? rawText.slice(0, 100) ?? `HTTP ${res.status}`);
+        const err = new Error(friendly);
+        (err as any).httpStatus = res.status;
+        throw err;
+      }
       return data as { jobs: JobMatch[]; totalJobs: number };
     },
     onSuccess: (data) => {
@@ -250,8 +269,13 @@ export function DashboardJobRecommendations() {
         });
       }
     },
-    onError: (err: Error) => {
-      toast({ title: "Matching failed", description: err.message, variant: "destructive" });
+    onError: (err: any) => {
+      const status = err?.httpStatus ? ` (HTTP ${err.httpStatus})` : "";
+      toast({
+        title: "Matching failed",
+        description: `${err?.message ?? "Unknown error"}${status}`,
+        variant: "destructive",
+      });
     },
   });
 
