@@ -1,4 +1,27 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -94,14 +117,28 @@ function registerAuthRoutes(app) {
             if (!rawEmail || !password) {
                 return res.status(400).json({ message: "Email and password are required." });
             }
+            // 2026-06 SECURITY: brute-force lockout check BEFORE we touch the DB.
+            // 5 failed attempts in a 15-min window locks (email + IP) for 15 min.
+            // Complements the per-IP rate limit (which doesn't know account context).
+            const { checkLockout, recordFailedLogin, clearFailedAttempts } = await Promise.resolve().then(() => __importStar(require("../../lib/security-guard")));
+            const clientIp = String(req.headers["x-forwarded-for"] || req.ip || "unknown")
+                .split(",")[0].trim();
+            const lockoutStatus = checkLockout(rawEmail, clientIp);
+            if (lockoutStatus.locked) {
+                res.setHeader("Retry-After", String(lockoutStatus.retryAfterSeconds));
+                return res.status(429).json({
+                    message: `Too many failed attempts. Try again in ${Math.ceil(lockoutStatus.retryAfterSeconds / 60)} minutes.`,
+                    retryAfterSeconds: lockoutStatus.retryAfterSeconds,
+                });
+            }
             const [user] = await db_1.db.select().from(auth_1.users).where((0, drizzle_orm_1.eq)(auth_1.users.email, rawEmail)).limit(1);
             if (!user || !user.passwordHash) {
+                // Record failure on an unknown email too — prevents enumeration via
+                // timing differences and frustrates credential-stuffing reconnaissance.
+                recordFailedLogin(rawEmail, clientIp);
                 return res.status(401).json({ message: "Invalid email or password." });
             }
-            // Block deleted (anonymised) accounts — password_hash is wiped on
-            // deletion so the bcrypt check below would already fail, but the
-            // is_active flag is the authoritative gate. Return a soft error
-            // matching the wording in case a user re-uses an email we anonymised.
+            // Block deleted (anonymised) accounts.
             if (user.isActive === false) {
                 return res.status(403).json({
                     message: "This account has been deleted. Please sign up with a new account.",
@@ -110,8 +147,15 @@ function registerAuthRoutes(app) {
             }
             const valid = await bcrypt_1.default.compare(password, user.passwordHash);
             if (!valid) {
-                return res.status(401).json({ message: "Invalid email or password." });
+                const post = recordFailedLogin(rawEmail, clientIp);
+                return res.status(401).json({
+                    message: post.remainingAttempts > 0 && post.remainingAttempts <= 2
+                        ? `Invalid email or password. ${post.remainingAttempts} attempt${post.remainingAttempts === 1 ? "" : "s"} left before lockout.`
+                        : "Invalid email or password.",
+                });
             }
+            // Successful login — clear the failure history for this (email, IP).
+            clearFailedAttempts(rawEmail, clientIp);
             await setSessionUserId(req, user.id);
             res.json({ id: user.id, email: user.email });
         }

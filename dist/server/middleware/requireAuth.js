@@ -19,6 +19,7 @@ exports.requireAuth = void 0;
 const db_1 = require("../db");
 const auth_1 = require("@shared/models/auth");
 const drizzle_orm_1 = require("drizzle-orm");
+const security_guard_1 = require("../lib/security-guard");
 function getUserId(req) {
     if (req.session?.customUserId) {
         return req.session.customUserId;
@@ -31,12 +32,21 @@ function getUserId(req) {
 function isHtmlRequest(req) {
     return !!(req.headers.accept && req.headers.accept.includes("text/html"));
 }
+/**
+ * Build a safe `/?redirect=...` URL. Validates req.originalUrl via
+ * safeRedirectPath — defence against an attacker crafting a request whose
+ * `Host` or proxy headers cause originalUrl to contain a foreign host. Should
+ * never happen with Express's defaults, but cheap insurance.
+ */
+function buildLoginRedirect(req) {
+    const safe = (0, security_guard_1.safeRedirectPath)(req.originalUrl, "/");
+    return `/?redirect=${encodeURIComponent(safe)}`;
+}
 const requireAuth = async (req, res, next) => {
     const userId = getUserId(req);
     if (!userId) {
         if (isHtmlRequest(req)) {
-            const redirect = encodeURIComponent(req.originalUrl);
-            return res.redirect(`/?redirect=${redirect}`);
+            return res.redirect(buildLoginRedirect(req));
         }
         return res.status(401).json({
             error: "Unauthorized",
@@ -50,7 +60,7 @@ const requireAuth = async (req, res, next) => {
             .where((0, drizzle_orm_1.eq)(auth_1.users.id, userId));
         if (!user) {
             if (isHtmlRequest(req)) {
-                return res.redirect("/?redirect=" + encodeURIComponent(req.originalUrl));
+                return res.redirect(buildLoginRedirect(req));
             }
             return res.status(401).json({
                 error: "Unauthorized",
