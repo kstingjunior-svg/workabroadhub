@@ -221,11 +221,6 @@ export function DashboardJobRecommendations() {
     } catch {}
   }, []);
 
-  // 2026-06: switched from paste-CV-text to upload-CV-file.
-  // Users were complaining they don't always have CV text on their phone
-  // to paste — they have it as a PDF or .docx. Server now extracts the
-  // text from the uploaded file via /api/jobs/match-upload, then runs the
-  // same getJobMatches() it uses for pasted text.
   const matchMutation = useMutation({
     mutationFn: async () => {
       if (!cvFile) throw new Error("Please choose a CV file (PDF or .docx).");
@@ -234,7 +229,7 @@ export function DashboardJobRecommendations() {
       form.append("cv", cvFile);
       const res = await fetch("/api/jobs/match-upload", {
         method: "POST",
-        headers: { "X-CSRF-Token": csrfToken }, // do NOT set Content-Type — browser sets multipart boundary
+        headers: { "X-CSRF-Token": csrfToken },
         credentials: "include",
         body: form,
       });
@@ -269,7 +264,6 @@ export function DashboardJobRecommendations() {
 
   const onFilePicked = (file: File | null) => {
     if (!file) return;
-    // Client-side guard: 5 MB cap, PDF/DOCX/DOC only
     const okTypes = [
       "application/pdf",
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -277,19 +271,11 @@ export function DashboardJobRecommendations() {
     ];
     const looksOkByName = /\.(pdf|docx|doc)$/i.test(file.name);
     if (!okTypes.includes(file.type) && !looksOkByName) {
-      toast({
-        title: "Wrong file type",
-        description: "Please upload a PDF or Word (.docx) CV.",
-        variant: "destructive",
-      });
+      toast({ title: "Wrong file type", description: "Please upload a PDF or Word (.docx) CV.", variant: "destructive" });
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
-      toast({
-        title: "File too large",
-        description: "Please upload a CV under 5 MB.",
-        variant: "destructive",
-      });
+      toast({ title: "File too large", description: "Please upload a CV under 5 MB.", variant: "destructive" });
       return;
     }
     setCvFile(file);
@@ -349,5 +335,73 @@ export function DashboardJobRecommendations() {
                   </p>
                 </div>
               </div>
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,.docx,.doc,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword"
+                className="hidden"
+                onChange={(e) => onFilePicked(e.target.files?.[0] ?? null)}
+                data-testid="input-cv-file"
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full rounded-xl border-2 border-dashed border-blue-300 dark:border-blue-700 bg-blue-50/50 dark:bg-blue-950/20 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition-colors p-4 flex flex-col items-center justify-center text-center mb-3 min-h-[120px]"
+                data-testid="dropzone-cv-file"
+              >
+                <div className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center mb-2">
+                  <Upload className="h-5 w-5" />
+                </div>
+                {cvFile ? (
+                  <>
+                    <p className="text-sm font-semibold text-gray-900 dark:text-white">{cvFile.name}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{(cvFile.size / 1024).toFixed(0)} KB · tap to choose another</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm font-semibold text-gray-900 dark:text-white">Tap to upload your CV</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">PDF or Word (.docx) · up to 5 MB</p>
+                  </>
+                )}
+              </button>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs text-gray-400 dark:text-gray-500">
+                  {cvFile ? "Ready to match" : "No file selected"}
+                </span>
+                <Button
+                  onClick={() => matchMutation.mutate()}
+                  disabled={matchMutation.isPending || !cvFile}
+                  className="bg-gradient-to-r from-blue-600 to-teal-500 hover:from-blue-700 hover:to-teal-600 text-white text-sm h-9 px-4"
+                  data-testid="btn-find-jobs"
+                >
+                  {matchMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Matching…
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="h-3.5 w-3.5 mr-1.5" /> Find Matches
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Results */}
+          {hasResults && (
+            <div className="space-y-3">
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Top {jobs.length} jobs matched to your CV — sorted by AI compatibility score.
+              </p>
+              {jobs.map((job) => (
+                <JobCard key={job.id} job={job} />
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
   );
 }
