@@ -18,13 +18,23 @@ interface UserEvent {
   created_at?: string;
 }
 
+// 2026-06: server-side /api/admin/stats returns these fields. Client was
+// reading users/revenue/active_pro/live_users which did NOT exist on the
+// response — every card silently fell back to 0 via "?? 0". Renamed to
+// match what the server actually sends.
 interface Stats {
-  users: number;
-  revenue: number;
-  active_pro: number;
-  live_users: number;
-  payments: Payment[];
-  events: UserEvent[];
+  totalUsers: number;
+  totalRevenue: number;
+  revenueToday: number;
+  activeSubscriptions: number;
+  totalPayments: number;
+  activeUsers: number;
+  activeAuthenticatedUsers: number;
+  usersToday: number;
+  signupStats?: { today: number; thisWeek: number; thisMonth: number };
+  planBreakdown?: { free: number; basic: number; pro: number };
+  payments?: Payment[];
+  events?: UserEvent[];
 }
 
 interface FunnelData {
@@ -65,13 +75,13 @@ export default function AdminDashboard() {
     socket.on("user_active", () => {});
 
     socket.on("new_payment", (data: { amount?: number }) => {
-      setStats(prev => prev ? ({ ...prev, revenue: prev.revenue + (data.amount ?? 0) }) : prev);
+      setStats(prev => prev ? ({ ...prev, totalRevenue: (prev.totalRevenue ?? 0) + (data.amount ?? 0) }) : prev);
       setPaymentBanner(`💰 New payment received: KES ${data.amount ?? 0}`);
       setTimeout(() => setPaymentBanner(null), 5000);
     });
 
     socket.on("user_upgraded", () => {
-      setStats(prev => prev ? ({ ...prev, active_pro: prev.active_pro + 1 }) : prev);
+      setStats(prev => prev ? ({ ...prev, activeSubscriptions: (prev.activeSubscriptions ?? 0) + 1 }) : prev);
     });
 
     return () => { socket.disconnect(); };
@@ -108,19 +118,32 @@ export default function AdminDashboard() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="p-4 bg-gray-800 shadow rounded" data-testid="stat-users">
             <h2 className="text-gray-400">Users</h2>
-            <p className="text-2xl font-bold text-white">{stats?.users ?? 0}</p>
+            <p className="text-2xl font-bold text-white">{stats?.totalUsers ?? 0}</p>
+            {stats?.usersToday ? (
+              <p className="text-xs text-emerald-400 mt-1">+{stats.usersToday} today</p>
+            ) : null}
           </div>
           <div className="p-4 bg-gray-800 shadow rounded" data-testid="stat-revenue">
             <h2 className="text-gray-400">Revenue (KES)</h2>
-            <p className="text-2xl font-bold text-white">{stats?.revenue ?? 0}</p>
+            <p className="text-2xl font-bold text-white">
+              {Number(stats?.totalRevenue ?? 0).toLocaleString("en-KE")}
+            </p>
+            {stats?.revenueToday ? (
+              <p className="text-xs text-emerald-400 mt-1">
+                +KES {Number(stats.revenueToday).toLocaleString("en-KE")} today
+              </p>
+            ) : null}
           </div>
           <div className="p-4 bg-gray-800 shadow rounded" data-testid="stat-pro">
             <h2 className="text-gray-400">Active PRO</h2>
-            <p className="text-2xl font-bold text-white">{stats?.active_pro ?? 0}</p>
+            <p className="text-2xl font-bold text-white">{stats?.activeSubscriptions ?? 0}</p>
           </div>
           <div className="p-4 bg-gray-800 shadow rounded" data-testid="stat-live">
             <h2 className="text-gray-400">Live Now</h2>
-            <p className="text-2xl font-bold text-green-400">{stats?.live_users ?? 0}</p>
+            <p className="text-2xl font-bold text-green-400">{stats?.activeUsers ?? 0}</p>
+            {stats?.activeAuthenticatedUsers ? (
+              <p className="text-xs text-gray-400 mt-1">{stats.activeAuthenticatedUsers} signed in</p>
+            ) : null}
           </div>
         </div>
 
