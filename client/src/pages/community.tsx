@@ -228,14 +228,23 @@ export default function Community() {
       });
       const data = await res.json();
       if (!res.ok) {
+        // 2026-06: show the real server error message so we can diagnose
+        // without Render dashboard access. Previously every unknown error
+        // showed "Try again in a moment" which gave us no signal.
+        const rawMsg = typeof data?.message === "string" ? data.message : "";
+        const friendly =
+          rawMsg === "rate_limited" ? "Wait a few seconds between messages." :
+          rawMsg === "no_quota" ? "You're out of free posts today. Go Pro or refer a friend." :
+          rawMsg === "not_signed_in" ? "Sign in to post." :
+          rawMsg === "invalid_room" ? "That room no longer exists." :
+          rawMsg === "empty_message" ? "Type at least 2 characters." :
+          rawMsg === "db_insert_failed" ? `Database write failed (status ${res.status}). Tell support: db_insert_failed.` :
+          rawMsg
+            ? `Server said: ${rawMsg} (HTTP ${res.status}). Tell support this message.`
+            : `Unknown error (HTTP ${res.status}). Tell support this number.`;
         toast({
           title: "Couldn't post",
-          description:
-            data.message === "rate_limited" ? "Wait a few seconds between messages." :
-            data.message === "no_quota" ? "You're out of free posts today. Go Pro or refer a friend." :
-            data.message === "not_signed_in" ? "Sign in to post." :
-            data.message === "invalid_room" ? "That room no longer exists." :
-            "Try again in a moment.",
+          description: friendly,
         });
         return;
       }

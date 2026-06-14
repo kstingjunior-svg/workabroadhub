@@ -221,17 +221,41 @@ async function postMessage(userId, roomSlug, rawBody) {
     const hiddenReason = hidden ? "pii_overload" : null;
     // 2026-06: log INSERT failures explicitly with the param shape so we
     // can diagnose schema drift / FK violations / pool exhaustion etc.
+    // 2026-06 SELF-HEAL: if the table is missing (42P01) OR a column is
+    // missing (42703), force re-ensureSchema and retry ONCE. This handles
+    // the case where ensureSchema's SCHEMA_INIT.done flag was set true on
+    // a prior boot but the table was later dropped (production DB surgery).
+    const insertSql = `INSERT INTO chat_messages
+       (room_slug, user_id, body, original_body, strip_count, hidden, hidden_reason)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     RETURNING id, created_at`;
+    const insertArgs = [roomSlug, userId, sanitized, trimmed, stripCount, hidden, hiddenReason];
     let rows;
     try {
-        const result = await db_1.pool.query(`INSERT INTO chat_messages
-         (room_slug, user_id, body, original_body, strip_count, hidden, hidden_reason)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING id, created_at`, [roomSlug, userId, sanitized, trimmed, stripCount, hidden, hiddenReason]);
+        const result = await db_1.pool.query(insertSql, insertArgs);
         rows = result.rows;
     }
     catch (dbErr) {
-        console.error(`[community] chat_messages INSERT failed for userId=${userId} slug=${roomSlug} bodyLen=${trimmed.length}:`, dbErr?.code, dbErr?.message, dbErr?.detail ? `detail=${dbErr.detail}` : "");
-        throw new Error("db_insert_failed");
+        const code = dbErr?.code;
+        console.error(`[community] chat_messages INSERT failed for userId=${userId} slug=${roomSlug} bodyLen=${trimmed.length}:`, code, dbErr?.message, dbErr?.detail ? `detail=${dbErr.detail}` : "");
+        // Self-heal: 42P01 = undefined_table, 42703 = undefined_column
+        if (code === "42P01" || code === "42703") {
+            console.warn(`[community] attempting schema self-heal after code ${code} and retrying once`);
+            SCHEMA_INIT.done = false;
+            try {
+                await ensureSchema();
+                const retry = await db_1.pool.query(insertSql, insertArgs);
+                rows = retry.rows;
+                console.info(`[community] self-heal succeeded — message id=${rows[0]?.id} posted on retry`);
+            }
+            catch (retryErr) {
+                console.error(`[community] self-heal RETRY also failed:`, retryErr?.code, retryErr?.message);
+                throw new Error("db_insert_failed");
+            }
+        }
+        else {
+            throw new Error("db_insert_failed");
+        }
     }
     // Stamp the room stats — best-effort.
     db_1.pool.query(`UPDATE chat_rooms SET message_count = message_count + 1, last_message_at = NOW() WHERE slug = $1`, [roomSlug]).catch(() => { });
