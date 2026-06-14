@@ -23,6 +23,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useUpgradeModal } from "@/contexts/upgrade-modal-context";
 import { Lock, ExternalLink, MapPin, DollarSign, Plane, ChevronRight, Briefcase, Loader2 } from "lucide-react";
 import { isPaidUser } from "@/lib/plan";
+import { useQuery } from "@tanstack/react-query";
 
 interface VisaJob {
   id: string;
@@ -55,8 +56,22 @@ export function DashboardVisaJobsLocked() {
   const [filter, setFilter] = useState<Filter>("All");
   const [showAll, setShowAll] = useState(false);
 
+  // 2026-06 EMERGENCY: paying KES 99 / 1000 customers were seeing the lock
+  // because useAuth's /api/auth/user cache could be up to 5 min stale after
+  // payment. Now we ALSO check /api/user/plan which polls every 30s — so
+  // even if useAuth still has plan="free", a fresh plan check unlocks the UI.
+  const { data: freshPlan } = useQuery<{ planId: string } | null>({
+    queryKey: ["/api/user/plan"],
+    enabled: !!user,
+    refetchOnWindowFocus: true,
+    refetchOnMount: true,
+    refetchInterval: 30_000,
+    staleTime: 30_000,
+  });
+
   const isPro =
     isPaidUser((user as any)?.plan) ||
+    isPaidUser(freshPlan?.planId) ||
     (user as any)?.subscriptionStatus === "active" ||
     (user as any)?.isAdmin === true ||
     (user as any)?.role === "ADMIN" ||

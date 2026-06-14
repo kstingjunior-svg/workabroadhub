@@ -11,6 +11,7 @@ import { Link } from "wouter";
 import { isPaidUser } from "@/lib/plan";
 import { useAuth } from "@/hooks/use-auth";
 import { Crown, CheckCircle2, ArrowRight, Sparkles } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 
 const PRO_FEATURES = [
   "Unlimited NEA agency checks",
@@ -23,8 +24,22 @@ const PRO_FEATURES = [
 
 export function DashboardProUpsell() {
   const { user } = useAuth();
+  // 2026-06 EMERGENCY: ALSO check the fresh /api/user/plan in case useAuth's
+  // 30s-stale cache hasn't picked up a just-completed M-Pesa payment yet.
+  // Without this, paying customers saw this "Upgrade to Pro" card for up to
+  // 30s after their KES 99/1000/4500 payment cleared.
+  const { data: freshPlan } = useQuery<{ planId: string } | null>({
+    queryKey: ["/api/user/plan"],
+    enabled: !!user,
+    refetchOnWindowFocus: true,
+    refetchOnMount: true,
+    refetchInterval: 30_000,
+    staleTime: 30_000,
+  });
+
   const isAlreadyPro =
     isPaidUser((user as any)?.plan) ||
+    isPaidUser(freshPlan?.planId) ||
     (user as any)?.subscriptionStatus === "active" ||
     (user as any)?.isAdmin === true;
 

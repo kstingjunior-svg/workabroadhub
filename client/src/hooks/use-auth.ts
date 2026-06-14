@@ -50,13 +50,22 @@ async function logoutFn(): Promise<void> {
 
 export function useAuth() {
   const queryClient = useQueryClient();
+  // 2026-06 EMERGENCY: was staleTime 5min + refetchOnWindowFocus:false.
+  // That meant a customer who paid KES 99 / 1000 via M-Pesa and came back
+  // to the tab saw the OLD user.plan="free" for up to 5 minutes — the
+  // visa-jobs lock + 'Unlock Premium Career Tools' modal stayed up until
+  // they hard-refreshed. Customers thought their payment didn't work and
+  // were losing trust.
+  // fetchUser handles 401 by returning null (not throwing), and React Query
+  // keeps previous data on background refetch errors, so a transient blip
+  // can't log anyone out anymore.
   const { data: user, isLoading } = useQuery<User | null>({
     queryKey: ["/api/auth/user"],
     queryFn: fetchUser,
     retry: false,
-    staleTime: 5 * 60_000,            // 5 min — long enough that a transient blip doesn't refetch
-    refetchOnWindowFocus: false,      // do NOT refetch on focus — a transient 401/503 would log the user out
-    refetchOnReconnect: false,        // same reasoning for network-flap refetches
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
 
   const logoutMutation = useMutation({
