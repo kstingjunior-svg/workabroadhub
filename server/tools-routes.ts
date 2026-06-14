@@ -946,10 +946,12 @@ Return ONLY this JSON (no markdown): { "content": "<numbered Q&A with each quest
   });
 
   // ════════════════════════════════════════════════════════════════════════════
-  // STEP 7: AI JOB MATCHING
-  // POST /api/jobs/match
-  // Auth required. Accepts { cvText } JSON body.
-  // Returns top 5 recommended jobs with AI match scores.
+  // STEP 7b: AI JOB MATCHING — FILE UPLOAD VARIANT
+  // POST /api/jobs/match-upload
+  // Auth required. Accepts multipart/form-data with field "cv" (PDF or DOCX).
+  // Server extracts text from the file via extractTextFromBuffer and then
+  // runs the same matching logic as /api/jobs/match. Lets users upload from
+  // their phone/laptop instead of pasting CV text.
   // ════════════════════════════════════════════════════════════════════════════
   app.post(
     "/api/jobs/match",

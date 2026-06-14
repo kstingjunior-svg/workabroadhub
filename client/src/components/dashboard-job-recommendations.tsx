@@ -15,7 +15,7 @@ import { useJobRedirect } from "@/hooks/use-job-redirect";
 import {
   Sparkles, MapPin, Building2, DollarSign, ExternalLink,
   ChevronDown, ChevronUp, RotateCcw, Loader2, Briefcase,
-  CheckCircle, TrendingUp,
+  CheckCircle, TrendingUp, Upload,
 } from "lucide-react";
 
 interface JobMatch {
@@ -205,10 +205,10 @@ function BrowseRecommendations() {
 
 export function DashboardJobRecommendations() {
   const { toast } = useToast();
-  const [cvText, setCvText] = useState("");
+  const [cvFile, setCvFile] = useState<File | null>(null);
   const [jobs, setJobs] = useState<JobMatch[]>([]);
   const [collapsed, setCollapsed] = useState(false);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Restore cached results on mount
   useEffect(() => {
@@ -221,14 +221,22 @@ export function DashboardJobRecommendations() {
     } catch {}
   }, []);
 
+  // 2026-06: switched from paste-CV-text to upload-CV-file.
+  // Users were complaining they don't always have CV text on their phone
+  // to paste — they have it as a PDF or .docx. Server now extracts the
+  // text from the uploaded file via /api/jobs/match-upload, then runs the
+  // same getJobMatches() it uses for pasted text.
   const matchMutation = useMutation({
     mutationFn: async () => {
+      if (!cvFile) throw new Error("Please choose a CV file (PDF or .docx).");
       const csrfToken = await fetchCsrfToken();
-      const res = await fetch("/api/jobs/match", {
+      const form = new FormData();
+      form.append("cv", cvFile);
+      const res = await fetch("/api/jobs/match-upload", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken },
+        headers: { "X-CSRF-Token": csrfToken }, // do NOT set Content-Type — browser sets multipart boundary
         credentials: "include",
-        body: JSON.stringify({ cvText }),
+        body: form,
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message ?? "Matching failed.");
@@ -236,7 +244,7 @@ export function DashboardJobRecommendations() {
     },
     onSuccess: (data) => {
       setJobs(data.jobs);
-      setCvText("");
+      setCvFile(null);
       try {
         sessionStorage.setItem(CACHE_KEY, JSON.stringify(data.jobs));
       } catch {}
@@ -254,9 +262,37 @@ export function DashboardJobRecommendations() {
 
   const handleReset = () => {
     setJobs([]);
-    setCvText("");
+    setCvFile(null);
     try { sessionStorage.removeItem(CACHE_KEY); } catch {}
-    setTimeout(() => textareaRef.current?.focus(), 100);
+    setTimeout(() => fileInputRef.current?.click(), 100);
+  };
+
+  const onFilePicked = (file: File | null) => {
+    if (!file) return;
+    // Client-side guard: 5 MB cap, PDF/DOCX/DOC only
+    const okTypes = [
+      "application/pdf",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/msword",
+    ];
+    const looksOkByName = /\.(pdf|docx|doc)$/i.test(file.name);
+    if (!okTypes.includes(file.type) && !looksOkByName) {
+      toast({
+        title: "Wrong file type",
+        description: "Please upload a PDF or Word (.docx) CV.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: "File too large",
+        description: "Please upload a CV under 5 MB.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setCvFile(file);
   };
 
   const hasResults = jobs.length > 0;
@@ -309,56 +345,9 @@ export function DashboardJobRecommendations() {
                     Find your best-fit overseas jobs
                   </p>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                    Paste your CV and AI will score and rank the best matches from our live job database.
+                    Upload your CV (PDF or Word) and AI will score and rank the best matches from our live job database.
                   </p>
                 </div>
               </div>
-
-              <Textarea
-                ref={textareaRef}
-                value={cvText}
-                onChange={(e) => setCvText(e.target.value)}
-                placeholder="Paste your CV text here — include your job title, skills, experience, and education…"
-                className="min-h-[120px] text-sm resize-none mb-3"
-                data-testid="input-cv-match"
-              />
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-xs text-gray-400 dark:text-gray-500">
-                  {cvText.length} characters · min 50
-                </span>
-                <Button
-                  onClick={() => matchMutation.mutate()}
-                  disabled={matchMutation.isPending || cvText.trim().length < 50}
-                  className="bg-gradient-to-r from-blue-600 to-teal-500 hover:from-blue-700 hover:to-teal-600 text-white text-sm h-9 px-4"
-                  data-testid="btn-find-jobs"
-                >
-                  {matchMutation.isPending ? (
-                    <>
-                      <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Matching…
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="h-3.5 w-3.5 mr-1.5" /> Find Matches
-                    </>
-                  )}
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {/* Results */}
-          {hasResults && (
-            <div className="space-y-3">
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                Top {jobs.length} jobs matched to your CV — sorted by AI compatibility score.
-              </p>
-              {jobs.map((job) => (
-                <JobCard key={job.id} job={job} />
-              ))}
-            </div>
-          )}
-        </>
-      )}
-    </div>
   );
 }
