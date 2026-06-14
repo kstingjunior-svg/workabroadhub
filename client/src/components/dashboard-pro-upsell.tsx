@@ -24,17 +24,17 @@ const PRO_FEATURES = [
 
 export function DashboardProUpsell() {
   const { user } = useAuth();
-  // 2026-06 EMERGENCY: ALSO check the fresh /api/user/plan in case useAuth's
-  // 30s-stale cache hasn't picked up a just-completed M-Pesa payment yet.
-  // Without this, paying customers saw this "Upgrade to Pro" card for up to
-  // 30s after their KES 99/1000/4500 payment cleared.
+  // 2026-06 LAG FIX: was 30s. Shares queryKey with dashboard-visa-jobs-locked
+  // so React Query dedupes the fetch across both widgets. 2 min interval +
+  // refetchOnFocus catches post-payment unlocks within seconds of the user
+  // switching back to the tab, without hammering the server every 30s.
   const { data: freshPlan } = useQuery<{ planId: string } | null>({
     queryKey: ["/api/user/plan"],
     enabled: !!user,
     refetchOnWindowFocus: true,
     refetchOnMount: true,
-    refetchInterval: 30_000,
-    staleTime: 30_000,
+    refetchInterval: 2 * 60_000,
+    staleTime: 60_000,
   });
 
   const isAlreadyPro =

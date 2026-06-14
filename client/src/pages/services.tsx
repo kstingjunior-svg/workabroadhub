@@ -210,13 +210,22 @@ export default function Services() {
           return;
         }
         if (data.code === "SESSION_EXPIRED" || data.code === "UNAUTHENTICATED" || res.status === 401) {
+          // 2026-06 TRUST FIX: don't kick the user to /auth on the FIRST 401 —
+          // transient 401s happen when the user has just refreshed the page
+          // or the session row was missed by a single query. Instead:
+          //   1. Try to refresh the session in the background
+          //   2. Show a friendly retry toast, do NOT navigate away
+          // The user can tap 'Get Started' again and it'll work. If their
+          // session is truly dead, they'll see the same toast a second time
+          // and can manually navigate to sign in.
           clearCsrfToken();
+          try {
+            await fetch("/api/auth/user", { credentials: "include" });
+          } catch {}
           toast({
-            title: "Please sign in to continue",
-            description: data.message ?? "Your session is not active.",
-            variant: "destructive",
+            title: "Quick refresh — tap again",
+            description: "Just refreshing your session. Tap 'Get Started' once more.",
           });
-          navigate("/auth");
           return;
         }
         toast({ title: "Payment failed", description: data.message, variant: "destructive" });
@@ -474,36 +483,6 @@ export default function Services() {
                   {subscriptionServices.map(renderCard)}
                 </div>
               </section>
-            )}
-
-            {filtered.length === 0 && !isLoading && (
-              <div className="flex flex-col items-center justify-center py-16 gap-3">
-                <p className="text-muted-foreground">No services found in this category.</p>
-                {activeCategory !== "All" && (
-                  <Button variant="ghost" size="sm" onClick={() => setActiveCategory("All")}>
-                    Show all services
-                  </Button>
-                )}
-              </div>
-            )}
-          </>
-        )}
-
-        <section className="mt-16">
-          <Card className="bg-gradient-to-r from-primary/10 to-accent/10 border-0">
-            <CardContent className="p-8 text-center">
-              <h2 className="text-2xl font-serif font-bold mb-3">Need a Custom Package?</h2>
-              <p className="text-muted-foreground mb-6 max-w-xl mx-auto">
-                Not sure which service fits your needs? Our career advisors can build a
-                custom package tailored to your target country, industry, and budget.
-              </p>
-              <Button size="lg" data-testid="button-contact" onClick={() => setBookingOpen(true)}>
-                <Headphones className="h-4 w-4 mr-2" />
-                Book a Free Consultation
-              </Button>
-            </CardContent>
-          </Card>
-        </section>
       </main>
 
       <ConsultationBookingModal open={bookingOpen} onOpenChange={setBookingOpen} />

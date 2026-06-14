@@ -56,17 +56,20 @@ export function DashboardVisaJobsLocked() {
   const [filter, setFilter] = useState<Filter>("All");
   const [showAll, setShowAll] = useState(false);
 
-  // 2026-06 EMERGENCY: paying KES 99 / 1000 customers were seeing the lock
-  // because useAuth's /api/auth/user cache could be up to 5 min stale after
-  // payment. Now we ALSO check /api/user/plan which polls every 30s — so
-  // even if useAuth still has plan="free", a fresh plan check unlocks the UI.
+  // 2026-06 LAG FIX: was refetchInterval 30s + refetchOnFocus + refetchOnMount.
+  // At 300+ users with multiple dashboard widgets all polling this same key,
+  // the server was getting hammered. Now interval is 2 min and we trust
+  // refetchOnFocus + refetchOnMount to catch the post-payment unlock case
+  // when the user actively comes back to the tab. React Query dedupes the
+  // queryKey across components so dashboard-pro-upsell + this one share one
+  // fetch.
   const { data: freshPlan } = useQuery<{ planId: string } | null>({
     queryKey: ["/api/user/plan"],
     enabled: !!user,
     refetchOnWindowFocus: true,
     refetchOnMount: true,
-    refetchInterval: 30_000,
-    staleTime: 30_000,
+    refetchInterval: 2 * 60_000,
+    staleTime: 60_000,
   });
 
   const isPro =

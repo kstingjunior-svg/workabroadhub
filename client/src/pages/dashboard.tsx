@@ -1138,24 +1138,24 @@ export default function Dashboard() {
 
   const queryClient = useQueryClient();
 
-  // 2026-06 scaling work: staleTime tuned for 3,000 concurrent dashboard loads.
-  // Previously these had staleTime: 0 which meant every mount re-fetched.
-  // 30s stale + 30s refetchInterval gives ~one fetch per 30s per signed-in
-  // user, while still showing fresh data after upgrade events (Pro upgrade
-  // success flow already calls queryClient.invalidateQueries on these keys).
+  // 2026-06 LAG FIX: bumped from 30s to 2 min. Pro upgrade success flow
+  // calls queryClient.invalidateQueries on these keys for instant feedback
+  // after payment, so the only thing the interval poll covers is the rare
+  // case where a user upgrade happens out-of-band (e.g. admin manual grant).
+  // 2 min is plenty for that.
   const { data: subscription, isLoading: subLoading } = useQuery<UserSubscription | null>({
     queryKey: ["/api/subscription"],
     refetchOnWindowFocus: true,
-    refetchInterval: 30000,
-    staleTime: 30_000,
+    refetchInterval: 2 * 60_000,
+    staleTime: 60_000,
   });
 
   const { data: userPlan } = useQuery<{ planId: string; plan: any; subscription: any } | null>({
     queryKey: ["/api/user/plan"],
     enabled: !!user,
     refetchOnWindowFocus: true,
-    refetchInterval: 30000,
-    staleTime: 30_000,
+    refetchInterval: 2 * 60_000,
+    staleTime: 60_000,
   });
 
   const { data: adminStats, error: adminError, isSuccess: adminCheckSuccess } = useQuery<{ totalUsers?: number }>({
