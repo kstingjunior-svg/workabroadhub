@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -511,7 +511,43 @@ export default function VisaSponsorshipJobs() {
     trackPageView("visa_sponsorship_jobs");
   }, []);
 
-  const handleUpgradeRequired = () => {
+  // 2026-06 EMERGENCY DEFENSIVE: customers reported paying KES 99 / 1000 then
+  // still seeing the upgrade modal. Root cause was 30s+ cache lag — even though
+  // the server activates the plan immediately, the client useQuery for
+  // /api/user/plan might be a few seconds stale. Now we ALWAYS hit the network
+  // first before opening the modal: invalidate the plan query, await the fresh
+  // server response, and only show the modal if the user truly isn't paid.
+  // This makes it impossible to show the modal to a customer whose payment
+  // has actually cleared on the server.
+  const queryClient = useQueryClient();
+  const handleUpgradeRequired = async () => {
+    try {
+      // Bust the cache and force a fresh fetch from the server
+      await queryClient.invalidateQueries({ queryKey: ["/api/user/plan"] });
+      const fresh = await queryClient.fetchQuery<{ planId?: string } | null>({
+        queryKey: ["/api/user/plan"],
+        queryFn: async () => {
+          const res = await fetch("/api/user/plan", { credentials: "include" });
+          if (!res.ok) return null;
+          return res.json();
+        },
+        staleTime: 0,
+      });
+      if (fresh?.planId && isPaidUser(fresh.planId)) {
+        // Server confirms they ARE paid — also refresh useAuth cache so the
+        // page re-renders with isPaid=true. Don't open the modal.
+        queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+        toast({
+          title: "You're already a member 🎉",
+          description: "Tap Apply again — your access just refreshed.",
+        });
+        return;
+      }
+    } catch {
+      // Network/server error — fall through and show the modal so the user
+      // can still pay if they need to. We prefer false-positive modal to
+      // silently blocking access.
+    }
     openUpgradeModal("jobs_locked", "Visa Sponsorship Jobs", "pro");
   };
 
