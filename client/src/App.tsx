@@ -28,6 +28,7 @@ import { useBehaviorTracker } from "@/hooks/use-behavior-tracker";
 import { useNanjilaIdleNudge } from "@/hooks/use-nanjila-idle-nudge";
 import { LiveActivityFeed } from "@/components/live-activity-feed";
 import { InstallAppPrompt } from "@/components/install-app-prompt";
+import { GlobalBackButton } from "@/components/global-back-button";
 
 // =============================================================================
 // PERFORMANCE: Lazy load ALL pages for code splitting
@@ -729,6 +730,7 @@ function App() {
               <LiveActivityFeed />
               <LazyNanjilaChatWidget />
               <InstallAppPrompt />
+              <GlobalBackButton />
             </AgeVerificationGate>
           </UpgradeModalProvider>
         </TooltipProvider>
