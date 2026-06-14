@@ -954,6 +954,76 @@ Return ONLY this JSON (no markdown): { "content": "<numbered Q&A with each quest
   // their phone/laptop instead of pasting CV text.
   // ════════════════════════════════════════════════════════════════════════════
   app.post(
+    "/api/jobs/match-upload",
+    isAuthenticated,
+    (req: any, res: Response, next: any) => {
+      upload.single("cv")(req, res, (err: any) => {
+        if (err) {
+          if (err.code === "LIMIT_FILE_SIZE") {
+            return res.status(413).json({ message: "File too large. CV must be under 5 MB." });
+          }
+          console.error("[job_match_upload] multer error:", err?.code, err?.message);
+          return res.status(400).json({ message: err?.message ?? "Upload failed." });
+        }
+        next();
+      });
+    },
+    async (req: any, res: Response) => {
+      try {
+        const matchUserId = req.user?.claims?.sub ?? req.user?.id;
+        if (!matchUserId) return res.status(401).json({ message: "Unauthorised" });
+
+        const matchPlanId = (await storage.getUserPlan(matchUserId) || "free").toLowerCase();
+        if (matchPlanId === "free") {
+          return res.status(403).json({
+            message: "AI Job Matching is available on Basic and Pro plans. Upgrade to find the best overseas jobs for your profile.",
+            upgradeRequired: true,
+          });
+        }
+
+        if (!req.file || !req.file.buffer) {
+          return res.status(400).json({ message: "No CV file received. Please pick a PDF or Word (.docx) file." });
+        }
+
+        console.log("[job_match_upload] userId=" + matchUserId + " fileName=" + req.file.originalname + " size=" + req.file.size + "B mime=" + req.file.mimetype);
+
+        const extracted: any = await extractTextFromBuffer(req.file.buffer, req.file.mimetype, req.file.originalname).catch((e: any) => {
+          console.error("[job_match_upload] extract error:", e?.message);
+          return { text: "", method: "error" };
+        });
+        const cvTextU = extracted?.text || "";
+        const extractMethod = extracted?.method || "unknown";
+        if (!cvTextU || cvTextU.trim().length < MIN_CV_LENGTH) {
+          console.warn("[job_match_upload] extracted only " + cvTextU.trim().length + " chars (method=" + extractMethod + ")");
+          return res.status(422).json({
+            message: "We couldn't read enough text from your CV. Try a different file (text-based PDF or .docx) or paste the text instead.",
+          });
+        }
+
+        const matchModule = await import("./services/jobMatchingService");
+        const matchesUp = await matchModule.getJobMatches(cvTextU.slice(0, 5000));
+
+        await storage
+          .recordToolUsage({
+            userId: matchUserId,
+            toolName: "job_match_upload",
+            metadata: { matchCount: matchesUp.length, extractMethod, fileName: req.file.originalname },
+          })
+          .catch((e: any) => { console.warn("[job_match_upload] usage record:", e?.message); });
+
+        return res.json({ jobs: matchesUp, totalJobs: matchesUp.length });
+      } catch (err: any) {
+        console.error("[job_match_upload] handler error:", err?.message, err?.stack);
+        return res.status(500).json({ message: "We couldn't process your CV. Please try again." });
+      }
+    },
+  );
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // STEP 7: AI JOB MATCHING — PASTE TEXT VARIANT
+  // POST /api/jobs/match
+  // ════════════════════════════════════════════════════════════════════════════
+  app.post(
     "/api/jobs/match",
     isAuthenticated,
     async (req: any, res: Response) => {
