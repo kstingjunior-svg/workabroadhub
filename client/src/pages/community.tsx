@@ -498,5 +498,23 @@ export default function Community() {
                     <Send className="h-4 w-4" />
                   </Button>
                 </div>
+                <div className="mt-1.5 flex items-center justify-between text-[10px] text-gray-500 dark:text-gray-400">
+                  <span>
+                    {tier === "pro" ? (
+                      <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-300">
+                        <CheckCircle2 className="h-3 w-3" /> Pro — unlimited posts
+                      </span>
+                    ) : tier === "referrer" ? (
+                      <span>{eligibility?.quotaRemaining ?? 0} free posts left today</span>
+                    ) : null}
+                  </span>
+                  <span>{composer.length}/800</span>
+                </div>
+              </div>
+            )}
+          </div>
+        </main>
+      </div>
+    </div>
   );
 }
