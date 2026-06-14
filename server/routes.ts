@@ -5477,9 +5477,9 @@ Crawl-delay: 1`);
       const { userId } = req.params;
       const { planId, transactionCode, note } = req.body;
 
-      const ADMIN_GRANT_VALID = ["trial", "monthly", "pro"];
+      const ADMIN_GRANT_VALID = ["trial", "basic", "monthly", "yearly", "pro", "pro_referral"];
       if (!planId || !ADMIN_GRANT_VALID.includes(planId)) {
-        return res.status(400).json({ message: "planId must be one of: trial, monthly, pro" });
+        return res.status(400).json({ message: "planId must be one of: trial, basic, monthly, yearly, pro, pro_referral" });
       }
       if (!transactionCode) {
         return res.status(400).json({ message: "transactionCode is required (M-Pesa receipt or PayPal order ID)" });
@@ -6305,9 +6305,9 @@ Crawl-delay: 1`);
       if (!receipt || typeof receipt !== "string") {
         return res.status(400).json({ message: "receipt is required" });
       }
-      const PAYMENT_SUCCESS_VALID = ["trial", "monthly", "pro"];
+      const PAYMENT_SUCCESS_VALID = ["trial", "basic", "monthly", "yearly", "pro", "pro_referral"];
       if (!PAYMENT_SUCCESS_VALID.includes(planId)) {
-        return res.status(400).json({ message: "planId must be one of: trial, monthly, pro" });
+        return res.status(400).json({ message: "planId must be one of: trial, basic, monthly, yearly, pro, pro_referral" });
       }
 
       // Resolve target user
@@ -6978,9 +6978,9 @@ Crawl-delay: 1`);
       if (!identifier || typeof identifier !== "string") {
         return res.status(400).json({ message: "identifier (email or phone) is required" });
       }
-      const MANUAL_GRANT_VALID = ["trial", "monthly", "pro"];
+      const MANUAL_GRANT_VALID = ["trial", "basic", "monthly", "yearly", "pro", "pro_referral"];
       if (!MANUAL_GRANT_VALID.includes(planId)) {
-        return res.status(400).json({ message: "planId must be one of: trial, monthly, pro" });
+        return res.status(400).json({ message: "planId must be one of: trial, basic, monthly, yearly, pro, pro_referral" });
       }
 
       const raw = identifier.trim();
@@ -7098,9 +7098,9 @@ Crawl-delay: 1`);
       if (!raw) {
         return res.status(400).json({ message: "identifier (email or phone) is required" });
       }
-      const ADMIN_UPGRADE_VALID = ["trial", "monthly", "pro"];
+      const ADMIN_UPGRADE_VALID = ["trial", "basic", "monthly", "yearly", "pro", "pro_referral"];
       if (!plan || !ADMIN_UPGRADE_VALID.includes(plan)) {
-        return res.status(400).json({ message: "plan must be one of: trial, monthly, pro" });
+        return res.status(400).json({ message: "plan must be one of: trial, basic, monthly, yearly, pro, pro_referral" });
       }
 
       const lookupType = raw.includes("@") ? "email" : "phone";
@@ -19717,8 +19717,11 @@ If your instinct says "3,500", STOP and re-read the SERVICES block above.`;
         const plan = (dbUser.plan || "free").toLowerCase();
         systemPrompt += `\n\n--- USER CONTEXT ---\nName: ${dbUser.firstName || "unknown"}\nPlan: ${plan.toUpperCase()}\nAccount: ${dbUser.isActive ? "active" : "inactive"}`;
         if (recentPayment) systemPrompt += `\nLast payment: KES ${recentPayment.amount} via ${recentPayment.method} on ${new Date(recentPayment.createdAt).toDateString()}`;
-        if (plan === "pro") {
-          systemPrompt += `\n\nUser is PRO — do NOT pitch upgrade. Help them maximise Pro features.`;
+        // 2026-06: was "if plan === 'pro'" — that pitched upgrade to
+        // paying trial/monthly/yearly customers. Now any paid tier qualifies.
+        const NANJILA_PAID = ["trial", "basic", "monthly", "yearly", "pro", "pro_referral"];
+        if (NANJILA_PAID.includes(plan)) {
+          systemPrompt += `\n\nUser is PAID (${plan.toUpperCase()}) — do NOT pitch upgrade. Help them maximise their plan's features.`;
         } else {
           systemPrompt += `\n\nUser is FREE — actively encourage upgrade to PRO (price in LIVE PRICE OVERRIDE) at /pricing.`;
         }
