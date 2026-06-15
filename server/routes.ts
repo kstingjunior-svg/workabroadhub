@@ -1409,6 +1409,14 @@ export async function registerRoutes(
   const { registerCanadaRoutes } = await import("./routes/canada");
   registerCanadaRoutes(app);
 
+  // 2026-06 Email diagnostic + emergency-verify (admin):
+  //   GET  /api/admin/email/diagnostics
+  //   POST /api/admin/email/test
+  //   POST /api/admin/email/resend-code/:userId
+  //   POST /api/admin/email/force-verify/:userId
+  const { registerEmailAdminRoutes } = await import("./routes/email-admin");
+  registerEmailAdminRoutes(app, isAuthenticated, isAdmin);
+
   // Track active sessions for the admin dashboard real-time counter.
   // Must run after setupAuth so req.session is populated.
   app.use(trackActiveUser);

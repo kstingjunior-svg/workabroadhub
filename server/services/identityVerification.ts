@@ -14,7 +14,11 @@ import { sendEmail } from "../email";
 
 const CODE_TTL_MS = 10 * 60 * 1000;          // 10 minutes
 const MAX_ATTEMPTS = 5;
-const MAX_CODES_PER_HOUR = 3;
+// 2026-06: bumped from 3 to 6. Three was too aggressive — users hitting "resend"
+// twice while panicking (one for "didn't arrive", one for spam-folder thinking)
+// would lock themselves out for an hour. Six gives a reasonable buffer while
+// still preventing pure abuse.
+const MAX_CODES_PER_HOUR = 6;
 
 function sha256(s: string): string {
   return crypto.createHash("sha256").update(s).digest("hex");
@@ -87,13 +91,25 @@ export async function sendEmailVerificationCode(
   </div>`;
   const text = `Your WorkAbroad Hub verification code: ${code}\nExpires in 10 minutes.\nIf you didn't request it, ignore this email.`;
 
-  try {
-    await sendEmail({ to: dest, subject: `Your WorkAbroad Hub verification code: ${code}`, html, text });
-    return { ok: true };
-  } catch (err: any) {
-    console.error("[Verification] email send failed:", err.message);
-    return { ok: false, code: "send_failed", message: "Could not send verification email. Please try again." };
-  }
+  // 2026-06: surface the underlying provider failure to the caller so the API
+  // route can decide between "show generic retry", "offer SMS fallback", or
+  // "tell user to check spam". Previously we returned 429 for ALL failures —
+  // including SMTP auth failures — leaving the user trying to "wait an hour".
+  const result = await sendEmail({
+    to: dest,
+    subject: `Your WorkAbroad Hub verification code: ${code}`,
+    html,
+    text,
+  });
+  if (result.success) return { ok: true };
+  console.error(`[Verification] email send failed for ${dest}: ${result.error}`);
+  return {
+    ok: false,
+    code: "send_failed",
+    message: "We couldn't deliver the verification code to your inbox. " +
+      "Please check that your email is spelled correctly, then try again. " +
+      "If it keeps failing, switch to SMS verification or contact support@workabroadhub.tech.",
+  };
 }
 
 /**

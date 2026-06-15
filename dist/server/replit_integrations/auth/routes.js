@@ -536,9 +536,23 @@ function registerAuthRoutes(app) {
         if (u.email_verified)
             return res.json({ ok: true, message: "Email already verified." });
         const result = await (0, identityVerification_1.sendEmailVerificationCode)(userId, u.email);
-        if (!result.ok)
-            return res.status(429).json({ message: result.message });
-        res.json({ ok: true, message: "Verification code sent. Check your inbox." });
+        if (!result.ok) {
+            // 2026-06: previously all failures returned 429 ("Too many requests"),
+            // which made delivery failures look like rate-limiting. Now we map
+            // each failure code to the right HTTP status so the client can show
+            // appropriate copy AND offer SMS fallback when delivery is the issue.
+            const status = result.code === "rate_limited" ? 429
+                : result.code === "send_failed" ? 502
+                    : 500;
+            return res.status(status).json({
+                message: result.message,
+                code: result.code,
+                // Tell the client to surface the SMS fallback button when email is
+                // broken — users always have an alternate path.
+                offerSmsFallback: result.code === "send_failed",
+            });
+        }
+        res.json({ ok: true, message: "Verification code sent. Check your inbox (and spam)." });
     });
     app.post("/api/auth/send-phone-code", async (req, res) => {
         const userId = getSessionUserId(req);

@@ -132,11 +132,25 @@ export default function AccountVerifyPage() {
   async function sendEmail() {
     setEmailSending(true);
     try {
-      await jsonPost("/api/auth/send-email-code", {});
+      const result = await jsonPost("/api/auth/send-email-code", {}) as any;
       setEmailCodeSent(true);
-      toast({ title: "Code sent", description: "Check your inbox for a 6-digit code." });
+      toast({
+        title: "Code sent",
+        description: result?.message || "Check your inbox AND your spam folder for a 6-digit code.",
+      });
     } catch (err: any) {
-      toast({ title: "Could not send code", description: err.message, variant: "destructive" });
+      // 2026-06: surface delivery failure clearly and offer fallback path.
+      // Previously this was a generic "Could not send code" — users had no
+      // idea whether to retry, wait, or switch to phone verification.
+      const offerSms = err?.body?.offerSmsFallback || /deliver|send|smtp/i.test(err?.message || "");
+      toast({
+        title: "Email delivery problem",
+        description: offerSms
+          ? `${err.message} — try the SMS option below, or contact support@workabroadhub.tech with your email and we'll verify you manually.`
+          : err.message,
+        variant: "destructive",
+        duration: 12000,
+      });
     } finally {
       setEmailSending(false);
     }

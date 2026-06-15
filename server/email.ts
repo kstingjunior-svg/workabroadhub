@@ -1,6 +1,9 @@
 // Email sending service for WorkAbroad Hub
 // Uses nodemailer with Gmail (GMAIL_USER + GMAIL_APP_PASSWORD) or generic SMTP (SMTP_* vars)
+// + Resend HTTP API as automatic fallback (RESEND_API_KEY). Multi-provider
+// failover + diagnostic logging lives in lib/email-providers.ts.
 import nodemailer from "nodemailer";
+import { sendWithFailover, clearProviderCache } from "./lib/email-providers";
 
 /** Escapes user-controlled strings before interpolating into HTML email templates. */
 function escapeHtml(value: string | null | undefined): string {
@@ -62,6 +65,7 @@ function getTransporter(): nodemailer.Transporter | null {
 /** Clears cached transporter (call after env vars change) */
 export function clearEmailCache() {
   _transporter = null;
+  clearProviderCache();
 }
 
 function getFromAddress(): string {
@@ -83,33 +87,17 @@ export async function sendEmail(options: {
   html: string;
   text?: string;
 }): Promise<EmailResult> {
-  const transporter = getTransporter();
-
-  if (!transporter) {
-    // Fallback: log to console so OTPs are visible in dev even without SMTP
-    console.warn(
-      `[Email] No email provider configured. Would send to ${options.to}:\n  Subject: ${options.subject}\n  Body: ${options.text || options.html}`,
-    );
-    return {
-      success: false,
-      error: "Email provider not configured. Set GMAIL_USER + GMAIL_APP_PASSWORD or SMTP_* secrets.",
-    };
+  // 2026-06: use multi-provider failover (Gmail → Resend) + diagnostic logging.
+  // Fixes "users not receiving verification codes" caused by Gmail SMTP being
+  // intermittently rejected (revoked app password, header rewrite, etc.).
+  const outcome = await sendWithFailover(options);
+  if (outcome.success) {
+    return { success: true, messageId: outcome.messageId };
   }
-
-  try {
-    const info = await transporter.sendMail({
-      from: `"WorkAbroad Hub" <${getFromAddress()}>`,
-      to: options.to,
-      subject: options.subject,
-      text: options.text,
-      html: options.html,
-    });
-    console.log(`[Email] Sent to ${options.to}: ${info.messageId}`);
-    return { success: true, messageId: info.messageId };
-  } catch (err: any) {
-    console.error(`[Email] Failed to send to ${options.to}:`, err.message);
-    return { success: false, error: err.message };
-  }
+  return {
+    success: false,
+    error: outcome.error || "Email send failed via all providers",
+  };
 }
 
 // ── Templated emails ─────────────────────────────────────────────────────────
