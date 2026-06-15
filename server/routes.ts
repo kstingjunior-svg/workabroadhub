@@ -1403,6 +1403,12 @@ export async function registerRoutes(
   const { registerBookmarkRoutes } = await import("./routes/bookmarks");
   registerBookmarkRoutes(app);
 
+  // 2026-06 Canada Express Entry + Jobs hub:
+  //   GET  /api/canada/programs, /fees, /noc, /eca-providers, /portals, /draws
+  //   POST /api/canada/crs   (working CRS calculator)
+  const { registerCanadaRoutes } = await import("./routes/canada");
+  registerCanadaRoutes(app);
+
   // Track active sessions for the admin dashboard real-time counter.
   // Must run after setupAuth so req.session is populated.
   app.use(trackActiveUser);

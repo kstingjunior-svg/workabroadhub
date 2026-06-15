@@ -35,6 +35,7 @@ import { DashboardInterviewCard } from "@/components/dashboard-interview-card";
 import { DashboardContinueCard } from "@/components/dashboard-continue-card";
 import { DashboardBookmarksCard } from "@/components/dashboard-bookmarks-card";
 import { DashboardCalculatorCard } from "@/components/dashboard-calculator-card";
+import { DashboardCanadaCard } from "@/components/dashboard-canada-card";
 import { DashboardSuccessStories } from "@/components/dashboard-success-stories";
 import { DashboardBestMatch } from "@/components/dashboard-best-match";
 import { DashboardVisaJobsLocked } from "@/components/dashboard-visa-jobs-locked";
@@ -1330,6 +1331,9 @@ export default function Dashboard() {
         {/* Retention #1: journey roadmap progress card — gives users a clear
             "what's next" anchor every time they open the dashboard. */}
         <DashboardJourneyCard />
+        {/* Canada Express Entry teaser — high-demand destination, surfaces
+            the CRS calculator / job portals / cost breakdown on rotation. */}
+        <DashboardCanadaCard />
         {/* Retention #2: salary teaser — rotates daily, anchors users to
             specific aspirations ("if I get hired as a nurse in UAE..."). */}
         <DashboardSalaryTeaser />

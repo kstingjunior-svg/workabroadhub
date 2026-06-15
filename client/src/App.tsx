@@ -139,6 +139,13 @@ const SalaryPage = lazyWithRetry(() => import("@/pages/salary"));
 const InterviewPage = lazyWithRetry(() => import("@/pages/interview"));
 const BookmarksPage = lazyWithRetry(() => import("@/pages/bookmarks"));
 const CalculatorPage = lazyWithRetry(() => import("@/pages/calculator"));
+// 2026-06 Canada Express Entry hub (production):
+//   /canada       — overview, programs, fees, draws
+//   /canada/crs   — working CRS calculator (official IRCC formula)
+//   /canada/jobs  — verified Canadian job portals + NOC 2021 finder
+const CanadaPage    = lazyWithRetry(() => import("@/pages/canada"));
+const CanadaCrsPage = lazyWithRetry(() => import("@/pages/canada-crs"));
+const CanadaJobsPage = lazyWithRetry(() => import("@/pages/canada-jobs"));
 const AdminUnmatchedPayments = lazyWithRetry(() => import("@/pages/admin/unmatched-payments"));
 const AdminServices = lazyWithRetry(() => import("@/pages/admin/services"));
 const AdminAlerts = lazyWithRetry(() => import("@/pages/admin/alerts"));
@@ -365,6 +372,9 @@ const LazySalaryPage = withSuspense(SalaryPage);
 const LazyInterviewPage = withSuspense(InterviewPage);
 const LazyBookmarksPage = withSuspense(BookmarksPage);
 const LazyCalculatorPage = withSuspense(CalculatorPage);
+const LazyCanadaPage = withSuspense(CanadaPage);
+const LazyCanadaCrsPage = withSuspense(CanadaCrsPage);
+const LazyCanadaJobsPage = withSuspense(CanadaJobsPage);
 const LazyAdminUnmatchedPayments = withSuspense(AdminUnmatchedPayments);
 const LazyAdminServices = withSuspense(AdminServices);
 const LazyAdminAlerts = withSuspense(AdminAlerts);
@@ -482,6 +492,10 @@ function AuthenticatedRoutes() {
       <Route path="/interview" component={LazyInterviewPage} />
       <Route path="/bookmarks" component={LazyBookmarksPage} />
       <Route path="/calculator" component={LazyCalculatorPage} />
+      {/* 2026-06 Canada Express Entry hub */}
+      <Route path="/canada/crs" component={LazyCanadaCrsPage} />
+      <Route path="/canada/jobs" component={LazyCanadaJobsPage} />
+      <Route path="/canada" component={LazyCanadaPage} />
       <Route path="/admin/unmatched-payments" component={LazyAdminUnmatchedPayments} />
       <Route path="/admin/services" component={LazyAdminServices} />
       <Route path="/admin/alerts" component={LazyAdminAlerts} />
@@ -709,6 +723,10 @@ function Router() {
         <Route path="/career-match" component={ProtectedRedirect} />
         <Route path="/service-order/:serviceId" component={LazyServiceOrderPage} />
         <Route path="/global-opportunities" component={LazyGlobalOpportunities} />
+        {/* Canada Express Entry hub — public so we can market it */}
+        <Route path="/canada/crs" component={LazyCanadaCrsPage} />
+        <Route path="/canada/jobs" component={LazyCanadaJobsPage} />
+        <Route path="/canada" component={LazyCanadaPage} />
         <Route path="/login" component={LazyLoginPage} />
         <Route path="/signup" component={LazyLoginPage} />
         <Route path="/forgot-password" component={LazyForgotPassword} />

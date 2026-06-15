@@ -1230,6 +1230,11 @@ async function registerRoutes(httpServer, app) {
     // 2026-06 retention #5: bookmarks (save jobs, portals, services for later)
     const { registerBookmarkRoutes } = await Promise.resolve().then(() => __importStar(require("./routes/bookmarks")));
     registerBookmarkRoutes(app);
+    // 2026-06 Canada Express Entry + Jobs hub:
+    //   GET  /api/canada/programs, /fees, /noc, /eca-providers, /portals, /draws
+    //   POST /api/canada/crs   (working CRS calculator)
+    const { registerCanadaRoutes } = await Promise.resolve().then(() => __importStar(require("./routes/canada")));
+    registerCanadaRoutes(app);
     // Track active sessions for the admin dashboard real-time counter.
     // Must run after setupAuth so req.session is populated.
     app.use(active_users_1.trackActiveUser);
