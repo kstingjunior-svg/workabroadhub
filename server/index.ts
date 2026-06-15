@@ -128,6 +128,36 @@ const PORT = parseInt(process.env.PORT || "5000", 10);
 
 httpServer.listen(PORT, "0.0.0.0", () => {
   console.log(`[Server] Running on port ${PORT}`);
+
+  // 2026-06 CRITICAL: start BullMQ workers on boot. These three queues handle
+  // ATS CV generation, bulk job applications, and job-alert delivery — all
+  // PAID services. Without the workers running, every paid order's job
+  // silently piles up in Redis with no consumer, the user sees "your CV is
+  // being generated" but nothing ever arrives. Tony hit exactly this case.
+  //
+  // Order matters: CV first (highest-impact paid service), then app, then job.
+  // Each worker logs its own startup line so Render's startup log makes it
+  // obvious if any of them failed to come up.
+  (async () => {
+    try {
+      const { startCvWorker } = await import("./lib/cvQueue");
+      startCvWorker();
+    } catch (err: any) {
+      console.error("[Server] ❌ CV worker failed to start:", err?.message);
+    }
+    try {
+      const { startAppWorker } = await import("./lib/appQueue");
+      startAppWorker();
+    } catch (err: any) {
+      console.error("[Server] ❌ App worker failed to start:", err?.message);
+    }
+    try {
+      const { startJobWorker } = await import("./lib/jobQueue");
+      startJobWorker();
+    } catch (err: any) {
+      console.error("[Server] ❌ Job worker failed to start:", err?.message);
+    }
+  })();
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
