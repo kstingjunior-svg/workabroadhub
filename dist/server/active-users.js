@@ -9,17 +9,33 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.trackActiveUser = trackActiveUser;
 exports.getActiveUserCounts = getActiveUserCounts;
-const ACTIVE_WINDOW_MS = 5 * 60 * 1000; // consider a session "active" if seen in last 5 min
+// 2026-06 STABILITY FIX: 10 minute window (was 5 min). On Kenyan 3G mobile
+// networks, users routinely have 1-3 min connectivity gaps. A 5-min window
+// dropped them from the count in bursts (180 → 25 cliffs in the admin
+// dashboard). 10 min is forgiving enough to ride out a typical mobile blip
+// while still expiring genuinely-gone users in a reasonable time.
+const ACTIVE_WINDOW_MS = 10 * 60 * 1000;
 // Map<sessionKey, SessionActivity>
 const sessionMap = new Map();
-// Prune expired sessions every minute
+// Prune expired sessions every 30 seconds. More frequent pruning + a wider
+// window means the count smoothly decays as users actually leave, rather
+// than dropping in jumpy 60-sec batches.
 setInterval(() => {
     const cutoff = Date.now() - ACTIVE_WINDOW_MS;
+    let pruned = 0;
     for (const [key, val] of sessionMap) {
-        if (val.lastSeen < cutoff)
+        if (val.lastSeen < cutoff) {
             sessionMap.delete(key);
+            pruned++;
+        }
     }
-}, 60000);
+    // If we ever prune >50 sessions in one pass, log it — that pattern indicates
+    // something pathological (mass network outage, deploy event, etc.) that
+    // would cause the "sudden drop" the founder reported.
+    if (pruned > 50) {
+        console.warn(`[active-users] mass prune: ${pruned} sessions expired in one pass. remaining=${sessionMap.size}`);
+    }
+}, 30000);
 /**
  * Express middleware — call this after session middleware so req.session exists.
  * Tracks any request that carries a session cookie.

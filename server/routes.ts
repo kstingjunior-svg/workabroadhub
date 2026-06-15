@@ -5471,6 +5471,97 @@ Crawl-delay: 1`);
   // ── Admin: manually activate a plan for any user ──────────────────────────
   // Use when automated callback failed (STK not received, PayPal dispute, etc.)
   // and admin has verified the payment externally.
+  // ── Admin: diagnose paying user who can't access Pro ──────────────────────
+  // 2026-06: when a user reports "I paid but I'm still locked out," paste their
+  // email into this endpoint. Returns every payment, every subscription, the
+  // current effective plan from storage.getUserPlan, and a verdict explaining
+  // which gate is rejecting them.
+  app.get("/api/admin/diagnose-user", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const rawEmail = String(req.query.email ?? "").trim().toLowerCase();
+      if (!rawEmail) return res.status(400).json({ message: "email query param required" });
+
+      const [user] = await db.select().from(users).where(eq(users.email, rawEmail)).limit(1);
+      if (!user) return res.status(404).json({ verdict: "no_user_with_that_email", email: rawEmail });
+
+      // All payments, newest first
+      const userPayments = await db.execute(sql`
+        SELECT id, amount, currency, method, status, service_id, transaction_ref, created_at, metadata
+          FROM payments
+         WHERE user_id = ${user.id}
+         ORDER BY created_at DESC
+         LIMIT 20
+      `);
+
+      // All user_subscriptions, newest first
+      const subs = await db.execute(sql`
+        SELECT id, plan, status, start_date, end_date, auto_renew, payment_id, created_at
+          FROM user_subscriptions
+         WHERE user_id = ${user.id}
+         ORDER BY created_at DESC
+         LIMIT 10
+      `);
+
+      // What does storage.getUserPlan currently say? This is the function every
+      // Pro gate uses — if it says "free" that's why the user is locked out.
+      const livePlan = await storage.getUserPlan(user.id).catch((e: any) => ({ error: e?.message }));
+
+      // Verdict — most common diagnosis first
+      const payments = (userPayments as any).rows ?? [];
+      const subRows = (subs as any).rows ?? [];
+      const successfulPayments = payments.filter((p: any) => p.status === "success");
+      const pendingPayments    = payments.filter((p: any) => p.status === "pending");
+      const activeSub          = subRows.find((s: any) => s.status === "active" && (!s.end_date || new Date(s.end_date) > new Date()));
+      const expiredSub         = subRows.find((s: any) => s.status === "active" && s.end_date && new Date(s.end_date) <= new Date());
+
+      let verdict = "unknown";
+      let fix = "manual_investigation";
+
+      if (successfulPayments.length === 0 && pendingPayments.length > 0) {
+        verdict = "payment_stuck_pending — M-Pesa callback never arrived or failed";
+        fix = `Use /api/admin/payments/${pendingPayments[0].id}/activate (verify M-Pesa receipt first), OR POST /api/admin/users/${user.id}/grant-plan { planId, transactionCode } with the M-Pesa code Tony sees on his Safaricom statement`;
+      } else if (successfulPayments.length > 0 && !activeSub && !expiredSub) {
+        verdict = "payment_succeeded_but_no_subscription_row — upgradeUserAccount silently failed at the time of the callback";
+        fix = `POST /api/admin/users/${user.id}/grant-plan { planId: "monthly" (for KES 1000) or "yearly" (KES 4500) or "basic" (KES 99), transactionCode: "${successfulPayments[0].transaction_ref}" }`;
+      } else if (expiredSub && !activeSub) {
+        verdict = "subscription_expired — they used to be Pro but end_date is in the past";
+        fix = `Confirm with the user that this is their NEW payment (not the old expired one). If new, grant a fresh subscription.`;
+      } else if (activeSub && (livePlan as any)?.planId === "free") {
+        verdict = "subscription_active_but_getUserPlan_returns_free — bug in the plan-resolution path";
+        fix = `Open server/storage.ts getUserPlan() and check why this active subscription isn't being read. Likely cause: end_date stored as NULL or in wrong timezone.`;
+      } else if (activeSub) {
+        verdict = "user_should_already_have_pro_access — the issue may be on the client (stale React Query cache)";
+        fix = `Ask user to: (1) log out fully, (2) close all tabs, (3) reopen and log in. The /api/auth/user cache invalidates on login.`;
+      }
+
+      res.json({
+        email: rawEmail,
+        user: {
+          id: user.id,
+          plan: user.plan,
+          subscriptionStatus: user.subscriptionStatus,
+          planEndDate: (user as any).planEndDate,
+          isActive: user.isActive,
+          createdAt: user.createdAt,
+        },
+        livePlan,
+        payments,
+        subscriptions: subRows,
+        summary: {
+          successfulPayments: successfulPayments.length,
+          pendingPayments:    pendingPayments.length,
+          hasActiveSub:       !!activeSub,
+          hasExpiredSub:      !!expiredSub,
+        },
+        verdict,
+        fix,
+      });
+    } catch (err: any) {
+      console.error("[Admin diagnose-user]", err?.message);
+      res.status(500).json({ message: err?.message || "Diagnosis failed" });
+    }
+  });
+
   app.post("/api/admin/users/:userId/grant-plan", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const adminId = req.user?.claims?.sub;
