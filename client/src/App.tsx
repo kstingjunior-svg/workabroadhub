@@ -29,6 +29,7 @@ import { useNanjilaIdleNudge } from "@/hooks/use-nanjila-idle-nudge";
 import { LiveActivityFeed } from "@/components/live-activity-feed";
 import { InstallAppPrompt } from "@/components/install-app-prompt";
 import { GlobalBackButton } from "@/components/global-back-button";
+import GlobalPlanListener from "@/components/global-plan-listener";
 
 // =============================================================================
 // PERFORMANCE: Lazy load ALL pages for code splitting
@@ -734,6 +735,7 @@ function App() {
               <LazyNanjilaChatWidget />
               <InstallAppPrompt />
               <GlobalBackButton />
+              <GlobalPlanListener />
             </AgeVerificationGate>
           </UpgradeModalProvider>
         </TooltipProvider>

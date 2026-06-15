@@ -5136,6 +5136,25 @@ Crawl-delay: 1`);
                 paymentId: payment.id,
                 note: note || "",
             }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+            // 2026-06 FIX: bust the auth-user cache so the next /api/auth/user
+            // call returns the Pro plan immediately. Without this the grant
+            // lingers behind the 30 s server cache + 15 s browser cache.
+            app.invalidateAuthUserCache?.(userId);
+            // 2026-06 FIX: push the unlock over the user's WebSocket channel so
+            // any open tab updates without a refresh.
+            try {
+                const { notifyUserPlanActivated } = await Promise.resolve().then(() => __importStar(require("./websocket")));
+                notifyUserPlanActivated(userId, {
+                    type: "plan_activated",
+                    planId,
+                    expiresAt: result.expiresAt instanceof Date ? result.expiresAt.toISOString() : String(result.expiresAt ?? ""),
+                    method: "mpesa",
+                    transactionId: transactionCode,
+                });
+            }
+            catch (err) {
+                console.warn(`[Admin/grant-plan] WS push failed (non-fatal): ${err?.message}`);
+            }
             console.log(`[Admin] Manual plan grant: userId=${userId} plan=${planId} txn=${transactionCode} by admin=${adminId}`);
             res.json({
                 success: true,
@@ -6551,12 +6570,34 @@ Crawl-delay: 1`);
             });
             await storage_1.storage.activateUserPlan(user.id, planId, payment.id, expiresAt);
             await storage_1.storage.updateUserStage(user.id, "paid").catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+            // 2026-06 FIX: invalidate the auth-user cache so the user's next
+            // /api/auth/user call returns the freshly-granted plan instead of the
+            // stale "free" record. Without this the grant takes effect in the DB
+            // but the user sees "Upgrade to Pro" for up to 30 seconds (server
+            // cache) + 15 seconds (browser cache).
+            app.invalidateAuthUserCache?.(user.id);
+            // 2026-06 FIX: push a real-time plan_activated event over WebSocket so
+            // any open tab the user has unlocks Pro immediately — no refresh
+            // needed. The client's /ws/user channel reacts to this and refetches.
+            try {
+                const { notifyUserPlanActivated } = await Promise.resolve().then(() => __importStar(require("./websocket")));
+                notifyUserPlanActivated(user.id, {
+                    type: "plan_activated",
+                    planId,
+                    expiresAt: expiresAt.toISOString(),
+                    method: "mpesa",
+                    transactionId: transactionRef,
+                });
+            }
+            catch (err) {
+                console.warn(`[ManualGrant] WS push failed (non-fatal): ${err?.message}`);
+            }
             // In-app notification for the user
             storage_1.storage.createUserNotification({
                 userId: user.id,
                 type: "success",
-                title: "Pro Plan Activated",
-                message: `Your Pro plan has been activated by the admin team. Expires ${expiresAt.toLocaleDateString("en-KE")}.`,
+                title: `${planId === "trial" ? "Trial" : planId === "monthly" ? "Monthly" : "Pro"} Plan Activated`,
+                message: `Your ${planId} plan has been activated by the admin team. Expires ${expiresAt.toLocaleDateString("en-KE")}.`,
             }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
             // Admin audit log
             await storage_1.storage.logAdminAction(adminId, "manual_plan_grant", {
