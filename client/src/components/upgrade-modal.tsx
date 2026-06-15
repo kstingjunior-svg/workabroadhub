@@ -7,6 +7,7 @@ import { UPGRADE_MODAL_FREE, UPGRADE_MODAL_PRO } from "@/lib/plan-features";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
+import { isPaidUser } from "@/lib/plan";
 
 interface PublicStats {
   scamReportsThisMonth: number;
@@ -112,6 +113,23 @@ export function UpgradeModal() {
     staleTime: 60_000,
     enabled: state.open,
   });
+
+  // 2026-06 FIX: read the user's CURRENT plan so we can label the right card
+  // as "Current" (the old hard-coded label always said "Current" on Free,
+  // which lied to paying customers and made them think the system forgot
+  // their payment).
+  const { data: livePlan } = useQuery<{ planId: string } | null>({
+    queryKey: ["/api/user/plan"],
+    enabled: state.open && !!user,
+    staleTime: 30_000,
+  });
+  const currentPlanId: string = (livePlan?.planId ?? (user as any)?.plan ?? "free").toLowerCase();
+  const isCurrent = (cardPlanId: "free" | "trial" | "monthly" | "yearly" | "pro") => {
+    if (cardPlanId === "free") return currentPlanId === "free";
+    if (cardPlanId === "yearly" || cardPlanId === "pro")
+      return currentPlanId === "yearly" || currentPlanId === "pro" || currentPlanId === "pro_referral";
+    return currentPlanId === cardPlanId;
+  };
 
   // Single price used by FeeBreakdown + receipt summary. Tracks the selected
   // tier so the breakdown updates when the user toggles between plans.
@@ -286,7 +304,9 @@ export function UpgradeModal() {
                   Limited preview
                 </div>
                 <div className="p-2 pt-0">
-                  <div className="w-full text-center text-[10px] text-muted-foreground py-1.5 font-medium">Current</div>
+                  <div className="w-full text-center text-[10px] text-muted-foreground py-1.5 font-medium">
+                    {isCurrent("free") ? "Current" : " "}
+                  </div>
                 </div>
               </div>
 
