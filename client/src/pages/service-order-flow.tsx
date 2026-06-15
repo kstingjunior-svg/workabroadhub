@@ -179,6 +179,11 @@ export default function ServiceOrderFlow() {
 
   function startPolling(id: string) {
     if (pollRef.current) window.clearInterval(pollRef.current);
+    // 2026-06 RESILIENCE: track when polling started so we can show a clear
+    // "still working — we'll email you" message after 2 min instead of
+    // letting the user stare at an infinite spinner if the AI step hangs.
+    const startedAt = Date.now();
+    let slowMessageShown = false;
     pollRef.current = window.setInterval(async () => {
       try {
         const res = await fetch(`/api/services/order/${id}/status`, { credentials: "include" });
@@ -190,8 +195,20 @@ export default function ServiceOrderFlow() {
           setStage("done");
         } else if (data.status === "failed") {
           if (pollRef.current) window.clearInterval(pollRef.current);
-          setErrorMsg(data.error ?? "Processing failed.");
+          setErrorMsg(data.error ?? "Processing failed. We'll keep retrying and email you when it's ready — or contact support and we'll regenerate it immediately.");
           setStage("failed");
+        } else {
+          // Still pending or processing — surface a softer message after 2 min
+          // so the user knows we haven't forgotten them.
+          const elapsedSec = (Date.now() - startedAt) / 1000;
+          if (elapsedSec > 120 && !slowMessageShown) {
+            slowMessageShown = true;
+            toast({
+              title: "Still working on it",
+              description: "Taking longer than usual. We'll keep trying in the background and email/WhatsApp you the moment it's ready. You can safely close this tab.",
+              duration: 12000,
+            });
+          }
         }
       } catch {
         /* transient — keep polling */
@@ -498,6 +515,19 @@ export default function ServiceOrderFlow() {
               <p className="text-sm text-muted-foreground">
                 <Clock className="inline h-3.5 w-3.5 mr-1" />
                 Usually takes under {Math.ceil(estSeconds / 60) || 1} minute. Keep this tab open.
+              </p>
+              {/* 2026-06 RESILIENCE: tell users they can safely close the tab —
+                  the server's recovery sweep keeps retrying and we'll notify
+                  them. No more "infinite spinner" panic. */}
+              <p className="text-xs text-muted-foreground/80 pt-3 max-w-xs mx-auto">
+                Safe to close — we'll email you and post it to your{" "}
+                <button
+                  onClick={() => navigate("/my-documents")}
+                  className="underline underline-offset-2 hover:text-foreground"
+                >
+                  My Documents
+                </button>{" "}
+                page the moment it's ready.
               </p>
             </CardContent>
           )}

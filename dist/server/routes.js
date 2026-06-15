@@ -5077,6 +5077,52 @@ Crawl-delay: 1`);
             res.status(500).json({ message: err?.message || "Failed to regenerate CV" });
         }
     });
+    // ── Admin: retry a stuck service order (cv_fix_lite, ATS, etc.) ───────────
+    // 2026-06: built after a user got stuck on "Generating your CV Fix Lite..."
+    // forever because the AI step silently failed. Forces processOrder() to
+    // re-run for the given orderId.
+    app.post("/api/admin/service-order/:orderId/retry", auth_1.isAuthenticated, isAdmin, async (req, res) => {
+        try {
+            const orderId = String(req.params.orderId || "").trim();
+            if (!orderId)
+                return res.status(400).json({ message: "orderId required" });
+            const { rows } = await db_1.pool.query(`SELECT id, status, service_slug, output_text FROM service_orders WHERE id = $1`, [orderId]);
+            const order = rows[0];
+            if (!order)
+                return res.status(404).json({ message: `Order ${orderId} not found` });
+            // Force-reset to 'paid' so processOrder will run regardless of current state
+            await db_1.pool.query(`UPDATE service_orders SET status = 'paid', error_message = NULL, output_text = NULL, updated_at = NOW() WHERE id = $1`, [orderId]);
+            const mod = await Promise.resolve().then(() => __importStar(require("./service-order-routes")));
+            // processOrder isn't exported — use onPaymentSuccessForServiceOrder which calls it
+            await mod.onPaymentSuccessForServiceOrder(orderId);
+            const { rows: after } = await db_1.pool.query(`SELECT status, output_text IS NOT NULL AS has_output, error_message FROM service_orders WHERE id = $1`, [orderId]);
+            res.json({ ok: true, before: { status: order.status, slug: order.service_slug }, after: after[0] });
+        }
+        catch (err) {
+            console.error("[Admin retry service-order]", err?.message);
+            res.status(500).json({ message: err?.message ?? "Retry failed" });
+        }
+    });
+    // ── Admin: list stuck service orders ──────────────────────────────────────
+    app.get("/api/admin/service-orders/stuck", auth_1.isAuthenticated, isAdmin, async (_req, res) => {
+        try {
+            const { rows } = await db_1.pool.query(`
+        SELECT id, user_id, service_slug, status, amount, created_at, updated_at,
+               (output_text IS NOT NULL AND output_text != '') AS has_output,
+               error_message
+          FROM service_orders
+         WHERE status IN ('paid', 'processing')
+           AND (output_text IS NULL OR output_text = '')
+           AND updated_at < NOW() - INTERVAL '60 seconds'
+         ORDER BY created_at DESC
+         LIMIT 100
+      `);
+            res.json({ count: rows.length, orders: rows });
+        }
+        catch (err) {
+            res.status(500).json({ message: err?.message ?? "Failed to list stuck orders" });
+        }
+    });
     // ── Admin: drain stuck CV queue (force re-enqueue waiting jobs) ───────────
     app.post("/api/admin/cv-queue/drain", auth_1.isAuthenticated, isAdmin, async (_req, res) => {
         try {

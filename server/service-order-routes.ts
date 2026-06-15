@@ -548,6 +548,72 @@ export async function onPaymentSuccessForServiceOrder(orderId: string): Promise<
   processOrder(orderId).catch((e) => console.error("[ServiceOrder] async process failed:", e?.message));
 }
 
+// ── Stuck-order recovery sweep ──────────────────────────────────────────────
+//
+// 2026-06: built after the cv_fix_lite "Generating..." infinite spinner.
+// Root cause was that processOrder() can silently fail (OpenAI timeout, transient
+// DB blip, or the payment-pipeline metadata missing `serviceOrderId`), leaving
+// the order at status='paid' or 'processing' with no AI output.
+//
+// This sweep runs every minute. For every order that's been in
+// paid|processing for more than 90 s with no output_text, we re-trigger
+// processOrder. Idempotent: if the AI later does deliver, the duplicate
+// run is a no-op (it'll re-write the SAME output_text and 'completed' state).
+let stuckSweepStarted = false;
+export function startStuckOrderSweep(): void {
+  if (stuckSweepStarted) return;
+  stuckSweepStarted = true;
+  const SWEEP_INTERVAL_MS = 60_000;
+  const STUCK_AFTER_SECONDS = 90;
+  const MAX_RETRIES_PER_ORDER = 3;
+
+  const retries = new Map<string, number>();
+
+  setInterval(async () => {
+    try {
+      const { rows } = await pool.query<{ id: string; status: string; service_slug: string }>(
+        `SELECT id, status, service_slug
+           FROM service_orders
+          WHERE status IN ('paid', 'processing')
+            AND (output_text IS NULL OR output_text = '')
+            AND updated_at < NOW() - INTERVAL '${STUCK_AFTER_SECONDS} seconds'
+          ORDER BY updated_at ASC
+          LIMIT 25`,
+      );
+      if (rows.length === 0) return;
+      console.log(`[ServiceOrder] Recovery sweep: ${rows.length} stuck order(s) to retry`);
+
+      for (const row of rows) {
+        const attempts = retries.get(row.id) ?? 0;
+        if (attempts >= MAX_RETRIES_PER_ORDER) {
+          // Mark failed so the client surfaces an error instead of spinning
+          await pool.query(
+            `UPDATE service_orders
+                SET status = 'failed',
+                    error_message = COALESCE(error_message, '') ||
+                                    E'\n[recovery] Exhausted ${MAX_RETRIES_PER_ORDER} retries.',
+                    updated_at = NOW()
+              WHERE id = $1 AND status IN ('paid', 'processing')`,
+            [row.id],
+          ).catch(() => {});
+          retries.delete(row.id);
+          console.warn(`[ServiceOrder] Recovery: order ${row.id} (${row.service_slug}) failed after ${MAX_RETRIES_PER_ORDER} retries`);
+          continue;
+        }
+        retries.set(row.id, attempts + 1);
+        console.log(`[ServiceOrder] Recovery: retrying ${row.id} (${row.service_slug}) attempt ${attempts + 1}`);
+        processOrder(row.id).catch((e) =>
+          console.error(`[ServiceOrder] Recovery retry failed for ${row.id}:`, e?.message)
+        );
+      }
+    } catch (err: any) {
+      console.error("[ServiceOrder] Recovery sweep error:", err?.message);
+    }
+  }, SWEEP_INTERVAL_MS).unref?.();
+
+  console.log(`[ServiceOrder] Stuck-order recovery sweep started — every ${SWEEP_INTERVAL_MS / 1000}s, retries orders stuck >${STUCK_AFTER_SECONDS}s`);
+}
+
 // ── Route registration ─────────────────────────────────────────────────────
 export function registerServiceOrderRoutes(app: Express, isAuthenticated: RequestHandler) {
   // POST /api/services/order/:slug

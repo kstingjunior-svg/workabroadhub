@@ -157,6 +157,15 @@ httpServer.listen(PORT, "0.0.0.0", () => {
     } catch (err: any) {
       console.error("[Server] ❌ Job worker failed to start:", err?.message);
     }
+    // Service-order recovery sweep: retries any service order stuck in
+    // paid|processing state for >90 s. Protects against silent OpenAI
+    // timeouts and lost callback metadata.
+    try {
+      const { startStuckOrderSweep } = await import("./service-order-routes");
+      startStuckOrderSweep();
+    } catch (err: any) {
+      console.error("[Server] ❌ Stuck-order sweep failed to start:", err?.message);
+    }
   })();
 });
 
