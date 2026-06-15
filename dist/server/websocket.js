@@ -6,6 +6,29 @@
  *                                               and live stats updates (user count, active now)
  * User channel:   ws[s]://host/ws/user       — receives plan-activated events for the logged-in user
  */
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.setStatsProvider = setStatsProvider;
 exports.initWebSocketServer = initWebSocketServer;
@@ -19,6 +42,7 @@ exports.notifyApplicationReady = notifyApplicationReady;
 exports.getConnectedClients = getConnectedClients;
 exports.getConnectedUserCount = getConnectedUserCount;
 const ws_1 = require("ws");
+const presence_1 = require("./lib/presence");
 let _statsProvider = null;
 function setStatsProvider(fn) { _statsProvider = fn; }
 let wss = null;
@@ -58,6 +82,27 @@ function initWebSocketServer(httpServer, sessionParser) {
                 }
             }).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
         }
+        // 2026-06 REAL-TIME: also send the current presence snapshot so a new
+        // admin tab sees the Live Sessions panel populated immediately instead
+        // of waiting for the next join/leave or 30 s heartbeat.
+        try {
+            const paidList = (0, presence_1.getPaidOnlineSnapshot)();
+            const allList = (0, presence_1.getOnlineSnapshot)();
+            ws.send(JSON.stringify({
+                type: "presence_update",
+                totalOnline: (0, presence_1.getOnlineCount)(),
+                paidOnline: (0, presence_1.getPaidOnlineCount)(),
+                paidUsers: paidList.map((p) => ({
+                    userId: p.userId, firstName: p.firstName, lastName: p.lastName,
+                    email: p.email, phone: p.phone, planId: p.planId,
+                    expiresAt: p.subscriptionExpiresAt, joinedAt: p.joinedAt,
+                    lastSeen: p.lastSeen, currentPage: p.currentPage,
+                })),
+                allUsers: allList.map((p) => ({ userId: p.userId, firstName: p.firstName, planId: p.planId })),
+                timestamp: Date.now(),
+            }));
+        }
+        catch { /* non-fatal */ }
         ws.on("close", () => { clearInterval(ping); if (process.env.WS_DEBUG === "1")
             console.log("[WS] Analytics client disconnected"); });
         ws.on("error", () => { clearInterval(ping); });
@@ -98,6 +143,45 @@ function initWebSocketServer(httpServer, sessionParser) {
             }
             userConnections.get(registeredUserId).add(ws);
             ws.send(JSON.stringify({ type: "identified", userId: registeredUserId }));
+            // 2026-06 REAL-TIME PRESENCE: as soon as a tab connects we look up the
+            // user's identity + plan from the DB and add them to the presence
+            // registry. Subsequent tabs from the same user just increment the
+            // tab count (no DB read needed). Subscribers (broadcastPresence below)
+            // push the new snapshot to admin + home clients instantly.
+            (async () => {
+                try {
+                    const { db } = await Promise.resolve().then(() => __importStar(require("./db")));
+                    const { users } = await Promise.resolve().then(() => __importStar(require("@shared/models/auth")));
+                    const { eq } = await Promise.resolve().then(() => __importStar(require("drizzle-orm")));
+                    const [u] = await db
+                        .select({
+                        email: users.email,
+                        firstName: users.firstName,
+                        lastName: users.lastName,
+                        phone: users.phone,
+                        plan: users.plan,
+                    })
+                        .from(users)
+                        .where(eq(users.id, claimedId))
+                        .limit(1);
+                    // Fetch active subscription for expiry tracking
+                    const { storage } = await Promise.resolve().then(() => __importStar(require("./storage")));
+                    const sub = await storage.getUserSubscription(claimedId).catch(() => null);
+                    (0, presence_1.attach)(claimedId, {
+                        email: u?.email ?? null,
+                        firstName: u?.firstName ?? null,
+                        lastName: u?.lastName ?? null,
+                        phone: u?.phone ?? null,
+                        planId: sub?.plan ?? u?.plan ?? "free",
+                        subscriptionExpiresAt: sub?.endDate ?? null,
+                    });
+                }
+                catch (err) {
+                    console.warn(`[WS/User] presence attach failed for ${claimedId}: ${err?.message}`);
+                    // Still register them as online so the count is right, just without details
+                    (0, presence_1.attach)(claimedId);
+                }
+            })();
             console.log(`[WS/User] User ${registeredUserId} identified (tabs: ${userConnections.get(registeredUserId).size})${serverVerifiedId ? " ✓session" : ""}`);
         };
         ws.on("message", (raw) => {
@@ -127,11 +211,72 @@ function initWebSocketServer(httpServer, sessionParser) {
                     if (conns.size === 0)
                         userConnections.delete(registeredUserId);
                 }
+                // 2026-06 REAL-TIME: decrement presence. If this was the user's last
+                // tab, presence.detach fires a "leave" event and the broadcaster
+                // pushes the updated snapshot to admin + home clients immediately.
+                (0, presence_1.detach)(registeredUserId);
             }
         });
         ws.on("error", () => { clearInterval(ping); });
     });
     console.log("[WS] User real-time WebSocket server started on /ws/user");
+    // ── Real-time presence broadcaster ──────────────────────────────────────
+    //
+    // Listens for join / leave / update events from server/lib/presence.ts and
+    // pushes two payload shapes:
+    //   • admin clients on /ws/analytics get the full paid-only snapshot with
+    //     email, name, plan, expiry — drives the admin Live Sessions panel
+    //   • all clients on /ws/analytics ALSO get totalOnline for any banner
+    //
+    // We coalesce rapid join/leave bursts into 250 ms batches so the broadcast
+    // doesn't fan-out 100× per second under load.
+    let coalesceTimer = null;
+    const broadcastPresence = () => {
+        if (!wss)
+            return;
+        const totalOnline = (0, presence_1.getOnlineCount)();
+        const paidOnline = (0, presence_1.getPaidOnlineCount)();
+        const paidList = (0, presence_1.getPaidOnlineSnapshot)();
+        const allList = (0, presence_1.getOnlineSnapshot)();
+        const adminPayload = JSON.stringify({
+            type: "presence_update",
+            totalOnline,
+            paidOnline,
+            paidUsers: paidList.map((p) => ({
+                userId: p.userId,
+                firstName: p.firstName,
+                lastName: p.lastName,
+                email: p.email,
+                phone: p.phone,
+                planId: p.planId,
+                expiresAt: p.subscriptionExpiresAt,
+                joinedAt: p.joinedAt,
+                lastSeen: p.lastSeen,
+                currentPage: p.currentPage,
+            })),
+            allUsers: allList.map((p) => ({
+                userId: p.userId,
+                firstName: p.firstName,
+                planId: p.planId,
+            })),
+            timestamp: Date.now(),
+        });
+        wss.clients.forEach((c) => {
+            if (c.readyState === ws_1.WebSocket.OPEN)
+                c.send(adminPayload);
+        });
+    };
+    (0, presence_1.subscribePresence)(() => {
+        if (coalesceTimer)
+            return;
+        coalesceTimer = setTimeout(() => {
+            coalesceTimer = null;
+            broadcastPresence();
+        }, 250);
+    });
+    // Also broadcast a heartbeat every 30 s so newly-connected admin clients
+    // get a fresh snapshot even if no presence events have fired
+    setInterval(broadcastPresence, 30000);
 }
 function broadcastNewUserEvent(event) {
     if (!wss)

@@ -287,12 +287,56 @@ export default function UsersPage() {
     staleTime: 30_000,
   });
 
-  const { data: _raw_liveSessions, refetch: refetchLive  } = useQuery<ActiveSessionRow[]>({
+  // 2026-06 REAL-TIME PRESENCE: was polling /api/admin/active-sessions every
+  // 30 s, which made the Live Sessions widget feel laggy and could show
+  // stale-by-30-seconds data. Now subscribes to /ws/analytics — the server
+  // pushes a presence_update event the moment any paid user joins or leaves,
+  // and the admin Live Sessions panel updates instantly.
+  //
+  // HTTP fallback is kept (REST polling at 60 s) for the rare case where the
+  // WebSocket can't connect (corporate proxy, browser plugin, etc.).
+  const [livePaidSessions, setLivePaidSessions] = useState<ActiveSessionRow[]>([]);
+  const [wsPresenceConnected, setWsPresenceConnected] = useState(false);
+  useEffect(() => {
+    const proto = window.location.protocol === "https:" ? "wss" : "ws";
+    const ws = new WebSocket(`${proto}://${window.location.host}/ws/analytics`);
+    let closed = false;
+    ws.onopen = () => setWsPresenceConnected(true);
+    ws.onmessage = (evt) => {
+      try {
+        const msg = JSON.parse(evt.data);
+        if (msg.type === "presence_update" && Array.isArray(msg.paidUsers)) {
+          setLivePaidSessions(
+            msg.paidUsers.map((p: any) => ({
+              user_id:      p.userId,
+              email:        p.email,
+              phone:        p.phone,
+              first_name:   p.firstName,
+              last_name:    p.lastName,
+              plan:         p.planId,
+              session_id:   p.userId, // one row per user, key by userId
+              current_page: p.currentPage,
+              last_seen:    new Date(p.lastSeen).toISOString(),
+            }))
+          );
+        }
+      } catch { /* malformed message */ }
+    };
+    ws.onclose = () => { setWsPresenceConnected(false); };
+    ws.onerror = () => { setWsPresenceConnected(false); };
+    return () => { closed = true; try { ws.close(); } catch {} };
+  }, []);
+
+  // REST fallback — only used when WebSocket can't connect. Slow poll (60 s).
+  const { data: _raw_liveSessions, refetch: refetchLive } = useQuery<ActiveSessionRow[]>({
     queryKey: ["/api/admin/active-sessions"],
-    refetchInterval: 30_000, // auto-refresh every 30 seconds
-    staleTime: 15_000,
+    refetchInterval: wsPresenceConnected ? false : 60_000,
+    staleTime: 30_000,
+    enabled: !wsPresenceConnected,
   });
-  const liveSessions: ActiveSessionRow[] = Array.isArray(_raw_liveSessions) ? _raw_liveSessions : [];
+  const liveSessions: ActiveSessionRow[] =
+    livePaidSessions.length > 0 ? livePaidSessions :
+    (Array.isArray(_raw_liveSessions) ? _raw_liveSessions : []);
 
   const { data: userPayments, isLoading: userPaymentsLoading } = useQuery<any[]>({
     queryKey: ["/api/admin/users", viewPaymentsUser?.id, "payments"],

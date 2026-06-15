@@ -1,10 +1,13 @@
 /**
  * Compact live activity strip — shows online count + total registered members.
  *
- * Renders as a thin horizontal pill that sits unobtrusively above the dashboard
- * content. Pulls real numbers from /api/public/stats (no fakes) and refreshes
- * every 30 seconds so the "live" number stays current without hammering the API.
+ * 2026-06: now updates in real time over the /ws/analytics WebSocket. When a
+ * user logs in their first tab → count goes up instantly. When their last
+ * tab closes → count goes down instantly. No more 30-second polling lag.
+ * /api/public/stats is still used as the initial snapshot + fallback when
+ * the WebSocket can't connect.
  */
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Users, Wifi } from "lucide-react";
 
@@ -22,11 +25,28 @@ export function LiveActivityStrip() {
       if (!res.ok) throw new Error("Failed to load live stats");
       return res.json();
     },
-    refetchInterval: 30_000,
-    staleTime: 25_000,
+    refetchInterval: 60_000, // backup poll only — WS push is the live source
+    staleTime: 30_000,
   });
 
-  const online = data?.activeNow ?? 0;
+  const [liveOnline, setLiveOnline] = useState<number | null>(null);
+  useEffect(() => {
+    const proto = window.location.protocol === "https:" ? "wss" : "ws";
+    const ws = new WebSocket(`${proto}://${window.location.host}/ws/analytics`);
+    ws.onmessage = (evt) => {
+      try {
+        const msg = JSON.parse(evt.data);
+        if (msg.type === "presence_update" && typeof msg.totalOnline === "number") {
+          setLiveOnline(msg.totalOnline);
+        } else if (msg.type === "stats_update" && typeof msg.activeNow === "number") {
+          setLiveOnline(msg.activeNow);
+        }
+      } catch { /* ignore malformed */ }
+    };
+    return () => { try { ws.close(); } catch {} };
+  }, []);
+
+  const online = liveOnline ?? data?.activeNow ?? 0;
   const total = data?.totalUsers ?? 0;
 
   // Show even before first load — gives the bar a stable height so the page

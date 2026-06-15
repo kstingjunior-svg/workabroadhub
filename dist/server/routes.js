@@ -1309,6 +1309,14 @@ Crawl-delay: 1`);
                 // Non-fatal: presence tracking should never block the response
                 console.warn("[Heartbeat] Presence update failed (non-fatal):", err?.message);
             }
+            // 2026-06 REAL-TIME: update the in-memory presence registry too so the
+            // admin Live Sessions panel sees the user's current_page update without
+            // a fresh fetch. No-op for users who don't have a /ws/user connection.
+            try {
+                const { heartbeat: presenceHeartbeat } = await Promise.resolve().then(() => __importStar(require("./lib/presence")));
+                presenceHeartbeat(userId, currentPage);
+            }
+            catch { /* ignore */ }
         }
         res.json({ ok: true });
     });
@@ -6617,6 +6625,14 @@ Crawl-delay: 1`);
             // but the user sees "Upgrade to Pro" for up to 30 seconds (server
             // cache) + 15 seconds (browser cache).
             app.invalidateAuthUserCache?.(user.id);
+            // 2026-06 REAL-TIME: update the presence registry so the admin Live
+            // Sessions panel reflects the new paid tier immediately (no waiting
+            // for the user to reconnect).
+            try {
+                const { updatePlan: presenceUpdatePlan } = await Promise.resolve().then(() => __importStar(require("./lib/presence")));
+                presenceUpdatePlan(user.id, planId, expiresAt);
+            }
+            catch { /* ignore */ }
             // 2026-06 FIX: push a real-time plan_activated event over WebSocket so
             // any open tab the user has unlocks Pro immediately — no refresh
             // needed. The client's /ws/user channel reacts to this and refetches.

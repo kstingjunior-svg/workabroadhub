@@ -101,6 +101,14 @@ export async function runPaymentPipeline(opts: PaymentPipelineOptions): Promise<
         invalidateAuthUserCache(user.id);
       } catch { /* ignore — best effort */ }
 
+      // 2026-06 REAL-TIME: update the presence registry so the admin Live
+      // Sessions panel sees the user's new paid tier immediately. No-op if
+      // they're not currently online (no /ws/user connection).
+      try {
+        const { updatePlan: presenceUpdatePlan } = await import("../lib/presence");
+        presenceUpdatePlan(user.id, planId, expiresAt);
+      } catch { /* ignore */ }
+
       console.log(`[Pipeline] Step 1 ✓ Plan "${planId}" activated | expires=${expiresAt.toISOString()}`);
     } else {
       // Service purchase — mark user as paid but don't touch plan
