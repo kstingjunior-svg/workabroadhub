@@ -20,7 +20,10 @@ export function startCvWorker() {
       const { userCareerProfiles } = await import("@shared/schema");
       const { eq } = await import("drizzle-orm");
 
-      const user = await storage.getUser(userId);
+      // 2026-06 FIX: was storage.getUser() which doesn't exist (TypeError
+      // every job → 3 retries → silent failure). The actual method is
+      // getUserById, same one used everywhere else in the codebase.
+      const user = await storage.getUserById(userId);
       if (!user) throw new Error(`User ${userId} not found`);
 
       const [careerProfile] = await db

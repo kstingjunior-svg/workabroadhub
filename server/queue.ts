@@ -228,7 +228,8 @@ export function registerQueueHandlers(): void {
       const { userCareerProfiles } = await import("@shared/schema");
       const { eq } = await import("drizzle-orm");
 
-      const user = await storage.getUser(job.userId);
+      // 2026-06 FIX: was storage.getUser() — method doesn't exist, real one is getUserById.
+      const user = await storage.getUserById(job.userId);
       if (!user) throw new Error(`User ${job.userId} not found`);
 
       const [careerProfile] = await db
