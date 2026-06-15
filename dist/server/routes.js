@@ -1329,11 +1329,19 @@ Crawl-delay: 1`);
         }
         res.json({ ok: true });
     });
-    // Presence cleanup — runs every 2 minutes.
-    // Marks offline any session/user whose last heartbeat is older than 2 min.
+    // Presence cleanup — runs every minute, cutoff at 10 minutes.
+    // 2026-06 STABILITY FIX: was every-2-min with 2-min cutoff. That was lethal
+    // on Kenyan 3G — one missed heartbeat (network blip) marked the user offline,
+    // and the cleanup running at 2-min intervals caused cliff drops in the
+    // admin "online" count (Tony reported 180 → 25 → 100 swings).
+    //
+    // Now the cutoff matches the in-memory active-user window (10 min) so a
+    // mobile user with a few-minute gap isn't immediately ejected, AND we run
+    // the sweep every 60 s so genuine departures are reflected smoothly instead
+    // of in 2-min batches.
     setInterval(async () => {
         try {
-            const cutoff = new Date(Date.now() - 2 * 60 * 1000);
+            const cutoff = new Date(Date.now() - 10 * 60 * 1000);
             await Promise.all([
                 db_1.db.update(auth_3.users)
                     .set({ isOnline: false })
@@ -1345,7 +1353,7 @@ Crawl-delay: 1`);
             ]);
         }
         catch { /* non-fatal */ }
-    }, 2 * 60 * 1000);
+    }, 60 * 1000);
     // Basic health check for load balancers (fast, minimal)
     app.get("/api/health", async (req, res) => {
         try {
@@ -1650,16 +1658,35 @@ Crawl-delay: 1`);
             ]);
             const activeVisitors = await storage_1.storage.getActiveUsers(10);
             const countriesServed = Math.max(7, Number((distinctCountries.rows?.[0]?.c) ?? 0));
-            // In-memory session tracker — same source as admin/stats/live (fast, no DB)
-            const liveActive = (0, active_users_1.getActiveUserCounts)();
+            // 2026-06 UNIFY: count online users from the SAME source the admin
+            // dashboard uses — the `active_sessions` table with is_online = true.
+            // Previously the home dashboard read the in-memory sessionMap (which
+            // counted anonymous visitors + bots and showed ~160), while admin read
+            // active_sessions (which only shows authenticated, recently-heartbeating
+            // users and showed ~32). Tony got two different "online now" numbers on
+            // the two screens. Now both screens query the same table → same number.
+            const onlineRows = await db_1.db.execute((0, drizzle_orm_1.sql) `
+        SELECT COUNT(*)::int AS c
+          FROM active_sessions
+         WHERE is_online = true
+           AND last_seen > NOW() - INTERVAL '10 minutes'
+      `);
+            const onlineNow = Number(onlineRows.rows?.[0]?.c ?? 0);
+            // We also expose the in-memory counter as `inMemoryActive` so anything
+            // that legitimately wants to track anonymous landing-page sessions
+            // (uplift banners, marketing) still has a path to it.
+            const inMemoryActive = (0, active_users_1.getActiveUserCounts)();
             res.json({
                 scamReportsThisMonth: Number(scamThisMonth[0]?.c ?? 0),
                 expiredAgencies: Number(expiredAgencies[0]?.c ?? 0),
                 totalAgencies: Number(totalAgencies[0]?.c ?? 0),
                 recentUpgradesThisWeek: Number(recentUpgrades[0]?.c ?? 0),
                 totalUsers: Number(totalUsers[0]?.c ?? 0),
-                activeNow: liveActive.total, // real-time session count (unified source)
-                activeAuthenticated: liveActive.authenticated,
+                // ↓ ONE number for "online now" — same as admin Live Sessions.
+                activeNow: onlineNow,
+                activeAuthenticated: onlineNow,
+                // Diagnostic-only: the in-memory tracker (includes anonymous sessions)
+                inMemoryActive: inMemoryActive.total,
                 activeVisitors,
                 // ── Public stats card metrics ──────────────────────────────────────
                 activePortals: Number(activePortals[0]?.c ?? 0),
