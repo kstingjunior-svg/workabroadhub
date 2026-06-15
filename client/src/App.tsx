@@ -135,6 +135,7 @@ const AdminUsers = lazyWithRetry(() => import("@/pages/admin/users"));
 const AdminPayments = lazyWithRetry(() => import("@/pages/admin/payments"));
 const AdminManualUpgrade = lazyWithRetry(() => import("@/pages/admin/manual-upgrade"));
 const JourneyPage = lazyWithRetry(() => import("@/pages/journey"));
+const SalaryPage = lazyWithRetry(() => import("@/pages/salary"));
 const AdminUnmatchedPayments = lazyWithRetry(() => import("@/pages/admin/unmatched-payments"));
 const AdminServices = lazyWithRetry(() => import("@/pages/admin/services"));
 const AdminAlerts = lazyWithRetry(() => import("@/pages/admin/alerts"));
@@ -357,6 +358,7 @@ const LazyAdminUsers = withSuspense(AdminUsers);
 const LazyAdminPayments = withSuspense(AdminPayments);
 const LazyAdminManualUpgrade = withSuspense(AdminManualUpgrade);
 const LazyJourneyPage = withSuspense(JourneyPage);
+const LazySalaryPage = withSuspense(SalaryPage);
 const LazyAdminUnmatchedPayments = withSuspense(AdminUnmatchedPayments);
 const LazyAdminServices = withSuspense(AdminServices);
 const LazyAdminAlerts = withSuspense(AdminAlerts);
@@ -469,6 +471,7 @@ function AuthenticatedRoutes() {
       <Route path="/admin/manual-upgrade" component={LazyAdminManualUpgrade} />
       <Route path="/journey/:country" component={LazyJourneyPage} />
       <Route path="/journey" component={LazyJourneyPage} />
+      <Route path="/salary" component={LazySalaryPage} />
       <Route path="/admin/unmatched-payments" component={LazyAdminUnmatchedPayments} />
       <Route path="/admin/services" component={LazyAdminServices} />
       <Route path="/admin/alerts" component={LazyAdminAlerts} />

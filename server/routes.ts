@@ -1391,6 +1391,10 @@ export async function registerRoutes(
   const { registerJourneyRoutes } = await import("./routes/journey");
   registerJourneyRoutes(app);
 
+  // 2026-06 retention #2: salary intelligence (static data, edge-cached)
+  const { registerSalaryRoutes } = await import("./routes/salary");
+  registerSalaryRoutes(app);
+
   // Track active sessions for the admin dashboard real-time counter.
   // Must run after setupAuth so req.session is populated.
   app.use(trackActiveUser);

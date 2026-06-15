@@ -30,6 +30,7 @@ import { DashboardServicesGrid } from "@/components/dashboard-services-grid";
 import { DashboardProUpsell } from "@/components/dashboard-pro-upsell";
 import { PlanStatusBanner } from "@/components/plan-status-banner";
 import { DashboardJourneyCard } from "@/components/dashboard-journey-card";
+import { DashboardSalaryTeaser } from "@/components/dashboard-salary-teaser";
 import { DashboardSuccessStories } from "@/components/dashboard-success-stories";
 import { DashboardBestMatch } from "@/components/dashboard-best-match";
 import { DashboardVisaJobsLocked } from "@/components/dashboard-visa-jobs-locked";
@@ -1320,6 +1321,9 @@ export default function Dashboard() {
         {/* Retention #1: journey roadmap progress card — gives users a clear
             "what's next" anchor every time they open the dashboard. */}
         <DashboardJourneyCard />
+        {/* Retention #2: salary teaser — rotates daily, anchors users to
+            specific aspirations ("if I get hired as a nurse in UAE..."). */}
+        <DashboardSalaryTeaser />
         <DashboardServicesGrid />
         <DashboardProUpsell />
 
