@@ -1395,6 +1395,10 @@ export async function registerRoutes(
   const { registerSalaryRoutes } = await import("./routes/salary");
   registerSalaryRoutes(app);
 
+  // 2026-06 retention #4: continue-where-you-left-off aggregator
+  const { registerContinueRoute } = await import("./routes/continue");
+  registerContinueRoute(app);
+
   // Track active sessions for the admin dashboard real-time counter.
   // Must run after setupAuth so req.session is populated.
   app.use(trackActiveUser);

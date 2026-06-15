@@ -1224,6 +1224,9 @@ async function registerRoutes(httpServer, app) {
     // 2026-06 retention #2: salary intelligence (static data, edge-cached)
     const { registerSalaryRoutes } = await Promise.resolve().then(() => __importStar(require("./routes/salary")));
     registerSalaryRoutes(app);
+    // 2026-06 retention #4: continue-where-you-left-off aggregator
+    const { registerContinueRoute } = await Promise.resolve().then(() => __importStar(require("./routes/continue")));
+    registerContinueRoute(app);
     // Track active sessions for the admin dashboard real-time counter.
     // Must run after setupAuth so req.session is populated.
     app.use(active_users_1.trackActiveUser);

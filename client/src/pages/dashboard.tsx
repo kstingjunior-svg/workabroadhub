@@ -32,6 +32,7 @@ import { PlanStatusBanner } from "@/components/plan-status-banner";
 import { DashboardJourneyCard } from "@/components/dashboard-journey-card";
 import { DashboardSalaryTeaser } from "@/components/dashboard-salary-teaser";
 import { DashboardInterviewCard } from "@/components/dashboard-interview-card";
+import { DashboardContinueCard } from "@/components/dashboard-continue-card";
 import { DashboardSuccessStories } from "@/components/dashboard-success-stories";
 import { DashboardBestMatch } from "@/components/dashboard-best-match";
 import { DashboardVisaJobsLocked } from "@/components/dashboard-visa-jobs-locked";
@@ -1316,6 +1317,11 @@ export default function Dashboard() {
             • Replaces the buried "CV Services" + "Tools to Accelerate" sections
             ─────────────────────────────────────────────────────────────────── */}
         <DashboardHeroCTA />
+        {/* Retention #4: smartest anchor — picks the user's single highest
+            priority unfinished action (mid-interview, paid CV processing,
+            partial journey, etc.) and surfaces it as a one-tap CTA. Hides
+            itself if there's nothing to continue. */}
+        <DashboardContinueCard />
         {/* Trial/Monthly/Yearly users see their countdown here so they never
             mistake "trial ended" for "the app forgot my payment" */}
         <PlanStatusBanner />
