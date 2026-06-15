@@ -22,7 +22,7 @@ import {
   Globe, CheckCircle2, Circle, Clock, Lightbulb, Trophy,
   Briefcase, FileText, Plane, Wallet, Building2, Sparkles, ArrowRight,
 } from "lucide-react";
-import { SUPPORTED_JOURNEY_COUNTRIES } from "@shared/country-journey-steps";
+import { SUPPORTED_JOURNEY_COUNTRIES, getJourneySteps, type JourneyStep } from "@shared/country-journey-steps";
 
 interface JourneyStepDisplay {
   key: string;
@@ -166,9 +166,51 @@ function JourneyDetail({ countryCode }: { countryCode: string }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  const { data, isLoading } = useQuery<JourneyResponse>({
+  // 2026-06 RESILIENCE FIX: the journey roadmap content is LOCAL — it lives
+  // in shared/country-journey-steps.ts. We should be able to render the steps
+  // even if the server is down, the journey table doesn't exist, or auth
+  // glitches. The server only adds:
+  //   - which steps the user has ticked off
+  //   - the stage label
+  //   - the started/lastTouched timestamps
+  // So we build the page from local data first, then OVERLAY whatever the
+  // server gives us. Worst case: user sees an empty progress bar but full
+  // step list — they can still read every step and tap them to mark complete.
+  const localCountry = SUPPORTED_JOURNEY_COUNTRIES.find((c) => c.code === countryCode);
+  const localSteps = getJourneySteps(countryCode);
+
+  const { data: serverData, isLoading } = useQuery<JourneyResponse>({
     queryKey: [`/api/journey/${countryCode}`],
+    retry: false, // server unreachable? show local steps, don't hammer the endpoint
   });
+
+  // Merge server state (which steps are completed) with local content (the
+  // steps themselves). If the server didn't respond, every step is unchecked
+  // but the user can STILL tap to complete (we send to server on click; if
+  // that fails, the optimistic update keeps the UI consistent locally).
+  const completedKeys = new Set(
+    (serverData?.steps ?? []).filter((s) => s.completed).map((s) => s.key),
+  );
+  const mergedSteps: JourneyStepDisplay[] = localSteps.map((s) => ({
+    ...s,
+    completed: completedKeys.has(s.key),
+  }));
+  const completedCount = mergedSteps.filter((s) => s.completed).length;
+
+  const data: JourneyResponse = {
+    country: localCountry,
+    steps: mergedSteps,
+    progress: {
+      totalSteps: mergedSteps.length,
+      completedCount,
+      progressPercent: mergedSteps.length > 0
+        ? Math.round((completedCount / mergedSteps.length) * 100)
+        : 0,
+    },
+    stage: serverData?.stage ?? null,
+    startedAt: serverData?.startedAt ?? null,
+    lastTouchedAt: serverData?.lastTouchedAt ?? null,
+  };
 
   const toggleStep = useMutation({
     mutationFn: async ({ stepKey, done }: { stepKey: string; done: boolean }) => {
@@ -219,15 +261,10 @@ function JourneyDetail({ countryCode }: { countryCode: string }) {
     },
   });
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-sm text-muted-foreground">Loading your journey…</div>
-      </div>
-    );
-  }
-
-  if (!data) {
+  // We only show the "no roadmap" screen if the country code itself is
+  // unrecognised — local content guarantees we always have steps when the
+  // code IS in SUPPORTED_JOURNEY_COUNTRIES.
+  if (!localCountry || mergedSteps.length === 0) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <Card className="max-w-md">
