@@ -9,7 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Phone, ShieldCheck, AlertCircle } from "lucide-react";
+import { Phone, ShieldCheck, AlertCircle, LogOut } from "lucide-react";
 
 // Kenya E.164 without "+": exactly 12 digits starting with 254
 const KENYA_RE = /^254\d{9}$/;
@@ -38,7 +38,7 @@ function parseInput(raw: string): { display: string; stored: string } {
 }
 
 export function PhoneCompletionModal() {
-  const { user, isLoading: authLoading } = useAuth();
+  const { user, isLoading: authLoading, logout } = useAuth();
   const [location] = useLocation();
   const [subscriber, setSubscriber] = useState(""); // the 9 digits after +254
   const [error, setError] = useState("");
@@ -56,7 +56,24 @@ export function PhoneCompletionModal() {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
     },
     onError: (err: any) => {
-      setError(err?.message || "Failed to save number. Please try again.");
+      const msg = err?.message || "";
+      // 2026-06 FIX: if the server says we're unauthenticated, the user has a
+      // stale React Query / browser cache that tells us they're logged in but
+      // the actual session is gone (deploy, idle timeout, cookie cleared).
+      // Auto-logout + redirect to the homepage so they can sign back in fresh
+      // rather than getting trapped in the modal with no way out.
+      const looksUnauthenticated =
+        msg.toLowerCase().includes("authentication required") ||
+        msg.toLowerCase().includes("unauthorized") ||
+        msg.toLowerCase().includes("not authenticated") ||
+        msg.startsWith("401");
+      if (looksUnauthenticated) {
+        setError("Your session expired. Signing you out…");
+        // Use the existing logout flow — clears query cache + redirects to /
+        setTimeout(() => logout(), 800);
+        return;
+      }
+      setError(msg || "Failed to save number. Please try again.");
     },
   });
 
@@ -178,6 +195,18 @@ export function PhoneCompletionModal() {
             <ShieldCheck className="h-4 w-4 shrink-0 text-green-600" />
             <span>Used only for M-Pesa payment prompts and service notifications. Never shared.</span>
           </div>
+
+          {/* Escape hatch — if the user is somehow stuck (stale session,
+              wrong account, etc.) they can always sign out and re-login. */}
+          <button
+            type="button"
+            onClick={() => logout()}
+            data-testid="btn-phone-modal-logout"
+            className="w-full text-xs text-muted-foreground hover:text-foreground inline-flex items-center justify-center gap-1.5 py-1"
+          >
+            <LogOut className="h-3 w-3" />
+            Not your account, or stuck? Sign out
+          </button>
         </form>
       </DialogContent>
     </Dialog>

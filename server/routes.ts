@@ -1751,7 +1751,16 @@ Crawl-delay: 1`);
 
   app.patch("/api/profile", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user?.claims?.sub;
+      // 2026-06 FIX: fall back to session-stored userId so custom email/password
+      // logins (which don't always populate req.user.claims.sub depending on
+      // middleware order) can still update their profile. Without this, paying
+      // users got stuck on the "Enter WhatsApp Number" modal forever because
+      // the PATCH 401'd while their /api/auth/user call succeeded.
+      const userId =
+        req.user?.claims?.sub ??
+        req.user?.id ??
+        req.session?.customUserId ??
+        req.session?.userId;
       if (!userId) {
         return res.status(401).json({ message: "Unauthorized" });
       }

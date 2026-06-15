@@ -445,7 +445,7 @@ export function registerAuthRoutes(app: Express) {
       // Fast-path: cache hit returns in <1ms
       const cached = getCachedUser(userId);
       if (cached) {
-        res.setHeader("Cache-Control", "private, max-age=15");
+        res.setHeader("Cache-Control", "private, max-age=5");
         res.setHeader("X-Cache", "HIT");
         return res.json(cached);
       }
@@ -466,7 +466,7 @@ export function registerAuthRoutes(app: Express) {
           ? { ...user, plan: "pro", subscriptionStatus: "active", emailVerified: true, phoneVerified: true, isAdminBypass: true }
           : user;
         setCachedUser(userId, payload);
-        res.setHeader("Cache-Control", "private, max-age=15");
+        res.setHeader("Cache-Control", "private, max-age=5");
         res.setHeader("X-Cache", "MISS");
         const elapsed = Date.now() - t0;
         if (elapsed > 500) console.warn(`[Auth][/api/auth/user] SLOW ${elapsed}ms userId=${userId}`);
