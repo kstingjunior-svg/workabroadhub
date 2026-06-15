@@ -19940,7 +19940,7 @@ Tone examples:
       try {
         const authUser = (req as any).user;
         if (authUser?.id) {
-          dbUser = await storage.getUser(authUser.id);
+          dbUser = await storage.getUserById(authUser.id);
           if (dbUser) {
             const payments = await storage.getPaymentsByUser(dbUser.id);
             recentPayment = payments

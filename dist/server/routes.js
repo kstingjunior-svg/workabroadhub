@@ -18562,7 +18562,7 @@ Tone examples:
             try {
                 const authUser = req.user;
                 if (authUser?.id) {
-                    dbUser = await storage_1.storage.getUser(authUser.id);
+                    dbUser = await storage_1.storage.getUserById(authUser.id);
                     if (dbUser) {
                         const payments = await storage_1.storage.getPaymentsByUser(dbUser.id);
                         recentPayment = payments

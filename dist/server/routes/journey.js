@@ -13,6 +13,16 @@ function validCountryCode(code) {
     const c = (code || "").toUpperCase();
     return country_journey_steps_1.SUPPORTED_JOURNEY_COUNTRIES.some((x) => x.code === c);
 }
+/**
+ * Postgres "relation does not exist" error — happens when the journey
+ * migration hasn't been pushed to the live DB yet. We catch it and degrade
+ * gracefully (empty list / null state) instead of 500ing.
+ */
+function isMissingTable(err) {
+    return err?.code === "42P01"
+        || /relation .* does not exist/i.test(String(err?.message || ""))
+        || /user_country_journeys.*not.*exist/i.test(String(err?.message || ""));
+}
 function registerJourneyRoutes(app) {
     // ── List all journeys for the current user ────────────────────────────────
     app.get("/api/journey", replitAuth_1.isAuthenticated, async (req, res) => {
@@ -41,6 +51,13 @@ function registerJourneyRoutes(app) {
             res.json(enriched);
         }
         catch (err) {
+            // 2026-06: if the journey table doesn't exist yet on this environment
+            // (migration not pushed), respond with an empty list rather than a 500.
+            // The client treats no-journeys-yet as "user can pick a country to start".
+            if (isMissingTable(err)) {
+                console.warn("[journey][list] user_country_journeys table missing — returning []");
+                return res.json([]);
+            }
             console.error("[journey][list]", err?.message);
             res.status(500).json({ message: "Failed to load journeys" });
         }
@@ -77,6 +94,21 @@ function registerJourneyRoutes(app) {
             });
         }
         catch (err) {
+            if (isMissingTable(err)) {
+                // Migration hasn't been pushed yet — render the country's roadmap as
+                // if it were untouched so the page still works.
+                const code = (req.params.countryCode || "").toUpperCase();
+                const steps = (0, country_journey_steps_1.getJourneySteps)(code);
+                const country = country_journey_steps_1.SUPPORTED_JOURNEY_COUNTRIES.find((c) => c.code === code);
+                return res.json({
+                    country,
+                    steps: steps.map((s) => ({ ...s, completed: false })),
+                    progress: { totalSteps: steps.length, completedCount: 0, progressPercent: 0 },
+                    stage: null,
+                    startedAt: null,
+                    lastTouchedAt: null,
+                });
+            }
             console.error("[journey][get]", err?.message);
             res.status(500).json({ message: "Failed to load journey" });
         }
@@ -109,6 +141,9 @@ function registerJourneyRoutes(app) {
             res.json({ ok: true });
         }
         catch (err) {
+            if (isMissingTable(err)) {
+                return res.status(503).json({ message: "Journey feature is being deployed — try again in a few minutes." });
+            }
             console.error("[journey][start]", err?.message);
             res.status(500).json({ message: "Failed to start journey" });
         }
@@ -160,6 +195,9 @@ function registerJourneyRoutes(app) {
             res.json({ ok: true, completedSteps: next, done: desired });
         }
         catch (err) {
+            if (isMissingTable(err)) {
+                return res.status(503).json({ message: "Journey feature is being deployed — try again in a few minutes." });
+            }
             console.error("[journey][toggle]", err?.message);
             res.status(500).json({ message: "Failed to update step" });
         }
@@ -193,6 +231,9 @@ function registerJourneyRoutes(app) {
             res.json({ ok: true, stage });
         }
         catch (err) {
+            if (isMissingTable(err)) {
+                return res.status(503).json({ message: "Journey feature is being deployed — try again in a few minutes." });
+            }
             console.error("[journey][stage]", err?.message);
             res.status(500).json({ message: "Failed to update stage" });
         }
@@ -210,6 +251,9 @@ function registerJourneyRoutes(app) {
             res.json({ ok: true });
         }
         catch (err) {
+            if (isMissingTable(err)) {
+                return res.status(503).json({ message: "Journey feature is being deployed — try again in a few minutes." });
+            }
             console.error("[journey][delete]", err?.message);
             res.status(500).json({ message: "Failed to delete journey" });
         }

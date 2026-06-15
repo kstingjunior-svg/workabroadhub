@@ -537,7 +537,7 @@ Return ONLY the JSON object, no markdown, no extra text.`;
 
         // Trigger CV email drip + funnel tracking for logged-in paid users (fire-and-forget)
         try {
-          const webUser = await storage.getUser(userId!);
+          const webUser = await storage.getUserById(userId!);
           if (webUser?.email) {
             const { scheduleCvEmailSequence } = await import("./cv-email-sequence");
             scheduleCvEmailSequence({

@@ -189,7 +189,8 @@ function registerQueueHandlers() {
             const { pool, db } = await Promise.resolve().then(() => __importStar(require("./db")));
             const { userCareerProfiles } = await Promise.resolve().then(() => __importStar(require("@shared/schema")));
             const { eq } = await Promise.resolve().then(() => __importStar(require("drizzle-orm")));
-            const user = await storage.getUser(job.userId);
+            // 2026-06 FIX: was storage.getUser() — method doesn't exist, real one is getUserById.
+            const user = await storage.getUserById(job.userId);
             if (!user)
                 throw new Error(`User ${job.userId} not found`);
             const [careerProfile] = await db

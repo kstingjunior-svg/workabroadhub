@@ -47,6 +47,9 @@ export function DashboardJourneyCard() {
     queryKey: ["/api/journey"],
     enabled: !!user,
     staleTime: 60_000,
+    // Don't retry — if the table is missing on the server we just hide the
+    // widget rather than spamming a failing endpoint.
+    retry: false,
   });
 
   // Sort newest-touched first, take the top one
