@@ -24,6 +24,7 @@ import { useUpgradeModal } from "@/contexts/upgrade-modal-context";
 import { Lock, ExternalLink, MapPin, DollarSign, Plane, ChevronRight, Briefcase, Loader2 } from "lucide-react";
 import { isPaidUser } from "@/lib/plan";
 import { useQuery } from "@tanstack/react-query";
+import { BookmarkButton } from "@/components/bookmark-button";
 
 interface VisaJob {
   id: string;
@@ -237,13 +238,25 @@ function JobCard({ job, isPro }: { job: VisaJob; isPro: boolean }) {
       onClick={isPro ? handleApply : undefined}
       role={isPro ? "button" : undefined}
     >
-      {/* Top row: country + category */}
+      {/* Top row: country + category + bookmark */}
       <div className="flex items-start justify-between mb-2 gap-2">
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground min-w-0">
           <span className="text-base">{job.countryFlag}</span>
           <span className="truncate">{job.city}, {job.country}</span>
         </div>
-        {CategoryBadge}
+        <div className="flex items-center gap-1 shrink-0">
+          {CategoryBadge}
+          {/* 2026-06 retention #5: bookmark this visa-sponsored job */}
+          <BookmarkButton
+            itemType="visa_job"
+            itemId={job.id}
+            title={job.title}
+            subtitle={`${job.employer} · ${job.city}, ${job.country}`}
+            countryCode={job.country?.slice(0, 2)?.toUpperCase()}
+            href="/dashboard"
+            meta={{ salary: job.salary, category: job.category, visaType: job.visaType }}
+          />
+        </div>
       </div>
 
       {/* Title + employer */}

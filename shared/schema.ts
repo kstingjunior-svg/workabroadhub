@@ -1223,6 +1223,35 @@ export const JOURNEY_STAGES = {
 } as const;
 export type JourneyStage = typeof JOURNEY_STAGES[keyof typeof JOURNEY_STAGES];
 
+// ==================== USER BOOKMARKS ====================
+// 2026-06 retention #5: lets users save any job listing, country portal, or
+// service for later viewing. One row per (user, itemType, itemId). Title +
+// subtitle + meta are cached at save time so the bookmark still renders even
+// if the underlying job/portal gets removed or rotated.
+
+export const userBookmarks = pgTable("user_bookmarks", {
+  id:           varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId:       varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  // "visa_job" | "agency_job" | "portal" | "service" | "country"
+  itemType:     varchar("item_type", { length: 32 }).notNull(),
+  // Stable identifier of the bookmarked item (job ID, portal slug, country code, etc.)
+  itemId:       varchar("item_id", { length: 200 }).notNull(),
+  title:        varchar("title", { length: 300 }).notNull(),
+  subtitle:     varchar("subtitle", { length: 300 }),
+  countryCode:  varchar("country_code", { length: 8 }),
+  // Optional pre-computed link the bookmark card uses for navigation.
+  href:         varchar("href", { length: 500 }),
+  meta:         jsonb("meta"),   // salary, posted date, category badges, etc.
+  createdAt:    timestamp("created_at").defaultNow(),
+}, (t) => ({
+  uniqUserItem: uniqueIndex("uniq_user_bookmark_item").on(t.userId, t.itemType, t.itemId),
+  byUser:       index("idx_user_bookmark_user").on(t.userId),
+}));
+
+export const insertUserBookmarkSchema = createInsertSchema(userBookmarks).omit({ id: true, createdAt: true });
+export type UserBookmark = typeof userBookmarks.$inferSelect;
+export type InsertUserBookmark = z.infer<typeof insertUserBookmarkSchema>;
+
 // ==================== ANALYTICS ====================
 
 // Analytics events - tracks all user actions

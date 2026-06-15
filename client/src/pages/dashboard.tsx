@@ -33,6 +33,7 @@ import { DashboardJourneyCard } from "@/components/dashboard-journey-card";
 import { DashboardSalaryTeaser } from "@/components/dashboard-salary-teaser";
 import { DashboardInterviewCard } from "@/components/dashboard-interview-card";
 import { DashboardContinueCard } from "@/components/dashboard-continue-card";
+import { DashboardBookmarksCard } from "@/components/dashboard-bookmarks-card";
 import { DashboardSuccessStories } from "@/components/dashboard-success-stories";
 import { DashboardBestMatch } from "@/components/dashboard-best-match";
 import { DashboardVisaJobsLocked } from "@/components/dashboard-visa-jobs-locked";
@@ -1334,6 +1335,9 @@ export default function Dashboard() {
         {/* Retention #3: AI mock interview — 5 questions, scored, with
             coaching feedback. Drives prep behaviour ahead of real calls. */}
         <DashboardInterviewCard />
+        {/* Retention #5: saved jobs/portals/services. Hides itself for users
+            with zero bookmarks; otherwise surfaces the count + link. */}
+        <DashboardBookmarksCard />
         <DashboardServicesGrid />
         <DashboardProUpsell />
 

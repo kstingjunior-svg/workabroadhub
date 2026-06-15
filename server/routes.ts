@@ -1399,6 +1399,10 @@ export async function registerRoutes(
   const { registerContinueRoute } = await import("./routes/continue");
   registerContinueRoute(app);
 
+  // 2026-06 retention #5: bookmarks (save jobs, portals, services for later)
+  const { registerBookmarkRoutes } = await import("./routes/bookmarks");
+  registerBookmarkRoutes(app);
+
   // Track active sessions for the admin dashboard real-time counter.
   // Must run after setupAuth so req.session is populated.
   app.use(trackActiveUser);

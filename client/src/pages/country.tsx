@@ -7,6 +7,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { BookmarkButton } from "@/components/bookmark-button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
@@ -685,6 +686,16 @@ export default function Country() {
                                 <Plus className="h-3 w-3 mr-1" />
                                 Track
                               </Button>
+                              {/* 2026-06 retention #5: save this portal for later */}
+                              <BookmarkButton
+                                itemType="portal"
+                                itemId={String(link.id)}
+                                title={link.name}
+                                subtitle={`${countryInfo?.name ?? code} · ${link.description ?? "Verified portal"}`}
+                                countryCode={(code || "").toUpperCase()}
+                                href={`/country/${code}`}
+                                meta={{ description: link.description, url: link.url }}
+                              />
                             </div>
                           </div>
                         </CardContent>
