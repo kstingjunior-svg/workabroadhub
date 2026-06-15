@@ -6,16 +6,20 @@ exports.planLabel = planLabel;
 /** Duration in days for each paid plan. */
 const PLAN_DURATION = {
     trial: 1, // KES 99    / 1 day
+    basic: 1, // KES 99    / 1 day (alias used by some admin grant paths — must match trial)
     monthly: 30, // KES 1,000 / 30 days
     yearly: 365, // KES 4,500 / 365 days
     pro: 365, // legacy alias for yearly — KES 4,500 / 365 days
+    pro_referral: 365, // free yearly comp for referral payouts
 };
 /** Human-readable label for each plan (used in Firebase records, notifications, etc.) */
 const PLAN_LABEL = {
     trial: "Trial Access (1 day)",
+    basic: "Basic Access (1 day)",
     monthly: "Monthly Access (30 days)",
     yearly: "Yearly Access (365 days)",
     pro: "Yearly Access (365 days)",
+    pro_referral: "Pro Referral Access (365 days)",
 };
 /**
  * Returns the expiry Date for a given planId, calculated from now.

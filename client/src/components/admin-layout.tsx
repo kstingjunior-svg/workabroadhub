@@ -68,6 +68,7 @@ const navItems = [
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/payments", label: "Payments", icon: CreditCard },
   { href: "/admin/unmatched-payments", label: "Unmatched Payments", icon: Unlink },
+  { href: "/admin/manual-upgrade", label: "Manual Upgrade 🛠️", icon: ShieldCheck },
   { href: "/admin/referrals", label: "Referrals", icon: Gift },
   { href: "/admin/consultations", label: "Consultations", icon: MessageSquare },
   { href: "/admin/success-stories", label: "Success Stories", icon: Trophy },

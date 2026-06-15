@@ -233,7 +233,12 @@ export default function UsersPage() {
 
   // Manual grant
   const [grantIdentifier, setGrantIdentifier] = useState("");
-  const [grantPlan, setGrantPlan] = useState<"pro">("pro");
+  // 2026-06: widened from "pro"-only to all four paid tiers so admin can
+  // manually fix any failed activation regardless of what the user paid.
+  // Each value maps to a server PLAN_DURATION entry, so the expiry is
+  // computed correctly (24 h / 30 d / 365 d) from the activation moment.
+  type GrantPlanId = "trial" | "monthly" | "yearly" | "pro";
+  const [grantPlan, setGrantPlan] = useState<GrantPlanId>("yearly");
   const [grantReceipt, setGrantReceipt] = useState("");
   const [grantNote, setGrantNote] = useState("");
   const [grantResult, setGrantResult] = useState<GrantResult | null>(null);
@@ -672,7 +677,9 @@ export default function UsersPage() {
             {grantResult ? (
               <div className="rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 p-4 space-y-2">
                 <p className="font-semibold text-green-700 dark:text-green-400 flex items-center gap-1.5 text-sm">
-                  <Check className="h-4 w-4" /> {grantResult.accountCreated ? "Account created & Pro granted" : "Plan granted"}
+                  <Check className="h-4 w-4" /> {grantResult.accountCreated
+                    ? `Account created & ${grantResult.user.plan} plan granted`
+                    : "Plan granted"}
                 </p>
                 <div className="text-xs space-y-1 text-muted-foreground">
                   <p><strong className="text-foreground">{grantResult.user.name}</strong> · {grantResult.user.email ?? grantResult.user.phone ?? "—"}</p>
@@ -696,12 +703,18 @@ export default function UsersPage() {
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="grant-plan" className="text-xs">Plan</Label>
-                  <Select value={grantPlan} onValueChange={v => setGrantPlan(v as "pro")}>
+                  <Select value={grantPlan} onValueChange={v => setGrantPlan(v as GrantPlanId)}>
                     <SelectTrigger id="grant-plan" data-testid="select-grant-plan"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="pro">Pro — KES 4,500 / year</SelectItem>
+                      <SelectItem value="trial">Trial — KES 99 / 24 hours</SelectItem>
+                      <SelectItem value="monthly">Monthly — KES 1,000 / 30 days</SelectItem>
+                      <SelectItem value="yearly">Yearly — KES 4,500 / 365 days</SelectItem>
+                      <SelectItem value="pro">Pro — KES 4,500 / 365 days (alias)</SelectItem>
                     </SelectContent>
                   </Select>
+                  <p className="text-[10px] text-muted-foreground leading-tight">
+                    Expiry is set from the activation moment — pick the tier matching what they paid.
+                  </p>
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="grant-receipt" className="text-xs">Receipt <span className="text-muted-foreground">(optional)</span></Label>
@@ -733,7 +746,11 @@ export default function UsersPage() {
                       >
                         {createAndGrantMutation.isPending
                           ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Creating…</>
-                          : <><Crown className="h-3.5 w-3.5 mr-1.5" />Create Account & Grant Pro</>}
+                          : <><Crown className="h-3.5 w-3.5 mr-1.5" />Create Account & Grant {
+                              grantPlan === "trial"   ? "Trial" :
+                              grantPlan === "monthly" ? "Monthly" :
+                              grantPlan === "yearly"  ? "Yearly" : "Pro"
+                            }</>}
                       </Button>
                     </div>
                   )}
@@ -743,7 +760,15 @@ export default function UsersPage() {
                     data-testid="button-grant-plan"
                     className="bg-amber-600 hover:bg-amber-700 text-white self-start"
                   >
-                    {manualGrantMutation.isPending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Granting…</> : <><Crown className="h-4 w-4 mr-2" />Grant {grantPlan === "pro" ? "Pro" : "Basic"}</>}
+                    {manualGrantMutation.isPending
+                      ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Granting…</>
+                      : <><Crown className="h-4 w-4 mr-2" />Grant {
+                          grantPlan === "trial"   ? "Trial (KES 99 — 24 hrs)"   :
+                          grantPlan === "monthly" ? "Monthly (KES 1,000 — 30 d)" :
+                          grantPlan === "yearly"  ? "Yearly (KES 4,500 — 365 d)" :
+                                                    "Pro (KES 4,500 — 365 d)"
+                        }</>
+                    }
                   </Button>
                 </div>
               </div>
