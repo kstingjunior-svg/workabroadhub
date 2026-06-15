@@ -28,6 +28,7 @@ import { UrgencyBanner } from "@/components/urgency-banner";
 import { DashboardHeroCTA } from "@/components/dashboard-hero-cta";
 import { DashboardServicesGrid } from "@/components/dashboard-services-grid";
 import { DashboardProUpsell } from "@/components/dashboard-pro-upsell";
+import { PlanStatusBanner } from "@/components/plan-status-banner";
 import { DashboardSuccessStories } from "@/components/dashboard-success-stories";
 import { DashboardBestMatch } from "@/components/dashboard-best-match";
 import { DashboardVisaJobsLocked } from "@/components/dashboard-visa-jobs-locked";
@@ -1312,6 +1313,9 @@ export default function Dashboard() {
             • Replaces the buried "CV Services" + "Tools to Accelerate" sections
             ─────────────────────────────────────────────────────────────────── */}
         <DashboardHeroCTA />
+        {/* Trial/Monthly/Yearly users see their countdown here so they never
+            mistake "trial ended" for "the app forgot my payment" */}
+        <PlanStatusBanner />
         <DashboardServicesGrid />
         <DashboardProUpsell />
 

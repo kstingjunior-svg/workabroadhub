@@ -8,6 +8,11 @@ import { sendEmail } from "../../email";
 import { validateEmail } from "../../utils/email-validator";
 import { validatePhone } from "../../utils/phone-validator";
 import {
+  getCachedAuthUser,
+  setCachedAuthUser,
+  invalidateAuthUserCache,
+} from "../../lib/auth-user-cache";
+import {
   sendEmailVerificationCode,
   sendSmsVerificationCode,
   verifyCode,
@@ -410,26 +415,14 @@ export function registerAuthRoutes(app: Express) {
     }
   });
 
-  // 2026-06 PERF: in-memory cache for /api/auth/user. The client calls this on
-  // every page refresh + every tab focus (post lag-fix the focus stale-time is
-  // 2 min, but mounts still re-fetch). At <300 users we saw the DB getting
-  // hammered with `SELECT * FROM users WHERE id = $1` 30+ times/sec. 30-second
-  // TTL is short enough that plan changes after payment surface fast, long
-  // enough to eliminate the steady-state load.
-  const USER_CACHE_TTL_MS = 30_000;
-  const userCache = new Map<string, { user: any; expiresAt: number }>();
-  function getCachedUser(userId: string): any | null {
-    const entry = userCache.get(userId);
-    if (entry && entry.expiresAt > Date.now()) return entry.user;
-    if (entry) userCache.delete(userId);
-    return null;
-  }
-  function setCachedUser(userId: string, user: any): void {
-    userCache.set(userId, { user, expiresAt: Date.now() + USER_CACHE_TTL_MS });
-  }
-  // Invalidate cache when /api/auth/logout fires or plan is updated — exposed
-  // for other modules.
-  (app as any).invalidateAuthUserCache = (userId: string) => userCache.delete(userId);
+  // 2026-06 PERF: 30 s in-memory cache for /api/auth/user. Lives in
+  // server/lib/auth-user-cache.ts so any code path that updates a user can
+  // call invalidateAuthUserCache directly. Kept on the app as a property too
+  // so older callers (admin grants, logout) that already use that accessor
+  // continue to work.
+  const getCachedUser = getCachedAuthUser;
+  const setCachedUser = setCachedAuthUser;
+  (app as any).invalidateAuthUserCache = invalidateAuthUserCache;
 
   app.get("/api/auth/user", async (req: Request, res: Response) => {
     const t0 = Date.now();

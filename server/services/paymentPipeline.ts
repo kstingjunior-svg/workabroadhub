@@ -61,6 +61,9 @@ export async function runPaymentPipeline(opts: PaymentPipelineOptions): Promise<
       await db
         .update(users)
         .set({
+          // 2026-06: TS cast covers the legacy union; runtime accepts any
+          // string because users.plan is varchar with no DB constraint.
+          // Trial / monthly / yearly all flow through here successfully.
           plan:      planId as "free" | "basic" | "pro",
           userStage: "paid",
           isActive:  true,
@@ -68,6 +71,36 @@ export async function runPaymentPipeline(opts: PaymentPipelineOptions): Promise<
           updatedAt: new Date(),
         })
         .where(eq(users.id, user.id));
+
+      // 2026-06: belt-and-braces verification — read users.plan back and make
+      // sure it actually persisted. If it didn't (silent CHECK constraint
+      // violation, trigger reject, etc.) we want a loud warning in Render
+      // logs instead of letting the paying user back to a "free" dashboard.
+      try {
+        const [verify] = await db
+          .select({ plan: users.plan, status: users.subscriptionStatus })
+          .from(users)
+          .where(eq(users.id, user.id))
+          .limit(1);
+        if (!verify || verify.plan !== planId) {
+          console.error(
+            `[Pipeline] ⚠ plan persistence MISMATCH for userId=${user.id} — ` +
+            `expected="${planId}" actual="${verify?.plan ?? "missing"}". ` +
+            `Paying user will appear free on next refresh. Investigate now.`
+          );
+        }
+      } catch (verr: any) {
+        console.warn(`[Pipeline] plan verify read failed (non-fatal): ${verr?.message}`);
+      }
+
+      // 2026-06: invalidate the /api/auth/user server cache for this user so
+      // their next request returns the fresh paid plan instead of a stale
+      // "free" record from before the payment.
+      try {
+        const { invalidateAuthUserCache } = await import("../lib/auth-user-cache");
+        invalidateAuthUserCache(user.id);
+      } catch { /* ignore — best effort */ }
+
       console.log(`[Pipeline] Step 1 ✓ Plan "${planId}" activated | expires=${expiresAt.toISOString()}`);
     } else {
       // Service purchase — mark user as paid but don't touch plan
