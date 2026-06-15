@@ -18,6 +18,10 @@ import {
   getPaidOnlineSnapshot,
   getOnlineCount,
   getPaidOnlineCount,
+  attachVisitor,
+  detachVisitor,
+  subscribeVisitorCount,
+  getVisitorCount,
 } from "./lib/presence";
 
 // ── Stats provider ────────────────────────────────────────────────────────────
@@ -28,6 +32,7 @@ export function setStatsProvider(fn: StatsProvider): void { _statsProvider = fn;
 
 let wss: WebSocketServer | null = null;
 let userWss: WebSocketServer | null = null;
+let visitorWss: WebSocketServer | null = null;
 
 // Map userId → set of open WebSocket connections (same user can have multiple tabs)
 const userConnections = new Map<string, Set<WebSocket>>();
@@ -212,6 +217,79 @@ export function initWebSocketServer(httpServer: Server, sessionParser?: RequestH
   });
 
   console.log("[WS] User real-time WebSocket server started on /ws/user");
+
+  // ── Public presence-count channel ──────────────────────────────────────
+  //
+  // 2026-06: separate public channel so the landing page banner (anonymous
+  // visitors) and the home dashboard widget (authenticated users) can BOTH
+  // subscribe to the SAME "X people online" number. No PII is broadcast —
+  // just the running total. This is the channel Tony asked for: "the exact
+  // number ... no bots ... no exaggerating".
+  //
+  // Per-IP cap of 5 concurrent connections prevents trivial abuse (someone
+  // trying to inflate the count by spamming connections from one machine).
+  const ipConnectionCount = new Map<string, number>();
+  const VISITOR_MAX_PER_IP = 5;
+  visitorWss = new WebSocketServer({ server: httpServer, path: "/ws/presence-count" });
+  visitorWss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
+    const ip = String(
+      (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ||
+      req.socket.remoteAddress || "unknown"
+    );
+    const ipCount = (ipConnectionCount.get(ip) ?? 0) + 1;
+    if (ipCount > VISITOR_MAX_PER_IP) {
+      ws.close(1008, "too_many_connections");
+      return;
+    }
+    ipConnectionCount.set(ip, ipCount);
+
+    let attachedVisitorId: string | null = null;
+
+    ws.on("message", (raw) => {
+      try {
+        const msg = JSON.parse(raw.toString());
+        if (msg.type === "identify" && typeof msg.visitorId === "string" && msg.visitorId.length > 0 && msg.visitorId.length < 100) {
+          if (attachedVisitorId) return;  // already attached this connection
+          attachedVisitorId = msg.visitorId;
+          attachVisitor(attachedVisitorId);
+        }
+      } catch { /* ignore malformed */ }
+    });
+
+    // Send the current count immediately so the page renders without waiting
+    ws.send(JSON.stringify({ type: "presence_count", total: getVisitorCount(), timestamp: Date.now() }));
+
+    ws.on("close", () => {
+      if (attachedVisitorId) detachVisitor(attachedVisitorId);
+      const cur = ipConnectionCount.get(ip) ?? 0;
+      if (cur <= 1) ipConnectionCount.delete(ip);
+      else ipConnectionCount.set(ip, cur - 1);
+    });
+    ws.on("error", () => { /* close handler will clean up */ });
+  });
+  console.log("[WS] Public presence-count server started on /ws/presence-count");
+
+  // Coalesced broadcast: when any visitor joins or leaves, push the new total
+  // to all subscribers within 200 ms so a rapid burst doesn't fan out 100×.
+  let visitorBroadcastTimer: NodeJS.Timeout | null = null;
+  const broadcastVisitorCount = () => {
+    if (!visitorWss) return;
+    const payload = JSON.stringify({
+      type: "presence_count",
+      total: getVisitorCount(),
+      timestamp: Date.now(),
+    });
+    visitorWss.clients.forEach((c) => {
+      if (c.readyState === WebSocket.OPEN) c.send(payload);
+    });
+  };
+  subscribeVisitorCount(() => {
+    if (visitorBroadcastTimer) return;
+    visitorBroadcastTimer = setTimeout(() => {
+      visitorBroadcastTimer = null;
+      broadcastVisitorCount();
+    }, 200);
+  });
 
   // ── Real-time presence broadcaster ──────────────────────────────────────
   //

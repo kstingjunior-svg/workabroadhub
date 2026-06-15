@@ -31,6 +31,10 @@ exports.getOnlineSnapshot = getOnlineSnapshot;
 exports.getPaidOnlineSnapshot = getPaidOnlineSnapshot;
 exports.getOnlineCount = getOnlineCount;
 exports.getPaidOnlineCount = getPaidOnlineCount;
+exports.subscribeVisitorCount = subscribeVisitorCount;
+exports.attachVisitor = attachVisitor;
+exports.detachVisitor = detachVisitor;
+exports.getVisitorCount = getVisitorCount;
 const presence = new Map();
 const listeners = new Set();
 function subscribePresence(fn) {
@@ -172,4 +176,51 @@ function getOnlineCount() {
 /** Lightweight count of paid-only users for the admin banner. */
 function getPaidOnlineCount() {
     return getPaidOnlineSnapshot().length;
+}
+// ─── Anonymous visitor presence ─────────────────────────────────────────────
+//
+// 2026-06: separate, lighter-weight registry for "is anyone on the site right
+// now" — used by the public homepage banner and landing page. Counts EVERY
+// open browser tab connected to the public presence channel, whether the
+// visitor has logged in or not. Dedup'd per visitorId (a UUID stored in
+// localStorage), so a single user with 3 tabs still counts as 1 person.
+//
+// This is what surfaces as "X online now" on the landing page — the number
+// includes anonymous visitors who haven't created an account yet, which is
+// what Tony asked for ("the exact number, no bots, no exaggerating").
+const visitorTabs = new Map(); // visitorId -> open tab count
+const visitorListeners = new Set();
+function subscribeVisitorCount(fn) {
+    visitorListeners.add(fn);
+    return () => visitorListeners.delete(fn);
+}
+function notifyVisitor(kind) {
+    for (const fn of visitorListeners) {
+        try {
+            fn(kind);
+        }
+        catch { /* swallow listener errors */ }
+    }
+}
+function attachVisitor(visitorId) {
+    const tabs = visitorTabs.get(visitorId) ?? 0;
+    visitorTabs.set(visitorId, tabs + 1);
+    if (tabs === 0)
+        notifyVisitor("visitor_join");
+}
+function detachVisitor(visitorId) {
+    const tabs = visitorTabs.get(visitorId);
+    if (!tabs)
+        return;
+    if (tabs === 1) {
+        visitorTabs.delete(visitorId);
+        notifyVisitor("visitor_leave");
+    }
+    else {
+        visitorTabs.set(visitorId, tabs - 1);
+    }
+}
+/** Distinct browsers (anonymous + authenticated) currently on the site. */
+function getVisitorCount() {
+    return visitorTabs.size;
 }

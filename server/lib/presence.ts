@@ -198,3 +198,51 @@ export function getOnlineCount(): number {
 export function getPaidOnlineCount(): number {
   return getPaidOnlineSnapshot().length;
 }
+
+// ─── Anonymous visitor presence ─────────────────────────────────────────────
+//
+// 2026-06: separate, lighter-weight registry for "is anyone on the site right
+// now" — used by the public homepage banner and landing page. Counts EVERY
+// open browser tab connected to the public presence channel, whether the
+// visitor has logged in or not. Dedup'd per visitorId (a UUID stored in
+// localStorage), so a single user with 3 tabs still counts as 1 person.
+//
+// This is what surfaces as "X online now" on the landing page — the number
+// includes anonymous visitors who haven't created an account yet, which is
+// what Tony asked for ("the exact number, no bots, no exaggerating").
+
+const visitorTabs = new Map<string, number>(); // visitorId -> open tab count
+const visitorListeners = new Set<(kind: "visitor_join" | "visitor_leave") => void>();
+
+export function subscribeVisitorCount(fn: (kind: "visitor_join" | "visitor_leave") => void): () => void {
+  visitorListeners.add(fn);
+  return () => visitorListeners.delete(fn);
+}
+
+function notifyVisitor(kind: "visitor_join" | "visitor_leave"): void {
+  for (const fn of visitorListeners) {
+    try { fn(kind); } catch { /* swallow listener errors */ }
+  }
+}
+
+export function attachVisitor(visitorId: string): void {
+  const tabs = visitorTabs.get(visitorId) ?? 0;
+  visitorTabs.set(visitorId, tabs + 1);
+  if (tabs === 0) notifyVisitor("visitor_join");
+}
+
+export function detachVisitor(visitorId: string): void {
+  const tabs = visitorTabs.get(visitorId);
+  if (!tabs) return;
+  if (tabs === 1) {
+    visitorTabs.delete(visitorId);
+    notifyVisitor("visitor_leave");
+  } else {
+    visitorTabs.set(visitorId, tabs - 1);
+  }
+}
+
+/** Distinct browsers (anonymous + authenticated) currently on the site. */
+export function getVisitorCount(): number {
+  return visitorTabs.size;
+}

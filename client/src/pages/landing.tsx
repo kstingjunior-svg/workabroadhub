@@ -20,6 +20,7 @@ import { trackLandingView, trackButtonClick } from "@/lib/analytics";
 import { AuthModal } from "@/components/auth-modal";
 import { useToast } from "@/hooks/use-toast";
 import { useFirebasePresence } from "@/hooks/use-firebase-presence";
+import { useLiveVisitorCount } from "@/hooks/use-live-visitor-count";
 import { useVerifiedSuccessStories } from "@/lib/firebase-success-stories";
 import SubmitForReviewModal from "@/components/submit-for-review-modal";
 
@@ -79,6 +80,10 @@ export default function Landing() {
   });
 
   const { activeVisitors: fbVisitors, visitorList, myVisitorId, recentSignups: fbSignups } = useFirebasePresence();
+  // 2026-06: real-time browser count over WebSocket — same source the home
+  // dashboard reads from. Landing page banner and home dashboard always show
+  // the EXACT same number, including anonymous visitors on the landing page.
+  const liveVisitorCount = useLiveVisitorCount();
   const verifiedPlacements = useVerifiedSuccessStories(10);
 
   // Track landing page view, capture referral code, and detect post-deletion redirect
@@ -273,9 +278,9 @@ export default function Landing() {
                     </div>
                     <span style={{ color: '#2A3A4A' }}>
                       <strong style={{ color: '#1A2530' }} data-testid="visitor-count">
-                        {publicStats?.activeNow ?? fbVisitors ?? '…'}
+                        {liveVisitorCount ?? publicStats?.activeNow ?? fbVisitors ?? '…'}
                       </strong>{' '}
-                      {(publicStats?.activeNow ?? fbVisitors ?? 0) === 1 ? 'person' : 'people'} browsing now
+                      {(liveVisitorCount ?? publicStats?.activeNow ?? fbVisitors ?? 0) === 1 ? 'person' : 'people'} browsing now
                     </span>
                   </div>
 

@@ -1,15 +1,15 @@
 /**
  * Compact live activity strip — shows online count + total registered members.
  *
- * 2026-06: now updates in real time over the /ws/analytics WebSocket. When a
- * user logs in their first tab → count goes up instantly. When their last
- * tab closes → count goes down instantly. No more 30-second polling lag.
- * /api/public/stats is still used as the initial snapshot + fallback when
- * the WebSocket can't connect.
+ * 2026-06: subscribes to /ws/presence-count (the public real-time presence
+ * channel). The number updates the instant any browser joins or leaves —
+ * authenticated users AND anonymous landing-page visitors are all counted.
+ * Landing page banner and this widget read from the SAME source, so the
+ * two screens always show the EXACT same number.
  */
-import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Users, Wifi } from "lucide-react";
+import { useLiveVisitorCount } from "@/hooks/use-live-visitor-count";
 
 interface PublicStats {
   totalUsers: number;
@@ -29,23 +29,10 @@ export function LiveActivityStrip() {
     staleTime: 30_000,
   });
 
-  const [liveOnline, setLiveOnline] = useState<number | null>(null);
-  useEffect(() => {
-    const proto = window.location.protocol === "https:" ? "wss" : "ws";
-    const ws = new WebSocket(`${proto}://${window.location.host}/ws/analytics`);
-    ws.onmessage = (evt) => {
-      try {
-        const msg = JSON.parse(evt.data);
-        if (msg.type === "presence_update" && typeof msg.totalOnline === "number") {
-          setLiveOnline(msg.totalOnline);
-        } else if (msg.type === "stats_update" && typeof msg.activeNow === "number") {
-          setLiveOnline(msg.activeNow);
-        }
-      } catch { /* ignore malformed */ }
-    };
-    return () => { try { ws.close(); } catch {} };
-  }, []);
+  const liveOnline = useLiveVisitorCount();
 
+  // Prefer the live WebSocket count; fall back to REST snapshot only until
+  // the first message arrives (typically <200ms).
   const online = liveOnline ?? data?.activeNow ?? 0;
   const total = data?.totalUsers ?? 0;
 
