@@ -29,6 +29,7 @@ import { DashboardHeroCTA } from "@/components/dashboard-hero-cta";
 import { DashboardServicesGrid } from "@/components/dashboard-services-grid";
 import { DashboardProUpsell } from "@/components/dashboard-pro-upsell";
 import { PlanStatusBanner } from "@/components/plan-status-banner";
+import { DashboardJourneyCard } from "@/components/dashboard-journey-card";
 import { DashboardSuccessStories } from "@/components/dashboard-success-stories";
 import { DashboardBestMatch } from "@/components/dashboard-best-match";
 import { DashboardVisaJobsLocked } from "@/components/dashboard-visa-jobs-locked";
@@ -1316,6 +1317,9 @@ export default function Dashboard() {
         {/* Trial/Monthly/Yearly users see their countdown here so they never
             mistake "trial ended" for "the app forgot my payment" */}
         <PlanStatusBanner />
+        {/* Retention #1: journey roadmap progress card — gives users a clear
+            "what's next" anchor every time they open the dashboard. */}
+        <DashboardJourneyCard />
         <DashboardServicesGrid />
         <DashboardProUpsell />
 

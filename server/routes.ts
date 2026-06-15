@@ -1387,6 +1387,10 @@ export async function registerRoutes(
   await setupAuth(app);
   registerAuthRoutes(app);
 
+  // 2026-06 retention #1: country journey checklist endpoints
+  const { registerJourneyRoutes } = await import("./routes/journey");
+  registerJourneyRoutes(app);
+
   // Track active sessions for the admin dashboard real-time counter.
   // Must run after setupAuth so req.session is populated.
   app.use(trackActiveUser);

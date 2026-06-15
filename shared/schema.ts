@@ -1,5 +1,5 @@
 import { sql, relations } from "drizzle-orm";
-import { pgTable, text, varchar, boolean, integer, timestamp, jsonb, serial, numeric } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, boolean, integer, timestamp, jsonb, serial, numeric, uniqueIndex, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -1179,6 +1179,49 @@ export type TrackedAppStatus = typeof TRACKED_APP_STATUSES[keyof typeof TRACKED_
 export const insertTrackedApplicationSchema = createInsertSchema(trackedApplications).omit({ id: true, createdAt: true, updatedAt: true });
 export type TrackedApplication = typeof trackedApplications.$inferSelect;
 export type InsertTrackedApplication = z.infer<typeof insertTrackedApplicationSchema>;
+
+// ==================== COUNTRY JOURNEY CHECKLIST ====================
+// 2026-06: per-user, per-country progress through the 10-12 step roadmap
+// of landing a job in their target country (passport, visa, KCSE attestation,
+// English cert, agency vetting, contract review, departure prep, etc.).
+//
+// Step definitions live in client/server constants (server/lib/country-journey-steps.ts)
+// because they're authored content, not DB data. Each row here records WHICH
+// steps a given user has completed for a given country, plus when they
+// started + last touched it. Drives the "Continue your journey" home dashboard
+// widget and the standalone /journey page.
+
+export const userCountryJourneys = pgTable("user_country_journeys", {
+  id:                varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId:            varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  countryCode:       varchar("country_code", { length: 8 }).notNull(),   // ISO-2 (KE, AE, GB, etc.)
+  // Array of step keys the user has marked complete (e.g. ["passport", "kcse_attestation"]).
+  // Stored as JSON so it's a simple in-place mutation rather than a join table.
+  completedSteps:    jsonb("completed_steps").notNull().default(sql`'[]'::jsonb`),
+  // Stage label the user has self-identified at (preparing / applying / hired / departed)
+  stage:             varchar("stage", { length: 32 }).notNull().default("preparing"),
+  startedAt:         timestamp("started_at").defaultNow(),
+  lastTouchedAt:     timestamp("last_touched_at").defaultNow(),
+  createdAt:         timestamp("created_at").defaultNow(),
+  updatedAt:         timestamp("updated_at").defaultNow(),
+}, (t) => ({
+  // One row per (user, country). Users CAN target multiple countries — each gets its own row.
+  uniqUserCountry: uniqueIndex("uniq_user_country_journey").on(t.userId, t.countryCode),
+  byUser:          index("idx_user_country_journey_user").on(t.userId),
+}));
+
+export const insertUserCountryJourneySchema = createInsertSchema(userCountryJourneys).omit({ id: true, createdAt: true, updatedAt: true });
+export type UserCountryJourney = typeof userCountryJourneys.$inferSelect;
+export type InsertUserCountryJourney = z.infer<typeof insertUserCountryJourneySchema>;
+
+export const JOURNEY_STAGES = {
+  PREPARING: "preparing",   // gathering docs, CV, etc.
+  APPLYING:  "applying",    // actively sending applications
+  INTERVIEW: "interview",   // in interview / offer process
+  HIRED:     "hired",       // signed contract, awaiting departure
+  DEPARTED:  "departed",    // already abroad
+} as const;
+export type JourneyStage = typeof JOURNEY_STAGES[keyof typeof JOURNEY_STAGES];
 
 // ==================== ANALYTICS ====================
 
