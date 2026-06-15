@@ -34,6 +34,7 @@ import { DashboardSalaryTeaser } from "@/components/dashboard-salary-teaser";
 import { DashboardInterviewCard } from "@/components/dashboard-interview-card";
 import { DashboardContinueCard } from "@/components/dashboard-continue-card";
 import { DashboardBookmarksCard } from "@/components/dashboard-bookmarks-card";
+import { DashboardCalculatorCard } from "@/components/dashboard-calculator-card";
 import { DashboardSuccessStories } from "@/components/dashboard-success-stories";
 import { DashboardBestMatch } from "@/components/dashboard-best-match";
 import { DashboardVisaJobsLocked } from "@/components/dashboard-visa-jobs-locked";
@@ -1332,6 +1333,9 @@ export default function Dashboard() {
         {/* Retention #2: salary teaser — rotates daily, anchors users to
             specific aspirations ("if I get hired as a nurse in UAE..."). */}
         <DashboardSalaryTeaser />
+        {/* Retention #6: income calculator — what would you really keep
+            after living costs and how much sent home? */}
+        <DashboardCalculatorCard />
         {/* Retention #3: AI mock interview — 5 questions, scored, with
             coaching feedback. Drives prep behaviour ahead of real calls. */}
         <DashboardInterviewCard />
