@@ -2787,13 +2787,19 @@ Crawl-delay: 1`);
                 return res.status(401).json({ message: "Unauthorized" });
             const { jobId } = req.params;
             const jobType = req.query.type || "visa";
-            // ── PRO gate (with admin bypass — admins always pass) ──────────────────
+            // ── Paid-tier gate (with admin bypass) ────────────────────────────────
+            // 2026-06 FIX: previously only "pro" passed, which blocked KES 99 trial
+            // and KES 1,000 monthly subscribers from clicking country portal links
+            // (Bayt, Naukri Gulf, etc.) on /country/uae. They'd hit the upgrade
+            // modal even though they had paid. Aligned with the same PAID_TIERS
+            // set used by /api/visa-jobs/:id/apply and requireAnyPaidPlan.
             const adminAccess = await storage_1.storage.isUserAdmin(userId).catch(() => false);
             const planId = adminAccess ? "pro" : await storage_1.storage.getUserPlan(userId);
-            if (planId !== "pro") {
+            const PAID_TIERS = new Set(["trial", "basic", "monthly", "yearly", "pro", "pro_referral"]);
+            if (!PAID_TIERS.has(planId)) {
                 return res.status(403).json({
                     error: "upgrade_required",
-                    message: "Upgrade to Pro to access job links.",
+                    message: "An active plan is required to open job links.",
                 });
             }
             // ── Synthetic portal short-circuit ─────────────────────────────────────

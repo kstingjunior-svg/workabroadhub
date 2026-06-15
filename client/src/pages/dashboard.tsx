@@ -1947,8 +1947,12 @@ export default function Dashboard() {
         <RecentSignupsPanel />
 
         {/* ── SUPPORT TEAM ─────────────────────────────────────────────── */}
+        {/* 2026-06 FIX: was `isPro` (only literal "pro" plan), which hid the
+            WhatsApp Support widget from trial + monthly paying users. Now
+            uses `isPaid` so every paid tier gets it — matches the rest of
+            the dashboard gating. */}
         <SupportTeamSection
-          isPro={isPro}
+          isPro={isPaid}
           onUpgrade={() => openUpgradeModal("consultation_locked", "WhatsApp Consultation", "pro")}
         />
 
