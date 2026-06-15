@@ -1006,10 +1006,14 @@ exports.userCountryJourneys = (0, pg_core_1.pgTable)("user_country_journeys", {
     userId: (0, pg_core_1.varchar)("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
     countryCode: (0, pg_core_1.varchar)("country_code", { length: 8 }).notNull(), // ISO-2 (KE, AE, GB, etc.)
     // Array of step keys the user has marked complete (e.g. ["passport", "kcse_attestation"]).
+    // Pre-departure checklist items use the `pd_` prefix and live in the same array.
     // Stored as JSON so it's a simple in-place mutation rather than a join table.
     completedSteps: (0, pg_core_1.jsonb)("completed_steps").notNull().default((0, drizzle_orm_1.sql) `'[]'::jsonb`),
     // Stage label the user has self-identified at (preparing / applying / hired / departed)
     stage: (0, pg_core_1.varchar)("stage", { length: 32 }).notNull().default("preparing"),
+    // 2026-06 retention #7: when the user marks "hired" they can set a departure
+    // date. Drives the countdown + pre-departure checklist visibility.
+    departureDate: (0, pg_core_1.timestamp)("departure_date"),
     startedAt: (0, pg_core_1.timestamp)("started_at").defaultNow(),
     lastTouchedAt: (0, pg_core_1.timestamp)("last_touched_at").defaultNow(),
     createdAt: (0, pg_core_1.timestamp)("created_at").defaultNow(),

@@ -1,4 +1,27 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.registerJourneyRoutes = registerJourneyRoutes;
 const drizzle_orm_1 = require("drizzle-orm");
@@ -89,6 +112,7 @@ function registerJourneyRoutes(app) {
                     progressPercent: steps.length > 0 ? Math.round((completed.length / steps.length) * 100) : 0,
                 },
                 stage: row?.stage ?? null,
+                departureDate: row?.departureDate ?? null,
                 startedAt: row?.startedAt ?? null,
                 lastTouchedAt: row?.lastTouchedAt ?? null,
             });
@@ -159,9 +183,16 @@ function registerJourneyRoutes(app) {
             if (!validCountryCode(code)) {
                 return res.status(400).json({ message: `Country "${code}" not supported yet.` });
             }
-            const validKeys = new Set((0, country_journey_steps_1.getJourneySteps)(code).map((s) => s.key));
+            // 2026-06 retention #7: pre-departure step keys are namespaced `pd_*`
+            // and live in shared/pre-departure-steps.ts. We validate them against
+            // that registry rather than the journey roadmap keys.
+            const { getPreDepartureSteps } = await Promise.resolve().then(() => __importStar(require("@shared/pre-departure-steps")));
+            const validKeys = new Set([
+                ...(0, country_journey_steps_1.getJourneySteps)(code).map((s) => s.key),
+                ...getPreDepartureSteps(code).map((s) => s.key),
+            ]);
             if (!validKeys.has(stepKey)) {
-                return res.status(400).json({ message: `Step "${stepKey}" is not part of the ${code} journey.` });
+                return res.status(400).json({ message: `Step "${stepKey}" is not part of the ${code} journey or pre-departure checklist.` });
             }
             // Fetch existing — auto-create the row if it doesn't exist, so the user
             // doesn't have to call /start explicitly before ticking their first step.
@@ -236,6 +267,51 @@ function registerJourneyRoutes(app) {
             }
             console.error("[journey][stage]", err?.message);
             res.status(500).json({ message: "Failed to update stage" });
+        }
+    });
+    // ── Set departure date (Retention #7) ────────────────────────────────────
+    // Body { departureDate: ISO8601 string | null }. Null clears the date.
+    app.post("/api/journey/:countryCode/departure-date", replitAuth_1.isAuthenticated, async (req, res) => {
+        try {
+            const userId = getUserId(req);
+            if (!userId)
+                return res.status(401).json({ message: "Unauthorized" });
+            const code = (req.params.countryCode || "").toUpperCase();
+            if (!validCountryCode(code)) {
+                return res.status(400).json({ message: `Country "${code}" not supported yet.` });
+            }
+            const rawDate = req.body?.departureDate;
+            let departureDate = null;
+            if (rawDate) {
+                const parsed = new Date(String(rawDate));
+                if (Number.isNaN(parsed.getTime())) {
+                    return res.status(400).json({ message: "departureDate must be a valid ISO date" });
+                }
+                departureDate = parsed;
+            }
+            const result = await db_1.db
+                .update(schema_1.userCountryJourneys)
+                .set({ departureDate, lastTouchedAt: new Date(), updatedAt: new Date() })
+                .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.userCountryJourneys.userId, userId), (0, drizzle_orm_1.eq)(schema_1.userCountryJourneys.countryCode, code)))
+                .returning();
+            if (result.length === 0) {
+                // Create journey row if missing — preserves the "tap to start" UX
+                await db_1.db.insert(schema_1.userCountryJourneys).values({
+                    userId,
+                    countryCode: code,
+                    completedSteps: [],
+                    stage: schema_1.JOURNEY_STAGES.HIRED,
+                    departureDate,
+                });
+            }
+            res.json({ ok: true, departureDate });
+        }
+        catch (err) {
+            if (isMissingTable(err)) {
+                return res.status(503).json({ message: "Journey feature is being deployed — try again in a few minutes." });
+            }
+            console.error("[journey][departure-date]", err?.message);
+            res.status(500).json({ message: "Failed to set departure date" });
         }
     });
     // ── Abandon a journey ─────────────────────────────────────────────────────

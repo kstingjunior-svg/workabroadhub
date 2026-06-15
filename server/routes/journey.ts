@@ -110,6 +110,7 @@ export function registerJourneyRoutes(app: Express): void {
           progressPercent: steps.length > 0 ? Math.round((completed.length / steps.length) * 100) : 0,
         },
         stage: row?.stage ?? null,
+        departureDate: row?.departureDate ?? null,
         startedAt: row?.startedAt ?? null,
         lastTouchedAt: row?.lastTouchedAt ?? null,
       });
@@ -181,9 +182,16 @@ export function registerJourneyRoutes(app: Express): void {
       if (!validCountryCode(code)) {
         return res.status(400).json({ message: `Country "${code}" not supported yet.` });
       }
-      const validKeys = new Set(getJourneySteps(code).map((s) => s.key));
+      // 2026-06 retention #7: pre-departure step keys are namespaced `pd_*`
+      // and live in shared/pre-departure-steps.ts. We validate them against
+      // that registry rather than the journey roadmap keys.
+      const { getPreDepartureSteps } = await import("@shared/pre-departure-steps");
+      const validKeys = new Set([
+        ...getJourneySteps(code).map((s) => s.key),
+        ...getPreDepartureSteps(code).map((s) => s.key),
+      ]);
       if (!validKeys.has(stepKey)) {
-        return res.status(400).json({ message: `Step "${stepKey}" is not part of the ${code} journey.` });
+        return res.status(400).json({ message: `Step "${stepKey}" is not part of the ${code} journey or pre-departure checklist.` });
       }
       // Fetch existing — auto-create the row if it doesn't exist, so the user
       // doesn't have to call /start explicitly before ticking their first step.
@@ -264,6 +272,53 @@ export function registerJourneyRoutes(app: Express): void {
       }
       console.error("[journey][stage]", err?.message);
       res.status(500).json({ message: "Failed to update stage" });
+    }
+  });
+
+  // ── Set departure date (Retention #7) ────────────────────────────────────
+  // Body { departureDate: ISO8601 string | null }. Null clears the date.
+  app.post("/api/journey/:countryCode/departure-date", isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      const code = (req.params.countryCode || "").toUpperCase();
+      if (!validCountryCode(code)) {
+        return res.status(400).json({ message: `Country "${code}" not supported yet.` });
+      }
+      const rawDate = req.body?.departureDate;
+      let departureDate: Date | null = null;
+      if (rawDate) {
+        const parsed = new Date(String(rawDate));
+        if (Number.isNaN(parsed.getTime())) {
+          return res.status(400).json({ message: "departureDate must be a valid ISO date" });
+        }
+        departureDate = parsed;
+      }
+      const result = await db
+        .update(userCountryJourneys)
+        .set({ departureDate, lastTouchedAt: new Date(), updatedAt: new Date() })
+        .where(and(
+          eq(userCountryJourneys.userId, userId),
+          eq(userCountryJourneys.countryCode, code),
+        ))
+        .returning();
+      if (result.length === 0) {
+        // Create journey row if missing — preserves the "tap to start" UX
+        await db.insert(userCountryJourneys).values({
+          userId,
+          countryCode: code,
+          completedSteps: [],
+          stage: JOURNEY_STAGES.HIRED,
+          departureDate,
+        });
+      }
+      res.json({ ok: true, departureDate });
+    } catch (err: any) {
+      if (isMissingTable(err)) {
+        return res.status(503).json({ message: "Journey feature is being deployed — try again in a few minutes." });
+      }
+      console.error("[journey][departure-date]", err?.message);
+      res.status(500).json({ message: "Failed to set departure date" });
     }
   });
 

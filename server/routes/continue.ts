@@ -174,8 +174,11 @@ async function getInterviewCandidate(userId: string): Promise<ContinueCandidate 
 
 async function getJourneyCandidate(userId: string): Promise<ContinueCandidate | null> {
   try {
-    const { rows } = await pool.query<{ country_code: string; completed_steps: any; last_touched_at: Date; stage: string }>(
-      `SELECT country_code, completed_steps, last_touched_at, stage
+    const { rows } = await pool.query<{
+      country_code: string; completed_steps: any; last_touched_at: Date; stage: string;
+      departure_date: Date | null;
+    }>(
+      `SELECT country_code, completed_steps, last_touched_at, stage, departure_date
          FROM user_country_journeys
         WHERE user_id = $1
         ORDER BY last_touched_at DESC NULLS LAST
@@ -191,6 +194,31 @@ async function getJourneyCandidate(userId: string): Promise<ContinueCandidate | 
     const pct = total > 0 ? Math.round((done / total) * 100) : 0;
     const flag = COUNTRY_FLAG[r.country_code] ?? "🌍";
     const name = COUNTRY_NAME[r.country_code] ?? r.country_code;
+
+    // ── HIGHEST PRIORITY: user is at "hired" with a departure date set ─────
+    // Surfaces the countdown so they can't miss the pre-departure checklist.
+    if (r.stage === "hired" && r.departure_date) {
+      const ms = new Date(r.departure_date).getTime() - Date.now();
+      const days = Math.ceil(ms / 86400_000);
+      if (days >= 0) {
+        const subhead = days === 0
+          ? `Today · pre-departure checklist`
+          : days === 1
+            ? `Tomorrow · pre-departure checklist`
+            : days <= 14
+              ? `${days} days away · finish your pre-departure list`
+              : `${days} days away · ${flag} ${name}`;
+        return {
+          kind: "journey_progress",
+          priority: 95,                  // higher than even a stuck CV order
+          href: `/journey/${r.country_code}`,
+          headline: `${flag} You fly in ${days} day${days === 1 ? "" : "s"}`,
+          subhead,
+          icon: "sparkles",
+          accent: days <= 7 ? "rose" : "amber",
+        };
+      }
+    }
 
     // Recently-completed journey → celebration
     if (pct === 100) {

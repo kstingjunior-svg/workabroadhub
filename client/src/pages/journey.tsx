@@ -23,6 +23,7 @@ import {
   Briefcase, FileText, Plane, Wallet, Building2, Sparkles, ArrowRight,
 } from "lucide-react";
 import { SUPPORTED_JOURNEY_COUNTRIES, getJourneySteps, type JourneyStep } from "@shared/country-journey-steps";
+import { PreDepartureSection } from "@/components/pre-departure-section";
 
 interface JourneyStepDisplay {
   key: string;
@@ -41,6 +42,7 @@ interface JourneyResponse {
   steps: JourneyStepDisplay[];
   progress: { totalSteps: number; completedCount: number; progressPercent: number };
   stage: string | null;
+  departureDate: string | null;
   startedAt: string | null;
   lastTouchedAt: string | null;
 }
@@ -208,6 +210,7 @@ function JourneyDetail({ countryCode }: { countryCode: string }) {
         : 0,
     },
     stage: serverData?.stage ?? null,
+    departureDate: serverData?.departureDate ?? null,
     startedAt: serverData?.startedAt ?? null,
     lastTouchedAt: serverData?.lastTouchedAt ?? null,
   };
@@ -430,6 +433,18 @@ function JourneyDetail({ countryCode }: { countryCode: string }) {
             );
           })}
         </div>
+
+        {/* Retention #7: pre-departure checklist appears once the user marks
+            their stage as "hired" or "departed". Hidden otherwise so it
+            doesn't clutter the page for users still in the prep phase. */}
+        <PreDepartureSection
+          countryCode={countryCode}
+          countryName={localCountry?.name ?? countryCode}
+          countryFlag={localCountry?.flag ?? "🌍"}
+          stage={data.stage}
+          departureDate={data.departureDate}
+          completedKeys={new Set(data.steps.filter((s) => s.completed).map((s) => s.key))}
+        />
       </div>
     </div>
   );

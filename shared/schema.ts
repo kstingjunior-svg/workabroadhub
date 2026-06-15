@@ -1196,10 +1196,14 @@ export const userCountryJourneys = pgTable("user_country_journeys", {
   userId:            varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   countryCode:       varchar("country_code", { length: 8 }).notNull(),   // ISO-2 (KE, AE, GB, etc.)
   // Array of step keys the user has marked complete (e.g. ["passport", "kcse_attestation"]).
+  // Pre-departure checklist items use the `pd_` prefix and live in the same array.
   // Stored as JSON so it's a simple in-place mutation rather than a join table.
   completedSteps:    jsonb("completed_steps").notNull().default(sql`'[]'::jsonb`),
   // Stage label the user has self-identified at (preparing / applying / hired / departed)
   stage:             varchar("stage", { length: 32 }).notNull().default("preparing"),
+  // 2026-06 retention #7: when the user marks "hired" they can set a departure
+  // date. Drives the countdown + pre-departure checklist visibility.
+  departureDate:     timestamp("departure_date"),
   startedAt:         timestamp("started_at").defaultNow(),
   lastTouchedAt:     timestamp("last_touched_at").defaultNow(),
   createdAt:         timestamp("created_at").defaultNow(),
