@@ -35,6 +35,15 @@ interface Diagnostics {
     recentFailureReasons: Record<string, number>;
     lastFailureAt: string | null;
   };
+  activeProfile: {
+    configured: boolean;
+    host?: string;
+    port?: number;
+    user?: string;
+    kind?: "gmail" | "smtp";
+    isHostinger?: boolean;
+  };
+  configuredFrom: string | null;
   codesGeneratedLastHour: number;
   unverifiedSignupsLast24h: number;
   recentAttempts: Array<{
@@ -141,6 +150,111 @@ export default function EmailHealthPage() {
       </div>
 
       <div className="max-w-5xl mx-auto px-4 py-5 space-y-5">
+        {/* Current sender — most important "what's actually going out" info */}
+        {d && (
+          <Card className={`border-2 ${
+            d.activeProfile.isHostinger
+              ? "border-emerald-300 dark:border-emerald-700 bg-emerald-50/40 dark:bg-emerald-950/20"
+              : d.activeProfile.kind === "gmail"
+                ? "border-amber-300 dark:border-amber-700 bg-amber-50/40 dark:bg-amber-950/20"
+                : "border-rose-300 dark:border-rose-700 bg-rose-50/40 dark:bg-rose-950/20"
+          }`}>
+            <CardContent className="p-4">
+              <h2 className="font-bold mb-2 flex items-center gap-2">
+                <Mail className="h-4 w-4" /> Codes are currently sent FROM
+              </h2>
+              {!d.activeProfile.configured ? (
+                <div className="text-sm text-rose-700">
+                  <strong>No SMTP configured.</strong> Codes won't send until you set Hostinger or another SMTP provider in Render env.
+                </div>
+              ) : (
+                <>
+                  <div className="text-2xl font-bold tabular-nums mb-1 break-all">
+                    {d.activeProfile.user}
+                  </div>
+                  <div className="text-xs text-muted-foreground mb-2">
+                    via {d.activeProfile.host}:{d.activeProfile.port}{" "}
+                    ({d.activeProfile.kind === "gmail" ? "Gmail SMTP" : d.activeProfile.isHostinger ? "Hostinger Mail" : "Generic SMTP"})
+                  </div>
+                  {d.activeProfile.kind === "gmail" && (
+                    <div className="text-xs bg-amber-100 dark:bg-amber-900/30 border border-amber-300 rounded p-2.5 mt-2">
+                      <strong>This is your personal Gmail.</strong> That's why users see codes coming from a Gmail address instead of your business email.
+                      Switch to Hostinger SMTP using the card below.
+                    </div>
+                  )}
+                  {d.activeProfile.isHostinger && (
+                    <div className="text-xs bg-emerald-100 dark:bg-emerald-900/30 border border-emerald-300 rounded p-2.5 mt-2">
+                      ✓ You're on Hostinger Mail — codes go out FROM your business address.
+                    </div>
+                  )}
+                  {d.configuredFrom && d.configuredFrom.toLowerCase() !== d.activeProfile.user?.toLowerCase() && (
+                    <div className="text-[11px] text-muted-foreground mt-2">
+                      EMAIL_FROM is set to <code>{d.configuredFrom}</code> but doesn't match the authed account.
+                      Configure DKIM on that domain (or remove EMAIL_FROM) to use it.
+                    </div>
+                  )}
+                </>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Hostinger SMTP setup card */}
+        {d && !d.activeProfile.isHostinger && (
+          <Card className="border-2 border-blue-300 dark:border-blue-700 bg-blue-50/40 dark:bg-blue-950/20">
+            <CardContent className="p-4">
+              <h2 className="font-bold mb-2 flex items-center gap-2">
+                Switch to Hostinger Mail (workabroadhub.tech@workabroadhub.tech)
+              </h2>
+              <p className="text-xs text-muted-foreground mb-3">
+                Add these exact env vars in your Render service → Environment → "Add Environment Variable".
+                Once added, hit "Save changes" — Render will redeploy automatically. After redeploy,
+                refresh this page; the "Codes are currently sent FROM" box above should show your business address.
+              </p>
+              <div className="space-y-1.5 font-mono text-xs">
+                <div className="bg-muted/60 rounded px-2 py-1.5 flex items-center justify-between gap-2">
+                  <span><strong>SMTP_HOST</strong> = smtp.hostinger.com</span>
+                  <Button size="sm" variant="ghost" className="h-6 px-2" onClick={() => copyCode("smtp.hostinger.com")}>
+                    <Copy className="h-3 w-3" />
+                  </Button>
+                </div>
+                <div className="bg-muted/60 rounded px-2 py-1.5 flex items-center justify-between gap-2">
+                  <span><strong>SMTP_PORT</strong> = 465</span>
+                  <Button size="sm" variant="ghost" className="h-6 px-2" onClick={() => copyCode("465")}>
+                    <Copy className="h-3 w-3" />
+                  </Button>
+                </div>
+                <div className="bg-muted/60 rounded px-2 py-1.5 flex items-center justify-between gap-2">
+                  <span><strong>SMTP_USER</strong> = workabroadhub.tech@workabroadhub.tech</span>
+                  <Button size="sm" variant="ghost" className="h-6 px-2" onClick={() => copyCode("workabroadhub.tech@workabroadhub.tech")}>
+                    <Copy className="h-3 w-3" />
+                  </Button>
+                </div>
+                <div className="bg-muted/60 rounded px-2 py-1.5">
+                  <strong>SMTP_PASS</strong> = <em className="text-muted-foreground">your Hostinger mailbox password</em>
+                  <div className="text-[10px] text-muted-foreground mt-0.5 normal-case">
+                    Find it in Hostinger: hPanel → Emails → Email Accounts → workabroadhub.tech@workabroadhub.tech → "Reset password" if you don't remember it.
+                  </div>
+                </div>
+                <div className="bg-muted/60 rounded px-2 py-1.5 flex items-center justify-between gap-2">
+                  <span><strong>EMAIL_FROM</strong> = workabroadhub.tech@workabroadhub.tech</span>
+                  <Button size="sm" variant="ghost" className="h-6 px-2" onClick={() => copyCode("workabroadhub.tech@workabroadhub.tech")}>
+                    <Copy className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
+              <div className="mt-3 text-xs bg-amber-50 dark:bg-amber-950/30 border border-amber-300 rounded p-2.5">
+                <strong>Important:</strong> after the new env vars are saved, you can leave <code>GMAIL_USER</code> and <code>GMAIL_APP_PASSWORD</code> in place as a backup —
+                they'll only be used if Hostinger SMTP fails. Or remove them entirely for a clean switch.
+              </div>
+              <div className="mt-2 text-[11px] text-muted-foreground">
+                Hostinger SMTP details: <code>smtp.hostinger.com</code>, port <code>465</code> (SSL) — confirmed by Hostinger docs at{" "}
+                <a href="https://support.hostinger.com/en/articles/1583158" target="_blank" rel="noopener noreferrer" className="underline">support.hostinger.com</a>.
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Provider status */}
         <Card>
           <CardContent className="p-4">

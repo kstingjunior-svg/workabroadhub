@@ -83,6 +83,29 @@ let _smtpTransport: nodemailer.Transporter | null = null;
 let _smtpAuthedAs: string | null = null;
 
 function buildSmtpTransport(): { transport: nodemailer.Transporter; authedAs: string; kind: "gmail" | "smtp" } | null {
+  // 2026-06: SMTP_* now takes precedence over GMAIL_*. The founder migrated
+  // from Gmail SMTP to Hostinger business email
+  // (workabroadhub.tech@workabroadhub.tech) so verification codes come FROM
+  // the business address, not a random personal Gmail. The previous order
+  // (Gmail first) silently overrode Hostinger config and left codes coming
+  // from the wrong address.
+  const smtpHost = (process.env.SMTP_HOST || "").trim();
+  const smtpUser = (process.env.SMTP_USER || "").trim();
+  const smtpPass = (process.env.SMTP_PASS || "").trim();
+  if (smtpHost && smtpUser && smtpPass) {
+    const port = parseInt(process.env.SMTP_PORT || "465", 10);
+    const transport = nodemailer.createTransport({
+      host: smtpHost,
+      port,
+      secure: port === 465,
+      auth: { user: smtpUser, pass: smtpPass },
+      connectionTimeout: 8000,
+      socketTimeout: 12000,
+    });
+    return { transport, authedAs: smtpUser, kind: "smtp" };
+  }
+
+  // Fallback: Gmail SMTP (only used if no generic SMTP is configured)
   const gmailUser = (process.env.GMAIL_USER || "").trim();
   // Strip spaces — Google shows app passwords as "xxxx xxxx xxxx xxxx" but SMTP needs no spaces
   const gmailPass = (process.env.GMAIL_APP_PASSWORD || "").trim().replace(/\s+/g, "");
@@ -99,24 +122,10 @@ function buildSmtpTransport(): { transport: nodemailer.Transporter; authedAs: st
     return { transport, authedAs: gmailUser, kind: "gmail" };
   }
 
-  const smtpHost = (process.env.SMTP_HOST || "").trim();
-  const smtpUser = (process.env.SMTP_USER || "").trim();
-  const smtpPass = (process.env.SMTP_PASS || "").trim();
-  if (smtpHost && smtpUser && smtpPass) {
-    const port = parseInt(process.env.SMTP_PORT || "587", 10);
-    const transport = nodemailer.createTransport({
-      host: smtpHost,
-      port,
-      secure: port === 465,
-      auth: { user: smtpUser, pass: smtpPass },
-      connectionTimeout: 8000,
-      socketTimeout: 12000,
-    });
-    return { transport, authedAs: smtpUser, kind: "smtp" };
-  }
-
   return null;
 }
+
+let _smtpKind: "gmail" | "smtp" | null = null;
 
 function getSmtpTransport(): { transport: nodemailer.Transporter; authedAs: string; kind: "gmail" | "smtp" } | null {
   if (!_smtpTransport) {
@@ -124,14 +133,13 @@ function getSmtpTransport(): { transport: nodemailer.Transporter; authedAs: stri
     if (!built) return null;
     _smtpTransport = built.transport;
     _smtpAuthedAs = built.authedAs;
+    _smtpKind = built.kind;
     return built;
   }
-  // Reconstruct return shape from cached
-  const gmailUser = (process.env.GMAIL_USER || "").trim();
   return {
     transport: _smtpTransport,
-    authedAs: _smtpAuthedAs || gmailUser,
-    kind: gmailUser ? "gmail" : "smtp",
+    authedAs: _smtpAuthedAs || "",
+    kind: _smtpKind || "smtp",
   };
 }
 
@@ -139,6 +147,43 @@ function getSmtpTransport(): { transport: nodemailer.Transporter; authedAs: stri
 export function clearProviderCache(): void {
   _smtpTransport = null;
   _smtpAuthedAs = null;
+  _smtpKind = null;
+}
+
+/** Which SMTP provider is currently being used (for the admin diagnostic). */
+export function getActiveSmtpProfile(): {
+  configured: boolean;
+  host?: string;
+  port?: number;
+  user?: string;
+  kind?: "gmail" | "smtp";
+  isHostinger?: boolean;
+} {
+  const smtpHost = (process.env.SMTP_HOST || "").trim();
+  const smtpUser = (process.env.SMTP_USER || "").trim();
+  const smtpPass = (process.env.SMTP_PASS || "").trim();
+  if (smtpHost && smtpUser && smtpPass) {
+    return {
+      configured: true,
+      host: smtpHost,
+      port: parseInt(process.env.SMTP_PORT || "465", 10),
+      user: smtpUser,
+      kind: "smtp",
+      isHostinger: /hostinger\.com$/i.test(smtpHost),
+    };
+  }
+  const gmailUser = (process.env.GMAIL_USER || "").trim();
+  if (gmailUser) {
+    return {
+      configured: true,
+      host: "smtp.gmail.com",
+      port: 465,
+      user: gmailUser,
+      kind: "gmail",
+      isHostinger: false,
+    };
+  }
+  return { configured: false };
 }
 
 /**

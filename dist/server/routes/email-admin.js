@@ -36,6 +36,8 @@ function registerEmailAdminRoutes(app, isAuthenticated, isAdmin) {
         }
         res.json({
             providers,
+            activeProfile: (0, email_providers_1.getActiveSmtpProfile)(),
+            configuredFrom: (process.env.SMTP_FROM || process.env.EMAIL_FROM || "").trim() || null,
             codesGeneratedLastHour: codesLastHour,
             unverifiedSignupsLast24h,
             recentAttempts: recent.map((a) => ({

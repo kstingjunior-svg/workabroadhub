@@ -19,7 +19,7 @@ import type { Express, Response } from "express";
 import crypto from "crypto";
 import { pool } from "../db";
 import { sendEmail } from "../email";
-import { getRecentEmailAttempts, getProviderStats } from "../lib/email-providers";
+import { getRecentEmailAttempts, getProviderStats, getActiveSmtpProfile } from "../lib/email-providers";
 
 function sha256(s: string): string {
   return crypto.createHash("sha256").update(s).digest("hex");
@@ -60,6 +60,8 @@ export function registerEmailAdminRoutes(
 
     res.json({
       providers,
+      activeProfile: getActiveSmtpProfile(),
+      configuredFrom: (process.env.SMTP_FROM || process.env.EMAIL_FROM || "").trim() || null,
       codesGeneratedLastHour: codesLastHour,
       unverifiedSignupsLast24h,
       recentAttempts: recent.map((a) => ({
