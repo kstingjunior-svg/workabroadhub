@@ -81,11 +81,42 @@ export default {
           busy: "rgb(239 68 68)",
           offline: "rgb(156 163 175)",
         },
+        // 2026-06 design foundation — named warm-earth tokens.
+        // Use these alongside the shadcn semantic tokens (bg-primary,
+        // bg-accent, etc.) for cases where you specifically want the
+        // *named* colour rather than its role. Hex values are sources of
+        // truth; HSL forms in :root mirror these.
+        cream: {
+          DEFAULT: "#FAF5EC", 50: "#FAF5EC", 100: "#F0E8DA", 200: "#E4D8C0",
+        },
+        ember: {
+          DEFAULT: "#C2461E", 500: "#C2461E", 700: "#8B3217",
+        },
+        acacia: {
+          DEFAULT: "#2D4D2A", 500: "#5A7B57", 700: "#2D4D2A",
+        },
+        honey: {
+          DEFAULT: "#C29D4F", 300: "#E0C684", 500: "#C29D4F",
+        },
+        espresso: {
+          DEFAULT: "#2B1810", 700: "#3A2D24", 900: "#2B1810",
+        },
+        ink: {
+          300: "#A39687", 500: "#6B5D4F", 700: "#3A2D24", 900: "#2B1810",
+        },
+        dusk: { DEFAULT: "#3D4666", 500: "#3D4666" },
+        clay: { DEFAULT: "#A85936", 500: "#A85936", 700: "#7A3825" },
+        mist: { DEFAULT: "#B5C1A7", 500: "#B5C1A7" },
       },
       fontFamily: {
-        sans: ["var(--font-sans)"],
-        serif: ["var(--font-serif)"],
-        mono: ["var(--font-mono)"],
+        // 2026-06 design foundation: Manrope as default body, Fraunces
+        // available as `font-serif` AND `font-display`. The `display`
+        // utility maps to the same font but the CSS layer in index.css
+        // applies the larger optical-size axis automatically.
+        sans:    ["var(--font-sans)", "system-ui", "sans-serif"],
+        serif:   ["var(--font-serif)", "Georgia", "serif"],
+        display: ["var(--font-serif)", "Georgia", "serif"],
+        mono:    ["var(--font-mono)", "ui-monospace", "monospace"],
       },
       keyframes: {
         "accordion-down": {

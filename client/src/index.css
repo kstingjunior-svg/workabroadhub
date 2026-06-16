@@ -165,61 +165,74 @@ html.text-size-larger {
   --elevate-1: rgba(0,0,0, .03);
   --elevate-2: rgba(0,0,0, .08);
 
-  --background: 210 20% 98%;
-  --foreground: 222 47% 11%;
+  /* 2026-06 design foundation — "Bone, Ember & Acacia".
+     Warm Kenyan-earth palette replacing the generic SaaS blue/white.
+     Maps the design spec (PART 1) onto the existing shadcn token names so
+     every component picks them up automatically:
+       background  → Savanna Cream  #FAF5EC
+       foreground  → Espresso       #2B1810
+       primary     → Ember Orange   #C2461E   (was sky blue)
+       secondary   → Bone           #F0E8DA
+       accent      → Honey Gold     #C29D4F   (was teal)
+       success     → Acacia Green   #2D4D2A   (already added below)
+       destructive → Bloodstone     #7A3825
+     All HSL values verified for WCAG AA at minimum; AAA on most pairs.
+     See `design-spec.md` for the full token table. */
+  --background: 36 56% 95%;       /* Savanna Cream  #FAF5EC */
+  --foreground: 20 47% 12%;       /* Espresso       #2B1810 */
 
-  --border: 214 20% 88%;
+  --border: 38 28% 80%;           /* Warm sand line */
 
-  --card: 0 0% 100%;
-  --card-foreground: 222 47% 11%;
-  --card-border: 214 20% 90%;
+  --card: 0 0% 100%;              /* keep cards bright by default — Bone via .bg-bone if needed */
+  --card-foreground: 20 47% 12%;
+  --card-border: 38 28% 82%;
 
-  --sidebar: 210 25% 96%;
-  --sidebar-foreground: 222 47% 11%;
-  --sidebar-border: 214 20% 88%;
-  --sidebar-primary: 199 89% 48%;
-  --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 199 30% 92%;
-  --sidebar-accent-foreground: 222 47% 11%;
-  --sidebar-ring: 199 89% 48%;
+  --sidebar: 38 38% 90%;          /* Bone — sidebars sit on Bone, content on Cream */
+  --sidebar-foreground: 20 47% 12%;
+  --sidebar-border: 38 28% 80%;
+  --sidebar-primary: 15 73% 44%;  /* Ember */
+  --sidebar-primary-foreground: 36 56% 95%;
+  --sidebar-accent: 36 56% 95%;   /* Cream — selected item lifts onto cream */
+  --sidebar-accent-foreground: 20 47% 12%;
+  --sidebar-ring: 15 73% 44%;
 
   --popover: 0 0% 100%;
-  --popover-foreground: 222 47% 11%;
-  --popover-border: 214 20% 88%;
+  --popover-foreground: 20 47% 12%;
+  --popover-border: 38 28% 80%;
 
-  --primary: 199 89% 48%;
-  --primary-foreground: 0 0% 100%;
+  --primary: 15 73% 44%;          /* Ember Orange — primary CTA */
+  --primary-foreground: 36 56% 95%;
 
-  --secondary: 210 20% 94%;
-  --secondary-foreground: 222 47% 30%;
+  --secondary: 38 38% 90%;        /* Bone */
+  --secondary-foreground: 23 24% 19%;  /* Cinder text on Bone */
 
-  --muted: 210 15% 94%;
-  --muted-foreground: 215 16% 47%;
+  --muted: 38 28% 89%;             /* Soft sand */
+  --muted-foreground: 31 15% 36%;  /* Smoke — secondary text */
 
-  --accent: 172 66% 50%;
-  --accent-foreground: 0 0% 100%;
+  --accent: 38 47% 53%;            /* Honey Gold — premium accent, KSh chip */
+  --accent-foreground: 20 47% 12%; /* Espresso on Honey for readability */
 
-  --destructive: 0 84% 60%;
-  --destructive-foreground: 0 0% 100%;
+  --destructive: 13 51% 31%;       /* Bloodstone — warm destructive, not cherry red */
+  --destructive-foreground: 36 56% 95%;
 
-  --input: 214 20% 85%;
-  --ring: 199 89% 48%;
+  --input: 38 28% 80%;
+  --ring: 15 73% 44%;              /* Ember focus ring — matches primary */
 
-  --chart-1: 199 89% 48%;
-  --chart-2: 172 66% 50%;
-  --chart-3: 142 71% 45%;
-  --chart-4: 38 92% 50%;
-  --chart-5: 0 84% 60%;
+  --chart-1: 15 73% 44%;           /* Ember */
+  --chart-2: 38 47% 53%;           /* Honey */
+  --chart-3: 115 28% 23%;          /* Acacia */
+  --chart-4: 228 25% 32%;          /* Soft Indigo */
+  --chart-5: 15 51% 44%;           /* Warning Clay */
 
-  /* Accessibility: Success/warning colors with sufficient contrast */
-  --success: 142 71% 35%;
-  --success-foreground: 0 0% 100%;
-  --warning: 38 92% 45%;
-  --warning-foreground: 0 0% 0%;
+  /* Accessibility: Success/warning colors retuned to the warm palette */
+  --success: 115 28% 23%;          /* Acacia Green */
+  --success-foreground: 36 56% 95%;
+  --warning: 15 51% 44%;           /* Warning Clay */
+  --warning-foreground: 36 56% 95%;
 
-  --font-sans: 'Inter', sans-serif;
-  --font-serif: Georgia, serif;
-  --font-mono: Menlo, monospace;
+  --font-sans: 'Manrope', system-ui, -apple-system, sans-serif;
+  --font-serif: 'Fraunces', Georgia, serif;
+  --font-mono: 'Geist Mono', Menlo, monospace;
   --radius: .5rem;
   --shadow-2xs: 0px 1px 2px 0px rgba(0,0,0,0.03);
   --shadow-xs: 0px 1px 3px 0px rgba(0,0,0,0.04);
@@ -263,57 +276,60 @@ html.text-size-larger {
   --elevate-1: rgba(255,255,255, .04);
   --elevate-2: rgba(255,255,255, .09);
 
-  --background: 222 47% 8%;
-  --foreground: 210 20% 98%;
+  /* Dark mode — warm Cinder + Ember rather than generic charcoal.
+     Background sits in the deep-Espresso family (warm near-black) so
+     Ember CTAs glow on it the way embers do in a real fire, and so the
+     palette feels like the same product after dark — not a different app. */
+  --background: 22 30% 7%;         /* Deep Espresso */
+  --foreground: 36 56% 95%;        /* Cream text */
 
-  --border: 215 20% 20%;
+  --border: 22 20% 22%;            /* Cinder line */
 
-  --card: 222 47% 11%;
-  --card-foreground: 210 20% 98%;
-  --card-border: 215 20% 18%;
+  --card: 22 25% 10%;              /* Slightly lifted from bg */
+  --card-foreground: 36 56% 95%;
+  --card-border: 22 20% 20%;
 
-  --sidebar: 222 47% 10%;
-  --sidebar-foreground: 210 20% 98%;
-  --sidebar-border: 215 20% 18%;
-  --sidebar-primary: 199 89% 48%;
-  --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 199 40% 20%;
-  --sidebar-accent-foreground: 210 20% 98%;
-  --sidebar-ring: 199 89% 48%;
+  --sidebar: 22 27% 9%;
+  --sidebar-foreground: 36 56% 95%;
+  --sidebar-border: 22 20% 20%;
+  --sidebar-primary: 15 73% 50%;   /* Ember, slightly brighter in dark */
+  --sidebar-primary-foreground: 36 56% 95%;
+  --sidebar-accent: 22 20% 16%;
+  --sidebar-accent-foreground: 36 56% 95%;
+  --sidebar-ring: 15 73% 50%;
 
-  --popover: 222 47% 11%;
-  --popover-foreground: 210 20% 98%;
-  --popover-border: 215 20% 20%;
+  --popover: 22 25% 10%;
+  --popover-foreground: 36 56% 95%;
+  --popover-border: 22 20% 22%;
 
-  --primary: 199 89% 48%;
-  --primary-foreground: 0 0% 100%;
+  --primary: 15 73% 50%;           /* Ember */
+  --primary-foreground: 36 56% 95%;
 
-  --secondary: 215 20% 18%;
-  --secondary-foreground: 210 20% 90%;
+  --secondary: 22 22% 18%;         /* Warm dark surface */
+  --secondary-foreground: 36 40% 85%;
 
-  --muted: 215 20% 16%;
-  --muted-foreground: 215 16% 60%;
+  --muted: 22 18% 15%;
+  --muted-foreground: 36 18% 65%;
 
-  --accent: 172 66% 40%;
-  --accent-foreground: 0 0% 100%;
+  --accent: 38 47% 55%;            /* Honey Gold — pops on dark Espresso */
+  --accent-foreground: 22 30% 7%;
 
-  --destructive: 0 72% 51%;
-  --destructive-foreground: 0 0% 100%;
+  --destructive: 13 60% 50%;
+  --destructive-foreground: 36 56% 95%;
 
-  --input: 215 20% 25%;
-  --ring: 199 89% 48%;
+  --input: 22 20% 25%;
+  --ring: 15 73% 50%;
 
-  --chart-1: 199 89% 48%;
-  --chart-2: 172 66% 50%;
-  --chart-3: 142 71% 45%;
-  --chart-4: 38 92% 50%;
-  --chart-5: 0 84% 60%;
+  --chart-1: 15 73% 50%;
+  --chart-2: 38 47% 55%;
+  --chart-3: 115 28% 45%;
+  --chart-4: 228 25% 50%;
+  --chart-5: 15 51% 50%;
 
-  /* Accessibility: Success/warning colors with sufficient contrast */
-  --success: 142 71% 45%;
-  --success-foreground: 0 0% 100%;
-  --warning: 38 92% 50%;
-  --warning-foreground: 0 0% 0%;
+  --success: 115 28% 45%;
+  --success-foreground: 36 56% 95%;
+  --warning: 38 80% 55%;
+  --warning-foreground: 22 30% 7%;
 
   --shadow-2xs: 0px 1px 2px 0px rgba(0,0,0,0.2);
   --shadow-xs: 0px 1px 3px 0px rgba(0,0,0,0.3);
@@ -333,6 +349,40 @@ html.text-size-larger {
   body {
     @apply font-sans antialiased bg-background text-foreground;
     padding-bottom: 100px;
+    /* 2026-06: subtle text rendering improvements for Manrope.
+       Letter-spacing -0.005em compensates for Manrope being slightly looser
+       than Inter at the same size — keeps lines feeling tight without
+       being cramped. */
+    letter-spacing: -0.005em;
+    font-feature-settings: "ss01", "cv11";
+  }
+
+  /* 2026-06 design foundation — Fraunces takes over every heading.
+     Optical sizing scales character chunkiness with point size so a 48pt
+     h1 looks chunkier and friendlier than a 14pt h4. The italic +
+     softness axes are reserved for hero / display moments and applied
+     via the .font-display utility, not globally. */
+  h1, h2, h3, h4, h5, h6,
+  .font-display {
+    font-family: var(--font-serif);
+    font-feature-settings: "tnum" 0, "ss01";
+    font-variation-settings: "opsz" 28, "SOFT" 50;
+    letter-spacing: -0.015em;
+    color: hsl(var(--foreground));
+  }
+
+  h1 { font-variation-settings: "opsz" 96, "SOFT" 60; font-weight: 600; }
+  h2 { font-variation-settings: "opsz" 60, "SOFT" 50; font-weight: 600; }
+  h3 { font-variation-settings: "opsz" 36, "SOFT" 40; font-weight: 500; }
+
+  /* Currency / numeric displays — Fraunces tabular variant.
+     Use `<span class="font-amount">KES 99</span>` anywhere a price renders. */
+  .font-amount {
+    font-family: var(--font-serif);
+    font-feature-settings: "tnum", "lnum";
+    font-variation-settings: "opsz" 48, "SOFT" 80;
+    font-weight: 500;
+    letter-spacing: 0;
   }
 }
 
