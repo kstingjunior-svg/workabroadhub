@@ -63,8 +63,8 @@ const SERVICES: ServiceCard[] = [
   {
     slug: "ats_cv_optimization",
     emoji: "🎯",
-    name: "ATS Optimization",
-    desc: "Beat the robots. Keyword-tuned CV that gets past filters.",
+    name: "Recruiter-Friendly CV",
+    desc: "Get past the gatekeepers. We tune your CV with the words recruiters search for.",
     price: 499,
     badge: "Popular",
     bgColor: "bg-amber-50 dark:bg-amber-950/30 border-amber-300 dark:border-amber-700",
@@ -188,7 +188,7 @@ export function DashboardServicesGrid() {
       <p className="text-[11px] text-center text-muted-foreground mt-3 flex items-center justify-center gap-1.5 flex-wrap">
         <span>💳 M-Pesa Paybill 4153025</span>
         <span>•</span>
-        <span>⚡ AI delivery in minutes</span>
+        <span>⚡ In your inbox in minutes</span>
         <span>•</span>
         <span>📥 Word & PDF download</span>
       </p>

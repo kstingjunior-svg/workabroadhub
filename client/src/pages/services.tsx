@@ -403,11 +403,12 @@ export default function Services() {
 
         <div className="mb-8 text-center">
           <h1 className="text-3xl font-serif font-bold mb-3">
-            Boost Your Job Application Success
+            The bits we'll handle for you.
           </h1>
           <p className="text-muted-foreground max-w-2xl mx-auto text-base">
-            Expert career services for Kenyans seeking overseas opportunities — from CV
-            writing to employer verification and ongoing support.
+            CV, cover letter, SOP, agency verification — pick what you need, we'll
+            do it the way we'd do it for our own family. Mandazi-level pricing.
+            No hidden fees.
           </p>
         </div>
 

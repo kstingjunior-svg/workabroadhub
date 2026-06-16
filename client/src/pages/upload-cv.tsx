@@ -145,7 +145,7 @@ export default function UploadCVPage() {
         <div className="text-center mb-10">
           <div className="inline-flex items-center gap-2 bg-white dark:bg-gray-800 border border-[#E2DDD5] dark:border-gray-700 rounded-full px-4 py-1.5 text-xs font-medium text-[#5A6A7A] dark:text-gray-400 mb-5">
             <Sparkles size={13} className="text-amber-500" />
-            Powered by Nanjila AI · Matches in under 60 seconds
+            Nanjila reads your CV · Matches in under 60 seconds
           </div>
           <h1 className="text-4xl sm:text-5xl font-serif font-medium text-[#1A2530] dark:text-white mb-4 leading-tight">
             📄 Upload Your CV.<br />Get Matched Instantly.
@@ -407,7 +407,7 @@ export default function UploadCVPage() {
         <div className="mt-12 grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
           {[
             { step: "1", icon: "📁", title: "Upload your CV", desc: "PDF or Word accepted. Under 10 MB." },
-            { step: "2", icon: "🤖", title: "Nanjila analyses it", desc: "AI reads your skills, experience & qualifications." },
+            { step: "2", icon: "📖", title: "Nanjila reads it", desc: "Skills, experience, qualifications — every line." },
             { step: "3", icon: "🌍", title: "Get matched", desc: "See which countries & jobs you qualify for now." },
           ].map((s) => (
             <div key={s.step} className="bg-white dark:bg-gray-800 border border-[#E2DDD5] dark:border-gray-700 rounded-2xl p-5">

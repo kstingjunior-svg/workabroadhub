@@ -272,14 +272,15 @@ export default function InterviewPracticePage() {
         <main className="max-w-2xl mx-auto px-4 sm:px-6 py-8 sm:py-12 space-y-6">
           <div className="text-center">
             <Badge className="bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300 mb-3">
-              <Sparkles className="h-3.5 w-3.5 mr-1" /> AI-powered · Voice-driven
+              <Sparkles className="h-3.5 w-3.5 mr-1" /> Voice practice · Real feedback
             </Badge>
             <h1 className="text-3xl sm:text-4xl font-bold mb-3 tracking-tight">
-              Mock interview, with your phone's voice
+              Let's practice — out loud
             </h1>
             <p className="text-base text-muted-foreground leading-relaxed">
-              5 adaptive questions. The interviewer speaks to you, you speak back.
-              We score every answer on four dimensions and send you a coaching report.
+              Five questions employers actually ask. You speak, we listen — then
+              we point out what was strong, what to work on, and a phrase or two to swap.
+              Like having a coach in your pocket. Nobody else listening.
             </p>
           </div>
 

@@ -224,11 +224,11 @@ export default function ATSCVChecker() {
             <FileText className="h-5 w-5" />
           </div>
           <div>
-            <h1 className="text-xl font-bold" data-testid="text-page-title">ATS CV Checker</h1>
-            <p className="text-blue-100 text-xs">AI-powered ATS compatibility analysis</p>
+            <h1 className="text-xl font-bold" data-testid="text-page-title">CV Health Check</h1>
+            <p className="text-blue-100 text-xs">Is your CV getting ignored? Let's find out.</p>
           </div>
           <Badge className="ml-auto bg-white/20 text-white border-white/30 text-xs">
-            <Sparkles className="h-3 w-3 mr-1" /> AI
+            <Sparkles className="h-3 w-3 mr-1" /> Free
           </Badge>
         </div>
       </div>

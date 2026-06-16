@@ -75,7 +75,7 @@ function EligibilityChecker({ onSubmit, isLoading }: { onSubmit: (q: string) => 
           PRO: Personalised Eligibility Check
         </CardTitle>
         <p className="text-sm text-purple-600 dark:text-purple-300">
-          Enter your profile and the AI will recommend the best visa routes for you.
+          Tell us about you — we'll point you at the visa routes that actually fit.
         </p>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -260,8 +260,8 @@ export default function VisaAssistantPage() {
 
   return (
     <>
-      <title>AI Visa Assistant | WorkAbroad Hub</title>
-      <meta name="description" content="Ask our AI Visa Assistant any immigration or work visa question. Free daily questions, unlimited for Pro users. Covering Canada, UK, USA, Germany, UAE and more." />
+      <title>Visa Assistant | WorkAbroad Hub</title>
+      <meta name="description" content="Ask any immigration or work visa question and get a clear, practical answer. Free daily questions, unlimited for Pro users. Covering Canada, UK, USA, Germany, UAE and more." />
       <meta name="robots" content="index, follow" />
 
       <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col">
@@ -282,11 +282,11 @@ export default function VisaAssistantPage() {
                 </div>
                 <div>
                   <h1 className="text-xl font-bold flex items-center gap-2">
-                    AI Visa Assistant
+                    Visa Assistant
                     {isPro && <Badge className="bg-yellow-400 text-yellow-900 text-xs font-bold">PRO</Badge>}
                     {isBasic && <Badge className="bg-blue-400 text-blue-900 text-xs font-bold">BASIC</Badge>}
                   </h1>
-                  <p className="text-blue-200 text-sm">Ask any visa or immigration question</p>
+                  <p className="text-blue-200 text-sm">Ask anything visa-related. We answer in plain English.</p>
                 </div>
               </div>
 
@@ -335,7 +335,7 @@ export default function VisaAssistantPage() {
                   <Lock className="h-12 w-12 text-blue-300 mx-auto mb-4" />
                   <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Sign In to Use the Visa Assistant</h2>
                   <p className="text-gray-500 mb-6 text-sm">
-                    Free accounts get 3 AI questions per day. Basic gets 20. Pro gets unlimited questions.
+                    Free accounts get 3 questions a day. Basic gets 20. Pro — ask away, no limit.
                   </p>
                   <a href="/">
                     <Button className="bg-blue-600 hover:bg-blue-700 text-white w-full" data-testid="button-login-visa-assistant">

@@ -32,10 +32,10 @@ const TOOLS = [
     icon: FileText,
     iconBg: "bg-blue-100 dark:bg-blue-900/30",
     iconColor: "text-blue-600 dark:text-blue-400",
-    label: "ATS CV Checker",
-    badge: "AI Powered",
+    label: "CV Health Check",
+    badge: "Free",
     badgeColor: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
-    description: "Upload your CV and get an instant ATS compatibility score, keyword analysis, and AI-powered improvement suggestions tailored for international job applications.",
+    description: "Is your CV getting ignored? Upload it. We'll show you exactly what recruiters see — and what's missing. Takes 3 minutes. Costs nothing.",
     cta: "Check My CV",
     requiresAuth: false,
   },
@@ -97,11 +97,11 @@ const TOOLS = [
     icon: Sparkles,
     iconBg: "bg-amber-100 dark:bg-amber-900/30",
     iconColor: "text-amber-600 dark:text-amber-400",
-    label: "AI Job Application Assistant",
-    badge: "AI — 1 Free",
+    label: "Job Application Helper",
+    badge: "1 Free",
     badgeColor: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300",
-    description: "Generate a tailored cover letter, rewrite your CV with ATS keywords, or craft strong application answers — all powered by AI and personalised to the specific job.",
-    cta: "Start Applying",
+    description: "A tailored cover letter, a CV rewrite for the specific job, or stronger application answers — all written for the exact role you're chasing.",
+    cta: "Let's do this",
     requiresAuth: true,
   },
   {
@@ -110,11 +110,11 @@ const TOOLS = [
     icon: Bot,
     iconBg: "bg-violet-100 dark:bg-violet-900/30",
     iconColor: "text-violet-600 dark:text-violet-400",
-    label: "AI Auto-Apply",
-    badge: "New — Automated",
+    label: "Auto-Apply",
+    badge: "New",
     badgeColor: "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300",
-    description: "Set your job profile once. AI scans all available visa-sponsored jobs, ranks the best matches, and auto-generates tailored cover letters for each one — ready to review and submit.",
-    cta: "Auto-Apply Now",
+    description: "Set your job profile once. We scan all the visa-sponsored jobs going, rank the best matches, and draft a tailored cover letter for each — ready for you to review and send.",
+    cta: "Start matching",
     requiresAuth: true,
   },
 ];
@@ -182,9 +182,9 @@ export default function ToolsHub() {
               <Sparkles className="h-4 w-4" />
               Growth Tools Suite
             </div>
-            <h1 className="text-2xl font-bold mb-2" data-testid="text-tools-title">Free Career Tools</h1>
+            <h1 className="text-2xl font-bold mb-2" data-testid="text-tools-title">Tools, on us.</h1>
             <p className="text-blue-100 text-sm max-w-md mx-auto">
-              Practical tools to help you land an overseas job — AI CV analysis, scam detection, sponsored job listings, and ready-to-use CV templates.
+              The things we wish we'd had — CV health check, scam detection, sponsored job listings, ready-to-use CV templates. Free. Use them as much as you want.
             </p>
           </div>
         </div>

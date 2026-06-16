@@ -26,6 +26,7 @@ import { useUpgradeModal } from "@/contexts/upgrade-modal-context";
 import { LockedFeature } from "@/components/locked-feature";
 import { UrgencyBanner } from "@/components/urgency-banner";
 import { DashboardHeroCTA } from "@/components/dashboard-hero-cta";
+import { LiveHelpTicker } from "@/components/live-help-ticker";
 import { DashboardServicesGrid } from "@/components/dashboard-services-grid";
 import { DashboardProUpsell } from "@/components/dashboard-pro-upsell";
 import { PlanStatusBanner } from "@/components/plan-status-banner";
@@ -37,6 +38,7 @@ import { DashboardBookmarksCard } from "@/components/dashboard-bookmarks-card";
 import { DashboardCalculatorCard } from "@/components/dashboard-calculator-card";
 import { DashboardCanadaCard } from "@/components/dashboard-canada-card";
 import { FounderNote } from "@/components/founder-note";
+import { WeveBeenWhereYouAre } from "@/components/weve-been-where-you-are";
 import { DashboardSuccessStories } from "@/components/dashboard-success-stories";
 import { DashboardBestMatch } from "@/components/dashboard-best-match";
 import { DashboardVisaJobsLocked } from "@/components/dashboard-visa-jobs-locked";
@@ -1320,6 +1322,8 @@ export default function Dashboard() {
             • Pro upsell card with KES 12/day framing — anchors the yearly plan
             • Replaces the buried "CV Services" + "Tools to Accelerate" sections
             ─────────────────────────────────────────────────────────────────── */}
+        {/* Live ticker — cycles "we just helped someone in {Kenyan city}…" */}
+        <LiveHelpTicker />
         <DashboardHeroCTA />
         {/* Retention #4: smartest anchor — picks the user's single highest
             priority unfinished action (mid-interview, paid CV processing,
@@ -1992,6 +1996,9 @@ export default function Dashboard() {
 
         {/* ── SUCCESS STORIES (rotating Kenyan testimonials) ───────────── */}
         <DashboardSuccessStories />
+
+        {/* ── "We've been where you are" trust section ────────────────── */}
+        <WeveBeenWhereYouAre />
 
         {/* ── FOUNDER NOTE (always) + late-night PS (10pm–5am Kenya) ───── */}
         <FounderNote />

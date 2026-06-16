@@ -35,10 +35,10 @@ export function DashboardHeroCTA() {
           </div>
           <h3 className="text-lg sm:text-xl font-bold mb-1">📝 Fix my CV</h3>
           <p className="text-sm text-white/90 mb-3 leading-snug">
-            ATS-ready CV, cover letter, SOP — done in 3 minutes by AI.
+            Recruiter-friendly CV, cover letter, SOP — in your inbox in minutes.
           </p>
           <div className="inline-flex items-center gap-1 text-sm font-semibold opacity-90 group-hover:opacity-100">
-            Start now <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+            Let's do this <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
           </div>
         </Link>
 
@@ -56,10 +56,10 @@ export function DashboardHeroCTA() {
           </div>
           <h3 className="text-lg sm:text-xl font-bold mb-1">🌍 Find me a job</h3>
           <p className="text-sm text-white/90 mb-3 leading-snug">
-            UK, Canada, UAE, Australia, Saudi & more — visa-sponsored roles.
+            UK, Canada, UAE, Australia, Saudi & more — employers who'll sponsor your visa.
           </p>
           <div className="inline-flex items-center gap-1 text-sm font-semibold opacity-90 group-hover:opacity-100">
-            Browse jobs <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+            Find your next role <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
           </div>
         </Link>
 

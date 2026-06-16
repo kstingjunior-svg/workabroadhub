@@ -33,7 +33,7 @@ const TRUST_ITEMS = [
 const FAQ_ITEMS = [
   {
     q: "What's the difference between the 4 plans?",
-    a: "Free (KES 0) gives you a limited preview of the platform — a few job listings, all visa guides, and one-time AI tool usage. 1 Day Trial (KES 99) gives you 24-hour full access — perfect for testing. Monthly Access (KES 1,000) gives you 30 days of everything. Yearly Access (KES 4,500) is the best value — pay yearly and save KES 7,500 vs paying month-by-month.",
+    a: "Free (KES 0) gives you a limited preview of the platform — a few job listings, all visa guides, and one-time tool usage. 1 Day Trial (KES 99) gives you 24-hour full access — perfect for testing. Monthly Access (KES 1,000) gives you 30 days of everything. Yearly Access (KES 4,500) is the best value — pay yearly and save KES 7,500 vs paying month-by-month.",
   },
   {
     q: "How does M-Pesa payment work?",
@@ -53,7 +53,7 @@ const FAQ_ITEMS = [
   },
   {
     q: "What can I do for free?",
-    a: "Free users can browse a limited preview of job listings, read all visa and country guides, and use each AI tool once. Any paid plan unlocks everything — verified job portals, unlimited AI tools, application tracking, and personal career guidance.",
+    a: "Free users can browse a limited preview of job listings, read all visa and country guides, and try each tool once. Any paid plan unlocks everything — verified job portals, unlimited tools, application tracking, and personal career guidance.",
   },
 ];
 
@@ -233,7 +233,7 @@ export default function PricingPage() {
           </h1>
 
           <p className="text-orange-100 text-base md:text-lg mb-3 max-w-lg mx-auto" data-testid="hero-subtext">
-            Verified overseas jobs, AI tools, scam protection & 1-on-1 guidance.{" "}
+            Verified overseas jobs, smart tools, scam protection, and someone real to talk to.{" "}
             {publicStats?.totalUsers
               ? <>Trusted by <strong className="text-white">{publicStats.totalUsers.toLocaleString()}+ members</strong> across UK, Canada, UAE & beyond.</>
               : "Choose the plan that fits your timeline."}
@@ -610,7 +610,7 @@ export default function PricingPage() {
             <span className="text-sm font-bold flex items-center gap-1.5">
               <Flame className="h-4 w-4" /> From KES 99 — limited access remaining
             </span>
-            <span className="text-white/70 text-xs">Verified jobs · AI tools · Career guidance</span>
+            <span className="text-white/70 text-xs">Verified jobs · Smart tools · Real guidance</span>
           </div>
           <div className="flex gap-2 shrink-0">
             <Button

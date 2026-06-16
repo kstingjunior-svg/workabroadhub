@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { LandingNeaSearch } from "@/components/landing-nea-search";
 import { LandingHowItWorks } from "@/components/landing-how-it-works";
+import { WeveBeenWhereYouAre } from "@/components/weve-been-where-you-are";
 import { LandingOurPromise } from "@/components/landing-our-promise";
 import { LandingFinalCta } from "@/components/landing-final-cta";
 import { LandingTrustStrip } from "@/components/landing-trust-strip";
@@ -830,6 +831,15 @@ export default function Landing() {
             Reinforces the verify-first framing established in the hero. */}
         <LandingHowItWorks />
 
+        {/* ── "We've been where you are" trust block — sits between the
+            process strip and the legal promise, so visitors see our story
+            before any rules-and-disclaimers copy. */}
+        <section className="px-4 sm:px-6 lg:px-8 py-8 bg-white dark:bg-gray-950">
+          <div className="max-w-2xl mx-auto">
+            <WeveBeenWhereYouAre />
+          </div>
+        </section>
+
         {/* ── OUR PROMISE — friendly reframe of the legal disclaimer ─────
             Replaces the cold defensive 'WorkAbroad Hub is NOT a recruitment
             agency' alert with three soft promise cards that build trust
@@ -1518,8 +1528,11 @@ export default function Landing() {
                 <a href="/report-abuse" className="hover:text-white transition-colors" data-testid="link-report-abuse">Report Abuse</a>
                 <a href="/agency-portal" className="hover:text-white transition-colors" data-testid="link-agency-portal-footer">Agency Portal</a>
               </div>
-              <p className="text-sm text-slate-500">
-                © {new Date().getFullYear()} WorkAbroad Hub. All rights reserved.
+              <p className="text-sm text-slate-300 font-medium">
+                Built in Nairobi, for Kenyans going global. 🇰🇪✈️
+              </p>
+              <p className="text-xs text-slate-500 mt-1">
+                © {new Date().getFullYear()} WorkAbroad Hub · Every shilling tracked, every fee verified.
               </p>
             </div>
             

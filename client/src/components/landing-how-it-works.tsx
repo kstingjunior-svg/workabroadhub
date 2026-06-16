@@ -11,28 +11,30 @@
  */
 import { Shield, FileText, Send, Star } from "lucide-react";
 
+// 2026-06: rewritten to sound like a Kenyan friend, not a faceless startup.
+// No "AI", no "ATS" jargon, no "Simple 3-step process" template-speak.
 const STEPS = [
   {
     n: 1,
     icon: Shield,
-    title: "Verify",
-    body: "Check any agency or job portal against the live NEA registry before you trust it. Free, instant, no signup.",
+    title: "Check the agency first",
+    body: "Before you pay anyone a single shilling — search them here. Live NEA registry, blacklist, fake-licence warnings. Free, takes 10 seconds.",
     accent: "from-emerald-500 to-teal-500",
     chipColor: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300",
   },
   {
     n: 2,
     icon: FileText,
-    title: "Prepare",
-    body: "Use country-specific CV templates, document checklists, and AI-powered ATS optimization. From KES 99.",
+    title: "Get your CV recruiter-friendly",
+    body: "Country-specific CV templates, document checklists, cover letters that get read. From KES 99 (about the price of two mandazi).",
     accent: "from-amber-500 to-orange-500",
     chipColor: "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300",
   },
   {
     n: 3,
     icon: Send,
-    title: "Apply Safely",
-    body: "Apply directly through official employer or verified portal links. No middlemen. No placement fees. Ever.",
+    title: "Apply — without the middlemen",
+    body: "Apply straight through the employer or a verified portal link. No 'facilitation fees.' No agency cut. No surprises.",
     accent: "from-blue-500 to-indigo-500",
     chipColor: "bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300",
   },
@@ -48,13 +50,13 @@ export function LandingHowItWorks() {
       <div className="max-w-6xl mx-auto">
         <div className="text-center mb-10">
           <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-xs font-bold uppercase tracking-wide">
-            Simple 3-step process
+            We've been where you are
           </span>
           <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 dark:text-white mt-4 leading-tight">
-            How WorkAbroad Hub works
+            So you want to work abroad? Let's get you there.
           </h2>
           <p className="text-base text-gray-600 dark:text-gray-400 mt-2 max-w-xl mx-auto">
-            From scam check to safe application — three steps, all in one place. No agents, no surprises.
+            We've broken it down so even your mum could follow it. No agent meetings. No mystery fees. Just the order we did it ourselves.
           </p>
         </div>
 
