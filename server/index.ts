@@ -166,6 +166,21 @@ httpServer.listen(PORT, "0.0.0.0", () => {
     } catch (err: any) {
       console.error("[Server] ❌ Stuck-order sweep failed to start:", err?.message);
     }
+
+    // 2026-06: M-Pesa reconciler — safety net for any STK push whose
+    // /api/payments/mpesa/callback never arrived (Render cold-start,
+    // network blip, Safaricom timeout, etc.). Pulls the last 90 minutes
+    // of transactions from Daraja's Pull API every 5 minutes and unlocks
+    // any payment that we recorded as initiated but never marked complete.
+    // Was previously built but never booted — discovered during the
+    // 2026-06 M-Pesa audit. Worst case it does nothing; best case it
+    // saves a user whose webhook was silently dropped.
+    try {
+      const { startReconcilerScheduler } = await import("./mpesa-reconciler");
+      startReconcilerScheduler();
+    } catch (err: any) {
+      console.error("[Server] ❌ M-Pesa reconciler failed to start:", err?.message);
+    }
   })();
 });
 

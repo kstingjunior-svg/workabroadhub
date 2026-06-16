@@ -127,10 +127,23 @@ export default {
           from: { height: "var(--radix-accordion-content-height)" },
           to: { height: "0" },
         },
+        // 2026-06: visa-jobs headline animation. Plane glides 8px right
+        // then back, with a tiny lift on the way — like it's taking off.
+        "plane-glide": {
+          "0%,   100%": { transform: "translateX(0) translateY(0) rotate(0deg)" },
+          "50%":        { transform: "translateX(6px) translateY(-2px) rotate(2deg)" },
+        },
+        // Shimmer for the underline gradient — sweeps left to right.
+        shimmer: {
+          "0%":   { backgroundPosition: "200% 0" },
+          "100%": { backgroundPosition: "-200% 0" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
-        "accordion-up": "accordion-up 0.2s ease-out",
+        "accordion-up":   "accordion-up 0.2s ease-out",
+        "plane-glide":    "plane-glide 2.4s ease-in-out infinite",
+        shimmer:          "shimmer 2.8s linear infinite",
       },
     },
   },

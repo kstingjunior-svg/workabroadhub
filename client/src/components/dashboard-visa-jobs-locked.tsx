@@ -102,20 +102,47 @@ export function DashboardVisaJobsLocked() {
     <section className="mb-6" aria-label="Visa-sponsored jobs">
       <div className="flex items-start justify-between mb-3 gap-3 flex-wrap">
         <div>
-          <h2 className="text-lg sm:text-xl font-bold text-foreground flex items-center gap-2">
-            <Plane className="h-5 w-5 text-blue-500" /> Visa-Sponsored Jobs · Live Now
+          {/* 2026-06: founder wanted the headline to physically move so it
+              catches the eye. Plane icon glides side-to-side; underline
+              shimmer pulses underneath the words. Copy reframed from
+              passive "Live Now" to active "Apply ... Live Now". */}
+          <h2
+            className="text-lg sm:text-xl font-bold text-foreground flex items-center gap-2 relative"
+            data-testid="visa-jobs-headline"
+          >
+            <Plane className="h-5 w-5 text-ember animate-plane-glide" />
+            <span className="relative">
+              <span className="relative z-10">Apply Visa-Sponsored Jobs Live Now</span>
+              <span
+                aria-hidden="true"
+                className="absolute left-0 right-0 -bottom-0.5 h-[3px] rounded-full bg-gradient-to-r from-amber-400 via-ember to-amber-400 bg-[length:200%_100%] animate-shimmer opacity-70"
+              />
+            </span>
           </h2>
-          <p className="text-xs text-muted-foreground mt-0.5">
+          <p className="text-xs text-muted-foreground mt-1">
             {jobs.length > 0 ? `${jobs.length}+ real openings` : "Loading openings"} · Visa & flight included · Updated daily
           </p>
         </div>
         {!isPro && (
+          /* 2026-06: founder feedback — showing only "KES 4,500/yr" was
+             scaring free users into doing nothing. Now we show all three
+             pricing tiers (99 trial / 1,000 monthly / 4,500 yearly) so
+             the lowest-friction option is the first one they see. */
           <Link
             href="/pricing"
-            className="inline-flex items-center gap-1.5 bg-gradient-to-r from-amber-500 to-rose-500 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-sm hover:scale-105 transition-transform"
+            className="inline-flex flex-col gap-0.5 items-end bg-gradient-to-r from-amber-500 to-rose-500 text-white text-[10px] font-semibold px-3 py-1.5 rounded-2xl shadow-sm hover:scale-[1.03] transition-transform"
             data-testid="link-upgrade-from-jobs"
           >
-            <Lock className="h-3 w-3" /> Unlock all — KES 4,500/yr
+            <span className="inline-flex items-center gap-1 text-[11px] font-bold">
+              <Lock className="h-3 w-3" /> Unlock from KES 99
+            </span>
+            <span className="flex items-center gap-1 leading-tight font-normal opacity-95">
+              <span>KES 99 / day</span>
+              <span aria-hidden className="opacity-50">·</span>
+              <span>1,000 / mo</span>
+              <span aria-hidden className="opacity-50">·</span>
+              <span>4,500 / yr</span>
+            </span>
           </Link>
         )}
       </div>
