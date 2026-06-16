@@ -181,6 +181,22 @@ httpServer.listen(PORT, "0.0.0.0", () => {
     } catch (err: any) {
       console.error("[Server] ❌ M-Pesa reconciler failed to start:", err?.message);
     }
+
+    // 2026-06 STRICT EXPIRY AUDIT: proactive plan-expiry sweep runs every
+    // 60s. Finds any user_subscriptions row where end_date < now() and
+    // status='active', flips it to 'expired', syncs users.plan='free',
+    // invalidates the auth-user cache, mirrors to Supabase, and notifies
+    // connected WebSocket sessions. This is defensive-in-depth on top of
+    // the lazy expiry in storage.getUserPlan(). Founder asked: "after
+    // 24h, they are automatically thrown out of pro usage." Without this
+    // sweep, a user sitting on their dashboard at the moment of expiry
+    // keeps stale Pro UI until they trigger a fresh plan check.
+    try {
+      const { startExpirySweep } = await import("./lib/plan-expiry-sweep");
+      startExpirySweep();
+    } catch (err: any) {
+      console.error("[Server] ❌ Plan expiry sweep failed to start:", err?.message);
+    }
   })();
 });
 

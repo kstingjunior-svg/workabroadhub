@@ -455,9 +455,31 @@ export function registerAuthRoutes(app: Express) {
           user.isAdmin === true ||
           user.role === "ADMIN" ||
           user.role === "SUPER_ADMIN";
+
+        // 2026-06 EXPIRY AUDIT: NEVER trust the denormalised users.plan
+        // field — it lags actual subscription expiry. Always reconcile with
+        // storage.getUserPlan(), which:
+        //   - reads user_subscriptions row
+        //   - checks status='active' AND end_date >= now()
+        //   - lazily auto-downgrades users.plan='free' if expired
+        // Worst-case: a trial expiring at 12:00:00 is reflected as "free"
+        // by 12:00:30 (max cache TTL). For most cases it's <2s.
+        let livePlan = user.plan;
+        if (!isAdminUser) {
+          try {
+            const { storage } = await import("../../storage");
+            livePlan = await storage.getUserPlan(userId);
+            if (livePlan !== user.plan) {
+              console.log(`[Auth][/api/auth/user] live-plan correction userId=${userId} db.plan="${user.plan}" → live="${livePlan}"`);
+            }
+          } catch (err: any) {
+            console.warn(`[Auth][/api/auth/user] getUserPlan failed — falling back to db.plan="${user.plan}":`, err?.message);
+          }
+        }
+
         const payload = isAdminUser
           ? { ...user, plan: "pro", subscriptionStatus: "active", emailVerified: true, phoneVerified: true, isAdminBypass: true }
-          : user;
+          : { ...user, plan: livePlan, subscriptionStatus: livePlan === "free" ? "expired" : "active" };
         setCachedUser(userId, payload);
         res.setHeader("Cache-Control", "private, max-age=5");
         res.setHeader("X-Cache", "MISS");

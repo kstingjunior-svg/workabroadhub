@@ -2883,20 +2883,38 @@ Crawl-delay: 1`);
         .eq("user_id", String(user_id))
         .single();
 
+      // 2026-06 EXPIRY AUDIT: every paid plan must be checked for active
+      // status AND non-expired end date on EVERY hit. No cached "is paid"
+      // flag. No stale Supabase row. Three protective layers:
+      //   1. If Supabase has a row, demand status="active" AND expires_at>now
+      //   2. If not, fall back to storage.getUserPlan() which does the same
+      //      fresh end_date check against user_subscriptions and lazily
+      //      auto-downgrades to "free" the moment expiry passes
+      //   3. Allow ANY tier in PAID_TIERS — trial (KES 99, 1d), monthly
+      //      (KES 1,000, 30d), yearly (KES 4,500, 365d), pro, pro_referral.
+      //      Previously this fallback only allowed literal "pro" which
+      //      blocked legitimately-paying KES 99 trial and KES 1,000 monthly
+      //      users whose Supabase write hadn't propagated yet.
+      const PAID_TIERS = new Set(["trial", "basic", "monthly", "yearly", "pro", "pro_referral"]);
       if (sub) {
         // Supabase row found — verify it is active and not expired
         const now = new Date();
         const expiry = new Date(sub.expires_at);
         if (sub.status !== "active" || expiry < now) {
-          return res.status(403).json({ error: "Subscription expired" });
+          // Belt-and-braces: also force local downgrade if Supabase reports expired
+          // so the next time `storage.getUserPlan` is called the user is "free"
+          storage.getUserPlan(user_id).catch(() => {});
+          return res.status(403).json({ error: "Subscription expired", currentPlan: "free", upgradeUrl: "/pricing" });
         }
       } else {
-        // No Supabase row — fall back to local DB (handles pre-sync PRO users)
+        // No Supabase row — fall back to local DB (handles pre-sync paid users).
+        // getUserPlan does the active+endDate>now check AND auto-downgrades
+        // on expiry, so we trust whatever it returns.
         const localPlan = await storage.getUserPlan(user_id);
-        if (localPlan !== "pro") {
-          return res.status(403).json({ error: "Upgrade to PRO" });
+        if (!PAID_TIERS.has(localPlan)) {
+          return res.status(403).json({ error: "Upgrade required", currentPlan: localPlan, upgradeUrl: "/pricing" });
         }
-        // Local DB says PRO — backfill Supabase so next request hits the fast path
+        // Local DB says paid — backfill Supabase so next request hits the fast path
         import("./supabaseClient").then(({ upgradeUserToPro }) =>
           upgradeUserToPro(user_id)
         ).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
