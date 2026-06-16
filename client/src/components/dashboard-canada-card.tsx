@@ -11,8 +11,15 @@
  * 2026-06: built in response to user demand for production Canada feature.
  */
 import { Link } from "wouter";
+import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "@/hooks/use-auth";
 import { Card, CardContent } from "@/components/ui/card";
-import { Calculator, Briefcase, Coins, ArrowRight, Sparkles } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Calculator, Briefcase, Coins, ArrowRight, Sparkles, Lock } from "lucide-react";
+
+// Same set the server uses (server/middleware/requirePlan.ts and
+// shared with /api/go/job, visa-jobs, ATS CV checker, etc.)
+const PAID_TIERS = new Set(["trial", "basic", "monthly", "yearly", "pro", "pro_referral"]);
 
 // 2026-06: copy rewritten to sound human and Kenyan. No "AI", no
 // "algorithm", no "generated". We talk like we've been through it,
@@ -45,6 +52,17 @@ const ANGLES = [
 ];
 
 export function DashboardCanadaCard() {
+  const { user } = useAuth();
+  // Read the plan from the same cache the rest of the app uses. No extra
+  // request — if React Query already has it the badge shows immediately.
+  const { data: plan } = useQuery<{ planId: string } | null>({
+    queryKey: ["/api/user/plan"],
+    enabled: !!user,
+    staleTime: 30_000,
+    retry: false,
+  });
+  const isPaid = PAID_TIERS.has((plan?.planId || "free").toLowerCase());
+
   // Rotate based on day-of-year for a stable but daily-changing pick
   const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400_000);
   const angle = ANGLES[dayOfYear % ANGLES.length];
@@ -53,15 +71,26 @@ export function DashboardCanadaCard() {
   return (
     <Link href={angle.href}>
       <Card
-        className="mb-4 cursor-pointer hover:shadow-md transition-all overflow-hidden border-2 border-red-200 dark:border-red-800/60 bg-gradient-to-br from-red-50/60 to-rose-50/40 dark:from-red-950/30 dark:to-rose-950/20"
+        className="mb-4 cursor-pointer hover:shadow-md transition-all overflow-hidden border-2 border-red-200 dark:border-red-800/60 bg-gradient-to-br from-red-50/60 to-rose-50/40 dark:from-red-950/30 dark:to-rose-950/20 relative"
         data-testid="card-canada-teaser"
       >
+        {/* Pro badge — only shown to free users so they see the gate
+            before tapping. Hidden for paid users (and admins) so the
+            dashboard feels clean once they've unlocked. */}
+        {!isPaid && (
+          <Badge
+            className="absolute top-3 right-3 bg-amber-400 hover:bg-amber-400 text-amber-950 border-0 text-[10px] font-bold gap-0.5 shadow-sm"
+            data-testid="badge-canada-pro"
+          >
+            <Lock className="h-2.5 w-2.5" /> PRO
+          </Badge>
+        )}
         <CardContent className="p-4">
           <div className="flex items-start gap-3">
             <div className="p-2.5 rounded-full bg-red-600/10 shrink-0">
               <Icon className="h-5 w-5 text-red-700 dark:text-red-300" />
             </div>
-            <div className="flex-1 min-w-0">
+            <div className="flex-1 min-w-0 pr-12">
               <div className="flex items-center gap-1.5 mb-0.5">
                 <span className="text-[10px] uppercase tracking-wider font-bold text-red-700 dark:text-red-300">
                   {angle.badge}
@@ -71,7 +100,9 @@ export function DashboardCanadaCard() {
               <div className="font-bold text-sm leading-tight">{angle.title}</div>
               <div className="text-xs text-muted-foreground mt-1 line-clamp-2">{angle.body}</div>
               <div className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-red-700 dark:text-red-300">
-                {angle.cta} <ArrowRight className="h-3 w-3" />
+                {isPaid
+                  ? <>{angle.cta} <ArrowRight className="h-3 w-3" /></>
+                  : <>Upgrade to unlock — from KES 99 <ArrowRight className="h-3 w-3" /></>}
               </div>
             </div>
           </div>
