@@ -36,6 +36,7 @@ import { DashboardContinueCard } from "@/components/dashboard-continue-card";
 import { DashboardBookmarksCard } from "@/components/dashboard-bookmarks-card";
 import { DashboardCalculatorCard } from "@/components/dashboard-calculator-card";
 import { DashboardCanadaCard } from "@/components/dashboard-canada-card";
+import { FounderNote } from "@/components/founder-note";
 import { DashboardSuccessStories } from "@/components/dashboard-success-stories";
 import { DashboardBestMatch } from "@/components/dashboard-best-match";
 import { DashboardVisaJobsLocked } from "@/components/dashboard-visa-jobs-locked";
@@ -1991,6 +1992,9 @@ export default function Dashboard() {
 
         {/* ── SUCCESS STORIES (rotating Kenyan testimonials) ───────────── */}
         <DashboardSuccessStories />
+
+        {/* ── FOUNDER NOTE (always) + late-night PS (10pm–5am Kenya) ───── */}
+        <FounderNote />
 
         {/* ── PAYMENT HISTORY ──────────────────────────────────────────── */}
         {paymentHistory && paymentHistory.length > 0 && (

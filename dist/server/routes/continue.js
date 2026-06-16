@@ -45,8 +45,9 @@ async function getServiceOrderCandidate(userId) {
                 kind: "service_processing",
                 priority: 100,
                 href: `/services/order/${o.service_slug}?orderId=${o.id}`,
-                headline: `${o.service_name} is generating`,
-                subhead: `Started ${humanAgo(o.created_at)} · we'll notify you when it's ready`,
+                // 2026-06: less robotic, more "person on the team is on it"
+                headline: `We're working on your ${o.service_name}`,
+                subhead: `Started ${humanAgo(o.created_at)} · we'll ping you the moment it's ready`,
                 icon: "clock",
                 accent: "amber",
             };
@@ -65,8 +66,10 @@ async function getServiceOrderCandidate(userId) {
                 kind: "service_ready",
                 priority: 90,
                 href: `/services/order/${o.service_slug}?orderId=${o.id}`,
-                headline: `Your ${o.service_name} is ready to download`,
-                subhead: `Generated ${humanAgo(o.completed_at)} · PDF + Word`,
+                // 2026-06: warmer copy — feels like a gift, acknowledges the wait,
+                // talks like a real person on the team handed it over.
+                headline: `🎁 Your ${o.service_name} is here`,
+                subhead: `We worked on it for a bit (${humanAgo(o.completed_at).replace(" ago", "")}) · PDF for sending, Word so you can tweak`,
                 icon: "download",
                 accent: "emerald",
             };
@@ -199,8 +202,9 @@ async function getJourneyCandidate(userId) {
             kind: "journey_progress",
             priority: 75,
             href: `/journey/${r.country_code}`,
-            headline: `Continue your ${flag} ${name} journey`,
-            subhead: `${done} of ${total} steps done · ${humanAgo(r.last_touched_at)}`,
+            // 2026-06: warmer — names the country properly, acknowledges progress
+            headline: `${flag} Your ${name} move — ${done}/${total} done`,
+            subhead: `Last time you popped in: ${humanAgo(r.last_touched_at)}. Pick up where you left off.`,
             icon: "globe",
             accent: "blue",
             progressPercent: pct,

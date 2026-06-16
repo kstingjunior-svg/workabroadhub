@@ -14,29 +14,32 @@ import { Link } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Calculator, Briefcase, Coins, ArrowRight, Sparkles } from "lucide-react";
 
+// 2026-06: copy rewritten to sound human and Kenyan. No "AI", no
+// "algorithm", no "generated". We talk like we've been through it,
+// because we have.
 const ANGLES = [
   {
     icon: Calculator,
-    badge: "Express Entry",
-    title: "🇨🇦 Will you get an Invitation to Apply?",
-    body: "2-minute CRS calculator. Official IRCC formula. We tell you what to improve.",
-    cta: "Score yourself",
+    badge: "We've been there 🇨🇦",
+    title: "Will Canada actually accept you?",
+    body: "Two minutes with our score check tells you where you stand and exactly what to fix. Same math the Canadian government uses — we just made it less painful to figure out.",
+    cta: "Check my score",
     href: "/canada/crs",
   },
   {
     icon: Briefcase,
-    badge: "Verified Jobs",
-    title: "🇨🇦 LMIA-approved jobs in Canada",
-    body: "Job Bank + 13 more verified Canadian boards. Filter by your NOC 2021 code.",
+    badge: "The job bank nobody told you about",
+    title: "Canadian employers willing to sponsor you",
+    body: "Canada's own government job board lets you filter for employers who already have permission to hire foreigners. We added 13 more boards too — the ones our community actually got hired through.",
     cta: "Open the list",
     href: "/canada/jobs",
   },
   {
     icon: Coins,
-    badge: "Real fees",
-    title: "🇨🇦 What does Canada PR actually cost?",
-    body: "Every fee in KES — application, ECA, IELTS, medical, police. No mockup, real IRCC numbers.",
-    cta: "See the breakdown",
+    badge: "We counted every shilling 💸",
+    title: "How much does Canada PR really cost?",
+    body: "The agencies tell you \"around 2,000 CAD.\" Then you actually start — IELTS, ECA, medicals, police clearance, biometrics. We tracked it all the first time so you can see it in KES, upfront.",
+    cta: "Show me the receipts",
     href: "/canada",
   },
 ];

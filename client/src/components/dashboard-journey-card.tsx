@@ -56,7 +56,8 @@ export function DashboardJourneyCard() {
   const active = [...journeys]
     .sort((a, b) => new Date(b.lastTouchedAt ?? 0).getTime() - new Date(a.lastTouchedAt ?? 0).getTime())[0];
 
-  // No journey yet — soft prompt
+  // No journey yet — soft prompt. Named the anxiety first; immigration
+  // IS scary and confusing, pretending otherwise feels fake.
   if (!active) {
     return (
       <Link href="/journey">
@@ -69,9 +70,9 @@ export function DashboardJourneyCard() {
               <Globe className="h-5 w-5 text-primary" />
             </div>
             <div className="flex-1 min-w-0">
-              <div className="font-bold text-sm">Start your journey roadmap</div>
-              <div className="text-xs text-muted-foreground line-clamp-1">
-                Pick a target country — we'll show you every step from passport to plane ticket.
+              <div className="font-bold text-sm">Not sure where to start? That's normal.</div>
+              <div className="text-xs text-muted-foreground line-clamp-2">
+                Pick a country and we'll walk it with you — passport, NEA vetting, contracts, visa, flight. Same order we figured it out for ourselves.
               </div>
             </div>
             <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />

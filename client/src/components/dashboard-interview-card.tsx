@@ -20,10 +20,13 @@ export function DashboardInterviewCard() {
             <Mic className="h-5 w-5 text-indigo-700 dark:text-indigo-300" />
           </div>
           <div className="flex-1 min-w-0">
-            <div className="font-bold text-sm mb-0.5">Practice your interview · 5 questions</div>
-            <div className="text-xs text-muted-foreground line-clamp-2">
-              AI plays the interviewer, scores your answers, and tells you exactly what to improve.
-              Speak or type — your call.
+            <div className="font-bold text-sm mb-0.5">
+              Let's practice — five real questions 🎙️
+            </div>
+            <div className="text-xs text-muted-foreground line-clamp-3">
+              The questions employers actually ask. Speak your answer out loud or type
+              it — your call. When you're done we'll point out what was strong, what
+              to work on, and a phrase or two to swap. Nobody listening but you.
             </div>
           </div>
           <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />

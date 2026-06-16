@@ -41,13 +41,14 @@ export function DashboardCalculatorCard() {
           </div>
           <div className="flex-1 min-w-0">
             <div className="text-[10px] font-semibold uppercase tracking-wider text-teal-700 dark:text-teal-300 mb-0.5">
-              Income calculator
+              What's actually left at month-end?
             </div>
             <div className="font-bold text-sm mb-0.5 line-clamp-1">
-              {teaser.flag} What would you keep in {teaser.country}?
+              {teaser.flag} Run the numbers for {teaser.country}
             </div>
-            <div className="text-[11px] text-muted-foreground line-clamp-1">
-              e.g. {teaser.example} · tweak lifestyle, see vs Nairobi
+            <div className="text-[11px] text-muted-foreground line-clamp-2">
+              The agencies stop at "{teaser.example.split(" → ")[0]}". We don't.
+              See what's left after rent, food, transport, and sending money home — before you sign anything.
             </div>
           </div>
           <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
