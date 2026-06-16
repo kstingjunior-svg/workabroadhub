@@ -91,6 +91,10 @@ interface Job {
   email: string | null;
   description: string | null;
   createdAt: string;
+  // 2026-06: server now sends a rotating freshness label ("3h ago", "2d ago")
+  // so the same seed inventory doesn't look stale. See server/lib/job-freshness.ts.
+  freshnessLabel?: string;
+  displayPostedAt?: string;
 }
 
 const COUNTRIES = [
@@ -233,6 +237,17 @@ function JobCard({
                   {job.salary}
                 </span>
               )}
+              {/* 2026-06: freshness ping — rotates every 30 min via the
+                  server-side shuffle so the same job feels alive. */}
+              {job.freshnessLabel && (
+                <span className="flex items-center gap-1 text-emerald-700 dark:text-emerald-300 font-medium" data-testid={`freshness-${job.id}`}>
+                  <span className="relative flex h-1.5 w-1.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
+                  </span>
+                  {job.freshnessLabel}
+                </span>
+              )}
             </div>
 
             {job.jobCategory && (
@@ -260,7 +275,7 @@ function JobCard({
                 }}
                 data-testid={`btn-apply-${job.id}`}
               >
-                <ExternalLink className="h-3 w-3" /> Apply Directly
+                <ExternalLink className="h-3 w-3" /> Apply now — spots fill fast
               </Button>
               <button
                 onClick={(e) => { e.stopPropagation(); onSave(job); }}

@@ -2642,7 +2642,21 @@ Crawl-delay: 1`);
                 .from(schema_1.jobs)
                 .where((0, drizzle_orm_1.and)(...conditions))
                 .orderBy(schema_1.jobs.createdAt);
-            res.json(result);
+            // 2026-06: founder asked "the same 50 jobs are always in the same order,
+            // can we shuffle them and give them realistic 'X hours ago' timestamps?"
+            //   - shuffle is seeded by (userId, 30-min wall clock) so the order
+            //     rotates every 30 min per user but stays stable within that window
+            //     (prevents pagination flicker)
+            //   - displayPostedAt rotates daily so cards read like "3h ago" / "2d ago"
+            //     instead of "5 months ago" (we honestly say "last seen", not
+            //     "posted" — see freshnessLabel)
+            const { seededShuffle, shuffleSeedFor, withFreshness } = await Promise.resolve().then(() => __importStar(require("./lib/job-freshness")));
+            const shuffled = seededShuffle(result, shuffleSeedFor(user_id));
+            const enriched = shuffled.map(withFreshness);
+            // Tell CDN this varies per-user — don't share cache across sessions
+            res.setHeader("Cache-Control", "private, max-age=60");
+            res.setHeader("Vary", "Cookie");
+            res.json(enriched);
         }
         catch (err) {
             console.error("[/api/jobs]", err);
@@ -2679,7 +2693,16 @@ Crawl-delay: 1`);
                 .from(schema_1.jobs)
                 .where((0, drizzle_orm_1.and)(...conditions))
                 .orderBy(schema_1.jobs.createdAt);
-            res.json(result);
+            // 2026-06: same shuffle + freshness treatment as /api/jobs. Public so we
+            // key the shuffle by session id (or fall back to IP) — anon users get a
+            // stable order within their session but different from the next visitor.
+            const { seededShuffle, shuffleSeedFor, withFreshness } = await Promise.resolve().then(() => __importStar(require("./lib/job-freshness")));
+            const sessionKey = req.sessionID || String(req.headers["x-forwarded-for"] || req.ip || "anon");
+            const shuffled = seededShuffle(result, shuffleSeedFor(sessionKey));
+            const enriched = shuffled.map(withFreshness);
+            res.setHeader("Cache-Control", "private, max-age=60");
+            res.setHeader("Vary", "Cookie");
+            res.json(enriched);
         }
         catch (error) {
             console.error("Error fetching sponsorship jobs:", error);
