@@ -105,14 +105,32 @@ export function DashboardVisaJobsLocked() {
           {/* 2026-06: founder wanted the headline to physically move so it
               catches the eye. Plane icon glides side-to-side; underline
               shimmer pulses underneath the words. Copy reframed from
-              passive "Live Now" to active "Apply ... Live Now". */}
+              passive "Live Now" to active "Apply ... Live Now".
+              Latest add: each letter glows acacia/emerald green in sequence,
+              left-to-right, so the headline reads alive at a glance. */}
           <h2
             className="text-lg sm:text-xl font-bold text-foreground flex items-center gap-2 relative"
             data-testid="visa-jobs-headline"
+            aria-label="Apply Visa-Sponsored Jobs Live Now"
           >
             <Plane className="h-5 w-5 text-ember animate-plane-glide" />
             <span className="relative">
-              <span className="relative z-10">Apply Visa-Sponsored Jobs Live Now</span>
+              <span className="relative z-10" aria-hidden="true">
+                {Array.from("Apply Visa-Sponsored Jobs Live Now").map((ch, i) => (
+                  ch === " "
+                    ? <span key={i}>&nbsp;</span>
+                    : <span
+                        key={i}
+                        className="inline-block animate-letter-glow"
+                        // Staggered start so the glow visibly sweeps L→R,
+                        // then the whole row resets and runs again every 3.6s.
+                        // 0.06s gap × 34 chars ≈ 2.04s sweep + a beat before loop.
+                        style={{ animationDelay: `${i * 0.06}s` }}
+                      >
+                        {ch}
+                      </span>
+                ))}
+              </span>
               <span
                 aria-hidden="true"
                 className="absolute left-0 right-0 -bottom-0.5 h-[3px] rounded-full bg-gradient-to-r from-amber-400 via-ember to-amber-400 bg-[length:200%_100%] animate-shimmer opacity-70"

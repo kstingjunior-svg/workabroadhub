@@ -138,12 +138,26 @@ export default {
           "0%":   { backgroundPosition: "200% 0" },
           "100%": { backgroundPosition: "-200% 0" },
         },
+        // 2026-06: letter-by-letter green glow for the visa-jobs headline.
+        // Each <span> applies this with a staggered animationDelay (0.06s
+        // per character) so the glow sweeps L→R then the whole row stays
+        // quiet for a moment before the next sweep. The 6% peak is short
+        // so the bright green is a "spark" not a "blink", which reads as
+        // alive (signal of life) rather than seizure-inducing.
+        "letter-glow": {
+          "0%":   { color: "hsl(var(--foreground))", textShadow: "none" },
+          "6%":   { color: "#16a34a", textShadow: "0 0 12px rgba(34,197,94,0.85), 0 0 24px rgba(34,197,94,0.55)" },
+          "18%":  { color: "hsl(var(--foreground))", textShadow: "none" },
+          "100%": { color: "hsl(var(--foreground))", textShadow: "none" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up":   "accordion-up 0.2s ease-out",
         "plane-glide":    "plane-glide 2.4s ease-in-out infinite",
         shimmer:          "shimmer 2.8s linear infinite",
+        // 3.6s total cycle: ~2s sweep across the headline + ~1.6s rest
+        "letter-glow":    "letter-glow 3.6s ease-in-out infinite",
       },
     },
   },
