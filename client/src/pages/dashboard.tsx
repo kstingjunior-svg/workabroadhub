@@ -1325,32 +1325,19 @@ export default function Dashboard() {
         {/* Live ticker — cycles "we just helped someone in {Kenyan city}…" */}
         <LiveHelpTicker />
         <DashboardHeroCTA />
-        {/* Retention #4: smartest anchor — picks the user's single highest
-            priority unfinished action (mid-interview, paid CV processing,
-            partial journey, etc.) and surfaces it as a one-tap CTA. Hides
-            itself if there's nothing to continue. */}
-        <DashboardContinueCard />
         {/* Trial/Monthly/Yearly users see their countdown here so they never
             mistake "trial ended" for "the app forgot my payment" */}
         <PlanStatusBanner />
-        {/* Retention #1: journey roadmap progress card — gives users a clear
-            "what's next" anchor every time they open the dashboard. */}
-        <DashboardJourneyCard />
-        {/* Canada Express Entry teaser — high-demand destination, surfaces
-            the CRS calculator / job portals / cost breakdown on rotation. */}
-        <DashboardCanadaCard />
-        {/* Retention #2: salary teaser — rotates daily, anchors users to
-            specific aspirations ("if I get hired as a nurse in UAE..."). */}
-        <DashboardSalaryTeaser />
-        {/* Retention #6: income calculator — what would you really keep
-            after living costs and how much sent home? */}
-        <DashboardCalculatorCard />
-        {/* Retention #3: AI mock interview — 5 questions, scored, with
-            coaching feedback. Drives prep behaviour ahead of real calls. */}
-        <DashboardInterviewCard />
         {/* Retention #5: saved jobs/portals/services. Hides itself for users
             with zero bookmarks; otherwise surfaces the count + link. */}
         <DashboardBookmarksCard />
+        {/* 2026-06 founder layout change: Career Services + Visa-Sponsored
+            Jobs moved up to sit directly under the hero CTAs because the
+            6 retention widgets (Continue / Journey / Canada / Salary /
+            Calculator / Interview) were burying the revenue surfaces and
+            tanking conversion. The retention widgets now live further down
+            after the Student Visa hero — still visible for returning
+            users, just no longer in the way for new ones. */}
         <DashboardServicesGrid />
         <DashboardProUpsell />
 
@@ -1977,6 +1964,38 @@ export default function Dashboard() {
             </div>
           </div>
         </Link>
+
+        {/* ─────────────────────────────────────────────────────────────────
+            RETENTION ROW — 6 widgets that used to sit between the hero CTAs
+            and the revenue surfaces. Moved here on 2026-06 (founder direction)
+            because they were eating prime real estate above the fold and
+            people were scrolling past the Career Services + Job Board to get
+            to them. Sitting after the Student Visa hero, they still surface
+            for returning users while keeping the revenue flow clean.
+            Order matters: highest-priority continue card first, then journey,
+            then the rotating-context widgets (Canada / salary / calculator /
+            interview).
+            ───────────────────────────────────────────────────────────────── */}
+
+        {/* Retention #4: smartest anchor — picks the user's single highest
+            priority unfinished action (mid-interview, paid CV processing,
+            partial journey, etc.). Hides itself if there's nothing to continue. */}
+        <DashboardContinueCard />
+        {/* Retention #1: journey roadmap progress card — gives users a clear
+            "what's next" anchor every time they open the dashboard. */}
+        <DashboardJourneyCard />
+        {/* Canada Express Entry teaser — high-demand destination, surfaces
+            the CRS calculator / job portals / cost breakdown on rotation. */}
+        <DashboardCanadaCard />
+        {/* Retention #2: salary teaser — rotates daily, anchors users to
+            specific aspirations ("if I get hired as a nurse in UAE..."). */}
+        <DashboardSalaryTeaser />
+        {/* Retention #6: income calculator — what would you really keep
+            after living costs and how much sent home? */}
+        <DashboardCalculatorCard />
+        {/* Retention #3: mock interview — 5 questions, scored, with coaching
+            feedback. Drives prep behaviour ahead of real calls. */}
+        <DashboardInterviewCard />
 
         {/* ── RECENT SIGNUPS (LIVE) ────────────────────────────────────── */}
         <RecentSignupsPanel />
