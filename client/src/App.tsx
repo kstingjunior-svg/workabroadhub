@@ -727,10 +727,11 @@ function Router() {
         <Route path="/career-match" component={ProtectedRedirect} />
         <Route path="/service-order/:serviceId" component={LazyServiceOrderPage} />
         <Route path="/global-opportunities" component={LazyGlobalOpportunities} />
-        {/* Canada Express Entry hub — public so we can market it */}
-        <Route path="/canada/crs" component={LazyCanadaCrsPage} />
-        <Route path="/canada/jobs" component={LazyCanadaJobsPage} />
-        <Route path="/canada" component={LazyCanadaPage} />
+        {/* Canada Express Entry hub — Pro feature; logged-out users get
+            redirected to sign in so they can subscribe. */}
+        <Route path="/canada/crs" component={ProtectedRedirect} />
+        <Route path="/canada/jobs" component={ProtectedRedirect} />
+        <Route path="/canada" component={ProtectedRedirect} />
         <Route path="/login" component={LazyLoginPage} />
         <Route path="/signup" component={LazyLoginPage} />
         <Route path="/forgot-password" component={LazyForgotPassword} />

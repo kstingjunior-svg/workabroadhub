@@ -2,6 +2,8 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.registerCanadaRoutes = registerCanadaRoutes;
 const canada_immigration_1 = require("@shared/canada-immigration");
+const requirePlan_1 = require("../middleware/requirePlan");
+const replitAuth_1 = require("../replit_integrations/auth/replitAuth");
 function calculateCrs(input) {
     const withSpouse = input.maritalStatus === "married" && input.spouseImmigratingWithYou;
     const ageRow = canada_immigration_1.CRS_AGE[Math.min(45, Math.max(17, Math.floor(input.age)))] ?? { single: 0, withSpouse: 0 };
@@ -59,9 +61,17 @@ function calculateCrs(input) {
     };
 }
 function registerCanadaRoutes(app) {
-    // Cache for 5 minutes browser, 1 hour edge — content is static between deploys.
-    const CACHE_CONTROL = "public, max-age=300, s-maxage=3600";
-    app.get("/api/canada/programs", (_req, res) => {
+    // 2026-06: Canada hub is Pro-only — all 4 paid tiers (trial KES 99,
+    // basic/monthly KES 1,000, yearly KES 4,500, pro_referral) pass.
+    // Free users get 403 with an upgrade_required payload that the client
+    // translates into a paywall card.
+    const paid = [replitAuth_1.isAuthenticated, requirePlan_1.requireAnyPaidPlan];
+    // Authed-but-not-paywalled: still need to know who you are so we can read
+    // your plan; the per-endpoint paid[] array below adds the pay-gate.
+    // Browser cache: keep short on Pro-gated routes (10s) so plan upgrades
+    // surface quickly; CDN cache disabled because responses depend on auth.
+    const CACHE_CONTROL = "private, max-age=10";
+    app.get("/api/canada/programs", paid, (_req, res) => {
         res.setHeader("Cache-Control", CACHE_CONTROL);
         res.json({
             programs: canada_immigration_1.CANADA_PROGRAMS,
@@ -69,7 +79,7 @@ function registerCanadaRoutes(app) {
             totalEstimatedKES: (0, canada_immigration_1.cadToKes)((0, canada_immigration_1.estimateCanadaTotalCAD)()),
         });
     });
-    app.get("/api/canada/fees", (_req, res) => {
+    app.get("/api/canada/fees", paid, (_req, res) => {
         res.setHeader("Cache-Control", CACHE_CONTROL);
         res.json({
             fees: canada_immigration_1.CANADA_FEES.map((f) => ({
@@ -81,7 +91,7 @@ function registerCanadaRoutes(app) {
             conversionRate: "1 CAD ≈ 109 KES",
         });
     });
-    app.get("/api/canada/noc", (req, res) => {
+    app.get("/api/canada/noc", paid, (req, res) => {
         const category = String(req.query.category || "").toLowerCase();
         res.setHeader("Cache-Control", CACHE_CONTROL);
         const list = category
@@ -93,7 +103,7 @@ function registerCanadaRoutes(app) {
             total: list.length,
         });
     });
-    app.get("/api/canada/eca-providers", (_req, res) => {
+    app.get("/api/canada/eca-providers", paid, (_req, res) => {
         res.setHeader("Cache-Control", CACHE_CONTROL);
         res.json({
             providers: canada_immigration_1.ECA_PROVIDERS.map((p) => ({
@@ -102,7 +112,7 @@ function registerCanadaRoutes(app) {
             })),
         });
     });
-    app.get("/api/canada/portals", (req, res) => {
+    app.get("/api/canada/portals", paid, (req, res) => {
         const category = String(req.query.category || "").toLowerCase();
         res.setHeader("Cache-Control", CACHE_CONTROL);
         const list = category
@@ -113,7 +123,7 @@ function registerCanadaRoutes(app) {
             total: list.length,
         });
     });
-    app.get("/api/canada/draws", (_req, res) => {
+    app.get("/api/canada/draws", paid, (_req, res) => {
         // 60s edge cache — short enough to pick up new draws when we update the seed
         res.setHeader("Cache-Control", "public, max-age=60, s-maxage=600");
         // Sort newest first and add a relative-date hint
@@ -131,7 +141,7 @@ function registerCanadaRoutes(app) {
             disclaimer: "Approximate baseline data — confirm latest rounds at canada.ca",
         });
     });
-    app.post("/api/canada/crs", (req, res) => {
+    app.post("/api/canada/crs", paid, (req, res) => {
         try {
             const body = req.body || {};
             // Validate + coerce — every numeric input has a sensible default

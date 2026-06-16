@@ -24,6 +24,7 @@ import {
   Sparkles, Loader2, Trophy, Target, Lightbulb, FileText, ExternalLink,
 } from "lucide-react";
 import { EDUCATION_LABELS, type EducationLevel } from "@shared/canada-immigration";
+import { ProOnlyGate } from "@/components/pro-only-gate";
 
 const CLB_LABEL: Record<number, string> = {
   4: "CLB 4 (IELTS 4.0)",
@@ -45,6 +46,24 @@ interface CrsResponse {
 }
 
 export default function CanadaCrsPage() {
+  return (
+    <ProOnlyGate
+      featureName="🇨🇦 CRS Calculator"
+      pitch="Will you get an Invitation to Apply? Find out in 2 minutes — official IRCC formula, recent draw cutoffs, and 6 specific boost suggestions."
+      bullets={[
+        "Working CRS calculator using the official IRCC scoring grid (age + education + language + work + transferability + bonuses)",
+        "Compares your score to the last 12 months of Express Entry draws",
+        "Verdict: 'likely to get an ITA', 'borderline', or 'long shot'",
+        "6 personalized boost suggestions ranked by effort — e.g. 'Retake IELTS for CLB 9 → +60 pts'",
+      ]}
+      returnTo="/canada/crs"
+    >
+      <CanadaCrsPageContent />
+    </ProOnlyGate>
+  );
+}
+
+function CanadaCrsPageContent() {
   // ── Form state — sensible Kenyan-applicant defaults ──────────────────────
   const [age, setAge] = useState(28);
   const [maritalStatus, setMaritalStatus] = useState<"single" | "married">("single");

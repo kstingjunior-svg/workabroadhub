@@ -28,6 +28,7 @@ import {
   CANADA_PROGRAMS, CANADA_FEES, NOC_CATEGORIES, ECA_PROVIDERS,
   CANADA_JOB_PORTALS, RECENT_DRAWS_SEED, estimateCanadaTotalCAD, cadToKes,
 } from "@shared/canada-immigration";
+import { ProOnlyGate } from "@/components/pro-only-gate";
 
 const CAT_ICONS: Record<string, any> = {
   healthcare: Stethoscope,
@@ -54,6 +55,25 @@ interface DrawsResponse {
 }
 
 export default function CanadaPage() {
+  return (
+    <ProOnlyGate
+      featureName="🇨🇦 Canada Express Entry Hub"
+      pitch="Permanent residence in 6-18 months. 7 immigration pathways, working CRS calculator, 14 verified Canadian job boards, every fee in KES — built for Kenyans, no guesswork."
+      bullets={[
+        "Working CRS calculator using the official IRCC formula — know your score in 2 minutes",
+        "All 7 immigration pathways explained (FSW, CEC, FST, PNP, Atlantic, RNIP, Caregiver)",
+        "14 verified Canadian job boards including Government of Canada's LMIA filter",
+        "45+ NOC 2021 codes with category-based draw eligibility flags",
+        "Real fees in KES + designated ECA providers + recent Express Entry draws",
+      ]}
+      returnTo="/canada"
+    >
+      <CanadaPageContent />
+    </ProOnlyGate>
+  );
+}
+
+function CanadaPageContent() {
   const [activeSection, setActiveSection] = useState<"overview" | "programs" | "jobs" | "costs" | "draws">("overview");
 
   const drawsQuery = useQuery<DrawsResponse>({

@@ -25,6 +25,7 @@ import {
 import {
   NOC_OCCUPATIONS, NOC_CATEGORIES, CANADA_JOB_PORTALS,
 } from "@shared/canada-immigration";
+import { ProOnlyGate } from "@/components/pro-only-gate";
 
 const CAT_ICONS: Record<string, any> = {
   healthcare: Stethoscope, stem: Cpu, trades: Wrench, education: GraduationCap,
@@ -41,6 +42,24 @@ const PORTAL_CATEGORY_LABELS: Record<string, string> = {
 };
 
 export default function CanadaJobsPage() {
+  return (
+    <ProOnlyGate
+      featureName="🇨🇦 Canadian Jobs"
+      pitch="14 verified Canadian job boards plus the official NOC 2021 finder. Job Bank's LMIA filter shows employers ready to sponsor you — work permit, then PR."
+      bullets={[
+        "Government of Canada Job Bank with LMIA-only filter (jobs where employers ALREADY have permission to hire foreigners)",
+        "45+ NOC 2021 codes searchable by title, code, or category — flagged when in recent draws",
+        "13 other verified portals: Indeed Canada, LinkedIn, Magnet (newcomer-focused), CareerBeacon (Atlantic), HealthCareCAN, more",
+        "Kenya-specific guidance on each portal — what filters to use, what to avoid",
+      ]}
+      returnTo="/canada/jobs"
+    >
+      <CanadaJobsPageContent />
+    </ProOnlyGate>
+  );
+}
+
+function CanadaJobsPageContent() {
   const [location] = useLocation();
   const initialCategory = new URLSearchParams(location.split("?")[1] || "").get("category") || "";
 
