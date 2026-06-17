@@ -13,6 +13,10 @@ import type { UserSubscription } from "@shared/schema";
 import { trackPaymentStarted, trackPaymentCompleted, trackServerEvent } from "@/lib/analytics";
 import { formatPhone } from "@/lib/phone";
 import { PRO_FEATURES } from "@/lib/plan-features";
+// 2026-06: Kenyan-friendly M-Pesa failure card with Paybill 4153025 escape hatch.
+// Wired into onError below so every STK push failure surfaces a clear next-step
+// + always-visible manual-pay instructions, not a toast that disappears in 5s.
+import { MpesaErrorCard, type MpesaError } from "@/components/mpesa-error-card";
 import {
   applyReferralCode,
   getUserReferralProfile,
@@ -82,6 +86,9 @@ export default function Payment() {
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [selectedMethod, setSelectedMethod] = useState<PayMethod | null>(null);
   const [showFailover, setShowFailover] = useState(false);
+  // 2026-06: structured M-Pesa error from /api/payments/initiate. Drives the
+  // <MpesaErrorCard /> rendered at the top of the form on failure.
+  const [mpesaError, setMpesaError] = useState<MpesaError | null>(null);
   const [paypalScriptReady, setPaypalScriptReady] = useState(false);
   const [paypalButtonRendered, setPaypalButtonRendered] = useState(false);
   const [paypalPending, setPaypalPending] = useState(false);
@@ -556,6 +563,8 @@ export default function Payment() {
       setShowFailover(false);
       setSecondsLeft(60);
       setPollStartTime(Date.now());
+      // Clear any previous M-Pesa error card — new attempt is in flight.
+      setMpesaError(null);
     },
     onError: (error: any) => {
       // 403 with verificationRequired — server says we need to verify email + phone first
@@ -576,6 +585,24 @@ export default function Payment() {
           variant: "destructive",
         });
         return;
+      }
+      // 2026-06: surface the structured Kenyan-friendly M-Pesa error from
+      // the server (title / nextStep / paybillFallback) via the rich card
+      // instead of a 5-second toast. The card stays on screen until the
+      // user retries or dismisses, so they always see how to pay manually.
+      const body = error?.body ?? {};
+      if (body && (body.paybillFallback || body.nextStep || body.title || body.darajaCode)) {
+        setMpesaError({
+          title:          body.title,
+          message:        body.message || error?.message,
+          error:          body.error,
+          nextStep:       body.nextStep,
+          retrySafe:      body.retrySafe,
+          offerPaybill:   body.offerPaybill ?? true,
+          badPhone:       body.badPhone,
+          darajaCode:     body.darajaCode,
+          paybillFallback: body.paybillFallback,
+        });
       }
       setShowFailover(true);
       setShowManualPaybill(true);
@@ -740,6 +767,8 @@ export default function Payment() {
     }
     trackPaymentStarted(paymentAmount, "mpesa");
     trackServerEvent("click_pay", { amount: paymentAmount, method: "mpesa" });
+    // 2026-06: clear any previous M-Pesa error card before re-attempting.
+    setMpesaError(null);
     paymentMutation.mutate({ method: "mpesa", phoneNumber });
   }, [phoneNumber, paymentMutation, toast, pendingPayment, pendingSecondsLeft, paymentId, priceReady, basePaymentAmount]);
 
@@ -1071,6 +1100,37 @@ export default function Payment() {
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
           Back to home
         </Link>
+
+        {/* 2026-06: rich M-Pesa failure card. Mounted ABOVE the payment form
+            so it's the first thing a user sees after an STK push fails.
+            Includes a Retry button when the failure was retry-safe, and an
+            always-visible Paybill 4153025 manual-pay box with copy-to-clipboard
+            for every value. Hides itself on the success state and when the
+            user starts a new attempt. */}
+        {mpesaError && !paymentSuccess && (
+          <div className="mb-4">
+            <MpesaErrorCard
+              error={mpesaError}
+              onRetry={() => {
+                setMpesaError(null);
+                if (phoneNumber) {
+                  paymentMutation.mutate({
+                    method: "mpesa",
+                    phoneNumber,
+                    ...(refCode ? { refCode } : {}),
+                    serviceId: urlServiceId ?? undefined,
+                    serviceName: urlServiceName ?? undefined,
+                  } as any);
+                }
+              }}
+              onFixPhone={() => {
+                setMpesaError(null);
+                // Scroll to the phone input so they can edit it
+                document.querySelector('[data-testid="input-phone-number"]')?.scrollIntoView({ behavior: "smooth", block: "center" });
+              }}
+            />
+          </div>
+        )}
 
         <Card className="bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden">
           <CardContent className="p-6 space-y-6">

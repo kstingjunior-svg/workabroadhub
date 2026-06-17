@@ -53,12 +53,19 @@ async function throwIfResNotOk(res: Response) {
       if (json?.message) {
         const err = new Error(json.message) as any;
         err.status = res.status;
+        // 2026-06: also attach the full body so callers can read rich
+        // structured fields like { title, nextStep, paybillFallback,
+        // retrySafe, badPhone } that the server now ships on M-Pesa
+        // failures. The M-Pesa error card needs these to render the
+        // friendly Kenyan-language guidance + Paybill fallback.
+        err.body = json;
         throw err;
       }
 
       if (json?.error) {
         const err = new Error(json.error) as any;
         err.status = res.status;
+        err.body = json;
         throw err;
       }
     } catch (e) {
