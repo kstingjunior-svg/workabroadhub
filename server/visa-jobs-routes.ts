@@ -154,11 +154,24 @@ export function registerVisaJobsRoutes(app: Express, isAuthenticated: RequestHan
   // GET /api/visa-jobs/:id/apply — paid-tier gated redirect
   app.get("/api/visa-jobs/:id/apply", isAuthenticated, async (req: any, res: Response) => {
     const userId: string | undefined = req.user?.claims?.sub ?? req.user?.id;
+
+    // 2026-06: detect a real browser navigation (Apply link clicked from a
+    // job card) vs an XHR/fetch call. Browsers send Accept: text/html as
+    // the first thing in their Accept header. When that's the case, NEVER
+    // dump raw JSON — redirect the user where they'd expect to land
+    // (sign-in for anon, paywall for free, the actual job for paid).
+    // Previously a free user clicking Apply got `{"message":"An active
+    // plan is required..."}` rendered as the entire page, which looked
+    // like a broken site to the user. Reported by Annita screenshot.
+    const wantsHtml = String(req.headers.accept || "").includes("text/html");
+
     if (!userId) {
+      if (wantsHtml) return res.redirect(302, "/login?redirect=" + encodeURIComponent("/tools/visa-sponsorship-jobs"));
       return res.status(401).json({ message: "Please sign in." });
     }
     const hasAccess = await userHasPaidAccess(userId);
     if (!hasAccess) {
+      if (wantsHtml) return res.redirect(302, "/pricing?from=visa-jobs-apply");
       return res.status(403).json({
         message: "An active plan is required to apply. Upgrade to unlock visa-sponsored jobs.",
         upgradeUrl: "/pricing",
@@ -166,7 +179,10 @@ export function registerVisaJobsRoutes(app: Express, isAuthenticated: RequestHan
       });
     }
     const url = applyUrlForJob(String(req.params.id || ""));
-    if (!url) return res.status(404).json({ message: "Job not found." });
+    if (!url) {
+      if (wantsHtml) return res.redirect(302, "/tools/visa-sponsorship-jobs?error=job-not-found");
+      return res.status(404).json({ message: "Job not found." });
+    }
     res.redirect(302, url);
   });
 

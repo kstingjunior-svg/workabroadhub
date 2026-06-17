@@ -2883,8 +2883,17 @@ Crawl-delay: 1`);
     app.get("/api/go/job/:jobId", auth_1.isAuthenticated, async (req, res) => {
         try {
             const userId = req.user?.claims?.sub;
-            if (!userId)
+            // 2026-06: browser-navigation detector — when Annita clicks "Apply"
+            // on a job card her browser opens /api/go/job/123 as a new tab. If we
+            // return JSON 403 she sees a blob of JSON instead of a paywall. Now
+            // we detect text/html Accept and redirect to /pricing so the user
+            // experience matches expectation.
+            const wantsHtml = String(req.headers.accept || "").includes("text/html");
+            if (!userId) {
+                if (wantsHtml)
+                    return res.redirect(302, "/login");
                 return res.status(401).json({ message: "Unauthorized" });
+            }
             const { jobId } = req.params;
             const jobType = req.query.type || "visa";
             // ── Paid-tier gate (with admin bypass) ────────────────────────────────
@@ -2897,6 +2906,8 @@ Crawl-delay: 1`);
             const planId = adminAccess ? "pro" : await storage_1.storage.getUserPlan(userId);
             const PAID_TIERS = new Set(["trial", "basic", "monthly", "yearly", "pro", "pro_referral"]);
             if (!PAID_TIERS.has(planId)) {
+                if (wantsHtml)
+                    return res.redirect(302, "/pricing?from=job-apply");
                 return res.status(403).json({
                     error: "upgrade_required",
                     message: "An active plan is required to open job links.",
@@ -5260,12 +5271,60 @@ Crawl-delay: 1`);
     // which gate is rejecting them.
     app.get("/api/admin/diagnose-user", auth_1.isAuthenticated, isAdmin, async (req, res) => {
         try {
+            // 2026-06: accept email OR phone OR transaction ref. Most stuck-payment
+            // reports come in over WhatsApp where Tony has the phone the user paid
+            // from but not their email. Falling back to phone catches those.
             const rawEmail = String(req.query.email ?? "").trim().toLowerCase();
-            if (!rawEmail)
-                return res.status(400).json({ message: "email query param required" });
-            const [user] = await db_1.db.select().from(auth_3.users).where((0, drizzle_orm_1.eq)(auth_3.users.email, rawEmail)).limit(1);
-            if (!user)
-                return res.status(404).json({ verdict: "no_user_with_that_email", email: rawEmail });
+            const rawPhone = String(req.query.phone ?? "").trim().replace(/\s+/g, "");
+            const rawRef = String(req.query.ref ?? "").trim();
+            if (!rawEmail && !rawPhone && !rawRef) {
+                return res.status(400).json({ message: "Provide email, phone, or ref (M-Pesa transaction code) as query param" });
+            }
+            let user = null;
+            if (rawEmail) {
+                const [u] = await db_1.db.select().from(auth_3.users).where((0, drizzle_orm_1.eq)(auth_3.users.email, rawEmail)).limit(1);
+                user = u;
+            }
+            if (!user && rawPhone) {
+                // Try the phone in a few common formats (07XX, 254XX, +254XX)
+                const candidates = [rawPhone];
+                if (rawPhone.startsWith("0"))
+                    candidates.push("254" + rawPhone.slice(1));
+                if (rawPhone.startsWith("+254"))
+                    candidates.push(rawPhone.slice(1));
+                if (rawPhone.startsWith("254"))
+                    candidates.push("0" + rawPhone.slice(3));
+                for (const cand of candidates) {
+                    const [u] = await db_1.db.select().from(auth_3.users).where((0, drizzle_orm_1.eq)(auth_3.users.phone, cand)).limit(1);
+                    if (u) {
+                        user = u;
+                        break;
+                    }
+                }
+            }
+            if (!user && rawRef) {
+                // Look up the payment by M-Pesa ref, then back to the user
+                const refRow = await db_1.db.execute((0, drizzle_orm_1.sql) `
+          SELECT user_id FROM payments
+           WHERE transaction_ref = ${rawRef}
+              OR mpesa_code      = ${rawRef}
+              OR mpesa_receipt_number = ${rawRef}
+           LIMIT 1
+        `);
+                const refUserId = refRow.rows?.[0]?.user_id;
+                if (refUserId) {
+                    const [u] = await db_1.db.select().from(auth_3.users).where((0, drizzle_orm_1.eq)(auth_3.users.id, refUserId)).limit(1);
+                    user = u;
+                }
+            }
+            if (!user) {
+                return res.status(404).json({
+                    verdict: "no_user_match",
+                    searched: { email: rawEmail || null, phone: rawPhone || null, ref: rawRef || null },
+                    hint: "If they JUST paid, their /api/payments/mpesa/callback might have been lost. The 5-min reconciler will catch it. If urgent, check the M-Pesa Daraja portal for the transaction and use /api/admin/users/:userId/grant-plan once you have the userId.",
+                });
+            }
+            const rawEmailForVerdict = user.email;
             // All payments, newest first
             const userPayments = await db_1.db.execute((0, drizzle_orm_1.sql) `
         SELECT id, amount, currency, method, status, service_id, transaction_ref, created_at, metadata
@@ -5315,9 +5374,14 @@ Crawl-delay: 1`);
                 fix = `Ask user to: (1) log out fully, (2) close all tabs, (3) reopen and log in. The /api/auth/user cache invalidates on login.`;
             }
             res.json({
-                email: rawEmail,
+                email: rawEmailForVerdict ?? rawEmail,
+                searchedBy: rawEmail ? "email" : rawPhone ? "phone" : "transaction_ref",
                 user: {
                     id: user.id,
+                    email: user.email,
+                    phone: user.phone,
+                    firstName: user.firstName,
+                    lastName: user.lastName,
                     plan: user.plan,
                     subscriptionStatus: user.subscriptionStatus,
                     planEndDate: user.planEndDate,
