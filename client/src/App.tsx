@@ -424,6 +424,15 @@ const LazyAdminBookings = withSuspense(AdminBookings);
 const LazyAdminAgencyRatings = withSuspense(AdminAgencyRatings);
 const LazyAdminPortalHealth = withSuspense(AdminPortalHealth);
 const LazyAdminModeration = withSuspense(AdminModeration);
+// 2026-06: was previously mounted as raw `AdminSupabaseStats` (no Suspense
+// boundary), which threw React error #426 the moment an authenticated user
+// navigated to /admin/supabase-stats — surfaced as the "Just a small detour"
+// error page. Wrapping with withSuspense fixes it. Same fix applied to
+// AdminErrorMonitor and PayPage (the two other raw-lazy components left
+// in the route list).
+const LazyAdminSupabaseStats = withSuspense(AdminSupabaseStats);
+const LazyAdminErrorMonitor = withSuspense(AdminErrorMonitor);
+const LazyPayPage           = withSuspense(PayPage);
 const LazyCommunityPortals = withSuspense(CommunityPortals);
 const LazyToolsHub = withSuspense(ToolsHub);
 const LazyATSCVChecker = withSuspense(ATSCVChecker);
@@ -446,7 +455,7 @@ function AuthenticatedRoutes() {
       <Route path="/dashboard" component={LazyDashboard} />
       <Route path="/pricing" component={LazyPricing} />
       <Route path="/payment" component={LazyPayment} />
-      <Route path="/pay" component={PayPage} />
+      <Route path="/pay" component={LazyPayPage} />
       <Route path="/country/:code" component={LazyCountry} />
       <Route path="/forum/:country" component={LazyForum} />
       <Route path="/services" component={LazyServices} />
@@ -530,7 +539,7 @@ function AuthenticatedRoutes() {
       <Route path="/admin/revenue-live" component={LazyAdminRevenueLive} />
       <Route path="/admin/plans" component={LazyAdminPlans} />
       <Route path="/admin/logs" component={LazyAdminLogs} />
-      <Route path="/admin/error-monitor" component={AdminErrorMonitor} />
+      <Route path="/admin/error-monitor" component={LazyAdminErrorMonitor} />
       <Route path="/admin/funnel" component={LazyAdminFunnel} />
       <Route path="/admin/success-stories" component={LazyAdminSuccessStories} />
       <Route path="/admin/reported-agencies" component={LazyAdminReportedAgencies} />
@@ -538,7 +547,7 @@ function AuthenticatedRoutes() {
       <Route path="/admin/agency-ratings" component={LazyAdminAgencyRatings} />
       <Route path="/admin/portal-health" component={LazyAdminPortalHealth} />
       <Route path="/admin/moderation" component={LazyAdminModeration} />
-      <Route path="/admin/supabase-stats" component={AdminSupabaseStats} />
+      <Route path="/admin/supabase-stats" component={LazyAdminSupabaseStats} />
       <Route path="/portals/community" component={LazyCommunityPortals} />
       <Route path="/referrals" component={LazyReferrals} />
       <Route path="/referral-terms" component={LazyReferralTerms} />
@@ -692,7 +701,7 @@ function Router() {
         <Route path="/data-safety" component={LazyDataSafety} />
         <Route path="/pricing" component={LazyPricing} />
         <Route path="/payment" component={LazyPayment} />
-        <Route path="/pay" component={PayPage} />
+        <Route path="/pay" component={LazyPayPage} />
         <Route path="/tools" component={LazyToolsHub} />
         <Route path="/tools/ats-cv-checker" component={LazyATSCVChecker} />
         <Route path="/tools/job-scam-checker" component={LazyJobScamChecker} />
