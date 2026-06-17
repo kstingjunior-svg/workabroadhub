@@ -56,7 +56,17 @@ interface PagedUsers {
 
 interface AdminStats {
   totalUsers: number;
-  planBreakdown: { free: number; basic: number; pro: number };
+  // 2026-06: 4-tier breakdown — free + 3 paid tiers (KES 99 / 1,000 / 4,500).
+  // Legacy `basic` + `pro` fields kept for back-compat; new UI reads
+  // trial/monthly/yearly directly.
+  planBreakdown: {
+    free:    number;
+    trial:   number;
+    monthly: number;
+    yearly:  number;
+    basic?:  number;
+    pro?:    number;
+  };
   missingPhone: number;
   signupStats: { today: number; thisWeek: number; thisMonth: number };
 }
@@ -491,11 +501,25 @@ export default function UsersPage() {
   };
 
   const counts = {
-    total: stats?.totalUsers ?? totalUsers,
-    free: stats?.planBreakdown?.free ?? 0,
-    basic: stats?.planBreakdown?.basic ?? 0,
-    pro: stats?.planBreakdown?.pro ?? 0,
+    total:   stats?.totalUsers ?? totalUsers,
+    free:    stats?.planBreakdown?.free    ?? 0,
+    trial:   stats?.planBreakdown?.trial   ?? 0,
+    monthly: stats?.planBreakdown?.monthly ?? 0,
+    yearly:  stats?.planBreakdown?.yearly  ?? 0,
   };
+  // 2026-06 revenue at-a-glance: how much each tier has billed (active users
+  // × tier price). Helps Tony see at month-end which tier is bringing
+  // the most money in — "is the KES 99 trial a converter or a leak?".
+  const tierRevenue = {
+    trial:   counts.trial   * 99,
+    monthly: counts.monthly * 1000,
+    yearly:  counts.yearly  * 4500,
+  };
+  const totalActiveRevenue = tierRevenue.trial + tierRevenue.monthly + tierRevenue.yearly;
+  const fmtKes = (n: number) =>
+    n >= 1_000_000 ? `KES ${(n / 1_000_000).toFixed(2)}M`
+    : n >= 1_000     ? `KES ${(n / 1_000).toFixed(0)}K`
+    : `KES ${n.toLocaleString("en-KE")}`;
 
   return (
     <AdminLayout title="Users">
@@ -532,34 +556,91 @@ export default function UsersPage() {
           </Button>
         </div>
 
-        {/* ── Plan breakdown ─────────────────────────────────────────────── */}
-        <div className="grid grid-cols-3 gap-3">
-          <Card>
+        {/* ── Plan breakdown — 4 tiers ─────────────────────────────────────
+            Founder ask 2026-06: drop the meaningless "Basic / Pro" split
+            and show the 4 real revenue buckets so we can see at a glance
+            which tier is paying the bills. Each card shows:
+              - the count (registered users on that tier)
+              - the tier name + price label
+              - active billable amount (count × tier price)
+            Yearly card stays clickable to expand the subscriber list. */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+
+          {/* Free */}
+          <Card className="hover:shadow-sm transition-shadow">
             <CardContent className="p-4">
-              <p className="text-xl font-bold text-muted-foreground">{counts.free.toLocaleString()}</p>
-              <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1"><UserCheck className="h-3 w-3" />Free</p>
+              <p className="text-2xl font-bold text-muted-foreground tabular-nums" data-testid="count-free">
+                {counts.free.toLocaleString()}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+                <UserCheck className="h-3 w-3" />
+                <span className="font-semibold">Free</span>
+              </p>
+              <p className="text-[10px] text-muted-foreground/70 mt-1">No active plan</p>
             </CardContent>
           </Card>
-          <Card className="border-blue-200 dark:border-blue-800">
+
+          {/* KES 99 / Trial */}
+          <Card className="border-emerald-200 dark:border-emerald-800 hover:shadow-sm transition-shadow">
             <CardContent className="p-4">
-              <p className="text-xl font-bold text-blue-600 dark:text-blue-400">{counts.basic.toLocaleString()}</p>
-              <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1"><Zap className="h-3 w-3 text-blue-500" />Basic</p>
+              <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-400 tabular-nums" data-testid="count-trial">
+                {counts.trial.toLocaleString()}
+              </p>
+              <p className="text-xs text-emerald-700 dark:text-emerald-300 mt-0.5 flex items-center gap-1">
+                <Zap className="h-3 w-3" />
+                <span className="font-semibold">KES 99 · 24h trial</span>
+              </p>
+              <p className="text-[10px] text-emerald-700/80 dark:text-emerald-300/70 mt-1 font-mono tabular-nums">
+                {fmtKes(tierRevenue.trial)} active
+              </p>
             </CardContent>
           </Card>
+
+          {/* KES 1,000 / Monthly */}
+          <Card className="border-blue-200 dark:border-blue-800 hover:shadow-sm transition-shadow">
+            <CardContent className="p-4">
+              <p className="text-2xl font-bold text-blue-700 dark:text-blue-400 tabular-nums" data-testid="count-monthly">
+                {counts.monthly.toLocaleString()}
+              </p>
+              <p className="text-xs text-blue-700 dark:text-blue-300 mt-0.5 flex items-center gap-1">
+                <Zap className="h-3 w-3" />
+                <span className="font-semibold">KES 1,000 · 30 days</span>
+              </p>
+              <p className="text-[10px] text-blue-700/80 dark:text-blue-300/70 mt-1 font-mono tabular-nums">
+                {fmtKes(tierRevenue.monthly)} active
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* KES 4,500 / Yearly — clickable, expands the Pro subscriber list */}
           <Card
-            className="border-amber-200 dark:border-amber-800 cursor-pointer hover:border-amber-400 dark:hover:border-amber-600 transition-colors select-none"
+            className="border-amber-200 dark:border-amber-800 cursor-pointer hover:shadow-sm hover:border-amber-400 dark:hover:border-amber-600 transition-all select-none"
             onClick={() => setProDropdownOpen(o => !o)}
             data-testid="card-pro-toggle"
           >
             <CardContent className="p-4">
-              <p className="text-xl font-bold text-amber-600 dark:text-amber-400">{counts.pro.toLocaleString()}</p>
-              <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
-                <Crown className="h-3 w-3 text-amber-500" />Pro
+              <p className="text-2xl font-bold text-amber-700 dark:text-amber-400 tabular-nums" data-testid="count-yearly">
+                {counts.yearly.toLocaleString()}
+              </p>
+              <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5 flex items-center gap-1">
+                <Crown className="h-3 w-3" />
+                <span className="font-semibold">KES 4,500 · 365 days</span>
                 {proDropdownOpen ? <ChevronUp className="h-3 w-3 ml-auto" /> : <ChevronDown className="h-3 w-3 ml-auto" />}
+              </p>
+              <p className="text-[10px] text-amber-700/80 dark:text-amber-300/70 mt-1 font-mono tabular-nums">
+                {fmtKes(tierRevenue.yearly)} active · tap to view list
               </p>
             </CardContent>
           </Card>
         </div>
+
+        {/* Total active billable amount across all 3 paid tiers */}
+        {totalActiveRevenue > 0 && (
+          <div className="text-xs text-muted-foreground flex items-center justify-end gap-1.5">
+            <span>Active subscription value across all tiers:</span>
+            <span className="font-bold text-foreground tabular-nums">{fmtKes(totalActiveRevenue)}</span>
+          </div>
+        )}
 
         {/* ── Pro Subscriber List ──────────────────────────────────────────── */}
         {proDropdownOpen && (

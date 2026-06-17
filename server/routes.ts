@@ -8112,7 +8112,9 @@ Crawl-delay: 1`);
             thisWeek:  cached.signupsWeek,
             thisMonth: cached.signupsMonth,
           },
-          planBreakdown: { free: cached.totalUsers - cached.paidUsers, basic: 0, pro: cached.paidUsers },
+          // Cached fast path can't break out per-tier; surface only free vs
+          // total-paid and zero the rest. Real numbers come from the slow path.
+          planBreakdown: { free: cached.totalUsers - cached.paidUsers, trial: 0, monthly: 0, yearly: cached.paidUsers, basic: 0, pro: cached.paidUsers },
           activeUsers:              activeUsers.total,
           activeAuthenticatedUsers: activeUsers.authenticated,
           _fromCache: true,
@@ -8130,21 +8132,42 @@ Crawl-delay: 1`);
         storage.getSignupStats(),
         // Plan breakdown: count Pro as users with plan='pro' OR an active pro subscription
         // (catches runtime grants before the next server restart syncs users.plan)
+        // 2026-06: plan breakdown rebuilt for the founder-requested 4-tier
+        // view (free / trial 99 / monthly 1k / yearly 4.5k). Now also resolves
+        // the EFFECTIVE plan by checking user_subscriptions live — same
+        // logic getUserPlan uses — so the dashboard isn't lying when a
+        // subscription has lapsed but users.plan still says "yearly".
         db.execute(sql`
           SELECT
-            COALESCE(
-              CASE WHEN u.plan = 'pro' THEN 'pro'
-                   WHEN EXISTS (
-                     SELECT 1 FROM user_subscriptions us
-                     WHERE us.user_id = u.id
-                       AND us.plan = 'pro'
-                       AND us.status = 'active'
-                       AND (us.end_date IS NULL OR us.end_date > NOW())
-                   ) THEN 'pro'
-                   ELSE COALESCE(u.plan, 'free')
-              END,
-              'free'
-            ) AS effective_plan,
+            CASE
+              WHEN EXISTS (
+                SELECT 1 FROM user_subscriptions us
+                 WHERE us.user_id = u.id
+                   AND us.status  = 'active'
+                   AND (us.end_date IS NULL OR us.end_date > NOW())
+                   AND us.plan IN ('yearly','pro','pro_referral')
+              ) THEN 'yearly'
+              WHEN EXISTS (
+                SELECT 1 FROM user_subscriptions us
+                 WHERE us.user_id = u.id
+                   AND us.status  = 'active'
+                   AND (us.end_date IS NULL OR us.end_date > NOW())
+                   AND us.plan = 'monthly'
+              ) THEN 'monthly'
+              WHEN EXISTS (
+                SELECT 1 FROM user_subscriptions us
+                 WHERE us.user_id = u.id
+                   AND us.status  = 'active'
+                   AND (us.end_date IS NULL OR us.end_date > NOW())
+                   AND us.plan IN ('trial','basic')
+              ) THEN 'trial'
+              -- Fall back to the denormalised users.plan column for users
+              -- with no subscriptions row (admin-promoted, legacy data, etc.)
+              WHEN u.plan IN ('yearly','pro','pro_referral')   THEN 'yearly'
+              WHEN u.plan = 'monthly'                          THEN 'monthly'
+              WHEN u.plan IN ('trial','basic')                 THEN 'trial'
+              ELSE 'free'
+            END AS effective_plan,
             COUNT(*) AS cnt
           FROM users u
           GROUP BY effective_plan
@@ -8152,14 +8175,31 @@ Crawl-delay: 1`);
         db.select({ cnt: count() }).from(users).where(sql`phone IS NULL OR phone = ''`),
       ]);
 
-      const planBreakdown = { free: 0, basic: 0, pro: 0 };
+      // 2026-06: new shape — 4 tier counts. Old "basic" alias still surfaced
+      // in case any other consumer reads it, but the admin UI now uses the
+      // explicit trial/monthly/yearly fields.
+      const planBreakdown = {
+        free:    0,
+        trial:   0,   // KES 99 / 24h
+        monthly: 0,   // KES 1,000 / 30d
+        yearly:  0,   // KES 4,500 / 365d
+        // Back-compat shims so any other consumer keeps working:
+        basic:   0,   // legacy alias for trial
+        pro:     0,   // legacy alias for yearly
+      };
       const planRows_rows = (planRows as any).rows ?? [];
       for (const row of planRows_rows) {
         const p = (row.effective_plan || "free").toLowerCase();
-        if (p === "basic") planBreakdown.basic = Number(row.cnt);
-        else if (p === "pro") planBreakdown.pro = Number(row.cnt);
-        else planBreakdown.free += Number(row.cnt);
+        const n = Number(row.cnt);
+        if (p === "yearly")  planBreakdown.yearly  += n;
+        else if (p === "monthly") planBreakdown.monthly += n;
+        else if (p === "trial")   planBreakdown.trial   += n;
+        else planBreakdown.free += n;
       }
+      // Mirror the new counts onto the legacy aliases so old clients show
+      // sensible numbers during the rollout window:
+      planBreakdown.basic = planBreakdown.trial;
+      planBreakdown.pro   = planBreakdown.yearly;
 
       const activeUsers = getActiveUserCounts();
 
