@@ -1,7 +1,7 @@
 import type { Express, Request, Response } from "express";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db, pool } from "../../db";
 import { users } from "@shared/models/auth";
 import { sendEmail } from "../../email";
@@ -218,8 +218,24 @@ export function registerAuthRoutes(app: Express) {
       if (totalMs > 1500) console.warn(`[Auth][login] SLOW total=${totalMs}ms email=${rawEmail}`);
       res.json({ id: user.id, email: user.email });
     } catch (err: any) {
-      console.error("[Auth][login] error:", err?.message);
-      res.status(500).json({ message: "Login failed. Please try again." });
+      // 2026-06 diagnostic upgrade: when login throws, log enough context
+      // for Tony to find the cause in Render logs (email + error code +
+      // full stack), and still hand the user a recovery breadcrumb so they
+      // don't sit on a dead error screen. jacksonmuturi004 reported "Login
+      // failed. Please try again." with no way forward — now even server
+      // errors offer the reset path.
+      const rawEmailForLog = String(req.body?.email ?? "").trim().toLowerCase();
+      console.error(
+        `[Auth][login] EXCEPTION email="${rawEmailForLog}" code=${err?.code ?? "n/a"} ` +
+        `name=${err?.name ?? "n/a"} message="${err?.message ?? "n/a"}"`,
+      );
+      if (err?.stack) console.error("[Auth][login] stack:", err.stack.split("\n").slice(0, 5).join(" | "));
+      res.status(500).json({
+        message:
+          "We hit a snag signing you in. Try again — if it keeps failing, reset your password and you'll be back in. We're already looking at the logs.",
+        forgotPasswordUrl: "/forgot-password",
+        supportEmail: "support@workabroadhub.tech",
+      });
     }
   });
 
