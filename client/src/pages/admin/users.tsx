@@ -367,8 +367,16 @@ export default function UsersPage() {
     phone: string | null;
     startDate: string | null;
     endDate: string | null;
-    amountPaid: string | null;
+    plan: string | null;
+    // 2026-06: amountPaid now comes from the latest real M-Pesa payment
+    // (not the subscription row), and paymentSource is "mpesa" if they
+    // really paid, "manual_grant" if admin granted without payment.
+    amountPaid: number | null;
     paymentMethod: string | null;
+    paymentSource?: "mpesa" | "manual_grant";
+    mpesaCode?: string | null;
+    paidAt?: string | null;
+    subscriptionId?: string;  // 2026-06: used by the Delete-duplicate button
   }
   const { data: proSubscribers, isLoading: proSubLoading } = useQuery<ProSubscriber[]>({
     queryKey: ["/api/admin/pro-subscribers"],
@@ -673,6 +681,8 @@ export default function UsersPage() {
                       <th className="text-right px-4 py-2 font-semibold text-muted-foreground hidden md:table-cell">Paid</th>
                       <th className="text-right px-4 py-2 font-semibold text-muted-foreground">Expires</th>
                       <th className="text-right px-4 py-2 font-semibold text-muted-foreground hidden lg:table-cell">Method</th>
+                      {/* 2026-06: per-row delete for duplicates */}
+                      <th className="text-right px-4 py-2 font-semibold text-muted-foreground"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
@@ -690,8 +700,19 @@ export default function UsersPage() {
                             ? <span className="flex items-center gap-1"><Phone className="h-2.5 w-2.5" />{sub.phone}</span>
                             : "—"}
                         </td>
-                        <td className="px-4 py-2.5 text-right font-semibold text-green-600 dark:text-green-400 hidden md:table-cell">
-                          {sub.amountPaid ? `KES ${Number(sub.amountPaid).toLocaleString()}` : "—"}
+                        <td className="px-4 py-2.5 text-right font-semibold hidden md:table-cell">
+                          {/* 2026-06: never show an empty dash. If we have
+                              the real M-Pesa amount, show it. If not, say
+                              "Manual grant" honestly. Truth on the page. */}
+                          {sub.amountPaid != null ? (
+                            <span className="text-green-600 dark:text-green-400">
+                              KES {Number(sub.amountPaid).toLocaleString()}
+                            </span>
+                          ) : (
+                            <span className="text-amber-600 dark:text-amber-400 text-[11px] font-medium" title="No M-Pesa payment found — granted manually by admin">
+                              Manual grant
+                            </span>
+                          )}
                         </td>
                         <td className="px-4 py-2.5 text-right text-muted-foreground whitespace-nowrap">
                           {sub.endDate
@@ -699,7 +720,52 @@ export default function UsersPage() {
                             : "—"}
                         </td>
                         <td className="px-4 py-2.5 text-right capitalize text-muted-foreground hidden lg:table-cell">
-                          {sub.paymentMethod || "—"}
+                          {sub.paymentMethod || (sub.paymentSource === "manual_grant" ? "Admin" : "—")}
+                        </td>
+                        {/* 2026-06: Delete duplicate. Marks the
+                            subscription row as expired, leaves payment +
+                            audit history intact. Used by Tony to clean up
+                            Geoffrey-style duplicates. */}
+                        <td className="px-4 py-2.5 text-right">
+                          <button
+                            onClick={async () => {
+                              if (!sub.subscriptionId) return;
+                              const ok = window.confirm(
+                                `Remove this subscription row for ${sub.name || sub.email}?\n\n` +
+                                `The user keeps any other active subscriptions they have. ` +
+                                `Payment + audit history is preserved. This is reversible by the admin.`
+                              );
+                              if (!ok) return;
+                              try {
+                                const res = await apiRequest(
+                                  "DELETE",
+                                  `/api/admin/subscriptions/${sub.subscriptionId}`,
+                                  { reason: "admin duplicate cleanup from Pro list" }
+                                );
+                                const data = await res.json();
+                                toast({
+                                  title: "Subscription removed",
+                                  description: data.remainingActiveSubscriptions === 0
+                                    ? "User is now Free."
+                                    : `${data.remainingActiveSubscriptions} other active subscription(s) kept.`,
+                                });
+                                queryClient.invalidateQueries({ queryKey: ["/api/admin/pro-subscribers"] });
+                                queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
+                              } catch (err: any) {
+                                toast({
+                                  title: "Couldn't remove",
+                                  description: err?.message || "Try again",
+                                  variant: "destructive",
+                                });
+                              }
+                            }}
+                            disabled={!sub.subscriptionId}
+                            className="text-xs font-medium text-rose-700 hover:text-rose-900 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/30 px-2 py-1 rounded transition-colors disabled:opacity-30"
+                            data-testid={`btn-delete-sub-${sub.id}`}
+                            title="Remove this subscription row (duplicate cleanup)"
+                          >
+                            Delete
+                          </button>
                         </td>
                       </tr>
                     ))}
