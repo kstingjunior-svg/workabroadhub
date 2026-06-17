@@ -166,7 +166,7 @@ function registerAuthRoutes(app) {
                 isActive: auth_1.users.isActive,
             })
                 .from(auth_1.users)
-                .where(sql `LOWER(${auth_1.users.email}) = ${rawEmail}`)
+                .where((0, drizzle_orm_1.sql) `LOWER(${auth_1.users.email}) = ${rawEmail}`)
                 .limit(1);
             step("user_lookup");
             if (!user || !user.passwordHash) {
@@ -215,8 +215,22 @@ function registerAuthRoutes(app) {
             res.json({ id: user.id, email: user.email });
         }
         catch (err) {
-            console.error("[Auth][login] error:", err?.message);
-            res.status(500).json({ message: "Login failed. Please try again." });
+            // 2026-06 diagnostic upgrade: when login throws, log enough context
+            // for Tony to find the cause in Render logs (email + error code +
+            // full stack), and still hand the user a recovery breadcrumb so they
+            // don't sit on a dead error screen. jacksonmuturi004 reported "Login
+            // failed. Please try again." with no way forward — now even server
+            // errors offer the reset path.
+            const rawEmailForLog = String(req.body?.email ?? "").trim().toLowerCase();
+            console.error(`[Auth][login] EXCEPTION email="${rawEmailForLog}" code=${err?.code ?? "n/a"} ` +
+                `name=${err?.name ?? "n/a"} message="${err?.message ?? "n/a"}"`);
+            if (err?.stack)
+                console.error("[Auth][login] stack:", err.stack.split("\n").slice(0, 5).join(" | "));
+            res.status(500).json({
+                message: "We hit a snag signing you in. Try again — if it keeps failing, reset your password and you'll be back in. We're already looking at the logs.",
+                forgotPasswordUrl: "/forgot-password",
+                supportEmail: "support@workabroadhub.tech",
+            });
         }
     });
     app.post("/api/auth/logout", (req, res) => {
