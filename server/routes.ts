@@ -1417,6 +1417,12 @@ export async function registerRoutes(
   const { registerEmailAdminRoutes } = await import("./routes/email-admin");
   registerEmailAdminRoutes(app, isAuthenticated, isAdmin);
 
+  // 2026-06 Live revenue dashboard backing endpoint — reads from Postgres
+  // (the source of truth) so the page never shows stale zeros even when
+  // Firebase RTDB writes were skipped during a webhook timeout.
+  const { registerAdminRevenueSummaryRoute } = await import("./routes/admin-revenue-summary");
+  registerAdminRevenueSummaryRoute(app, isAuthenticated, isAdmin);
+
   // Track active sessions for the admin dashboard real-time counter.
   // Must run after setupAuth so req.session is populated.
   app.use(trackActiveUser);

@@ -1242,6 +1242,11 @@ async function registerRoutes(httpServer, app) {
     //   POST /api/admin/email/force-verify/:userId
     const { registerEmailAdminRoutes } = await Promise.resolve().then(() => __importStar(require("./routes/email-admin")));
     registerEmailAdminRoutes(app, auth_1.isAuthenticated, isAdmin);
+    // 2026-06 Live revenue dashboard backing endpoint — reads from Postgres
+    // (the source of truth) so the page never shows stale zeros even when
+    // Firebase RTDB writes were skipped during a webhook timeout.
+    const { registerAdminRevenueSummaryRoute } = await Promise.resolve().then(() => __importStar(require("./routes/admin-revenue-summary")));
+    registerAdminRevenueSummaryRoute(app, auth_1.isAuthenticated, isAdmin);
     // Track active sessions for the admin dashboard real-time counter.
     // Must run after setupAuth so req.session is populated.
     app.use(active_users_1.trackActiveUser);
