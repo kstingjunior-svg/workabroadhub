@@ -8104,8 +8104,74 @@ Crawl-delay: 1`);
       const cached = await getCachedStats();
       const CACHE_TTL_SECONDS = 300; // 5 minutes — matches the scheduler interval
 
+      // 2026-06: ALWAYS compute the per-tier breakdown via a small live SQL
+      // query, even when the rest of the stats come from cache. Previously
+      // the fast path returned trial:0/monthly:0 hardcoded — which made the
+      // admin users page flicker between real numbers (slow path) and zeros
+      // (cached path) every refresh. This single GROUP BY is cheap (<10ms)
+      // and the founder reported "loaded for a few seconds then went back
+      // to nothing" — that was the cached zeros overwriting the real values.
+      async function computeLiveTierBreakdown(): Promise<{
+        free: number; trial: number; monthly: number; yearly: number;
+        basic: number; pro: number;
+      }> {
+        try {
+          const rows = await db.execute(sql`
+            SELECT
+              CASE
+                WHEN EXISTS (
+                  SELECT 1 FROM user_subscriptions us
+                   WHERE us.user_id = u.id
+                     AND us.status  = 'active'
+                     AND (us.end_date IS NULL OR us.end_date > NOW())
+                     AND us.plan IN ('yearly','pro','pro_referral')
+                ) THEN 'yearly'
+                WHEN EXISTS (
+                  SELECT 1 FROM user_subscriptions us
+                   WHERE us.user_id = u.id
+                     AND us.status  = 'active'
+                     AND (us.end_date IS NULL OR us.end_date > NOW())
+                     AND us.plan = 'monthly'
+                ) THEN 'monthly'
+                WHEN EXISTS (
+                  SELECT 1 FROM user_subscriptions us
+                   WHERE us.user_id = u.id
+                     AND us.status  = 'active'
+                     AND (us.end_date IS NULL OR us.end_date > NOW())
+                     AND us.plan IN ('trial','basic')
+                ) THEN 'trial'
+                WHEN u.plan IN ('yearly','pro','pro_referral')   THEN 'yearly'
+                WHEN u.plan = 'monthly'                          THEN 'monthly'
+                WHEN u.plan IN ('trial','basic')                 THEN 'trial'
+                ELSE 'free'
+              END AS effective_plan,
+              COUNT(*) AS cnt
+            FROM users u
+            GROUP BY effective_plan
+          `);
+          const out = { free: 0, trial: 0, monthly: 0, yearly: 0, basic: 0, pro: 0 };
+          for (const row of ((rows as any).rows ?? [])) {
+            const p = (row.effective_plan || "free").toLowerCase();
+            const n = Number(row.cnt);
+            if (p === "yearly")  out.yearly  += n;
+            else if (p === "monthly") out.monthly += n;
+            else if (p === "trial")   out.trial   += n;
+            else out.free += n;
+          }
+          out.basic = out.trial;   // legacy aliases
+          out.pro   = out.yearly;
+          return out;
+        } catch (err: any) {
+          console.error("[admin/stats] live tier breakdown failed:", err?.message);
+          return { free: 0, trial: 0, monthly: 0, yearly: 0, basic: 0, pro: 0 };
+        }
+      }
+
       if (cached && cached.cacheAgeSeconds < CACHE_TTL_SECONDS) {
-        const activeUsers = getActiveUserCounts();
+        const [activeUsers, livePlanBreakdown] = await Promise.all([
+          Promise.resolve(getActiveUserCounts()),
+          computeLiveTierBreakdown(),
+        ]);
         return res.json({
           totalUsers:              cached.totalUsers,
           usersToday:              cached.signupsToday,
@@ -8118,9 +8184,8 @@ Crawl-delay: 1`);
             thisWeek:  cached.signupsWeek,
             thisMonth: cached.signupsMonth,
           },
-          // Cached fast path can't break out per-tier; surface only free vs
-          // total-paid and zero the rest. Real numbers come from the slow path.
-          planBreakdown: { free: cached.totalUsers - cached.paidUsers, trial: 0, monthly: 0, yearly: cached.paidUsers, basic: 0, pro: cached.paidUsers },
+          // 2026-06: live per-tier breakdown — never zeros when real users exist.
+          planBreakdown: livePlanBreakdown,
           activeUsers:              activeUsers.total,
           activeAuthenticatedUsers: activeUsers.authenticated,
           _fromCache: true,
