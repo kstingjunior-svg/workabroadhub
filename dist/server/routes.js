@@ -7487,64 +7487,52 @@ Crawl-delay: 1`);
             const { getCachedStats, refreshPlatformStats } = await Promise.resolve().then(() => __importStar(require("./lib/stats-cache")));
             const cached = await getCachedStats();
             const CACHE_TTL_SECONDS = 300; // 5 minutes — matches the scheduler interval
-            // 2026-06: ALWAYS compute the per-tier breakdown via a small live SQL
-            // query, even when the rest of the stats come from cache. Previously
-            // the fast path returned trial:0/monthly:0 hardcoded — which made the
-            // admin users page flicker between real numbers (slow path) and zeros
-            // (cached path) every refresh. This single GROUP BY is cheap (<10ms)
-            // and the founder reported "loaded for a few seconds then went back
-            // to nothing" — that was the cached zeros overwriting the real values.
+            // 2026-06: tier breakdown counts DISTINCT users who made a real successful
+            // M-Pesa payment in each price band. Previously counted subscription
+            // rows in user_subscriptions, which inflated the figures because:
+            //   - admin grants create subscription rows without a payment
+            //   - test data / migrated old rows inflated trial+monthly
+            //   - retried payments could create multiple rows per user
+            // Founder said: "KES 1,000 shows 20 but real paid users are not more
+            // than 10." This now reads from the payments table — only people who
+            // actually sent money via M-Pesa count.
             async function computeLiveTierBreakdown() {
                 try {
-                    const rows = await db_1.db.execute((0, drizzle_orm_1.sql) `
-            SELECT
-              CASE
-                WHEN EXISTS (
-                  SELECT 1 FROM user_subscriptions us
-                   WHERE us.user_id = u.id
-                     AND us.status  = 'active'
-                     AND (us.end_date IS NULL OR us.end_date > NOW())
-                     AND us.plan IN ('yearly','pro','pro_referral')
-                ) THEN 'yearly'
-                WHEN EXISTS (
-                  SELECT 1 FROM user_subscriptions us
-                   WHERE us.user_id = u.id
-                     AND us.status  = 'active'
-                     AND (us.end_date IS NULL OR us.end_date > NOW())
-                     AND us.plan = 'monthly'
-                ) THEN 'monthly'
-                WHEN EXISTS (
-                  SELECT 1 FROM user_subscriptions us
-                   WHERE us.user_id = u.id
-                     AND us.status  = 'active'
-                     AND (us.end_date IS NULL OR us.end_date > NOW())
-                     AND us.plan IN ('trial','basic')
-                ) THEN 'trial'
-                WHEN u.plan IN ('yearly','pro','pro_referral')   THEN 'yearly'
-                WHEN u.plan = 'monthly'                          THEN 'monthly'
-                WHEN u.plan IN ('trial','basic')                 THEN 'trial'
-                ELSE 'free'
-              END AS effective_plan,
-              COUNT(*) AS cnt
-            FROM users u
-            GROUP BY effective_plan
+                    const [totalUsersRow, paidCountsRow] = await Promise.all([
+                        db_1.db.execute((0, drizzle_orm_1.sql) `SELECT COUNT(*)::text AS cnt FROM users`),
+                        db_1.db.execute((0, drizzle_orm_1.sql) `
+              SELECT
+                COUNT(DISTINCT CASE WHEN amount BETWEEN 95   AND 105   THEN user_id END)::text AS trial_cnt,
+                COUNT(DISTINCT CASE WHEN amount BETWEEN 950  AND 1050  THEN user_id END)::text AS monthly_cnt,
+                COUNT(DISTINCT CASE WHEN amount BETWEEN 4400 AND 4600  THEN user_id END)::text AS yearly_cnt,
+                COUNT(DISTINCT CASE WHEN amount BETWEEN 3500 AND 3700  THEN user_id END)::text AS yearly_ref_cnt
+              FROM payments
+              WHERE LOWER(status) IN ('success', 'completed', 'paid')
+                AND user_id IS NOT NULL
+            `),
+                    ]);
+                    const totalUsers = Number((totalUsersRow.rows?.[0] ?? {}).cnt ?? 0);
+                    const counts = (paidCountsRow.rows?.[0] ?? {});
+                    const trial = Number(counts.trial_cnt ?? 0);
+                    const monthly = Number(counts.monthly_cnt ?? 0);
+                    const yearly = Number(counts.yearly_cnt ?? 0) + Number(counts.yearly_ref_cnt ?? 0);
+                    // A user might be counted in multiple tiers (paid trial then monthly
+                    // then yearly) — that's fine, the cards show real M-Pesa transactions
+                    // per band. Free = total minus the union of all paying users.
+                    const anyPaidRow = await db_1.db.execute((0, drizzle_orm_1.sql) `
+            SELECT COUNT(DISTINCT user_id)::text AS cnt
+            FROM payments
+            WHERE LOWER(status) IN ('success', 'completed', 'paid')
+              AND user_id IS NOT NULL
+              AND amount >= 99
           `);
-                    const out = { free: 0, trial: 0, monthly: 0, yearly: 0, basic: 0, pro: 0 };
-                    for (const row of (rows.rows ?? [])) {
-                        const p = (row.effective_plan || "free").toLowerCase();
-                        const n = Number(row.cnt);
-                        if (p === "yearly")
-                            out.yearly += n;
-                        else if (p === "monthly")
-                            out.monthly += n;
-                        else if (p === "trial")
-                            out.trial += n;
-                        else
-                            out.free += n;
-                    }
-                    out.basic = out.trial; // legacy aliases
-                    out.pro = out.yearly;
-                    return out;
+                    const anyPaid = Number((anyPaidRow.rows?.[0] ?? {}).cnt ?? 0);
+                    const free = Math.max(0, totalUsers - anyPaid);
+                    return {
+                        free, trial, monthly, yearly,
+                        basic: trial, // legacy alias
+                        pro: yearly, // legacy alias
+                    };
                 }
                 catch (err) {
                     console.error("[admin/stats] live tier breakdown failed:", err?.message);
@@ -7708,28 +7696,192 @@ Crawl-delay: 1`);
             res.status(500).json({ message: "Failed to fetch live stats" });
         }
     });
+    // 2026-06: admin tools for cleaning up duplicate Pro subscribers.
+    // Founder ask: Geoffrey Kariuki appeared twice in the Active Pro list with
+    // the same email + phone. Need a way to:
+    //   1. Delete one specific subscription row from the table view (1-click).
+    //   2. Detect all users with multiple active subscription rows (bulk view).
+    //   3. Detect users with multiple user_id rows sharing the same email
+    //      (the harder case — two separate signups with case-different emails
+    //      pre-normalization).
+    // DELETE /api/admin/subscriptions/:id — kill a stray active subscription.
+    // Used by the Delete button next to a row in the Pro list. Marks status =
+    // 'expired' rather than hard-delete so payment + audit history survive.
+    app.delete("/api/admin/subscriptions/:id", auth_1.isAuthenticated, isAdmin, async (req, res) => {
+        try {
+            const subId = String(req.params.id);
+            const adminId = req.user?.claims?.sub ?? req.user?.id;
+            const reason = String(req.body?.reason || "admin-dedup").slice(0, 200);
+            const { rows } = await db_1.pool.query(`UPDATE user_subscriptions
+            SET status = 'expired', updated_at = NOW()
+          WHERE id = $1 AND status = 'active'
+        RETURNING user_id, plan, end_date`, [subId]);
+            const row = rows[0];
+            if (!row) {
+                return res.status(404).json({ message: "Subscription not found or already expired." });
+            }
+            // If they have OTHER active subscriptions, leave users.plan alone.
+            // If this was their LAST active sub, downgrade to free.
+            const { rows: stillActive } = await db_1.pool.query(`SELECT COUNT(*)::text AS cnt
+           FROM user_subscriptions
+          WHERE user_id = $1 AND status = 'active'
+            AND (end_date IS NULL OR end_date > NOW())`, [row.user_id]);
+            if (Number(stillActive[0]?.cnt ?? 0) === 0) {
+                await db_1.pool.query(`UPDATE users SET plan = 'free', subscription_status = 'expired', updated_at = NOW() WHERE id = $1`, [row.user_id]);
+                try {
+                    const { invalidateAuthUserCache } = await Promise.resolve().then(() => __importStar(require("../lib/auth-user-cache")));
+                    invalidateAuthUserCache(row.user_id);
+                }
+                catch { /* non-fatal */ }
+            }
+            console.log(`[AdminDedup] Expired subscription ${subId} for user ${row.user_id} (plan=${row.plan}) by admin=${adminId} reason="${reason}"`);
+            res.json({
+                ok: true,
+                deletedSubscriptionId: subId,
+                userId: row.user_id,
+                remainingActiveSubscriptions: Number(stillActive[0]?.cnt ?? 0),
+            });
+        }
+        catch (err) {
+            console.error("[AdminDedup] subscription delete failed:", err?.message);
+            res.status(500).json({ message: "Failed to delete subscription", error: err?.message });
+        }
+    });
+    // GET /api/admin/duplicate-users — finds duplicate user accounts.
+    // Two failure modes:
+    //   (a) Same lowercase email but different user_id rows in `users`
+    //       (happens when a signup pre-normalization went through with
+    //        mixed case — e.g. Geoffrey@gmail.com and geoffrey@gmail.com).
+    //   (b) Single user_id with multiple active subscriptions.
+    // Returns both lists so Tony can clean either type from one screen.
+    app.get("/api/admin/duplicate-users", auth_1.isAuthenticated, isAdmin, async (_req, res) => {
+        try {
+            const [sameEmail, multiSubs] = await Promise.all([
+                db_1.pool.query(`
+          SELECT LOWER(email)         AS lower_email,
+                 ARRAY_AGG(id ORDER BY created_at ASC)    AS user_ids,
+                 ARRAY_AGG(email ORDER BY created_at ASC) AS emails,
+                 COUNT(*)::text                            AS count
+            FROM users
+           WHERE email IS NOT NULL AND email <> ''
+           GROUP BY LOWER(email)
+          HAVING COUNT(*) > 1
+           ORDER BY COUNT(*) DESC
+           LIMIT 200
+        `),
+                db_1.pool.query(`
+          SELECT us.user_id,
+                 u.email,
+                 u.first_name,
+                 u.last_name,
+                 ARRAY_AGG(us.id   ORDER BY us.start_date DESC) AS subscription_ids,
+                 ARRAY_AGG(us.plan ORDER BY us.start_date DESC) AS plans,
+                 COUNT(*)::text AS count
+            FROM user_subscriptions us
+            JOIN users u ON u.id = us.user_id
+           WHERE us.status = 'active'
+             AND (us.end_date IS NULL OR us.end_date > NOW())
+           GROUP BY us.user_id, u.email, u.first_name, u.last_name
+          HAVING COUNT(*) > 1
+           ORDER BY COUNT(*) DESC
+           LIMIT 200
+        `),
+            ]);
+            res.json({
+                sameEmailDifferentUserIds: sameEmail.rows.map((r) => ({
+                    lowerEmail: r.lower_email,
+                    count: Number(r.count),
+                    userIds: r.user_ids,
+                    emails: r.emails,
+                })),
+                multipleActiveSubscriptions: multiSubs.rows.map((r) => ({
+                    userId: r.user_id,
+                    email: r.email,
+                    name: [r.first_name, r.last_name].filter(Boolean).join(" ").trim() || null,
+                    count: Number(r.count),
+                    subscriptionIds: r.subscription_ids,
+                    plans: r.plans,
+                })),
+            });
+        }
+        catch (err) {
+            console.error("[AdminDedup] duplicate-users query failed:", err?.message);
+            res.status(500).json({ message: "Failed to find duplicates", error: err?.message });
+        }
+    });
     // ── GET /api/admin/pro-subscribers — list of all active Pro users ──
+    // 2026-06 rewrite: founder reported two visible problems:
+    //   1. Geoffrey showed up TWICE because he has two user accounts (and
+    //      multiple subscription rows). Now we DISTINCT ON (u.id) so each
+    //      person appears at most once.
+    //   2. Many rows showed "Paid: —" because the subscription was admin-
+    //      granted with no payment row attached. Now we look up the actual
+    //      most-recent successful M-Pesa payment for that user (any plan
+    //      bucket: trial/monthly/yearly) and show what they really paid.
+    //      If they truly never paid (admin grant only), we say "Manual grant"
+    //      instead of an empty dash, so the truth is visible.
+    // Also widened the plan filter from literal 'pro' to ANY active paid
+    // tier (yearly, pro, pro_referral) so a manually-granted "yearly" user
+    // still appears in the Pro Subscribers list — they were missing before.
     app.get("/api/admin/pro-subscribers", auth_1.isAuthenticated, isAdmin, async (_req, res) => {
         try {
             const rows = await db_1.db.execute((0, drizzle_orm_1.sql) `
+        WITH active_pro AS (
+          SELECT DISTINCT ON (u.id)
+            u.id,
+            us.id AS "subscriptionId",
+            TRIM(COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, '')) AS "name",
+            u.email,
+            u.phone,
+            us.start_date,
+            us.end_date,
+            us.plan
+          FROM user_subscriptions us
+          INNER JOIN users u ON u.id = us.user_id
+          WHERE us.status = 'active'
+            AND us.plan IN ('yearly', 'pro', 'pro_referral')
+            AND (us.end_date IS NULL OR us.end_date > NOW())
+          ORDER BY u.id, us.start_date DESC
+        ),
+        latest_payment AS (
+          SELECT DISTINCT ON (p.user_id)
+            p.user_id,
+            p.amount,
+            p.method,
+            p.created_at,
+            p.transaction_ref,
+            p.mpesa_code
+          FROM payments p
+          WHERE LOWER(p.status) IN ('success', 'completed', 'paid')
+            AND p.amount >= 99
+          ORDER BY p.user_id, p.created_at DESC
+        )
         SELECT
-          u.id,
-          TRIM(COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, '')) AS "name",
-          u.email,
-          u.phone,
-          us.start_date AS "startDate",
-          us.end_date   AS "endDate",
-          p.amount      AS "amountPaid",
-          p.payment_method AS "paymentMethod"
-        FROM user_subscriptions us
-        INNER JOIN users u ON u.id = us.user_id
-        LEFT JOIN payments p ON p.id = us.payment_id
-        WHERE us.status = 'active'
-          AND us.plan   = 'pro'
-          AND (us.end_date IS NULL OR us.end_date > NOW())
-        ORDER BY us.start_date DESC
+          ap.id,
+          ap."subscriptionId",
+          ap.name,
+          ap.email,
+          ap.phone,
+          ap.start_date AS "startDate",
+          ap.end_date   AS "endDate",
+          ap.plan,
+          lp.amount     AS "amountPaid",
+          lp.method     AS "paymentMethod",
+          lp.mpesa_code AS "mpesaCode",
+          lp.created_at AS "paidAt"
+        FROM active_pro ap
+        LEFT JOIN latest_payment lp ON lp.user_id = ap.id
+        ORDER BY ap.start_date DESC
       `);
-            res.json(rows.rows ?? rows);
+            const result = (rows.rows ?? rows);
+            // Tag each row with payment status so the UI can show "Manual grant"
+            // instead of an empty dash for users we know never paid via M-Pesa.
+            const enriched = result.map((r) => ({
+                ...r,
+                amountPaid: r.amountPaid ? Number(r.amountPaid) : null,
+                paymentSource: r.amountPaid ? "mpesa" : "manual_grant",
+            }));
+            res.json(enriched);
         }
         catch (err) {
             console.error("[ProSubscribers]", err.message);
