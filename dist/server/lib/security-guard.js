@@ -47,6 +47,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.checkLockout = checkLockout;
 exports.recordFailedLogin = recordFailedLogin;
 exports.clearFailedAttempts = clearFailedAttempts;
+exports.clearAllAttemptsForEmail = clearAllAttemptsForEmail;
 exports.safeRedirectPath = safeRedirectPath;
 exports.notifySecurityAlert = notifySecurityAlert;
 const sentry_1 = require("../lib/sentry");
@@ -144,6 +145,26 @@ function recordFailedLogin(email, ip) {
  */
 function clearFailedAttempts(email, ip) {
     attempts.delete(keyFor(email, ip));
+}
+/**
+ * 2026-06: clear ALL brute-force attempts for an email regardless of IP.
+ * Used by the password reset flow so a user who got locked out, reset their
+ * password, and tries to log in can do so immediately (instead of waiting
+ * for the 15-minute window to roll off). Iterates every key that starts
+ * with `email:` so it catches all the (email, IP) pairs that contributed
+ * to the lockout — phone hotspots, office IP, home IP, etc.
+ */
+function clearAllAttemptsForEmail(email) {
+    const normalized = email.trim().toLowerCase();
+    const prefix = `${normalized}|`; // keyFor uses email|ip — match that exact prefix
+    let cleared = 0;
+    for (const key of attempts.keys()) {
+        if (key.startsWith(prefix)) {
+            attempts.delete(key);
+            cleared++;
+        }
+    }
+    return cleared;
 }
 // ─── Open-redirect prevention ───────────────────────────────────────────────
 /**

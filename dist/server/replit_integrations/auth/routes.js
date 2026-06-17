@@ -138,14 +138,26 @@ function registerAuthRoutes(app) {
                 .split(",")[0].trim();
             const lockoutStatus = checkLockout(rawEmail, clientIp);
             if (lockoutStatus.locked) {
+                // 2026-06 friendly-error pass: surface the recovery path. Founder
+                // reported "Pro users say they can't log back in" — most of those
+                // are users who hit lockout and never see a way out. Now we tell
+                // them about /forgot-password explicitly.
                 res.setHeader("Retry-After", String(lockoutStatus.retryAfterSeconds));
                 return res.status(429).json({
-                    message: `Too many failed attempts. Try again in ${Math.ceil(lockoutStatus.retryAfterSeconds / 60)} minutes.`,
+                    message: `Too many failed attempts. You can either wait ${Math.ceil(lockoutStatus.retryAfterSeconds / 60)} minute(s) — or reset your password right now and skip the wait.`,
                     retryAfterSeconds: lockoutStatus.retryAfterSeconds,
+                    locked: true,
+                    forgotPasswordUrl: "/forgot-password",
                 });
             }
             // 2026-06 PERF: project only the columns we need for the auth flow.
             // SELECT * was pulling 60+ columns over the wire on every login attempt.
+            //
+            // 2026-06 friendly-login pass: lookup is now CASE-INSENSITIVE on email.
+            // Old or admin-imported accounts may have email stored with mixed case
+            // (Mary.K@Gmail.com); the lowercased rawEmail wouldn't match those and
+            // the user would see "Invalid email or password" for an email they
+            // typed correctly. LOWER() on both sides covers every case.
             const [user] = await db_1.db
                 .select({
                 id: auth_1.users.id,
@@ -154,30 +166,39 @@ function registerAuthRoutes(app) {
                 isActive: auth_1.users.isActive,
             })
                 .from(auth_1.users)
-                .where((0, drizzle_orm_1.eq)(auth_1.users.email, rawEmail))
+                .where(sql `LOWER(${auth_1.users.email}) = ${rawEmail}`)
                 .limit(1);
             step("user_lookup");
             if (!user || !user.passwordHash) {
                 // Record failure on an unknown email too — prevents enumeration via
                 // timing differences and frustrates credential-stuffing reconnaissance.
                 recordFailedLogin(rawEmail, clientIp);
-                return res.status(401).json({ message: "Invalid email or password." });
+                return res.status(401).json({
+                    message: "Invalid email or password. If you're sure your email is right, reset your password to get straight back in.",
+                    forgotPasswordUrl: "/forgot-password",
+                });
             }
             // Block deleted (anonymised) accounts.
             if (user.isActive === false) {
                 return res.status(403).json({
-                    message: "This account has been deleted. Please sign up with a new account.",
+                    message: "This account has been deleted. Please sign up with a new account, or contact support if this is a mistake.",
                     accountDeleted: true,
+                    supportEmail: "support@workabroadhub.tech",
                 });
             }
             const valid = await bcrypt_1.default.compare(password, user.passwordHash);
             step("bcrypt_compare");
             if (!valid) {
                 const post = recordFailedLogin(rawEmail, clientIp);
+                const willLockNext = post.remainingAttempts === 0;
                 return res.status(401).json({
-                    message: post.remainingAttempts > 0 && post.remainingAttempts <= 2
-                        ? `Invalid email or password. ${post.remainingAttempts} attempt${post.remainingAttempts === 1 ? "" : "s"} left before lockout.`
-                        : "Invalid email or password.",
+                    message: willLockNext
+                        ? "Invalid email or password — and this was your last attempt. Reset your password now to get straight back in instead of waiting 15 minutes."
+                        : post.remainingAttempts > 0 && post.remainingAttempts <= 2
+                            ? `Invalid email or password. ${post.remainingAttempts} attempt${post.remainingAttempts === 1 ? "" : "s"} left before a 15-minute lockout. Forgot it? Reset now — much faster.`
+                            : "Invalid email or password. Forgot it? You can reset it right now.",
+                    remainingAttempts: post.remainingAttempts,
+                    forgotPasswordUrl: "/forgot-password",
                 });
             }
             // Successful login — clear the failure history for this (email, IP).
@@ -526,8 +547,27 @@ function registerAuthRoutes(app) {
             const passwordHash = await bcrypt_1.default.hash(password, 10);
             await db_1.pool.query(`UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2`, [passwordHash, row.user_id]);
             await db_1.pool.query(`UPDATE password_reset_tokens SET used_at = NOW() WHERE id = $1`, [row.id]);
+            // 2026-06: clear any active brute-force lockout for this user's email.
+            // Without this, a user who gets locked out → resets → tries to log in
+            // is STILL locked for the remainder of the 15-minute window. Brutal.
+            // Now the reset is also their unlock.
+            try {
+                const userRow = await db_1.pool.query(`SELECT email FROM users WHERE id = $1 LIMIT 1`, [row.user_id]);
+                const email = userRow.rows[0]?.email?.toLowerCase();
+                if (email) {
+                    const { clearAllAttemptsForEmail } = await Promise.resolve().then(() => __importStar(require("../../lib/security-guard")));
+                    if (typeof clearAllAttemptsForEmail === "function") {
+                        clearAllAttemptsForEmail(email);
+                        console.log(`[Auth][reset-password] Cleared brute-force lockout for ${email}`);
+                    }
+                }
+            }
+            catch (clearErr) {
+                // Non-fatal — the user can still wait out the lockout naturally
+                console.warn("[Auth][reset-password] Could not clear lockout:", clearErr?.message);
+            }
             console.log(`[Auth][reset-password] Password updated for userId=${row.user_id}`);
-            res.json({ ok: true, message: "Password updated. You can now sign in with your new password." });
+            res.json({ ok: true, message: "Password updated. You're signed in. Use the new password to log in." });
         }
         catch (err) {
             console.error("[Auth][reset-password] error:", err?.message);
