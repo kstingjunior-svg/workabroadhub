@@ -111,6 +111,15 @@ export function AuthModal({
 
   const [serverError, setServerError] =
     useState("");
+  // 2026-06 friendly-login pass: when the server tells us a recovery path
+  // exists (wrong password / locked / unknown email), capture it so the
+  // error box can render a real clickable "Reset password" button instead
+  // of just words on a screen the user shrugs at.
+  const [serverRecovery, setServerRecovery] = useState<{
+    forgotPasswordUrl?: string;
+    locked?: boolean;
+    supportEmail?: string;
+  } | null>(null);
 
   const [fieldErrors, setFieldErrors] =
     useState<FieldErrors>({});
@@ -124,6 +133,7 @@ export function AuthModal({
     setEmail("");
     setPassword("");
     setServerError("");
+    setServerRecovery(null);
     setFieldErrors({});
     setSuccessMsg("");
   };
@@ -185,6 +195,7 @@ export function AuthModal({
     e.preventDefault();
 
     setServerError("");
+    setServerRecovery(null);
     setSuccessMsg("");
 
     if (!validate()) return;
@@ -252,6 +263,16 @@ export function AuthModal({
           data.message ||
             "Something went wrong. Please try again."
         );
+        // 2026-06: capture the recovery breadcrumbs the server now ships
+        // (forgotPasswordUrl, locked flag, supportEmail) so the error box
+        // can render a clickable Reset Password button instead of dead text.
+        if (data.forgotPasswordUrl || data.locked || data.supportEmail || data.accountDeleted) {
+          setServerRecovery({
+            forgotPasswordUrl: data.forgotPasswordUrl,
+            locked: !!data.locked,
+            supportEmail: data.supportEmail,
+          });
+        }
 
         return;
       }
@@ -432,8 +453,45 @@ export function AuthModal({
             <div className="flex items-start gap-2 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
               <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
 
-              <div>
-                {serverError}
+              <div className="flex-1">
+                <div>{serverError}</div>
+                {/* 2026-06: when the server flags a recovery path, surface
+                    real clickable buttons. Locked users get a prominent
+                    "Reset password now" CTA — biggest unlock the founder
+                    asked for: "let them smoothly log in back." */}
+                {serverRecovery?.forgotPasswordUrl && (
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <a
+                      href={serverRecovery.forgotPasswordUrl}
+                      className={`inline-flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-md transition-colors ${
+                        serverRecovery.locked
+                          ? "bg-red-600 hover:bg-red-700 text-white"
+                          : "bg-white border border-red-300 text-red-700 hover:bg-red-100"
+                      }`}
+                      data-testid="link-reset-password-from-error"
+                    >
+                      {serverRecovery.locked ? "Reset password & get straight back in" : "Reset password"}
+                    </a>
+                    {serverRecovery.supportEmail && (
+                      <a
+                        href={`mailto:${serverRecovery.supportEmail}`}
+                        className="text-xs text-red-700 hover:underline"
+                      >
+                        Or email support
+                      </a>
+                    )}
+                  </div>
+                )}
+                {serverRecovery?.supportEmail && !serverRecovery?.forgotPasswordUrl && (
+                  <div className="mt-3">
+                    <a
+                      href={`mailto:${serverRecovery.supportEmail}`}
+                      className="inline-flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-md bg-white border border-red-300 text-red-700 hover:bg-red-100"
+                    >
+                      Contact support
+                    </a>
+                  </div>
+                )}
               </div>
             </div>
           )}
