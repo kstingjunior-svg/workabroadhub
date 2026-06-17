@@ -6867,9 +6867,25 @@ Crawl-delay: 1`);
                 }
             }
             console.info(`[ManualGrant] found userId=${user.id} email=${user.email} phone=${user.phone ?? "N/A"}`);
-            const resolvedGrant = await resolveCanonicalPlanPrice(planId);
-            if (!resolvedGrant)
-                return res.status(400).json({ message: `Plan "${planId}" is not configured in the database.` });
+            // 2026-06 hardening: never let a missing plans row block a legitimate
+            // admin grant. If the DB lookup returns null (plans table empty, row
+            // deleted, replication lag, etc.) fall back to the canonical price
+            // for the requested tier. We KNOW what KES 99 / 1,000 / 4,500 buys —
+            // we should never refuse to grant it because of an empty config row.
+            let resolvedGrant = await resolveCanonicalPlanPrice(planId);
+            if (!resolvedGrant) {
+                const { getCanonicalPlanPrice, ensurePlansSeeded } = await Promise.resolve().then(() => __importStar(require("./lib/ensure-plans-seeded")));
+                const fallbackPrice = getCanonicalPlanPrice(planId);
+                if (fallbackPrice !== null) {
+                    console.warn(`[ManualGrant] plans["${planId}"] missing from DB — using canonical fallback price KES ${fallbackPrice}. Re-running ensurePlansSeeded in the background.`);
+                    resolvedGrant = { basePrice: fallbackPrice, finalPrice: fallbackPrice, discountType: null };
+                    // Repair the table in the background so the next grant uses the proper row
+                    ensurePlansSeeded().catch((e) => console.error("[ManualGrant] background ensurePlansSeeded failed:", e?.message));
+                }
+                else {
+                    return res.status(400).json({ message: `Plan "${planId}" is not a recognised tier. Valid: trial, basic, monthly, yearly, pro, pro_referral.` });
+                }
+            }
             const amount = resolvedGrant.finalPrice;
             const transactionRef = receipt?.trim() || `ADMIN-GRANT-${Date.now()}`;
             const expiresAt = (0, plans_1.planExpiry)(planId);
@@ -6990,9 +7006,22 @@ Crawl-delay: 1`);
                 });
             }
             console.info(`[AdminUpgrade] found userId=${user.id} email=${user.email} phone=${user.phone ?? "N/A"}`);
-            const resolvedUpgrade = await resolveCanonicalPlanPrice(plan);
-            if (!resolvedUpgrade)
-                return res.status(400).json({ message: `Plan "${plan}" is not configured in the database.` });
+            // 2026-06: same defensive fallback as /api/admin/users/:userId/grant-plan
+            // — never let a missing plans row block an admin who knows what they're
+            // granting. Falls back to canonical price + repairs the table in BG.
+            let resolvedUpgrade = await resolveCanonicalPlanPrice(plan);
+            if (!resolvedUpgrade) {
+                const { getCanonicalPlanPrice, ensurePlansSeeded } = await Promise.resolve().then(() => __importStar(require("./lib/ensure-plans-seeded")));
+                const fallbackPrice = getCanonicalPlanPrice(plan);
+                if (fallbackPrice !== null) {
+                    console.warn(`[AdminUpgrade] plans["${plan}"] missing — using canonical fallback KES ${fallbackPrice}.`);
+                    resolvedUpgrade = { basePrice: fallbackPrice, finalPrice: fallbackPrice, discountType: null };
+                    ensurePlansSeeded().catch((e) => console.error("[AdminUpgrade] background ensurePlansSeeded failed:", e?.message));
+                }
+                else {
+                    return res.status(400).json({ message: `Plan "${plan}" is not a recognised tier. Valid: trial, basic, monthly, yearly, pro, pro_referral.` });
+                }
+            }
             const amount = resolvedUpgrade.finalPrice;
             const transactionRef = `ADMIN-UPGRADE-${Date.now()}`;
             const expiresAt = (0, plans_1.planExpiry)(plan);

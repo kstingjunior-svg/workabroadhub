@@ -428,6 +428,17 @@ app.use((req, res, next) => {
         // registerRoutes(app)
         // NOT registerRoutes(httpServer, app)
         await (0, routes_1.registerRoutes)(httpServer, app);
+        // 2026-06: ensure the plans table has rows for trial/basic/monthly/
+        // yearly/pro/pro_referral before any manual-grant endpoint can fire.
+        // Was previously missing and broke admin grants with the message
+        // "Plan 'yearly' is not configured in the database." Idempotent.
+        try {
+            const { ensurePlansSeeded } = await Promise.resolve().then(() => __importStar(require("./lib/ensure-plans-seeded")));
+            await ensurePlansSeeded();
+        }
+        catch (err) {
+            console.error("[Server] ❌ ensurePlansSeeded failed:", err?.message);
+        }
         // Wire Sentry's Express error handler AFTER all routes are registered
         // but BEFORE any custom 500 middleware. No-op if Sentry isn't initialised.
         (0, sentry_1.attachSentryErrorHandler)(app);
