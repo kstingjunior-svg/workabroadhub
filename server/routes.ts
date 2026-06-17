@@ -2467,7 +2467,27 @@ Crawl-delay: 1`);
           merchantRequestId = stkResponse.MerchantRequestID;
         } catch (err: any) {
           logActivity({ event: "payment_failed", userId, email: initiatingUser.email, meta: { method: "mpesa", planId, error: err.message }, ip: clientIp });
-          return res.status(500).json({ message: "Failed to initiate M-Pesa payment. Please try again." });
+          // 2026-06: same Kenyan-friendly translation as /api/mpesa/stk.
+          // Founder ask: never leave a user on a dead error screen — always
+          // route them to retry or manual Paybill so revenue isn't lost.
+          const { friendlyMpesaError, MPESA_FALLBACK } = await import("./lib/mpesa-error-translator");
+          const friendly = friendlyMpesaError(err.response?.data || err);
+          return res.status(502).json({
+            success:       false,
+            message:       friendly.message,
+            title:         friendly.title,
+            nextStep:      friendly.next_step,
+            retrySafe:     friendly.retry_safe,
+            offerPaybill:  friendly.offer_paybill,
+            badPhone:      friendly.bad_phone,
+            darajaCode:    friendly.daraja_code,
+            paybillFallback: {
+              paybill:  MPESA_FALLBACK.paybill,
+              account:  initiatingUser.email || MPESA_FALLBACK.accountKey,
+              amount:   chargeAmount,
+              planName: plan.planName,
+            },
+          });
         }
 
         const payment = await storage.createPayment({
@@ -3933,7 +3953,25 @@ Crawl-delay: 1`);
           ip: req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket?.remoteAddress || "unknown",
           metadata: { error: mpesaError.message, phone, amount },
         }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
-        return res.status(500).json({ success: false, error: "Failed to send STK push. Please try again." });
+        // 2026-06: translate Daraja errors into Kenyan-friendly guidance + always
+        // ship the Paybill fallback so the user has a path no matter what.
+        const { friendlyMpesaError, MPESA_FALLBACK } = await import("./lib/mpesa-error-translator");
+        const friendly = friendlyMpesaError(mpesaError.response?.data || mpesaError);
+        return res.status(502).json({
+          success:       false,
+          error:         friendly.message,
+          title:         friendly.title,
+          nextStep:      friendly.next_step,
+          retrySafe:     friendly.retry_safe,
+          offerPaybill:  friendly.offer_paybill,
+          badPhone:      friendly.bad_phone,
+          darajaCode:    friendly.daraja_code,
+          paybillFallback: {
+            paybill:  MPESA_FALLBACK.paybill,
+            account:  payment.email || MPESA_FALLBACK.accountKey,
+            amount,
+          },
+        });
       }
 
       // Stamp Safaricom's IDs onto the row — this is what the M-Pesa callback will match on.
