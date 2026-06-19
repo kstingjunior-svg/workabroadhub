@@ -26,8 +26,25 @@ type JobMatch = {
   salary?: string | null;
 };
 
+// 2026-06 security fix: msg.text is passed to dangerouslySetInnerHTML in the
+// render path. Previously this function let the raw text through unescaped,
+// then replaced `*x*` with <strong>x</strong>. If a user or AI response ever
+// contained `<script>…</script>` or any other HTML, it would execute in the
+// browser — classic stored XSS in the chat surface.
+// Now: HTML-escape EVERY character first, then apply the bold + newline
+// transforms over the escaped text. Bold formatting still works; injection
+// no longer does.
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function formatText(text: string): string {
-  return text
+  return escapeHtml(text)
     .replace(/\*([^*]+)\*/g, "<strong>$1</strong>")
     .replace(/\n/g, "<br/>");
 }

@@ -19986,7 +19986,9 @@ Tone examples:
 
   // ── Verified Portal Health Routes ────────────────────────────────────────────
   // GET /api/admin/portals — list all portals (sorted by name)
-  app.get("/api/admin/portals", async (req: any, res) => {
+  // 2026-06 SECURITY FIX: was unauthenticated — anyone could enumerate every
+  // verified portal. Now properly gated behind isAdmin.
+  app.get("/api/admin/portals", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const rows = await db.select().from(verifiedPortals).orderBy(verifiedPortals.name);
       res.json(rows);
@@ -20005,11 +20007,12 @@ Tone examples:
     }
   });
 
-  // POST /api/admin/portals — add a new portal
-  app.post("/api/admin/portals", async (req: any, res) => {
-    if (!req.isAuthenticated?.() && !req.user) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
+  // 2026-06 CRITICAL SECURITY FIX: these admin portal endpoints previously
+  // only checked req.isAuthenticated() — meaning ANY signed-in free user
+  // could add/modify/delete the verified job portals (point them at scam
+  // sites, hide legitimate ones, etc.). Now properly gated behind isAdmin
+  // middleware. Discovered during the 2026-06 full production audit.
+  app.post("/api/admin/portals", isAuthenticated, isAdmin, async (req: any, res) => {
     const parsed = insertVerifiedPortalSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ message: "Invalid portal data", errors: parsed.error.errors });
@@ -20023,10 +20026,7 @@ Tone examples:
   });
 
   // PATCH /api/admin/portals/:id — update portal fields (toggle isActive, etc.)
-  app.patch("/api/admin/portals/:id", async (req: any, res) => {
-    if (!req.isAuthenticated?.() && !req.user) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
+  app.patch("/api/admin/portals/:id", isAuthenticated, isAdmin, async (req: any, res) => {
     const id = parseInt(req.params.id);
     if (isNaN(id)) return res.status(400).json({ message: "Invalid portal id" });
     try {
@@ -20039,10 +20039,7 @@ Tone examples:
   });
 
   // DELETE /api/admin/portals/:id — remove a portal
-  app.delete("/api/admin/portals/:id", async (req: any, res) => {
-    if (!req.isAuthenticated?.() && !req.user) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
+  app.delete("/api/admin/portals/:id", isAuthenticated, isAdmin, async (req: any, res) => {
     const id = parseInt(req.params.id);
     if (isNaN(id)) return res.status(400).json({ message: "Invalid portal id" });
     try {
@@ -20054,10 +20051,7 @@ Tone examples:
   });
 
   // POST /api/admin/portals/check-now — trigger immediate health check
-  app.post("/api/admin/portals/check-now", async (req: any, res) => {
-    if (!req.isAuthenticated?.() && !req.user) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
+  app.post("/api/admin/portals/check-now", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const result = await runPortalHealthCheck();
       res.json(result);
