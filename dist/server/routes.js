@@ -5292,6 +5292,195 @@ Crawl-delay: 1`);
             res.status(500).json({ message: err.message });
         }
     });
+    // 2026-06: ONE consolidated M-Pesa health URL. Founder asked "check if
+    // M-Pesa is running smoothly" — this endpoint answers that in a single
+    // JSON response. Aggregates everything the existing scattered endpoints
+    // each surface individually:
+    //   - env-var presence and shape (do we have valid Daraja credentials?)
+    //   - current OAuth token TTL (expiring soon?)
+    //   - circuit breaker state (are we tripped?)
+    //   - reconciler last-run + last-success timestamps
+    //   - last 1h / 24h / 7d STK push counts: initiated / succeeded / failed
+    //   - real-time success rate per window
+    //   - count of "stuck" payments (pending >5 min, callback never arrived)
+    //   - 5 most recent payment statuses for quick eyeballing
+    //   - overall verdict + concrete next step if unhealthy
+    app.get("/api/admin/mpesa/health", auth_1.isAuthenticated, isAdmin, async (req, res) => {
+        try {
+            const { getTokenStatus, isMpesaAvailable, isB2CAvailable } = await Promise.resolve().then(() => __importStar(require("./mpesa")));
+            const { getReconcilerState } = await Promise.resolve().then(() => __importStar(require("./mpesa-reconciler")));
+            // ── 1. Configuration check ─────────────────────────────────────────
+            const env = process.env.MPESA_ENV === "sandbox" ? "sandbox" : "production";
+            const config = {
+                environment: env,
+                shortcode: (process.env.MPESA_SHORTCODE || "").trim() || null,
+                callbackBaseUrl: (process.env.APP_URL || process.env.MPESA_CALLBACK_URL || "").trim() || null,
+                consumerKey: !!(process.env.MPESA_CONSUMER_KEY || "").trim(),
+                consumerSecret: !!(process.env.MPESA_CONSUMER_SECRET || "").trim(),
+                passKey: !!(process.env.MPESA_PASSKEY || "").trim(),
+                initiatorName: !!(process.env.MPESA_INITIATOR_NAME || "").trim(),
+                securityCredential: !!(process.env.MPESA_SECURITY_CREDENTIAL || "").trim(),
+            };
+            const allCorePresent = !!(config.shortcode && config.consumerKey && config.consumerSecret && config.passKey);
+            const missingCore = [];
+            if (!config.shortcode)
+                missingCore.push("MPESA_SHORTCODE");
+            if (!config.consumerKey)
+                missingCore.push("MPESA_CONSUMER_KEY");
+            if (!config.consumerSecret)
+                missingCore.push("MPESA_CONSUMER_SECRET");
+            if (!config.passKey)
+                missingCore.push("MPESA_PASSKEY");
+            if (!config.callbackBaseUrl)
+                missingCore.push("APP_URL (callback base)");
+            // ── 2. STK volume + success metrics ────────────────────────────────
+            // Buckets paid-status rows by initiated time. Looks at mpesa method
+            // specifically so service-order non-mpesa payments don't skew.
+            const PAID_STATUSES = ["success", "completed", "paid"];
+            const volumeRows = await db_1.pool.query(`
+        SELECT * FROM (
+          SELECT 'last_1h'  AS window,
+                 COUNT(*)::text                                              AS initiated,
+                 COUNT(*) FILTER (WHERE LOWER(status) = ANY($1))::text       AS success,
+                 COUNT(*) FILTER (WHERE LOWER(status) = 'failed')::text      AS failed,
+                 COUNT(*) FILTER (WHERE LOWER(status) IN ('pending','initiated','processing'))::text AS pending
+            FROM payments
+           WHERE method = 'mpesa' AND created_at > NOW() - INTERVAL '1 hour'
+          UNION ALL
+          SELECT 'last_24h',
+                 COUNT(*)::text,
+                 COUNT(*) FILTER (WHERE LOWER(status) = ANY($1))::text,
+                 COUNT(*) FILTER (WHERE LOWER(status) = 'failed')::text,
+                 COUNT(*) FILTER (WHERE LOWER(status) IN ('pending','initiated','processing'))::text
+            FROM payments
+           WHERE method = 'mpesa' AND created_at > NOW() - INTERVAL '24 hours'
+          UNION ALL
+          SELECT 'last_7d',
+                 COUNT(*)::text,
+                 COUNT(*) FILTER (WHERE LOWER(status) = ANY($1))::text,
+                 COUNT(*) FILTER (WHERE LOWER(status) = 'failed')::text,
+                 COUNT(*) FILTER (WHERE LOWER(status) IN ('pending','initiated','processing'))::text
+            FROM payments
+           WHERE method = 'mpesa' AND created_at > NOW() - INTERVAL '7 days'
+        ) t
+      `, [PAID_STATUSES]);
+            const volume = Object.fromEntries(volumeRows.rows.map((r) => {
+                const initiated = Number(r.initiated);
+                const success = Number(r.success);
+                const failed = Number(r.failed);
+                const pending = Number(r.pending);
+                const settled = success + failed;
+                return [r.window, {
+                        initiated,
+                        success,
+                        failed,
+                        pending,
+                        successRatePct: settled > 0 ? Math.round((success / settled) * 100) : null,
+                    }];
+            }));
+            // ── 3. Stuck payments — pending >5 min likely means callback lost ──
+            const stuckRows = await db_1.pool.query(`
+        SELECT
+          COUNT(*)::text AS cnt,
+          COALESCE(EXTRACT(EPOCH FROM (NOW() - MIN(created_at)))/60, 0)::text AS oldest_age_min
+        FROM payments
+        WHERE method = 'mpesa'
+          AND LOWER(status) IN ('pending','initiated','processing')
+          AND created_at < NOW() - INTERVAL '5 minutes'
+      `);
+            const stuck = {
+                count: Number(stuckRows.rows[0]?.cnt ?? 0),
+                oldestAgeMins: Math.round(Number(stuckRows.rows[0]?.oldest_age_min ?? 0)),
+            };
+            // ── 4. Last 5 payments — eyeball check ──────────────────────────────
+            const recentRows = await db_1.pool.query(`
+        SELECT id, amount::text, status, created_at, mpesa_code, service_id
+          FROM payments
+         WHERE method = 'mpesa'
+         ORDER BY created_at DESC
+         LIMIT 5
+      `);
+            // ── 5. Verdict + actionable next step ──────────────────────────────
+            const tokenStatus = getTokenStatus();
+            const reconcilerState = getReconcilerState();
+            const circuitBreakerOpen = !isMpesaAvailable();
+            let verdict = "healthy";
+            const issues = [];
+            const recommendations = [];
+            if (missingCore.length > 0) {
+                verdict = "broken";
+                issues.push(`Missing env vars: ${missingCore.join(", ")}`);
+                recommendations.push("Add the missing values in Render → Environment, then redeploy.");
+            }
+            if (tokenStatus.status === "error" || tokenStatus.status === "expired") {
+                verdict = "broken";
+                issues.push(`OAuth token: ${tokenStatus.status}${tokenStatus.lastError ? " — " + tokenStatus.lastError : ""}`);
+                recommendations.push("POST /api/admin/mpesa/token-refresh — if that fails, check MPESA_CONSUMER_KEY/SECRET match the production app on developer.safaricom.co.ke.");
+            }
+            if (circuitBreakerOpen) {
+                if (verdict === "healthy")
+                    verdict = "degraded";
+                issues.push("Circuit breaker is OPEN — too many recent Daraja failures.");
+                recommendations.push("POST /api/admin/circuits/mpesa/reset after the underlying issue is fixed.");
+            }
+            const lastHour = volume.last_1h;
+            if (lastHour && lastHour.initiated >= 5 && lastHour.successRatePct !== null && lastHour.successRatePct < 50) {
+                if (verdict === "healthy")
+                    verdict = "degraded";
+                issues.push(`Success rate in last hour: ${lastHour.successRatePct}% (${lastHour.success}/${lastHour.success + lastHour.failed} settled).`);
+                recommendations.push("Open recent failed payments and look at the audit log — common causes: insufficient balance, cancelled by user, phone unreachable.");
+            }
+            if (stuck.count >= 3) {
+                if (verdict === "healthy")
+                    verdict = "degraded";
+                issues.push(`${stuck.count} payment(s) stuck pending for >5 min (oldest: ${stuck.oldestAgeMins} min).`);
+                recommendations.push("Reconciler should pick these up within 5 min. If they persist, POST /api/admin/mpesa/pull/reconcile to force a sweep.");
+            }
+            if (reconcilerState.lastSuccessAt) {
+                const lastSuccessAge = (Date.now() - new Date(reconcilerState.lastSuccessAt).getTime()) / 60000;
+                if (lastSuccessAge > 15) {
+                    if (verdict === "healthy")
+                        verdict = "degraded";
+                    issues.push(`Reconciler hasn't run successfully in ${Math.round(lastSuccessAge)} min.`);
+                    recommendations.push("Check server logs for [Reconciler] errors. Common cause: Pull URL not registered.");
+                }
+            }
+            else if (allCorePresent) {
+                // No reconciler success ever recorded — usually means the Pull URL
+                // isn't registered yet. Not critical but worth knowing.
+                recommendations.push("Reconciler has no successful run yet — register Pull URL via POST /api/admin/mpesa/pull/register if not already done.");
+            }
+            // Don't cache — this is a real-time admin diagnostic.
+            res.setHeader("Cache-Control", "no-store");
+            res.json({
+                verdict,
+                issues,
+                recommendations,
+                config,
+                token: tokenStatus,
+                circuitBreaker: {
+                    mpesaStkOpen: circuitBreakerOpen,
+                    mpesaB2COpen: !isB2CAvailable(),
+                },
+                reconciler: reconcilerState,
+                volume,
+                stuck,
+                recentPayments: recentRows.rows.map((r) => ({
+                    id: r.id,
+                    amount: Number(r.amount),
+                    status: r.status,
+                    mpesaCode: r.mpesa_code,
+                    serviceId: r.service_id,
+                    ageMins: Math.round((Date.now() - new Date(r.created_at).getTime()) / 60000),
+                })),
+                generatedAt: new Date().toISOString(),
+            });
+        }
+        catch (err) {
+            console.error("[/api/admin/mpesa/health]", err?.message);
+            res.status(500).json({ message: err?.message, verdict: "broken" });
+        }
+    });
     // Force a token refresh (useful after credential change or Pull API registration)
     app.post("/api/admin/mpesa/token-refresh", auth_1.isAuthenticated, isAdmin, async (req, res) => {
         try {
