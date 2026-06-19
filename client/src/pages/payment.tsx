@@ -1613,15 +1613,105 @@ export default function Payment() {
                       </button>
                     </div>
 
+                    {/* 2026-06: LIVE STATUS BANNER while the STK push is in
+                        flight. Previously users only saw a tiny "Sending
+                        prompt…" spinner on the button — they didn't know
+                        whether anything was happening on their phone. Now a
+                        big amber-emerald banner shows "Check your phone! 47s
+                        left" with a pulsing dot. Pulled out of the form's
+                        button area so it's the most visible thing on the
+                        screen during those 60 seconds. */}
+                    {isPolling && !timedOut && (
+                      <div
+                        className="mt-4 rounded-xl border-2 border-emerald-300 dark:border-emerald-700 bg-gradient-to-br from-emerald-50 to-amber-50 dark:from-emerald-950/40 dark:to-amber-950/30 p-4"
+                        role="status"
+                        aria-live="polite"
+                        data-testid="stk-status-banner"
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className="relative shrink-0 mt-0.5">
+                            <span className="absolute inline-flex h-3 w-3 rounded-full bg-emerald-400 opacity-75 animate-ping" />
+                            <span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-500" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-bold text-emerald-900 dark:text-emerald-100 text-sm">
+                              📱 Check your phone — M-Pesa prompt sent
+                            </p>
+                            <p className="text-xs text-emerald-800 dark:text-emerald-200 mt-1 leading-relaxed">
+                              Look for the M-Pesa screen on the phone you entered. Enter your
+                              PIN and tap <strong>OK</strong>. We'll unlock your plan the
+                              second Safaricom confirms.
+                            </p>
+                          </div>
+                          <div className="shrink-0 text-right">
+                            <div className="text-2xl font-bold tabular-nums text-emerald-700 dark:text-emerald-300 leading-none">
+                              {Math.floor(secondsLeft / 60)}:{String(secondsLeft % 60).padStart(2, "0")}
+                            </div>
+                            <div className="text-[10px] text-emerald-700/70 dark:text-emerald-300/70 uppercase tracking-wide mt-0.5">
+                              left
+                            </div>
+                          </div>
+                        </div>
+                        {/* Progress bar — visual reinforcement of the countdown */}
+                        <div className="mt-3 h-1.5 bg-emerald-200/50 dark:bg-emerald-900/40 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-emerald-500 to-amber-500 transition-all duration-1000 ease-linear"
+                            style={{ width: `${(secondsLeft / 60) * 100}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 2026-06: TIMEOUT RESEND PANEL — when STK expired without
+                        a result, give them a one-tap resend that REUSES the
+                        existing payment record (no need to re-type phone or
+                        re-agree to terms). */}
+                    {timedOut && paymentId && !paymentSuccess && (
+                      <div
+                        className="mt-4 rounded-xl border-2 border-amber-300 dark:border-amber-700 bg-amber-50/80 dark:bg-amber-950/40 p-4"
+                        role="alert"
+                        data-testid="stk-timeout-resend"
+                      >
+                        <div className="flex items-start gap-2 mb-3">
+                          <AlertCircle className="h-5 w-5 text-amber-700 dark:text-amber-300 shrink-0 mt-0.5" />
+                          <div className="flex-1">
+                            <p className="font-bold text-sm text-amber-900 dark:text-amber-100">
+                              The M-Pesa prompt expired
+                            </p>
+                            <p className="text-xs text-amber-800 dark:text-amber-200 mt-1 leading-relaxed">
+                              Happens to all of us — you missed the prompt or M-Pesa took
+                              too long. Tap below to send a fresh prompt to your phone
+                              ({phoneNumber}). Or use the Paybill option below.
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => retryMutation.mutate(paymentId)}
+                          disabled={retryMutation.isPending}
+                          className="w-full bg-amber-600 hover:bg-amber-700 disabled:bg-amber-400 text-white py-3 rounded-lg font-bold text-sm flex items-center justify-center gap-2 transition-colors"
+                          data-testid="button-resend-stk"
+                        >
+                          {retryMutation.isPending ? (
+                            <><Loader2 className="h-4 w-4 animate-spin" />Sending fresh prompt…</>
+                          ) : (
+                            <><RefreshCw className="h-4 w-4" />Send the prompt again</>
+                          )}
+                        </button>
+                      </div>
+                    )}
+
                     <button
                       type="submit"
-                      disabled={!phoneNumber || !agreedToTerms || paymentMutation.isPending || (!!pendingPayment?.hasPending && pendingPayment.paymentId !== paymentId)}
+                      disabled={!phoneNumber || !agreedToTerms || paymentMutation.isPending || isPolling || (!!pendingPayment?.hasPending && pendingPayment.paymentId !== paymentId)}
                       className="w-full bg-green-600 hover:bg-green-700 disabled:bg-green-400 disabled:cursor-not-allowed text-white py-4 rounded-xl text-lg font-semibold transition-colors mt-4 flex items-center justify-center gap-2"
                       data-testid="button-pay-mpesa"
                       aria-label={`Pay ${paymentAmount.toLocaleString()} Kenyan Shillings with M-Pesa`}
                     >
                       {paymentMutation.isPending ? (
                         <><Loader2 className="h-5 w-5 animate-spin" />Sending prompt…</>
+                      ) : isPolling ? (
+                        <>Waiting for your PIN…</>
                       ) : (
                         `Pay KES ${paymentAmount.toLocaleString()} via M-Pesa`
                       )}
