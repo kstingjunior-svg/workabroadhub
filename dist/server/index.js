@@ -196,6 +196,18 @@ httpServer.listen(PORT, "0.0.0.0", () => {
         catch (err) {
             console.error("[Server] ❌ Plan expiry sweep failed to start:", err?.message);
         }
+        // 2026-06 AUDIT REC #4: verification reminder sweep — every hour, send
+        // ONE friendly reminder email to users who signed up 6-48h ago but
+        // never verified. Caps at one reminder per user (column
+        // verification_reminder_sent_at). Recovers part of the 535-unverified
+        // figure the Email Health page surfaced as a funnel leak.
+        try {
+            const { startVerificationReminderSweep } = await Promise.resolve().then(() => __importStar(require("./lib/verification-reminder-sweep")));
+            startVerificationReminderSweep();
+        }
+        catch (err) {
+            console.error("[Server] ❌ Verification reminder sweep failed to start:", err?.message);
+        }
     })();
 });
 // ─────────────────────────────────────────────────────────────────────────────
