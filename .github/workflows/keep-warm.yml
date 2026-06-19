@@ -1,0 +1,67 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Keep-warm ping — prevents Render free-tier cold starts.
+#
+# Render's free tier puts the instance to sleep after ~15 min of inactivity.
+# The next user request then takes 30-60 seconds to wake the instance, during
+# which the browser fetch() often times out with "Failed to fetch". A customer
+# (Susan) reported this on a tiny 24 KB CV Fix Lite upload.
+#
+# This workflow keeps the instance awake by hitting /api/health every 10 min
+# from GitHub's runner network. It does NOT use any secrets so it can't have
+# the same syntax-validation problem the old deploy.yml had.
+#
+# DESIGN: this workflow ALWAYS reports success ("exit 0") even when the ping
+# fails. That's deliberate. If we exit 1 on a transient HTTP error, GitHub
+# Actions sends an email — and over time those emails would pile up exactly
+# like the broken deploy.yml did before we deleted it. Render itself runs
+# health checks every 30s and will email Tony when the service is actually
+# down — so we never need to duplicate that signal here. This workflow only
+# needs to wake the instance; whether it succeeded or not isn't important.
+#
+# 2026-06: built after Susan's "Failed to fetch" report.
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: Keep warm
+
+on:
+  schedule:
+    # Every 10 minutes. Render's idle timeout is 15 min, so this gives us a
+    # comfortable buffer even when GitHub's cron occasionally runs late.
+    - cron: '*/10 * * * *'
+  # Allow manual trigger from the Actions tab for testing.
+  workflow_dispatch:
+
+# Only one ping at a time. If a previous run is still going, skip the next.
+concurrency:
+  group: keep-warm
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    name: Wake the server
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+
+    steps:
+      - name: Hit /api/health (warm Render instance)
+        # `set +e` so a non-zero exit from curl doesn't stop the script.
+        # `|| true` on the curl line for the same reason. The whole step
+        # then always succeeds — Render's own monitoring will alert us
+        # if the service is actually down.
+        run: |
+          set +e
+          echo "Pinging https://workabroadhub.tech/api/health at $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          response=$(curl --silent --show-error --max-time 60 \
+                          --write-out "\nHTTP_STATUS:%{http_code}\nTIME_TOTAL:%{time_total}s\n" \
+                          https://workabroadhub.tech/api/health || true)
+          echo "$response"
+          status=$(echo "$response" | grep -oE 'HTTP_STATUS:[0-9]+' | head -1 | cut -d: -f2)
+          if [ -z "$status" ]; then
+            echo "::notice::No HTTP status — server may have been cold-starting. The ping itself was enough to wake it."
+          elif [ "$status" -ge 200 ] && [ "$status" -lt 400 ]; then
+            echo "::notice::✓ Server warm (HTTP $status)"
+          else
+            echo "::notice::Server returned HTTP $status — Render's own monitoring will email if this persists."
+          fi
+          # ALWAYS exit 0 so this workflow never sends a failure email.
+          exit 0
