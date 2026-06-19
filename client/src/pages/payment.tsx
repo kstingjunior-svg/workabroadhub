@@ -17,6 +17,10 @@ import { PRO_FEATURES } from "@/lib/plan-features";
 // Wired into onError below so every STK push failure surfaces a clear next-step
 // + always-visible manual-pay instructions, not a toast that disappears in 5s.
 import { MpesaErrorCard, type MpesaError } from "@/components/mpesa-error-card";
+// 2026-06: always-on Paybill 4153025 option shown alongside STK push so
+// users who don't trust the prompt can pay manually. Founder ask: lift the
+// 46% M-Pesa success rate to 70%+ by showing both paths as co-equal.
+import { MpesaPaybillOption } from "@/components/mpesa-paybill-option";
 import {
   applyReferralCode,
   getUserReferralProfile,
@@ -1575,8 +1579,16 @@ export default function Payment() {
                         required
                       />
                       <p className="text-xs text-gray-400 dark:text-gray-500">
-                        Must be a Safaricom number (07XX). M-Pesa only works on Safaricom lines.
+                        Must be a Safaricom number (07XX or 01XX). M-Pesa only works on Safaricom lines.
                       </p>
+                      {/* 2026-06: tiny pre-flight checklist to reduce the most common
+                          STK failure causes — phone off, no balance, not ready to enter
+                          PIN. Just a quiet reminder, not a blocking form. */}
+                      <div className="mt-2 text-[11px] text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 rounded-md p-2 leading-relaxed">
+                        <strong>Before you tap Pay:</strong>{" "}
+                        Phone on, signal up, at least <strong>KES {(paymentAmount + 5).toLocaleString()}</strong> in your M-Pesa wallet,
+                        and your PIN ready. Prompt expires in 60 seconds.
+                      </div>
                     </div>
 
                     <div className="mt-4">
@@ -1618,6 +1630,19 @@ export default function Payment() {
                     <p className="text-xs text-gray-500 dark:text-gray-400 text-center mt-3">
                       You'll receive an STK push on your phone. Enter your PIN to confirm.
                     </p>
+
+                    {/* 2026-06: ALWAYS-VISIBLE Paybill 4153025 manual option.
+                        Shown as a co-equal path next to STK push so users who
+                        cancel out of the prompt (the #1 cause of our 46%
+                        success rate) have a clear alternate route to upgrading.
+                        Collapsed by default — taps to expand the 5-step manual
+                        instructions with one-click copy for Paybill, account,
+                        and amount. */}
+                    <MpesaPaybillOption
+                      amount={paymentAmount}
+                      account={user?.email || "your email"}
+                      planName={(urlPlanId && (urlPlanId === "trial" ? "Trial" : urlPlanId === "monthly" ? "Monthly" : urlPlanId === "yearly" ? "Yearly" : urlPlanId)) || undefined}
+                    />
 
                     {renderFailoverBanner()}
                     {renderManualPaybillBox()}
