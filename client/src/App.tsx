@@ -136,6 +136,7 @@ const AdminPayments = lazyWithRetry(() => import("@/pages/admin/payments"));
 const AdminManualUpgrade = lazyWithRetry(() => import("@/pages/admin/manual-upgrade"));
 // 2026-06: email health + emergency resend (users report missing codes)
 const AdminEmailHealth = lazyWithRetry(() => import("@/pages/admin/email-health"));
+const AdminMpesaHealth = lazyWithRetry(() => import("@/pages/admin/mpesa-health"));
 const JourneyPage = lazyWithRetry(() => import("@/pages/journey"));
 const SalaryPage = lazyWithRetry(() => import("@/pages/salary"));
 const InterviewPage = lazyWithRetry(() => import("@/pages/interview"));
@@ -374,6 +375,7 @@ const LazyAdminUsers = withSuspense(AdminUsers);
 const LazyAdminPayments = withSuspense(AdminPayments);
 const LazyAdminManualUpgrade = withSuspense(AdminManualUpgrade);
 const LazyAdminEmailHealth = withSuspense(AdminEmailHealth);
+const LazyAdminMpesaHealth = withSuspense(AdminMpesaHealth);
 const LazyJourneyPage = withSuspense(JourneyPage);
 const LazySalaryPage = withSuspense(SalaryPage);
 const LazyInterviewPage = withSuspense(InterviewPage);
@@ -503,6 +505,7 @@ function AuthenticatedRoutes() {
       <Route path="/admin/payments" component={LazyAdminPayments} />
       <Route path="/admin/manual-upgrade" component={LazyAdminManualUpgrade} />
       <Route path="/admin/email-health" component={LazyAdminEmailHealth} />
+      <Route path="/admin/mpesa-health" component={LazyAdminMpesaHealth} />
       <Route path="/journey/:country" component={LazyJourneyPage} />
       <Route path="/journey" component={LazyJourneyPage} />
       <Route path="/salary" component={LazySalaryPage} />

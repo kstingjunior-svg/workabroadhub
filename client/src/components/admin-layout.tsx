@@ -70,6 +70,7 @@ const navItems = [
   { href: "/admin/unmatched-payments", label: "Unmatched Payments", icon: Unlink },
   { href: "/admin/manual-upgrade", label: "Manual Upgrade 🛠️", icon: ShieldCheck },
   { href: "/admin/email-health", label: "Email Health 📧", icon: ShieldCheck },
+  { href: "/admin/mpesa-health", label: "M-Pesa Health 🩺", icon: ShieldCheck },
   { href: "/admin/referrals", label: "Referrals", icon: Gift },
   { href: "/admin/consultations", label: "Consultations", icon: MessageSquare },
   { href: "/admin/success-stories", label: "Success Stories", icon: Trophy },

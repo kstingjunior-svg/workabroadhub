@@ -5780,6 +5780,74 @@ Crawl-delay: 1`);
     }
   });
 
+  // 2026-06: Bulk-expire historical stuck M-Pesa payments.
+  // /admin/mpesa-health showed 109 payments stuck pending for 26+ days.
+  // Those are orphans from before the reconciler existed — Daraja's Pull
+  // API only goes back ~24 hours so they're unrecoverable. Without a way
+  // to mark them expired they'd pollute the dashboard forever and skew
+  // every success-rate calculation.
+  //
+  // POST /api/admin/mpesa/cleanup-stuck { olderThanMinutes?: number }
+  //   - Default: 1440 (24 hours) — same window Daraja's Pull API covers
+  //   - Returns: { expired: number, oldestAgeMins: number }
+  //   - Marks payments status='failed' with a metadata note
+  //   - Never touches payments newer than the threshold (reconciler handles those)
+  app.post("/api/admin/mpesa/cleanup-stuck", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const olderThanMinutes = Math.max(60, Number(req.body?.olderThanMinutes ?? 1440));
+      const adminId = req.user?.claims?.sub ?? req.user?.id ?? "unknown";
+
+      // Two-step transaction: snapshot the rows first (so we can return
+      // detail to the admin), then update them as failed in one statement.
+      const { rows: targets } = await pool.query<{ id: string; amount: string; created_at: Date }>(`
+        SELECT id, amount::text, created_at
+          FROM payments
+         WHERE method = 'mpesa'
+           AND LOWER(status) IN ('pending', 'initiated', 'processing')
+           AND created_at < NOW() - INTERVAL '${olderThanMinutes} minutes'
+      `);
+
+      if (targets.length === 0) {
+        return res.json({
+          expired: 0,
+          olderThanMinutes,
+          message: "Nothing to clean up — all pending payments are within the recoverable window.",
+        });
+      }
+
+      const ids = targets.map((t) => t.id);
+      await pool.query(`
+        UPDATE payments
+           SET status = 'failed',
+               metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+                 'admin_cleanup', true,
+                 'cleanup_reason', 'stuck_pending_beyond_reconciler_window',
+                 'cleanup_by', $2::text,
+                 'cleanup_at', NOW()::text
+               )
+         WHERE id = ANY($1::varchar[])
+      `, [ids, adminId]);
+
+      const oldestAgeMins = Math.max(...targets.map((t) =>
+        Math.round((Date.now() - new Date(t.created_at).getTime()) / 60_000)
+      ));
+      const totalAmount = targets.reduce((sum, t) => sum + Number(t.amount), 0);
+
+      console.log(`[AdminCleanupStuck] Expired ${targets.length} stuck M-Pesa payments by admin=${adminId} (oldest age: ${oldestAgeMins} min, total amount: KES ${totalAmount})`);
+
+      res.json({
+        expired: targets.length,
+        olderThanMinutes,
+        oldestAgeMins,
+        totalAmount,
+        message: `Marked ${targets.length} stuck payment(s) as failed. Total KES ${totalAmount.toLocaleString()} of orphan transactions cleared.`,
+      });
+    } catch (err: any) {
+      console.error("[AdminCleanupStuck]", err?.message);
+      res.status(500).json({ message: err?.message });
+    }
+  });
+
   // 2026-06: ONE consolidated M-Pesa health URL. Founder asked "check if
   // M-Pesa is running smoothly" — this endpoint answers that in a single
   // JSON response. Aggregates everything the existing scattered endpoints
