@@ -230,12 +230,35 @@ export default function ServiceOrderFlow() {
       if (targetCountry)  form.append("targetCountry", targetCountry);
       if (extraInput)     form.append("extraInput", extraInput);
 
-      const res = await fetch(`/api/services/order/${slug}`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "X-CSRF-Token": csrf },
-        body: form,
-      });
+      // 2026-06: was failing as "Failed to fetch" (raw browser TypeError) on
+      // flaky mobile networks + Render cold starts. Now we retry once with
+      // a 2.5s wait on the specific TypeError, and surface a HUMAN error
+      // message with an actionable next step if both attempts fail. Susan
+      // reported this on a 24KB file — clearly network, not size. Reported
+      // by founder via screenshot 2026-06.
+      async function postOnce(): Promise<Response> {
+        return fetch(`/api/services/order/${slug}`, {
+          method: "POST",
+          credentials: "include",
+          headers: { "X-CSRF-Token": csrf },
+          body: form,
+        });
+      }
+
+      let res: Response;
+      try {
+        res = await postOnce();
+      } catch (netErr: any) {
+        // TypeError "Failed to fetch" — wait briefly and retry once. This
+        // gives Render's cold-start warmup time and lets mobile reconnect.
+        if (netErr?.name === "TypeError" || /failed to fetch|networkerror/i.test(netErr?.message ?? "")) {
+          console.warn("[service-order] first attempt failed with network error — retrying in 2.5s");
+          await new Promise((r) => setTimeout(r, 2500));
+          res = await postOnce();
+        } else {
+          throw netErr;
+        }
+      }
       const data = await res.json();
       if (!res.ok) {
         if (res.status === 403 && /verify/i.test(data?.message ?? "")) {
@@ -260,7 +283,19 @@ export default function ServiceOrderFlow() {
         startPolling(data.orderId);
       }
     } catch (err: any) {
-      toast({ title: "Order failed", description: err.message, variant: "destructive" });
+      // 2026-06: friendlier copy. Founder reported "Failed to fetch" was
+      // surfacing as-is to users. Translate it into a Kenyan-friendly line.
+      const isNetwork =
+        err?.name === "TypeError" ||
+        /failed to fetch|networkerror|network request failed/i.test(err?.message ?? "");
+      toast({
+        title: isNetwork ? "Couldn't reach our server" : "Order couldn't be created",
+        description: isNetwork
+          ? "Your internet dropped or our server was warming up. Check your connection and tap Continue again. If it keeps failing, WhatsApp us +254700 000 000 or email support@workabroadhub.tech."
+          : (err?.message || "Something went wrong. Please try again."),
+        variant: "destructive",
+        duration: 10_000,
+      });
     } finally {
       setSubmitting(false);
     }
@@ -451,7 +486,7 @@ export default function ServiceOrderFlow() {
                 )}
               </Button>
               <p className="text-xs text-muted-foreground text-center">
-                Your CV is processed by AI in under {Math.ceil(estSeconds / 60) || 1} minute{estSeconds > 60 ? "s" : ""} and never shared.
+                We'll have your CV back to you in under {Math.ceil(estSeconds / 60) || 1} minute{estSeconds > 60 ? "s" : ""}. Your file stays private — we don't share it.
               </p>
             </CardContent>
           )}
