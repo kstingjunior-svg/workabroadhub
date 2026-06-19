@@ -267,11 +267,11 @@ function JobCard({
                 className="h-7 text-xs gap-1"
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (job.applyLink) {
-                    window.open(job.applyLink, "_blank", "noopener,noreferrer");
-                  } else {
-                    openJob(job.id, "visa");
-                  }
+                  // 2026-06: route through the prep page so users see the
+                  // "you don't need to install their app" heads-up + the job
+                  // is auto-bookmarked. Anchors them to WorkAbroad Hub
+                  // before sending them to GulfTalent / Indeed / Bayt etc.
+                  navigate(`/apply/${job.id}`);
                 }}
                 data-testid={`btn-apply-${job.id}`}
               >

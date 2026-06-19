@@ -140,6 +140,10 @@ const JourneyPage = lazyWithRetry(() => import("@/pages/journey"));
 const SalaryPage = lazyWithRetry(() => import("@/pages/salary"));
 const InterviewPage = lazyWithRetry(() => import("@/pages/interview"));
 const BookmarksPage = lazyWithRetry(() => import("@/pages/bookmarks"));
+// 2026-06: /apply/:jobId pre-redirect prep page — wraps every "Apply" click
+// with a friendly heads-up about third-party app prompts + auto-bookmarks
+// the job so the user comes back to us between applications.
+const ApplyPage = lazyWithRetry(() => import("@/pages/apply"));
 const CalculatorPage = lazyWithRetry(() => import("@/pages/calculator"));
 // 2026-06 Canada Express Entry hub (production):
 //   /canada       — overview, programs, fees, draws
@@ -374,6 +378,7 @@ const LazyJourneyPage = withSuspense(JourneyPage);
 const LazySalaryPage = withSuspense(SalaryPage);
 const LazyInterviewPage = withSuspense(InterviewPage);
 const LazyBookmarksPage = withSuspense(BookmarksPage);
+const LazyApplyPage = withSuspense(ApplyPage);
 const LazyCalculatorPage = withSuspense(CalculatorPage);
 const LazyCanadaPage = withSuspense(CanadaPage);
 const LazyCanadaCrsPage = withSuspense(CanadaCrsPage);
@@ -504,6 +509,7 @@ function AuthenticatedRoutes() {
       <Route path="/interview/:sessionId" component={LazyInterviewPage} />
       <Route path="/interview" component={LazyInterviewPage} />
       <Route path="/bookmarks" component={LazyBookmarksPage} />
+      <Route path="/apply/:jobId" component={LazyApplyPage} />
       <Route path="/calculator" component={LazyCalculatorPage} />
       {/* 2026-06 Canada Express Entry hub */}
       <Route path="/canada/crs" component={LazyCanadaCrsPage} />
