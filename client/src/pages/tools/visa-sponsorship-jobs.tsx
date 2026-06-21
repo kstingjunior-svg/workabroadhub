@@ -95,6 +95,23 @@ interface Job {
   // so the same seed inventory doesn't look stale. See server/lib/job-freshness.ts.
   freshnessLabel?: string;
   displayPostedAt?: string;
+  // 2026-06: per-job badge (NEW TODAY / JUST ADDED / HOT JOB / EXPIRING SOON /
+  // FEW LEFT). At most ~35% of jobs carry a badge so the signal stays meaningful.
+  badge?: {
+    kind: "new_today" | "just_added" | "hot_job" | "expiring_soon" | "few_left";
+    label: string;
+    color: "emerald" | "amber" | "rose" | "violet" | "orange";
+  } | null;
+}
+
+// 2026-06: activity stats returned via X-WAH-* response headers so the board
+// can show "15 new this week / updated 2h ago" — social proof that the
+// platform is being actively maintained.
+interface ActivityStats {
+  totalActive: number;
+  newThisWeek: number;
+  newToday: number;
+  lastUpdatedLabel: string;
 }
 
 const COUNTRIES = [
@@ -214,7 +231,27 @@ function JobCard({
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-2">
-              <h3 className="font-semibold text-sm leading-tight" data-testid={`text-job-title-${job.id}`}>{job.title}</h3>
+              <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                <h3 className="font-semibold text-sm leading-tight" data-testid={`text-job-title-${job.id}`}>{job.title}</h3>
+                {/* 2026-06: per-job activity badge (NEW TODAY / HOT JOB /
+                    EXPIRING SOON / etc). Computed server-side, only ~35% of
+                    cards carry one so the signal stays meaningful. */}
+                {job.badge && (
+                  <span
+                    data-testid={`badge-${job.badge.kind}-${job.id}`}
+                    className={[
+                      "text-[9px] font-bold tracking-wide px-1.5 py-0.5 rounded-sm uppercase shrink-0",
+                      job.badge.color === "emerald" && "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200 ring-1 ring-emerald-200 dark:ring-emerald-800",
+                      job.badge.color === "amber"   && "bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-200 ring-1 ring-amber-200 dark:ring-amber-800",
+                      job.badge.color === "rose"    && "bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-200 ring-1 ring-rose-200 dark:ring-rose-800",
+                      job.badge.color === "violet"  && "bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-200 ring-1 ring-violet-200 dark:ring-violet-800",
+                      job.badge.color === "orange"  && "bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-200 ring-1 ring-orange-200 dark:ring-orange-800",
+                    ].filter(Boolean).join(" ")}
+                  >
+                    {job.badge.label}
+                  </span>
+                )}
+              </div>
               {job.visaSponsorship && (
                 <Badge className="text-[10px] bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300 shrink-0 flex items-center gap-0.5">
                   <BadgeCheck className="h-3 w-3" /> Visa
@@ -489,6 +526,9 @@ export default function VisaSponsorshipJobs() {
   };
 
   const [jobs, setJobs] = useState<Job[] | undefined>(undefined);
+  // 2026-06: pulled from X-WAH-* response headers — the activity strip
+  // ("15 new this week · Updated 2h ago") that lives at the top of the list.
+  const [activityStats, setActivityStats] = useState<ActivityStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isFetching, setIsFetching] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
@@ -508,6 +548,15 @@ export default function VisaSponsorshipJobs() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data: Job[] = await res.json();
       setJobs(data);
+
+      // 2026-06: capture freshness/activity stats from response headers.
+      // Server sets them in routes.ts /api/jobs/sponsorship; falls back to
+      // computing locally if a header is missing (e.g. old deploys, CDN strip).
+      const totalActive  = Number(res.headers.get("X-WAH-Total-Active"))  || data.length;
+      const newThisWeek  = Number(res.headers.get("X-WAH-New-This-Week")) || 0;
+      const newToday     = Number(res.headers.get("X-WAH-New-Today"))     || 0;
+      const lastUpdated  = res.headers.get("X-WAH-Last-Updated") || "Updated just now";
+      setActivityStats({ totalActive, newThisWeek, newToday, lastUpdatedLabel: lastUpdated });
     } catch (err: any) {
       if (err.name !== "AbortError") setJobs([]);
     } finally {
@@ -775,6 +824,42 @@ export default function VisaSponsorshipJobs() {
           </div>
         ) : jobs && jobs.length > 0 ? (
           <div className="space-y-3">
+            {/* 2026-06: activity strip — "X new this week · Y added today ·
+                Updated 2h ago". Tiny inline social-proof line that tells
+                visitors the board is alive. Pulled from X-WAH-* response
+                headers (see fetchJobs above). */}
+            {activityStats && (
+              <div
+                data-testid="activity-strip"
+                className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground px-1 -mb-1"
+              >
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                  </span>
+                  <span className="font-semibold text-emerald-700 dark:text-emerald-300">
+                    {activityStats.lastUpdatedLabel}
+                  </span>
+                </span>
+                <span className="text-muted-foreground/40">·</span>
+                <span>
+                  <span className="font-semibold text-foreground">{activityStats.newThisWeek}</span> new this week
+                </span>
+                {activityStats.newToday > 0 && (
+                  <>
+                    <span className="text-muted-foreground/40">·</span>
+                    <span>
+                      <span className="font-semibold text-amber-700 dark:text-amber-300">{activityStats.newToday}</span> added today
+                    </span>
+                  </>
+                )}
+                <span className="text-muted-foreground/40">·</span>
+                <span>
+                  <span className="font-semibold text-foreground">{activityStats.totalActive}</span> active openings
+                </span>
+              </div>
+            )}
             {jobs.map((job) => (
               <JobCard
                 key={job.id}
