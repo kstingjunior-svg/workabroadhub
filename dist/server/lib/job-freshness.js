@@ -34,6 +34,11 @@ exports.shuffleSeedFor = shuffleSeedFor;
 exports.computeDisplayPostedAt = computeDisplayPostedAt;
 exports.freshnessLabel = freshnessLabel;
 exports.withFreshness = withFreshness;
+exports.computeBadge = computeBadge;
+exports.computeJobScore = computeJobScore;
+exports.rotateByScore = rotateByScore;
+exports.pickDiverseTop = pickDiverseTop;
+exports.computeActivityStats = computeActivityStats;
 exports.JOB_TTL_DAYS = 21;
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
@@ -148,5 +153,127 @@ function withFreshness(job) {
         ...job,
         displayPostedAt: at,
         freshnessLabel: freshnessLabel(at),
+        badge: computeBadge(job.id, at),
+    };
+}
+/**
+ * Choose at most one badge per job. We don't want every card carrying a
+ * badge — that would dilute the signal. Roughly 35% of cards get a badge
+ * across the inventory, with the distribution skewed toward "NEW TODAY"
+ * and "JUST ADDED" because those drive the most user trust.
+ *
+ * The choice is deterministic per (jobId, day) so refreshing the page
+ * doesn't flicker the badge — it stays consistent within a single day,
+ * then rolls to a different mix the next day.
+ */
+function computeBadge(jobId, displayedAt, now = new Date()) {
+    const dayBucket = Math.floor(now.getTime() / DAY_MS);
+    const seed = hash32(`badge-${jobId}-${dayBucket}`);
+    const roll = seed % 100; // 0..99
+    const hoursAgo = Math.floor((now.getTime() - displayedAt.getTime()) / HOUR_MS);
+    // First filter: was the displayedAt within the last 24h? Then it's "fresh"
+    // and eligible for NEW TODAY / JUST ADDED.
+    if (hoursAgo < 6 && roll < 20) {
+        return { kind: "just_added", label: "JUST ADDED", color: "amber" };
+    }
+    if (hoursAgo < 24 && roll < 35) {
+        return { kind: "new_today", label: "NEW TODAY", color: "emerald" };
+    }
+    // Slightly older: HOT JOB (heuristic — pretends "high view count" for now;
+    // when we wire up a real views table this becomes data-driven).
+    if (hoursAgo >= 24 && hoursAgo < 96 && roll >= 60 && roll < 75) {
+        return { kind: "hot_job", label: "HOT JOB", color: "rose" };
+    }
+    // Older still: scarcity-driven badges to drive urgency
+    if (hoursAgo >= 72 && roll >= 80 && roll < 88) {
+        return { kind: "few_left", label: "FEW LEFT", color: "orange" };
+    }
+    if (hoursAgo >= 120 && roll >= 90) {
+        return { kind: "expiring_soon", label: "EXPIRING SOON", color: "violet" };
+    }
+    return null;
+}
+function computeJobScore(job, shuffleSeed, now = new Date()) {
+    // 1. Freshness component (0-100, decays over 168 hours = 7 days)
+    const hoursOld = (now.getTime() - job.displayPostedAt.getTime()) / HOUR_MS;
+    const freshness = Math.max(0, 100 - (hoursOld / 168) * 100);
+    // 2. Per-user jitter — keeps the order varying per session without
+    //    breaking the top-N ranking. Range: 0..15.
+    const perUserJitter = (hash32(`${job.id}-${shuffleSeed}`) % 1500) / 100;
+    return freshness + perUserJitter;
+}
+/**
+ * Score + sort + lightly randomize within score bands. Use this instead of
+ * the bare seededShuffle when you want freshest-first AND varied-per-user.
+ */
+function rotateByScore(jobs, shuffleSeed, now = new Date()) {
+    const scored = jobs.map((j) => ({ job: j, score: computeJobScore(j, shuffleSeed, now) }));
+    scored.sort((a, b) => b.score - a.score);
+    return scored.map((s) => s.job);
+}
+/**
+ * Category-diverse top-N picker. Ensures the top 6 (or whatever N is)
+ * spans multiple categories rather than 6 truck-driver jobs in a row.
+ * Falls back to a strict rotateByScore if there aren't enough categories.
+ */
+function pickDiverseTop(jobs, count, shuffleSeed, now = new Date()) {
+    const ranked = rotateByScore(jobs, shuffleSeed, now);
+    if (ranked.length <= count)
+        return ranked;
+    const picked = [];
+    const usedCategories = new Map();
+    const maxPerCategory = Math.max(1, Math.ceil(count / 3)); // e.g. 2 of 6 max from one category
+    // First pass — fill respecting the per-category cap
+    for (const j of ranked) {
+        if (picked.length >= count)
+            break;
+        const cat = (j.jobCategory || "uncategorised").toLowerCase();
+        const used = usedCategories.get(cat) ?? 0;
+        if (used < maxPerCategory) {
+            picked.push(j);
+            usedCategories.set(cat, used + 1);
+        }
+    }
+    // Second pass — if we didn't fill (e.g. all 6 jobs are same category in inventory),
+    // backfill ignoring the cap.
+    if (picked.length < count) {
+        for (const j of ranked) {
+            if (picked.length >= count)
+                break;
+            if (!picked.includes(j))
+                picked.push(j);
+        }
+    }
+    return picked;
+}
+function computeActivityStats(jobs, now = new Date()) {
+    let newThisWeek = 0;
+    let newToday = 0;
+    let mostRecent = 0;
+    for (const j of jobs) {
+        const ageMs = now.getTime() - j.displayPostedAt.getTime();
+        if (ageMs < 7 * DAY_MS)
+            newThisWeek++;
+        if (ageMs < DAY_MS)
+            newToday++;
+        if (j.displayPostedAt.getTime() > mostRecent) {
+            mostRecent = j.displayPostedAt.getTime();
+        }
+    }
+    // Format "Updated X ago"
+    const updatedAgo = now.getTime() - mostRecent;
+    let lastUpdatedLabel = "Updated just now";
+    if (updatedAgo > 60 * 60000) {
+        const hrs = Math.floor(updatedAgo / HOUR_MS);
+        lastUpdatedLabel = hrs < 24 ? `Updated ${hrs}h ago` : `Updated ${Math.floor(hrs / 24)}d ago`;
+    }
+    else if (updatedAgo > 60000) {
+        lastUpdatedLabel = `Updated ${Math.floor(updatedAgo / 60000)}m ago`;
+    }
+    return {
+        totalActive: jobs.length,
+        newThisWeek,
+        newToday,
+        lastUpdatedLabel,
     };
 }

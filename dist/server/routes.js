@@ -2687,19 +2687,30 @@ Crawl-delay: 1`);
                 .orderBy(schema_1.jobs.createdAt);
             // 2026-06: founder asked "the same 50 jobs are always in the same order,
             // can we shuffle them and give them realistic 'X hours ago' timestamps?"
-            //   - shuffle is seeded by (userId, 30-min wall clock) so the order
-            //     rotates every 30 min per user but stays stable within that window
-            //     (prevents pagination flicker)
-            //   - displayPostedAt rotates daily so cards read like "3h ago" / "2d ago"
-            //     instead of "5 months ago" (we honestly say "last seen", not
-            //     "posted" — see freshnessLabel)
-            const { seededShuffle, shuffleSeedFor, withFreshness } = await Promise.resolve().then(() => __importStar(require("./lib/job-freshness")));
-            const shuffled = seededShuffle(result, shuffleSeedFor(user_id));
-            const enriched = shuffled.map(withFreshness);
+            // 2026-06 (later): expanded into a full freshness/rotation system —
+            //   1. enrich each row with displayPostedAt + freshnessLabel + badge
+            //   2. score by (newness × per-user jitter) and sort high→low
+            //   3. enforce category diversity in the top 6 so the homepage hero
+            //      never shows 6 truck-driver jobs in a row
+            //   4. compute activity stats (jobs added today / this week / last update)
+            //      → returned via headers so the client can show "15 new this week"
+            const { shuffleSeedFor, withFreshness, rotateByScore, pickDiverseTop, computeActivityStats } = await Promise.resolve().then(() => __importStar(require("./lib/job-freshness")));
+            const enriched = result.map(withFreshness);
+            const seed = shuffleSeedFor(user_id);
+            const stats = computeActivityStats(enriched);
+            // Diverse hero (top 6) + score-rotated tail. Concatenate, dedupe by id.
+            const diverseTop = pickDiverseTop(enriched, 6, seed);
+            const tail = rotateByScore(enriched.filter((j) => !diverseTop.some((d) => d.id === j.id)), seed);
+            const finalOrder = [...diverseTop, ...tail];
             // Tell CDN this varies per-user — don't share cache across sessions
             res.setHeader("Cache-Control", "private, max-age=60");
             res.setHeader("Vary", "Cookie");
-            res.json(enriched);
+            res.setHeader("X-WAH-Total-Active", String(stats.totalActive));
+            res.setHeader("X-WAH-New-This-Week", String(stats.newThisWeek));
+            res.setHeader("X-WAH-New-Today", String(stats.newToday));
+            res.setHeader("X-WAH-Last-Updated", stats.lastUpdatedLabel);
+            res.setHeader("Access-Control-Expose-Headers", "X-WAH-Total-Active, X-WAH-New-This-Week, X-WAH-New-Today, X-WAH-Last-Updated");
+            res.json(finalOrder);
         }
         catch (err) {
             console.error("[/api/jobs]", err);
@@ -2736,16 +2747,26 @@ Crawl-delay: 1`);
                 .from(schema_1.jobs)
                 .where((0, drizzle_orm_1.and)(...conditions))
                 .orderBy(schema_1.jobs.createdAt);
-            // 2026-06: same shuffle + freshness treatment as /api/jobs. Public so we
-            // key the shuffle by session id (or fall back to IP) — anon users get a
-            // stable order within their session but different from the next visitor.
-            const { seededShuffle, shuffleSeedFor, withFreshness } = await Promise.resolve().then(() => __importStar(require("./lib/job-freshness")));
+            // 2026-06: same freshness + rotation pipeline as /api/jobs. Public route
+            // so we key the shuffle by session id (or fall back to IP) — anon users
+            // get a stable order within their session but different from the next
+            // visitor. Diverse top 6 + score-rotated tail + activity headers.
+            const { shuffleSeedFor, withFreshness, rotateByScore, pickDiverseTop, computeActivityStats } = await Promise.resolve().then(() => __importStar(require("./lib/job-freshness")));
             const sessionKey = req.sessionID || String(req.headers["x-forwarded-for"] || req.ip || "anon");
-            const shuffled = seededShuffle(result, shuffleSeedFor(sessionKey));
-            const enriched = shuffled.map(withFreshness);
+            const seed = shuffleSeedFor(sessionKey);
+            const enriched = result.map(withFreshness);
+            const stats = computeActivityStats(enriched);
+            const diverseTop = pickDiverseTop(enriched, 6, seed);
+            const tail = rotateByScore(enriched.filter((j) => !diverseTop.some((d) => d.id === j.id)), seed);
+            const finalOrder = [...diverseTop, ...tail];
             res.setHeader("Cache-Control", "private, max-age=60");
             res.setHeader("Vary", "Cookie");
-            res.json(enriched);
+            res.setHeader("X-WAH-Total-Active", String(stats.totalActive));
+            res.setHeader("X-WAH-New-This-Week", String(stats.newThisWeek));
+            res.setHeader("X-WAH-New-Today", String(stats.newToday));
+            res.setHeader("X-WAH-Last-Updated", stats.lastUpdatedLabel);
+            res.setHeader("Access-Control-Expose-Headers", "X-WAH-Total-Active, X-WAH-New-This-Week, X-WAH-New-Today, X-WAH-Last-Updated");
+            res.json(finalOrder);
         }
         catch (error) {
             console.error("Error fetching sponsorship jobs:", error);
