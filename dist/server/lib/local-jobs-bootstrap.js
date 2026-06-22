@@ -127,6 +127,18 @@ async function bootstrapLocalJobs() {
         await db_1.pool.query(`CREATE INDEX IF NOT EXISTS idx_local_jobs_company  ON local_jobs(company_id)`);
         await db_1.pool.query(`CREATE INDEX IF NOT EXISTS idx_companies_status    ON companies(status)`);
         await db_1.pool.query(`CREATE INDEX IF NOT EXISTS idx_branches_company    ON branches(company_id)`);
+        // Phase 2: unique application per (job, user) so re-applying updates
+        // instead of duplicating + countering the daily-limit gate.
+        // Also a per-user index for the /me/applications page.
+        await db_1.pool.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_local_app_job_user
+      ON local_job_applications(job_id, applicant_user_id)
+      WHERE applicant_user_id IS NOT NULL
+    `);
+        await db_1.pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_local_app_user_time
+      ON local_job_applications(applicant_user_id, applied_at DESC)
+    `);
         // ── 2. Seed sample data ─────────────────────────────────────────────────
         // Only seed if companies table is empty. Idempotent.
         const { rows: [{ count }] } = await db_1.pool.query(`SELECT COUNT(*)::text AS count FROM companies`);
