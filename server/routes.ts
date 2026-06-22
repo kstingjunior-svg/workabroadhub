@@ -6027,17 +6027,26 @@ Crawl-delay: 1`);
       }
 
       const ids = targets.map((t) => t.id);
+      // 2026-06 BUGFIX: previous version did
+      //   `COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(...)`
+      // which fails with "COALESCE types character varying and json cannot
+      // be matched" because the payments.metadata column is actually text/
+      // varchar (legacy schema — historically stored stringified JSON), not
+      // jsonb. So we can't use the jsonb concat operator on it.
+      //
+      // Cleaner approach: write the audit trail into fail_reason (which IS
+      // a text column and is the canonical place for "why did this payment
+      // fail?"). No COALESCE games needed.
       await pool.query(`
         UPDATE payments
-           SET status = 'failed',
-               metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
-                 'admin_cleanup', true,
-                 'cleanup_reason', 'stuck_pending_beyond_reconciler_window',
-                 'cleanup_by', $2::text,
-                 'cleanup_at', NOW()::text
-               )
+           SET status      = 'failed',
+               fail_reason = $2::text,
+               updated_at  = NOW()
          WHERE id = ANY($1::varchar[])
-      `, [ids, adminId]);
+      `, [
+        ids,
+        `Auto-expired by admin cleanup (stuck >${olderThanMinutes} min beyond Daraja Pull window, by admin ${adminId})`,
+      ]);
 
       const oldestAgeMins = Math.max(...targets.map((t) =>
         Math.round((Date.now() - new Date(t.created_at).getTime()) / 60_000)
