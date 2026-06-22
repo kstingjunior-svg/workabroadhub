@@ -99,14 +99,37 @@ function formatSalary(min: number | null, max: number | null): string | null {
   return `KES ${(min ?? max)!.toLocaleString()}+`;
 }
 
-function timeAgo(iso: string): string {
-  const ms = Date.now() - new Date(iso).getTime();
+function timeAgo(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const t = new Date(iso).getTime();
+  if (isNaN(t)) return "";
+  const ms = Date.now() - t;
   const days = Math.floor(ms / 86_400_000);
   if (days < 1) return "today";
   if (days === 1) return "yesterday";
   if (days < 7) return `${days}d ago`;
   if (days < 30) return `${Math.floor(days / 7)}w ago`;
   return `${Math.floor(days / 30)}mo ago`;
+}
+
+/**
+ * Safe JSON fetch. Returns null on ANY failure — non-2xx, non-JSON body,
+ * network error, parse failure. Caller treats null as "endpoint not
+ * available" and renders the empty state. Critical for Phase 1 because the
+ * server-side routes may not be deployed everywhere yet, in which case the
+ * SPA catch-all returns the HTML shell with 200 — which would normally make
+ * `r.json()` throw a SyntaxError that escapes and crashes the page.
+ */
+async function safeJson<T = any>(url: string, signal?: AbortSignal): Promise<T | null> {
+  try {
+    const res = await fetch(url, { signal });
+    if (!res.ok) return null;
+    const ct = res.headers.get("content-type") || "";
+    if (!ct.toLowerCase().includes("application/json")) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
 }
 
 export default function KenyaCareers() {
@@ -131,31 +154,39 @@ export default function KenyaCareers() {
     return () => clearTimeout(t);
   }, [searchInput]);
 
-  // One-shot static fetches (stats, filters, employers)
+  // One-shot static fetches (stats, filters, employers). All wrapped in
+  // safeJson so an undeployed endpoint (which would return the SPA shell as
+  // HTML with 200) never crashes the page — it just leaves the side-strip
+  // empty and the dropdowns showing only the "All …" defaults.
   useEffect(() => {
     let cancelled = false;
+    const ac = new AbortController();
     (async () => {
-      try {
-        const [s, f, e] = await Promise.all([
-          fetch("/api/local-jobs/stats").then((r) => r.json()),
-          fetch("/api/local-jobs/filters").then((r) => r.json()),
-          fetch("/api/local-jobs/companies").then((r) => r.json()),
-        ]);
-        if (cancelled) return;
-        setStats(s);
-        setFilters(f);
-        setEmployers(e.companies ?? []);
-      } catch (err: any) {
-        // non-fatal — page still renders
-        console.warn("[KenyaCareers] stats/filters fetch failed:", err?.message);
+      const [s, f, e] = await Promise.all([
+        safeJson<Stats>("/api/local-jobs/stats", ac.signal),
+        safeJson<Filters>("/api/local-jobs/filters", ac.signal),
+        safeJson<{ companies?: Employer[] }>("/api/local-jobs/companies", ac.signal),
+      ]);
+      if (cancelled) return;
+      if (s) setStats(s);
+      if (f) {
+        // Defensive — coerce missing keys to [] so downstream .map() can't throw.
+        setFilters({
+          counties:   Array.isArray(f.counties)   ? f.counties   : [],
+          categories: Array.isArray(f.categories) ? f.categories : [],
+          companies:  Array.isArray(f.companies)  ? f.companies  : [],
+        });
       }
+      if (e && Array.isArray(e.companies)) setEmployers(e.companies);
     })();
-    return () => { cancelled = true; };
+    return () => { cancelled = true; ac.abort(); };
   }, []);
 
-  // Re-fetch jobs whenever filters change
+  // Re-fetch jobs whenever filters change. Also routed through safeJson so an
+  // unexpected response shape can't bubble out.
   useEffect(() => {
     let cancelled = false;
+    const ac = new AbortController();
     setLoading(true);
     setError(null);
     const params = new URLSearchParams();
@@ -164,20 +195,48 @@ export default function KenyaCareers() {
     if (companyId  !== "all") params.set("companyId", companyId);
     if (search)               params.set("search",    search);
     const url = `/api/local-jobs?${params.toString()}`;
-    fetch(url)
-      .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
-      .then((data) => {
-        if (cancelled) return;
-        setJobs(data.jobs ?? []);
-        setTotal(data.total ?? 0);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setError(err?.message || "Could not load jobs.");
+    (async () => {
+      const data = await safeJson<{ jobs?: unknown[]; total?: number }>(url, ac.signal);
+      if (cancelled) return;
+      if (!data) {
+        setError("Could not load jobs right now. Please refresh in a moment.");
         setJobs([]);
-      })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+        setTotal(0);
+      } else {
+        // Coerce every job to a safe shape — missing nested fields can't throw
+        // during the render pass below.
+        const rawJobs = Array.isArray(data.jobs) ? data.jobs : [];
+        const safeJobs: Job[] = rawJobs.map((raw: any) => ({
+          id:              String(raw?.id ?? Math.random()),
+          title:           String(raw?.title ?? "Untitled job"),
+          department:      raw?.department ?? null,
+          vacancies:       Number(raw?.vacancies ?? 1),
+          employmentType:  raw?.employmentType ?? null,
+          salaryMin:       raw?.salaryMin ?? null,
+          salaryMax:       raw?.salaryMax ?? null,
+          county:          raw?.county ?? null,
+          town:            raw?.town ?? null,
+          experienceLevel: raw?.experienceLevel ?? null,
+          category:        raw?.category ?? null,
+          deadline:        raw?.deadline ?? null,
+          createdAt:       String(raw?.createdAt ?? new Date().toISOString()),
+          company: {
+            id:       String(raw?.company?.id ?? ""),
+            name:     String(raw?.company?.name ?? "Employer"),
+            slug:     raw?.company?.slug ?? null,
+            industry: raw?.company?.industry ?? null,
+            verified: !!raw?.company?.verified,
+          },
+          branch: raw?.branch && raw?.branch?.id
+            ? { id: String(raw.branch.id), name: String(raw.branch.name ?? "") }
+            : null,
+        }));
+        setJobs(safeJobs);
+        setTotal(Number(data.total ?? safeJobs.length));
+      }
+      setLoading(false);
+    })();
+    return () => { cancelled = true; ac.abort(); };
   }, [county, category, companyId, search]);
 
   const hasAnyFilter = useMemo(

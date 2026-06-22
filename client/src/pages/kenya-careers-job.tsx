@@ -110,18 +110,72 @@ export default function KenyaCareersJob() {
   useEffect(() => {
     if (!params?.id) return;
     let cancelled = false;
+    const ac = new AbortController();
     setLoading(true);
     setError(null);
-    fetch(`/api/local-jobs/${params.id}`)
-      .then(async (r) => {
-        if (r.status === 404) throw new Error("This job is no longer available.");
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json();
-      })
-      .then((data) => { if (!cancelled) setJob(data); })
-      .catch((err) => { if (!cancelled) setError(err?.message || "Could not load this job."); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+    (async () => {
+      try {
+        const r = await fetch(`/api/local-jobs/${params.id}`, { signal: ac.signal });
+        if (r.status === 404) {
+          if (!cancelled) { setError("This job is no longer available."); setLoading(false); }
+          return;
+        }
+        if (!r.ok) {
+          if (!cancelled) { setError(`Could not load this job (HTTP ${r.status}).`); setLoading(false); }
+          return;
+        }
+        const ct = r.headers.get("content-type") || "";
+        if (!ct.toLowerCase().includes("application/json")) {
+          if (!cancelled) { setError("Could not load this job right now."); setLoading(false); }
+          return;
+        }
+        const data = await r.json();
+        if (cancelled) return;
+        // Coerce to a safe shape so missing nested fields can't throw in the
+        // render below.
+        setJob({
+          id:              String(data?.id ?? params.id),
+          title:           String(data?.title ?? "Untitled job"),
+          department:      data?.department ?? null,
+          vacancies:       Number(data?.vacancies ?? 1),
+          employmentType:  data?.employmentType ?? null,
+          salaryMin:       data?.salaryMin ?? null,
+          salaryMax:       data?.salaryMax ?? null,
+          requirements:    data?.requirements ?? null,
+          responsibilities: data?.responsibilities ?? null,
+          deadline:        data?.deadline ?? null,
+          county:          data?.county ?? null,
+          town:            data?.town ?? null,
+          experienceLevel: data?.experienceLevel ?? null,
+          category:        data?.category ?? null,
+          status:          String(data?.status ?? "open"),
+          createdAt:       String(data?.createdAt ?? new Date().toISOString()),
+          company: {
+            id:          String(data?.company?.id ?? ""),
+            name:        String(data?.company?.name ?? "Employer"),
+            slug:        data?.company?.slug ?? null,
+            industry:    data?.company?.industry ?? null,
+            description: data?.company?.description ?? null,
+            website:     data?.company?.website ?? null,
+            verified:    !!data?.company?.verified,
+            county:      data?.company?.county ?? null,
+          },
+          branch: data?.branch && data?.branch?.id ? {
+            id:       String(data.branch.id),
+            name:     String(data.branch.name ?? ""),
+            county:   data.branch.county ?? null,
+            town:     data.branch.town ?? null,
+            location: data.branch.location ?? null,
+          } : null,
+        });
+        setLoading(false);
+      } catch (err: any) {
+        if (cancelled) return;
+        setError(err?.message || "Could not load this job.");
+        setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; ac.abort(); };
   }, [params?.id]);
 
   function handleApplyClick() {

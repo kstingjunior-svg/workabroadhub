@@ -25,11 +25,26 @@ export function DashboardKenyaCareersCard() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/local-jobs/stats")
-      .then((r) => r.ok ? r.json() : null)
-      .then((data) => { if (!cancelled && data) setStats(data); })
-      .catch(() => { /* silent — card still renders without stats */ });
-    return () => { cancelled = true; };
+    const ac = new AbortController();
+    // Bulletproof: if the endpoint isn't deployed, the SPA catch-all may
+    // serve HTML with 200. Check the content-type before json() so we don't
+    // throw a SyntaxError that crashes the surrounding dashboard.
+    (async () => {
+      try {
+        const res = await fetch("/api/local-jobs/stats", { signal: ac.signal });
+        if (!res.ok) return;
+        const ct = res.headers.get("content-type") || "";
+        if (!ct.toLowerCase().includes("application/json")) return;
+        const data = await res.json();
+        if (cancelled || !data) return;
+        setStats({
+          totalJobs:      Number(data.totalJobs      ?? 0),
+          totalEmployers: Number(data.totalEmployers ?? 0),
+          totalCounties:  Number(data.totalCounties  ?? 0),
+        });
+      } catch { /* silent — card still renders without stats */ }
+    })();
+    return () => { cancelled = true; ac.abort(); };
   }, []);
 
   return (

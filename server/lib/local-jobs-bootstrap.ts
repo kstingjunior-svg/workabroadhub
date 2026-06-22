@@ -35,6 +35,15 @@ export async function bootstrapLocalJobs(): Promise<void> {
   _ranOnce = true;
 
   try {
+    // ── 0. Ensure UUID generator is available ──────────────────────────────
+    // Postgres 13+ has gen_random_uuid() built in. Older deployments need
+    // pgcrypto. Try the extension idempotently; if it fails (insufficient
+    // privilege on managed Postgres), fall through — newer Postgres will
+    // still work because the function is core.
+    await pool.query(`CREATE EXTENSION IF NOT EXISTS "pgcrypto"`).catch((err) => {
+      console.warn("[local-jobs] could not enable pgcrypto (may be unnecessary):", err?.message);
+    });
+
     // ── 1. DDL (idempotent — IF NOT EXISTS) ────────────────────────────────
     await pool.query(`
       CREATE TABLE IF NOT EXISTS companies (
