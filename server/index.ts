@@ -520,18 +520,33 @@ app.use((req, res, next) => {
     // registerRoutes(app)
     // NOT registerRoutes(httpServer, app)
 
-    // 2026-06 CRITICAL ORDERING: Kenya Careers /api/local-jobs/* routes must
-    // be registered BEFORE registerRoutes(), because registerRoutes() ends
-    // with an `app.use("/api", 404)` catch-all (server/routes.ts ~line 21454)
-    // that would otherwise intercept every /api/local-jobs/* request and
-    // return 404 — exactly the bug the founder reported as "Could not load
-    // jobs right now" on /kenya-careers. Express matches routes in
-    // registration order, so registering here guarantees our handlers win.
+    // 2026-06 CRITICAL ORDERING — TWO constraints to satisfy:
     //
-    // Bootstrap (DDL + seed) still runs AFTER registerRoutes — it doesn't
-    // affect routing, only fills the tables in. Tables get created lazily;
-    // if bootstrap fails the routes still respond (they catch 42P01 and
-    // return empty arrays).
+    // 1. Kenya Careers /api/local-jobs/* routes must register BEFORE the
+    //    `app.use("/api", 404)` catch-all inside registerRoutes (otherwise
+    //    every /api/local-jobs/* returns 404 — founder reported "Could not
+    //    load jobs right now").
+    //
+    // 2. Kenya Careers endpoints read req.session.customUserId to recognise
+    //    logged-in users (so signed-in users aren't asked to sign in again).
+    //    But the session middleware is installed by setupAuth(), which is
+    //    called INSIDE registerRoutes. If we register Kenya Careers BEFORE
+    //    registerRoutes, req.session is undefined when our routes run.
+    //
+    // Solution: install just the session parser here, BEFORE Kenya Careers
+    // routes register. getSessionParser() is a singleton — when setupAuth()
+    // later calls app.use(getSessionParser()) inside registerRoutes, it
+    // re-registers the same function reference. Express-session is safe to
+    // call twice per request (the second pass sees req.session already set
+    // and is a no-op for our purposes).
+    try {
+      const { getSessionParser } = await import("./replit_integrations/auth/replitAuth");
+      app.set("trust proxy", 1);
+      app.use(getSessionParser());
+    } catch (err: any) {
+      console.error("[Server] ❌ Early session parser install failed (non-fatal):", err?.message);
+    }
+
     try {
       const { registerLocalJobsRoutes } = await import("./local-jobs-routes");
       registerLocalJobsRoutes(app);
