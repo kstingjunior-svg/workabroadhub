@@ -26,6 +26,24 @@ const VALID_EMPLOYMENT_TYPES = new Set(["full_time", "part_time", "contract", "i
 const VALID_EXPERIENCE       = new Set(["entry", "mid", "senior", "any"]);
 
 export function registerLocalJobsRoutes(app: Express): void {
+  // ─── GET /api/local-jobs/_ping ────────────────────────────────────────────
+  // 2026-06: Pure diagnostic — no DB, no logic. If this returns JSON {ok:true,
+  // routesAt: <ISO>}, the route registration is alive on the server.
+  // If it returns 404 or HTML, the deploy is incomplete (build cache, missing
+  // file, boot crash before registration, etc).
+  //
+  // Use this to validate the deploy:
+  //   curl -i https://workabroadhub.tech/api/local-jobs/_ping
+  // Expected: HTTP 200 + Content-Type: application/json + {"ok":true,...}
+  app.get("/api/local-jobs/_ping", (_req: Request, res: Response) => {
+    res.json({
+      ok: true,
+      routesAt: new Date().toISOString(),
+      module: "local-jobs-routes",
+      version: 1,
+    });
+  });
+
   // ─── GET /api/local-jobs ──────────────────────────────────────────────────
   // Public job list with optional filters. No auth required.
   // Query params:
