@@ -46,18 +46,34 @@ const DAILY_LIMITS = {
     pro: 9999,
     pro_referral: 9999,
 };
-// Multer config — memory storage, 5 MB limit, PDF/DOCX only. Mirrors the
-// existing /api/upload-cv handler so users get a consistent experience.
-const cvUpload = (0, multer_1.default)({
+// Multer config — memory storage, 5 MB per file limit. Mirrors the existing
+// /api/upload-cv handler so users get a consistent experience.
+//
+// Phase 2.5: now accepts TWO fields ("cv" + "certificates") so applicants can
+// attach diplomas/transcripts alongside their CV. Certificates also allow JPG/PNG
+// because many Kenyans take phone photos of their certificates rather than
+// scanning to PDF.
+const CV_MIME = new Set([
+    "application/pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/msword",
+]);
+const CERT_MIME = new Set([
+    ...CV_MIME,
+    "image/jpeg",
+    "image/png",
+    "image/heic",
+    "image/webp",
+]);
+const applicationUpload = (0, multer_1.default)({
     storage: multer_1.default.memoryStorage(),
-    limits: { fileSize: 5 * 1024 * 1024 },
+    limits: { fileSize: 5 * 1024 * 1024, files: 2 },
     fileFilter: (_req, file, cb) => {
-        const allowed = new Set([
-            "application/pdf",
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            "application/msword",
-        ]);
-        cb(null, allowed.has(file.mimetype));
+        if (file.fieldname === "cv")
+            return cb(null, CV_MIME.has(file.mimetype));
+        if (file.fieldname === "certificates")
+            return cb(null, CERT_MIME.has(file.mimetype));
+        cb(null, false);
     },
 });
 function registerLocalJobsRoutes(app) {
@@ -408,7 +424,10 @@ function registerLocalJobsRoutes(app) {
     // — re-submitting updates the existing application instead of inserting
     // duplicates, so an honest "I want to update my CV" works without
     // counting against the daily limit twice.
-    app.post("/api/local-jobs/jobs/:id/apply", cvUpload.single("cv"), async (req, res) => {
+    app.post("/api/local-jobs/jobs/:id/apply", applicationUpload.fields([
+        { name: "cv", maxCount: 1 },
+        { name: "certificates", maxCount: 1 },
+    ]), async (req, res) => {
         try {
             const userId = req.user?.claims?.sub ?? req.user?.id;
             if (!userId) {
@@ -471,20 +490,33 @@ function registerLocalJobsRoutes(app) {
                 });
             }
             const applicantName = (user.firstName || user.first_name || "").trim() + " " + (user.lastName || user.last_name || "").trim();
-            const coverNote = String(req.body?.coverNote ?? "").trim().slice(0, 2000) || null;
-            // ── 5. Upload CV to Supabase Storage if a file was attached ────────
+            const coverNote = String(req.body?.coverNote ?? req.body?.coverLetter ?? "").trim().slice(0, 2000) || null;
+            // Phase 2.5: extra applicant fields. Sanitised and length-capped.
+            const applicantCounty = String(req.body?.county ?? "").trim().slice(0, 60) || null;
+            const highestEducation = String(req.body?.education ?? "").trim().slice(0, 80) || null;
+            const yearsExperienceN = Number(req.body?.yearsExperience);
+            const yearsExperience = Number.isFinite(yearsExperienceN) && yearsExperienceN >= 0
+                ? Math.min(50, Math.floor(yearsExperienceN))
+                : null;
+            // ── 5. Upload CV and (optionally) certificates ──────────────────────
+            // req.files comes from multer.fields() — each key is an array of files.
+            // Both uploads go through logCvUpload so they land in the same
+            // Supabase Storage bucket; we just record different URLs.
+            const filesIn = req.files ?? {};
+            const cvFile = filesIn.cv?.[0];
+            const certFile = filesIn.certificates?.[0];
             let cvUrl = null;
-            if (req.file && req.file.buffer && req.file.buffer.length > 0) {
+            let certificatesUrl = null;
+            if (cvFile && cvFile.buffer && cvFile.buffer.length > 0) {
                 try {
                     const { logCvUpload } = await Promise.resolve().then(() => __importStar(require("./supabaseClient")));
                     await logCvUpload({
                         userId,
-                        fileName: req.file.originalname,
-                        buffer: req.file.buffer,
-                        mimeType: req.file.mimetype,
-                        parsedText: "", // we don't parse local-jobs CVs (overseas board does, this is just storage)
+                        fileName: cvFile.originalname,
+                        buffer: cvFile.buffer,
+                        mimeType: cvFile.mimetype,
+                        parsedText: "",
                     });
-                    // logCvUpload writes to cv_uploads; grab the most recent file_url for this user.
                     const { rows: [row] } = await db_1.pool.query(`
               SELECT file_url FROM cv_uploads
                WHERE user_id = $1 AND file_url IS NOT NULL
@@ -495,36 +527,81 @@ function registerLocalJobsRoutes(app) {
                 }
                 catch (uploadErr) {
                     console.warn(`[apply] CV upload failed for user=${userId}:`, uploadErr?.message);
-                    // Non-fatal — application still gets submitted, employer can request CV later
+                }
+            }
+            // Certificates upload — same pipeline but tagged in the filename so
+            // it doesn't collide with the user's main CV in cv_uploads.
+            if (certFile && certFile.buffer && certFile.buffer.length > 0) {
+                try {
+                    const { logCvUpload } = await Promise.resolve().then(() => __importStar(require("./supabaseClient")));
+                    await logCvUpload({
+                        userId,
+                        fileName: `cert-${certFile.originalname}`,
+                        buffer: certFile.buffer,
+                        mimeType: certFile.mimetype,
+                        parsedText: "",
+                    });
+                    const { rows: [row] } = await db_1.pool.query(`
+              SELECT file_url FROM cv_uploads
+               WHERE user_id = $1 AND file_url IS NOT NULL AND file_name LIKE 'cert-%'
+               ORDER BY uploaded_at DESC NULLS LAST, id DESC
+               LIMIT 1
+            `, [userId]).catch(() => ({ rows: [{ file_url: null }] }));
+                    certificatesUrl = row?.file_url ?? null;
+                }
+                catch (uploadErr) {
+                    console.warn(`[apply] Certificates upload failed for user=${userId}:`, uploadErr?.message);
                 }
             }
             // ── 6. Upsert application — re-applying updates instead of duplicating ──
+            // 2026-06 Phase 2.5: includes the new applicant_county / highest_education
+            // / years_experience / certificates_url / company_id columns. ON CONFLICT
+            // updates everything that was supplied this time but keeps existing values
+            // when the new submission left them blank.
+            const insertParams = [
+                jobId, userId, applicantName.trim() || user.email, user.phone, user.email,
+                cvUrl, coverNote, applicantCounty, highestEducation, yearsExperience,
+                certificatesUrl, job.company_id,
+            ];
             const { rows: [appRow] } = await db_1.pool.query(`
           INSERT INTO local_job_applications (
-            job_id, applicant_user_id, applicant_name, phone, email, cv_url, cover_note, status
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'submitted')
+            job_id, applicant_user_id, applicant_name, phone, email,
+            cv_url, cover_note, applicant_county, highest_education, years_experience,
+            certificates_url, company_id, status
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'submitted')
           ON CONFLICT (job_id, applicant_user_id) DO UPDATE
-             SET cv_url     = COALESCE(EXCLUDED.cv_url, local_job_applications.cv_url),
-                 cover_note = COALESCE(EXCLUDED.cover_note, local_job_applications.cover_note),
-                 updated_at = NOW()
+             SET cv_url            = COALESCE(EXCLUDED.cv_url,            local_job_applications.cv_url),
+                 cover_note        = COALESCE(EXCLUDED.cover_note,        local_job_applications.cover_note),
+                 applicant_county  = COALESCE(EXCLUDED.applicant_county,  local_job_applications.applicant_county),
+                 highest_education = COALESCE(EXCLUDED.highest_education, local_job_applications.highest_education),
+                 years_experience  = COALESCE(EXCLUDED.years_experience,  local_job_applications.years_experience),
+                 certificates_url  = COALESCE(EXCLUDED.certificates_url,  local_job_applications.certificates_url),
+                 company_id        = COALESCE(EXCLUDED.company_id,        local_job_applications.company_id),
+                 updated_at        = NOW()
           RETURNING id
-        `, [jobId, userId, applicantName.trim() || user.email, user.phone, user.email, cvUrl, coverNote])
+        `, insertParams)
                 .catch(async (err) => {
-                // First-deploy guard: if the ON CONFLICT constraint doesn't exist yet,
-                // add it idempotently and retry once. Phase 1 created the table
-                // without the (job_id, applicant_user_id) unique constraint.
-                if (err?.code === "42P10") {
+                // First-deploy guard: if the ON CONFLICT constraint or new columns
+                // don't exist yet, add them idempotently and retry once.
+                if (err?.code === "42P10" || err?.code === "42703") {
                     await db_1.pool.query(`
                 CREATE UNIQUE INDEX IF NOT EXISTS uq_local_app_job_user
                 ON local_job_applications(job_id, applicant_user_id)
                 WHERE applicant_user_id IS NOT NULL
               `).catch(() => { });
+                    await db_1.pool.query(`ALTER TABLE local_job_applications ADD COLUMN IF NOT EXISTS applicant_county    VARCHAR(60)`).catch(() => { });
+                    await db_1.pool.query(`ALTER TABLE local_job_applications ADD COLUMN IF NOT EXISTS highest_education   VARCHAR(80)`).catch(() => { });
+                    await db_1.pool.query(`ALTER TABLE local_job_applications ADD COLUMN IF NOT EXISTS years_experience    INTEGER`).catch(() => { });
+                    await db_1.pool.query(`ALTER TABLE local_job_applications ADD COLUMN IF NOT EXISTS certificates_url    TEXT`).catch(() => { });
+                    await db_1.pool.query(`ALTER TABLE local_job_applications ADD COLUMN IF NOT EXISTS company_id          UUID`).catch(() => { });
                     return db_1.pool.query(`
                 INSERT INTO local_job_applications (
-                  job_id, applicant_user_id, applicant_name, phone, email, cv_url, cover_note, status
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'submitted')
+                  job_id, applicant_user_id, applicant_name, phone, email,
+                  cv_url, cover_note, applicant_county, highest_education, years_experience,
+                  certificates_url, company_id, status
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'submitted')
                 RETURNING id
-              `, [jobId, userId, applicantName.trim() || user.email, user.phone, user.email, cvUrl, coverNote]);
+              `, insertParams);
                 }
                 throw err;
             });
@@ -566,6 +643,143 @@ function registerLocalJobsRoutes(app) {
         catch (err) {
             console.error("[POST /api/local-jobs/jobs/:id/apply]", err?.message, err?.stack?.split("\n").slice(0, 3).join(" | "));
             res.status(500).json({ message: "Could not submit your application right now. Please try again." });
+        }
+    });
+    // ─── ADMIN ENDPOINTS ─────────────────────────────────────────────────────
+    // 2026-06 Phase 2.5: founder asked for the basic admin moderation tools
+    // before the full employer dashboard ships in Phase 3:
+    //   • Close (or re-open) a fake / spam job
+    //   • Suspend (or re-approve) an employer — hides all their jobs from
+    //     /kenya-careers AND blocks new applications without losing the
+    //     existing data
+    //   • List all applications for moderation (read-only)
+    // Each endpoint inlines the admin check via storage.isUserAdmin() since
+    // isAdmin middleware lives in routes.ts and isn't exported.
+    async function requireAdminInline(req, res) {
+        const userId = req.user?.claims?.sub ?? req.user?.id;
+        if (!userId) {
+            res.status(401).json({ message: "Sign in required." });
+            return null;
+        }
+        const { storage } = await Promise.resolve().then(() => __importStar(require("./storage")));
+        const admin = await storage.isUserAdmin(userId).catch(() => false);
+        if (!admin) {
+            res.status(403).json({ message: "Admin access required." });
+            return null;
+        }
+        return userId;
+    }
+    // PATCH /api/admin/local-jobs/jobs/:id — change status (open / closed)
+    app.patch("/api/admin/local-jobs/jobs/:id", async (req, res) => {
+        const adminId = await requireAdminInline(req, res);
+        if (!adminId)
+            return;
+        try {
+            const { id } = req.params;
+            const newStatus = String(req.body?.status ?? "").trim();
+            if (!["open", "closed", "draft"].includes(newStatus)) {
+                return res.status(400).json({ message: "status must be one of: open, closed, draft." });
+            }
+            const { rowCount } = await db_1.pool.query(`UPDATE local_jobs SET status = $1, updated_at = NOW() WHERE id = $2`, [newStatus, id]);
+            if (!rowCount)
+                return res.status(404).json({ message: "Job not found." });
+            console.log(`[admin] adminId=${adminId} set job=${id} status=${newStatus}`);
+            res.json({ success: true, status: newStatus });
+        }
+        catch (err) {
+            console.error("[PATCH /api/admin/local-jobs/jobs/:id]", err?.message);
+            res.status(500).json({ message: "Could not update job." });
+        }
+    });
+    // PATCH /api/admin/local-jobs/companies/:id — change status (approved / suspended / pending)
+    app.patch("/api/admin/local-jobs/companies/:id", async (req, res) => {
+        const adminId = await requireAdminInline(req, res);
+        if (!adminId)
+            return;
+        try {
+            const { id } = req.params;
+            const newStatus = String(req.body?.status ?? "").trim();
+            if (!["approved", "pending", "suspended"].includes(newStatus)) {
+                return res.status(400).json({ message: "status must be one of: approved, pending, suspended." });
+            }
+            const { rowCount } = await db_1.pool.query(`UPDATE companies SET status = $1, updated_at = NOW(),
+                              verified_at = CASE WHEN $1 = 'approved' THEN COALESCE(verified_at, NOW()) ELSE verified_at END
+          WHERE id = $2`, [newStatus, id]);
+            if (!rowCount)
+                return res.status(404).json({ message: "Company not found." });
+            console.log(`[admin] adminId=${adminId} set company=${id} status=${newStatus}`);
+            res.json({ success: true, status: newStatus });
+        }
+        catch (err) {
+            console.error("[PATCH /api/admin/local-jobs/companies/:id]", err?.message);
+            res.status(500).json({ message: "Could not update company." });
+        }
+    });
+    // PATCH /api/admin/local-jobs/applications/:id — change application status
+    // Will also be used by the employer dashboard when Phase 3 ships.
+    // Valid transitions: submitted → under_review → shortlisted → interview → hired/rejected.
+    app.patch("/api/admin/local-jobs/applications/:id", async (req, res) => {
+        const adminId = await requireAdminInline(req, res);
+        if (!adminId)
+            return;
+        try {
+            const { id } = req.params;
+            const newStatus = String(req.body?.status ?? "").trim();
+            const validStatuses = ["submitted", "under_review", "shortlisted", "interview", "hired", "rejected"];
+            if (!validStatuses.includes(newStatus)) {
+                return res.status(400).json({ message: `status must be one of: ${validStatuses.join(", ")}.` });
+            }
+            const { rowCount } = await db_1.pool.query(`UPDATE local_job_applications SET status = $1, updated_at = NOW() WHERE id = $2`, [newStatus, id]);
+            if (!rowCount)
+                return res.status(404).json({ message: "Application not found." });
+            console.log(`[admin] adminId=${adminId} set application=${id} status=${newStatus}`);
+            res.json({ success: true, status: newStatus });
+        }
+        catch (err) {
+            console.error("[PATCH /api/admin/local-jobs/applications/:id]", err?.message);
+            res.status(500).json({ message: "Could not update application." });
+        }
+    });
+    // GET /api/admin/local-jobs/overview — moderation dashboard data: companies,
+    // open jobs, recent applications. Used by the admin Kenya Careers page.
+    app.get("/api/admin/local-jobs/overview", async (req, res) => {
+        const adminId = await requireAdminInline(req, res);
+        if (!adminId)
+            return;
+        try {
+            const [companiesRes, jobsRes, appsRes] = await Promise.all([
+                db_1.pool.query(`
+          SELECT c.id, c.name, c.industry, c.county, c.status, c.verified_at,
+                 (SELECT COUNT(*) FROM local_jobs WHERE company_id = c.id)::int AS job_count
+            FROM companies c ORDER BY c.created_at DESC LIMIT 100
+        `),
+                db_1.pool.query(`
+          SELECT j.id, j.title, j.county, j.town, j.status, j.vacancies, j.created_at,
+                 c.id AS company_id, c.name AS company_name, c.status AS company_status
+            FROM local_jobs j JOIN companies c ON c.id = j.company_id
+           ORDER BY j.created_at DESC LIMIT 100
+        `),
+                db_1.pool.query(`
+          SELECT a.id, a.status, a.applied_at, a.applicant_name, a.email, a.phone,
+                 a.applicant_county, a.highest_education, a.years_experience,
+                 a.cv_url, a.certificates_url, a.cover_note,
+                 j.id AS job_id, j.title AS job_title,
+                 c.name AS company_name
+            FROM local_job_applications a
+            JOIN local_jobs j ON j.id = a.job_id
+            JOIN companies   c ON c.id = j.company_id
+           ORDER BY a.applied_at DESC LIMIT 100
+        `),
+            ]);
+            res.json({
+                companies: companiesRes.rows,
+                jobs: jobsRes.rows,
+                applications: appsRes.rows,
+            });
+        }
+        catch (err) {
+            console.error("[GET /api/admin/local-jobs/overview]", err?.message);
+            res.status(500).json({ message: "Could not load overview." });
         }
     });
     // ─── GET /api/local-jobs/me/applications ─────────────────────────────────
