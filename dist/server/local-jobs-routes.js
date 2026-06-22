@@ -183,6 +183,7 @@ function registerLocalJobsRoutes(app) {
               j.id, j.title, j.department, j.vacancies, j.employment_type,
               j.salary_min, j.salary_max, j.county, j.town,
               j.experience_level, j.category, j.deadline, j.created_at,
+              COALESCE(j.is_seed, false) AS is_seed,
               c.id AS company_id, c.name AS company_name, c.slug AS company_slug,
               c.industry AS company_industry, c.verified_at AS company_verified_at,
               b.id AS branch_id, b.name AS branch_name
@@ -208,12 +209,19 @@ function registerLocalJobsRoutes(app) {
                 category: r.category,
                 deadline: r.deadline,
                 createdAt: r.created_at,
+                isSeed: !!r.is_seed,
                 company: {
                     id: r.company_id,
                     name: r.company_name,
                     slug: r.company_slug,
                     industry: r.company_industry,
-                    verified: !!r.company_verified_at,
+                    // 2026-06 SAFETY: while every job in the catalogue is a seed, the
+                    // company hasn't actually verified themselves with us. Hide the
+                    // "Verified" tick until the company is genuinely verified — i.e.
+                    // when there's at least one real (non-seed) job under their name.
+                    // This keeps us legally honest about who's actually a confirmed
+                    // partner vs who's still a placeholder.
+                    verified: !!r.company_verified_at && !r.is_seed,
                 },
                 branch: r.branch_id ? { id: r.branch_id, name: r.branch_name } : null,
             }));
@@ -411,7 +419,7 @@ function registerLocalJobsRoutes(app) {
             j.id, j.title, j.department, j.vacancies, j.employment_type,
             j.salary_min, j.salary_max, j.requirements, j.responsibilities,
             j.deadline, j.county, j.town, j.experience_level, j.category,
-            j.status, j.created_at,
+            j.status, j.created_at, COALESCE(j.is_seed, false) AS is_seed,
             c.id AS company_id, c.name AS company_name, c.slug AS company_slug,
             c.industry AS company_industry, c.description AS company_description,
             c.website AS company_website, c.verified_at AS company_verified_at,
@@ -446,6 +454,7 @@ function registerLocalJobsRoutes(app) {
                 category: job.category,
                 status: job.status,
                 createdAt: job.created_at,
+                isSeed: !!job.is_seed,
                 company: {
                     id: job.company_id,
                     name: job.company_name,
@@ -453,7 +462,9 @@ function registerLocalJobsRoutes(app) {
                     industry: job.company_industry,
                     description: job.company_description,
                     website: job.company_website,
-                    verified: !!job.company_verified_at,
+                    // 2026-06 SAFETY: hide the Verified tick while the job is a seed —
+                    // the company hasn't actually confirmed they're listing with us.
+                    verified: !!job.company_verified_at && !job.is_seed,
                     county: job.company_county,
                 },
                 branch: job.branch_id ? {
@@ -604,9 +615,16 @@ function registerLocalJobsRoutes(app) {
                     dailyLimit: limit,
                 });
             }
-            // ── 3. Validate the job exists and is open ─────────────────────────
+            // ── 3. Validate the job exists, is open, and is REAL (not a seed) ──
+            // 2026-06 SAFETY: founder confirmed the catalogue jobs are NOT real
+            // postings from the named employers. Until Phase 4 onboards real
+            // employers via the self-service portal, every seeded row has
+            // is_seed=true and applications are blocked here with a clear
+            // honest message that does NOT take the user's money or pretend
+            // the application is being routed to the employer.
             const { rows: [job] } = await db_1.pool.query(`
-          SELECT j.id, j.title, j.status, c.id AS company_id, c.name AS company_name
+          SELECT j.id, j.title, j.status, j.is_seed,
+                 c.id AS company_id, c.name AS company_name
             FROM local_jobs j
             JOIN companies   c ON c.id = j.company_id
            WHERE j.id = $1 AND c.status = 'approved'
@@ -614,6 +632,15 @@ function registerLocalJobsRoutes(app) {
         `, [jobId]);
             if (!job) {
                 return res.status(404).json({ message: "Job not found or no longer available." });
+            }
+            if (job.is_seed) {
+                console.log(`[kenya-careers/apply] BLOCK userId=${userId} reason=seed_listing company="${job.company_name}" jobId=${jobId}`);
+                return res.status(410).json({
+                    message: `This is a sample listing — ${job.company_name} hasn't been onboarded yet. We're not sending applications to them yet. Tap "Notify me" on the job page and we'll email you the moment ${job.company_name} posts real openings.`,
+                    reason: "sample_listing",
+                    companyName: job.company_name,
+                    companyId: job.company_id,
+                });
             }
             if (job.status !== "open") {
                 return res.status(410).json({ message: "Applications for this job have closed." });
@@ -783,6 +810,66 @@ function registerLocalJobsRoutes(app) {
         catch (err) {
             console.error("[POST /api/local-jobs/jobs/:id/apply]", err?.message, err?.stack?.split("\n").slice(0, 3).join(" | "));
             res.status(500).json({ message: "Could not submit your application right now. Please try again." });
+        }
+    });
+    // ─── POST /api/local-jobs/companies/:id/notify ───────────────────────────
+    // 2026-06 SAFETY: replaces Apply on every seed job. Visitor leaves their
+    // email (and optionally phone) — when Tony actually onboards {company},
+    // everyone in this table for that company gets a notification email.
+    // No payment taken. No false promise. Public — no auth required.
+    app.post("/api/local-jobs/companies/:id/notify", async (req, res) => {
+        try {
+            const { id } = req.params;
+            if (!/^[0-9a-f-]{8,}$/i.test(id)) {
+                return res.status(400).json({ message: "Invalid company id." });
+            }
+            const email = String(req.body?.email ?? "").trim().slice(0, 160).toLowerCase();
+            const phone = String(req.body?.phone ?? "").trim().slice(0, 40) || null;
+            const sourceJobId = String(req.body?.jobId ?? "").trim() || null;
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                return res.status(400).json({ message: "Please enter a valid email." });
+            }
+            // Confirm the company exists
+            const { rows: [company] } = await db_1.pool.query(`SELECT id, name FROM companies WHERE id = $1 LIMIT 1`, [id]);
+            if (!company)
+                return res.status(404).json({ message: "Company not found." });
+            const userId = readSessionUserId(req); // optional — present if signed in
+            await db_1.pool.query(`
+        INSERT INTO employer_notify_signups (company_id, email, phone, signed_up_user_id, source_job_id)
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (company_id, email) DO UPDATE SET phone = COALESCE(EXCLUDED.phone, employer_notify_signups.phone)
+      `, [id, email, phone, userId, sourceJobId])
+                .catch(async (err) => {
+                if (err?.code === "42P01") {
+                    await db_1.pool.query(`
+              CREATE TABLE IF NOT EXISTS employer_notify_signups (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                company_id UUID NOT NULL,
+                email VARCHAR(160) NOT NULL,
+                phone VARCHAR(40),
+                signed_up_user_id UUID,
+                source_job_id UUID,
+                notified_at TIMESTAMP,
+                created_at TIMESTAMP NOT NULL DEFAULT NOW()
+              )
+            `).catch(() => { });
+                    await db_1.pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_notify_company_email ON employer_notify_signups(company_id, email)`).catch(() => { });
+                    return db_1.pool.query(`
+              INSERT INTO employer_notify_signups (company_id, email, phone, signed_up_user_id, source_job_id)
+              VALUES ($1, $2, $3, $4, $5)
+            `, [id, email, phone, userId, sourceJobId]);
+                }
+                throw err;
+            });
+            console.log(`[kenya-careers/notify] new signup company="${company.name}" email=${email} phone=${phone ?? "n/a"}`);
+            res.json({
+                success: true,
+                message: `Got it! We'll email ${email} as soon as ${company.name} starts posting real openings on WorkAbroad Hub.`,
+            });
+        }
+        catch (err) {
+            console.error("[POST /api/local-jobs/companies/:id/notify]", err?.message);
+            res.status(500).json({ message: "Could not save your signup. Try again or email hello@workabroadhub.tech." });
         }
     });
     // ─── POST /api/local-jobs/companies/:id/claim ────────────────────────────
@@ -968,6 +1055,74 @@ function registerLocalJobsRoutes(app) {
         catch (err) {
             console.error("[PATCH /api/admin/local-jobs/applications/:id]", err?.message);
             res.status(500).json({ message: "Could not update application." });
+        }
+    });
+    // GET /api/admin/local-jobs/seed-applicants — refund list.
+    // 2026-06 SAFETY: founder needs to identify every paid user who applied
+    // to a seed (not-yet-real) job so they can be refunded the KES 99 (or have
+    // their trial extended as compensation). Returns applicants joined to
+    // their most recent payment.
+    app.get("/api/admin/local-jobs/seed-applicants", async (req, res) => {
+        const adminId = await requireAdminInline(req, res);
+        if (!adminId)
+            return;
+        try {
+            const { rows } = await db_1.pool.query(`
+        SELECT
+            a.id            AS application_id,
+            a.applied_at,
+            a.applicant_user_id,
+            a.applicant_name,
+            a.email,
+            a.phone,
+            j.id            AS job_id,
+            j.title         AS job_title,
+            c.name          AS company_name,
+            p.id            AS payment_id,
+            p.amount        AS payment_amount,
+            p.status        AS payment_status,
+            p.mpesa_receipt_number AS mpesa_receipt,
+            p.plan_id
+          FROM local_job_applications a
+          JOIN local_jobs j ON j.id = a.job_id
+          JOIN companies   c ON c.id = j.company_id
+     LEFT JOIN LATERAL (
+            SELECT id, amount, status, mpesa_receipt_number, plan_id
+              FROM payments
+             WHERE user_id = a.applicant_user_id
+               AND status IN ('success', 'completed')
+               AND plan_id IN ('trial', 'monthly', 'yearly', 'pro')
+             ORDER BY created_at DESC
+             LIMIT 1
+          ) p ON true
+         WHERE COALESCE(j.is_seed, false) = true
+         ORDER BY a.applied_at DESC
+         LIMIT 500
+      `).catch(() => ({ rows: [] }));
+            res.json({
+                message: rows.length === 0
+                    ? "No paid applications to seed jobs found. You're clear — no refunds needed."
+                    : `${rows.length} applicant${rows.length === 1 ? "" : "s"} applied to seed jobs with a paid plan. Refund each KES 99 via M-Pesa B2C (paybill 4153025) using the receipt number, or extend their trial as compensation.`,
+                count: rows.length,
+                applicants: rows.map((r) => ({
+                    applicationId: r.application_id,
+                    appliedAt: r.applied_at,
+                    applicantName: r.applicant_name,
+                    email: r.email,
+                    phone: r.phone,
+                    jobTitle: r.job_title,
+                    companyName: r.company_name,
+                    paymentId: r.payment_id,
+                    paymentAmount: r.payment_amount,
+                    paymentStatus: r.payment_status,
+                    mpesaReceipt: r.mpesa_receipt,
+                    planId: r.plan_id,
+                })),
+            });
+        }
+        catch (err) {
+            console.error("[GET /api/admin/local-jobs/seed-applicants]", err?.message);
+            res.status(500).json({ message: "Could not load seed-applicant list." });
         }
     });
     // GET /api/admin/local-jobs/gate-stats — paywall observability for the founder.
