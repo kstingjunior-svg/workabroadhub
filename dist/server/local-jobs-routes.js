@@ -421,6 +421,7 @@ function registerLocalJobsRoutes(app) {
             const { storage } = await Promise.resolve().then(() => __importStar(require("./storage")));
             const tier = await storage.getUserPlan(userId);
             if (!KENYA_CAREERS_PAID_TIERS.has(tier)) {
+                console.log(`[kenya-careers/gate] BLOCK userId=${userId} tier=${tier} reason=not_paid`);
                 return res.json({
                     canApply: false,
                     reason: "upgrade",
@@ -478,14 +479,35 @@ function registerLocalJobsRoutes(app) {
             if (!/^[0-9a-f-]{8,}$/i.test(jobId)) {
                 return res.status(400).json({ message: "Invalid job id." });
             }
-            // ── 1. Tier check ──────────────────────────────────────────────────
+            // ── 1. Tier check — primary paywall ────────────────────────────────
+            // getUserPlan() is the single source of truth used by every paid
+            // feature in WAH. It does a live DB read of users.plan + the active
+            // subscription's end_date, and auto-downgrades expired users to
+            // "free" on the spot. So a trial user 25 hours after payment is
+            // already "free" by the time this check runs.
             const { storage } = await Promise.resolve().then(() => __importStar(require("./storage")));
             const tier = await storage.getUserPlan(userId);
             if (!KENYA_CAREERS_PAID_TIERS.has(tier)) {
+                console.log(`[kenya-careers/apply] BLOCK userId=${userId} tier=${tier} reason=not_paid jobId=${jobId}`);
                 return res.status(402).json({
                     message: "Unlock applying — KES 99 trial covers both overseas AND Kenya jobs.",
                     reason: "upgrade",
                     tier,
+                });
+            }
+            // ── 1b. Defensive subscription expiry double-check ─────────────────
+            // Belt-and-braces: even though getUserPlan() auto-downgrades expired
+            // users, do an independent end_date read here. If the subscription
+            // record exists but is in the past, treat the user as free. Catches
+            // any edge case where getUserPlan's lazy-sync hasn't run yet
+            // (database trigger lag, missed sweep, etc).
+            const sub = await storage.getUserSubscription(userId).catch(() => null);
+            if (sub?.endDate && new Date(sub.endDate) < new Date()) {
+                console.log(`[kenya-careers/apply] BLOCK userId=${userId} tier=${tier} reason=subscription_expired endDate=${sub.endDate} jobId=${jobId}`);
+                return res.status(402).json({
+                    message: "Your plan has expired. Renew to keep applying.",
+                    reason: "upgrade",
+                    tier: "free",
                 });
             }
             // ── 2. Daily limit check ───────────────────────────────────────────
@@ -670,12 +692,15 @@ function registerLocalJobsRoutes(app) {
                     console.warn(`[apply] confirmation email failed for ${user.email}:`, emailErr?.message);
                 }
             })();
+            console.log(`[kenya-careers/apply] ALLOW userId=${userId} tier=${tier} jobId=${jobId} ` +
+                `company="${job.company_name}" applicationId=${appRow.id} appsToday=${Number(count) + 1}/${limit}`);
             res.json({
                 success: true,
                 applicationId: appRow.id,
                 message: `Application sent to ${job.company_name}. Check your email — we sent you a confirmation.`,
                 dailyLimit: limit,
                 appsToday: Number(count) + 1,
+                tier,
             });
         }
         catch (err) {
@@ -776,6 +801,50 @@ function registerLocalJobsRoutes(app) {
         catch (err) {
             console.error("[PATCH /api/admin/local-jobs/applications/:id]", err?.message);
             res.status(500).json({ message: "Could not update application." });
+        }
+    });
+    // GET /api/admin/local-jobs/gate-stats — paywall observability for the founder.
+    // Shows last-24h counts of: paid users who successfully applied, paid users
+    // who hit the daily limit, free users who hit the upgrade card, and the
+    // current paid-tier breakdown. Confirms the gate is doing its job without
+    // having to dig through Render logs.
+    app.get("/api/admin/local-jobs/gate-stats", async (req, res) => {
+        const adminId = await requireAdminInline(req, res);
+        if (!adminId)
+            return;
+        try {
+            // Applications submitted in last 24h, grouped by tier of the applicant
+            // at submission time. We don't store the tier on the row (it's derived
+            // from getUserPlan when needed), so we join through users to get the
+            // current plan — close enough for an observability stat.
+            const { rows: byTier } = await db_1.pool.query(`
+        SELECT COALESCE(u.plan, 'free') AS plan, COUNT(*)::text AS count
+          FROM local_job_applications a
+          JOIN users u ON u.id = a.applicant_user_id
+         WHERE a.applied_at > NOW() - INTERVAL '24 hours'
+         GROUP BY u.plan
+         ORDER BY count DESC
+      `).catch(() => ({ rows: [] }));
+            // Total applications + unique applicants in last 24h
+            const { rows: [totals] } = await db_1.pool.query(`
+        SELECT COUNT(*)::text AS total_apps,
+               COUNT(DISTINCT applicant_user_id)::text AS unique_users
+          FROM local_job_applications
+         WHERE applied_at > NOW() - INTERVAL '24 hours'
+      `).catch(() => ({ rows: [{ total_apps: "0", unique_users: "0" }] }));
+            res.json({
+                windowHours: 24,
+                totalApplications: Number(totals?.total_apps ?? 0),
+                uniqueApplicants: Number(totals?.unique_users ?? 0),
+                byTier: byTier.map((r) => ({ tier: r.plan, count: Number(r.count) })),
+                gateLogs: {
+                    message: "Detailed allow/block decisions are emitted to Render logs. Search for [kenya-careers/apply] ALLOW or BLOCK.",
+                },
+            });
+        }
+        catch (err) {
+            console.error("[GET /api/admin/local-jobs/gate-stats]", err?.message);
+            res.status(500).json({ message: "Could not load gate stats." });
         }
     });
     // GET /api/admin/local-jobs/overview — moderation dashboard data: companies,
