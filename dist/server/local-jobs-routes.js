@@ -231,28 +231,105 @@ function registerLocalJobsRoutes(app) {
         }
     });
     // ─── GET /api/local-jobs/filters ──────────────────────────────────────────
-    // Distinct values for the filter dropdowns. Cached aggressively because
-    // these change rarely once Phase 3 ships employer posting.
+    // 2026-06 Phase 3a: Founder asked that ALL 47 Kenyan counties appear in the
+    // filter dropdown — not just the ones that currently have jobs. So we
+    // return the canonical IEBC list of 47 counties (sourced from
+    // ./lib/local-jobs-seed-data) regardless of what's in the jobs table. The
+    // empty-state on the landing page handles "no jobs in this county yet".
     app.get("/api/local-jobs/filters", async (_req, res) => {
         try {
-            const [countiesRes, categoriesRes, companiesRes] = await Promise.all([
-                db_1.pool.query(`SELECT DISTINCT county FROM local_jobs WHERE status='open' AND county IS NOT NULL ORDER BY county`),
-                db_1.pool.query(`SELECT DISTINCT category FROM local_jobs WHERE status='open' AND category IS NOT NULL ORDER BY category`),
-                db_1.pool.query(`SELECT id, name FROM companies WHERE status='approved' ORDER BY name`),
+            const { KENYA_47_COUNTIES } = await Promise.resolve().then(() => __importStar(require("./lib/local-jobs-seed-data")));
+            const [categoriesRes, industriesRes, companiesRes] = await Promise.all([
+                db_1.pool.query(`SELECT DISTINCT category FROM local_jobs WHERE status='open' AND category IS NOT NULL ORDER BY category`).catch(() => ({ rows: [] })),
+                db_1.pool.query(`SELECT DISTINCT industry FROM companies WHERE status='approved' AND industry IS NOT NULL ORDER BY industry`).catch(() => ({ rows: [] })),
+                db_1.pool.query(`SELECT c.id, c.name, c.industry,
+                  (SELECT COUNT(*) FROM local_jobs WHERE company_id = c.id AND status = 'open')::text AS job_count
+             FROM companies c
+            WHERE c.status = 'approved'
+            ORDER BY c.name`).catch(() => ({ rows: [] })),
             ]);
             res.setHeader("Cache-Control", "public, max-age=300");
             res.json({
-                counties: countiesRes.rows.map((r) => r.county),
+                counties: KENYA_47_COUNTIES, // ALL 47, always
                 categories: categoriesRes.rows.map((r) => r.category),
-                companies: companiesRes.rows,
+                industries: industriesRes.rows.map((r) => r.industry),
+                companies: companiesRes.rows.map((r) => ({
+                    id: r.id,
+                    name: r.name,
+                    industry: r.industry,
+                    jobCount: Number(r.job_count ?? 0),
+                })),
             });
         }
         catch (err) {
             if (err?.code === "42P01") {
-                return res.json({ counties: [], categories: [], companies: [] });
+                // Fall back to the canonical county list even if the tables don't
+                // exist yet — so the dropdown always has options.
+                try {
+                    const { KENYA_47_COUNTIES } = await Promise.resolve().then(() => __importStar(require("./lib/local-jobs-seed-data")));
+                    return res.json({ counties: KENYA_47_COUNTIES, categories: [], industries: [], companies: [] });
+                }
+                catch {
+                    return res.json({ counties: [], categories: [], industries: [], companies: [] });
+                }
             }
             console.error("[GET /api/local-jobs/filters]", err?.message);
             res.status(500).json({ message: "Could not load filters." });
+        }
+    });
+    // ─── GET /api/local-jobs/empty-suggestions ────────────────────────────────
+    // 2026-06 Phase 3a: powers the "No jobs in <county>" empty-state. Returns
+    // (a) the nearest counties that DO have jobs (by simple alphabetical
+    // neighbourhood — good enough for Phase 3a), (b) a few related employers,
+    // (c) a count of jobs in the same category if a category was filtered.
+    // Caller passes ?county=...&category=...&companyId=... — same query
+    // shape as /api/local-jobs.
+    app.get("/api/local-jobs/empty-suggestions", async (req, res) => {
+        try {
+            const { county, category } = req.query;
+            const { KENYA_47_COUNTIES } = await Promise.resolve().then(() => __importStar(require("./lib/local-jobs-seed-data")));
+            // Counties that DO have jobs right now, ordered by job count desc
+            const { rows: activeCounties } = await db_1.pool.query(`
+        SELECT j.county, COUNT(*)::text AS job_count
+          FROM local_jobs j
+          JOIN companies c ON c.id = j.company_id
+         WHERE j.status = 'open' AND c.status = 'approved' AND j.county IS NOT NULL
+         GROUP BY j.county
+         ORDER BY COUNT(*) DESC
+         LIMIT 6
+      `).catch(() => ({ rows: [] }));
+            // A handful of recently-approved employers — used to seed "Related
+            // employers" when the user is browsing a county with no jobs.
+            const { rows: employerSuggestions } = await db_1.pool.query(`
+        SELECT c.id, c.name, c.industry,
+               (SELECT COUNT(*) FROM local_jobs WHERE company_id = c.id AND status = 'open')::text AS job_count
+          FROM companies c
+         WHERE c.status = 'approved'
+         ORDER BY c.created_at DESC
+         LIMIT 6
+      `).catch(() => ({ rows: [] }));
+            // Is the asked-for county actually valid (one of the 47)?
+            const countyIsKenyan = !!county && KENYA_47_COUNTIES.includes(county);
+            res.setHeader("Cache-Control", "public, max-age=120");
+            res.json({
+                message: countyIsKenyan
+                    ? `No jobs currently available in ${county}. Check back soon — employers are joining every week.`
+                    : "No jobs match those filters yet.",
+                suggestedCounties: activeCounties.map((r) => ({ county: r.county, jobCount: Number(r.job_count) })),
+                suggestedEmployers: employerSuggestions.map((r) => ({
+                    id: r.id, name: r.name, industry: r.industry, jobCount: Number(r.job_count),
+                })),
+                filterContext: { county: county ?? null, category: category ?? null },
+            });
+        }
+        catch (err) {
+            console.error("[GET /api/local-jobs/empty-suggestions]", err?.message);
+            res.json({
+                message: "No jobs currently available.",
+                suggestedCounties: [],
+                suggestedEmployers: [],
+                filterContext: {},
+            });
         }
     });
     // ─── GET /api/local-jobs/companies ────────────────────────────────────────
@@ -706,6 +783,96 @@ function registerLocalJobsRoutes(app) {
         catch (err) {
             console.error("[POST /api/local-jobs/jobs/:id/apply]", err?.message, err?.stack?.split("\n").slice(0, 3).join(" | "));
             res.status(500).json({ message: "Could not submit your application right now. Please try again." });
+        }
+    });
+    // ─── POST /api/local-jobs/companies/:id/claim ────────────────────────────
+    // 2026-06 Phase 3a: "Are you this employer? Claim your company profile."
+    // Public endpoint (no auth required — claims often come from HR managers
+    // who don't yet have a WAH account). Stores the claim for admin review.
+    // Light validation + one email to support so the founder is notified.
+    app.post("/api/local-jobs/companies/:id/claim", async (req, res) => {
+        try {
+            const { id } = req.params;
+            if (!/^[0-9a-f-]{8,}$/i.test(id)) {
+                return res.status(400).json({ message: "Invalid company id." });
+            }
+            const claimantName = String(req.body?.name ?? "").trim().slice(0, 160);
+            const claimantEmail = String(req.body?.email ?? "").trim().slice(0, 160).toLowerCase();
+            const claimantPhone = String(req.body?.phone ?? "").trim().slice(0, 40) || null;
+            const roleAtCompany = String(req.body?.role ?? "").trim().slice(0, 120) || null;
+            const message = String(req.body?.message ?? "").trim().slice(0, 2000) || null;
+            if (!claimantName || claimantName.length < 2) {
+                return res.status(400).json({ message: "Please enter your full name." });
+            }
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(claimantEmail)) {
+                return res.status(400).json({ message: "Please enter a valid work email." });
+            }
+            // Confirm the company actually exists
+            const { rows: [company] } = await db_1.pool.query(`
+        SELECT id, name FROM companies WHERE id = $1 LIMIT 1
+      `, [id]);
+            if (!company)
+                return res.status(404).json({ message: "Company not found." });
+            // Insert claim
+            const { rows: [claim] } = await db_1.pool.query(`
+        INSERT INTO company_claims (
+          company_id, claimant_name, claimant_email, claimant_phone, role_at_company, message
+        ) VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING id
+      `, [id, claimantName, claimantEmail, claimantPhone, roleAtCompany, message])
+                .catch(async (err) => {
+                if (err?.code === "42P01") {
+                    // Table doesn't exist yet — create minimal version then retry
+                    await db_1.pool.query(`
+              CREATE TABLE IF NOT EXISTS company_claims (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                company_id UUID NOT NULL, claimant_name VARCHAR(160) NOT NULL,
+                claimant_email VARCHAR(160) NOT NULL, claimant_phone VARCHAR(40),
+                role_at_company VARCHAR(120), message TEXT,
+                status VARCHAR(24) NOT NULL DEFAULT 'pending',
+                created_at TIMESTAMP NOT NULL DEFAULT NOW()
+              )
+            `).catch(() => { });
+                    return db_1.pool.query(`
+              INSERT INTO company_claims (company_id, claimant_name, claimant_email, claimant_phone, role_at_company, message)
+              VALUES ($1, $2, $3, $4, $5, $6) RETURNING id
+            `, [id, claimantName, claimantEmail, claimantPhone, roleAtCompany, message]);
+                }
+                throw err;
+            });
+            console.log(`[claim-company] new claim id=${claim.id} company="${company.name}" claimant="${claimantName}" <${claimantEmail}>`);
+            // Email the founder so they know to review
+            (async () => {
+                try {
+                    const { sendEmail } = await Promise.resolve().then(() => __importStar(require("./email")));
+                    await sendEmail({
+                        to: "hello@workabroadhub.tech",
+                        subject: `[Kenya Careers] New company claim: ${company.name}`,
+                        html: `
+              <div style="font-family:-apple-system,Segoe UI,sans-serif;max-width:520px;color:#1a2530;">
+                <h3>New employer claim — ${company.name}</h3>
+                <p><strong>${claimantName}</strong> (${claimantEmail}${claimantPhone ? `, ${claimantPhone}` : ""}) wants to claim this company profile.</p>
+                ${roleAtCompany ? `<p><strong>Role at company:</strong> ${roleAtCompany}</p>` : ""}
+                ${message ? `<p><strong>Message:</strong></p><p style="border-left:3px solid #ddd;padding-left:8px;">${message}</p>` : ""}
+                <p><a href="https://workabroadhub.tech/admin/kenya-careers">Review in admin panel →</a></p>
+                <p style="font-size:12px;color:#999;">Claim ID: ${claim.id}</p>
+              </div>`,
+                        text: `New employer claim — ${company.name}\n\n${claimantName} (${claimantEmail}${claimantPhone ? `, ${claimantPhone}` : ""}) wants to claim this company.\n${roleAtCompany ? `Role: ${roleAtCompany}\n` : ""}${message ? `Message: ${message}\n` : ""}\nReview: https://workabroadhub.tech/admin/kenya-careers\nClaim ID: ${claim.id}`,
+                    });
+                }
+                catch (err) {
+                    console.warn("[claim-company] founder notification email failed (non-fatal):", err?.message);
+                }
+            })();
+            res.json({
+                success: true,
+                message: `Thanks ${claimantName.split(" ")[0]}! We received your claim for ${company.name}. We'll review and reach out at ${claimantEmail} within 1-2 business days.`,
+                claimId: claim.id,
+            });
+        }
+        catch (err) {
+            console.error("[POST /api/local-jobs/companies/:id/claim]", err?.message);
+            res.status(500).json({ message: "Could not submit your claim. Try again or email hello@workabroadhub.tech." });
         }
     });
     // ─── ADMIN ENDPOINTS ─────────────────────────────────────────────────────

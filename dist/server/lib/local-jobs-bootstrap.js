@@ -1,4 +1,27 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.bootstrapLocalJobs = bootstrapLocalJobs;
 /**
@@ -158,179 +181,216 @@ async function bootstrapLocalJobs() {
        WHERE a.job_id = j.id AND a.company_id IS NULL
     `).catch(() => { });
         await db_1.pool.query(`CREATE INDEX IF NOT EXISTS idx_local_app_company ON local_job_applications(company_id)`);
-        // ── 2. Seed sample data ─────────────────────────────────────────────────
-        // Only seed if companies table is empty. Idempotent.
-        const { rows: [{ count }] } = await db_1.pool.query(`SELECT COUNT(*)::text AS count FROM companies`);
-        if (Number(count) > 0) {
-            console.log("[local-jobs] DDL ready; companies already seeded.");
-            return;
-        }
-        console.log("[local-jobs] Seeding sample companies and jobs…");
-        // 6 sample employers — well-known Kenyan brands so early visitors recognise them
-        const companies = [
-            { slug: "naivas", name: "Naivas Supermarkets", industry: "Retail", county: "Nairobi",
-                desc: "Kenya's largest supermarket chain with 90+ branches across the country.",
-                website: "https://naivas.online" },
-            { slug: "quickmart", name: "Quickmart Limited", industry: "Retail", county: "Nairobi",
-                desc: "Fast-growing retail chain serving customers across Kenya since 2006.",
-                website: "https://quickmart.co.ke" },
-            { slug: "carrefour", name: "Carrefour Kenya (Majid Al Futtaim)", industry: "Retail", county: "Nairobi",
-                desc: "International hypermarket operator with branches in Nairobi, Mombasa and Kisumu.",
-                website: "https://www.carrefour.ke" },
-            { slug: "magunas", name: "Magunas Supermarket", industry: "Retail", county: "Nairobi",
-                desc: "Family-owned Kenyan retailer known for fresh produce and competitive prices.",
-                website: null },
-            { slug: "java-house", name: "Java House Africa", industry: "Hospitality", county: "Nairobi",
-                desc: "Pan-African coffee and food chain with branches across East Africa.",
-                website: "https://www.javahouseafrica.com" },
-            { slug: "aga-khan", name: "Aga Khan University Hospital", industry: "Healthcare", county: "Nairobi",
-                desc: "Tertiary teaching hospital providing specialist care in Nairobi and across East Africa.",
-                website: "https://hospitals.aku.edu/nairobi" },
-        ];
-        // Insert all companies as 'approved' so they show up immediately for Phase 1.
-        // Phase 4 will introduce the admin approval queue and switch the default to 'pending'.
+        // Phase 3a: claim-company table. Anyone can submit a claim ("I'm the HR
+        // manager at Naivas — can I take over this profile?"). Admin reviews
+        // each one before granting access. No FK to users table — claims can
+        // come from non-signed-in visitors too.
+        await db_1.pool.query(`
+      CREATE TABLE IF NOT EXISTS company_claims (
+        id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id    UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        claimant_name VARCHAR(160) NOT NULL,
+        claimant_email VARCHAR(160) NOT NULL,
+        claimant_phone VARCHAR(40),
+        role_at_company VARCHAR(120),
+        message       TEXT,
+        evidence_url  TEXT,                            -- future: link to verification email/document
+        status        VARCHAR(24) NOT NULL DEFAULT 'pending',  -- pending|approved|rejected
+        reviewed_by   UUID,                            -- admin userId when actioned
+        reviewed_at   TIMESTAMP,
+        review_note   TEXT,
+        created_at    TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+        await db_1.pool.query(`CREATE INDEX IF NOT EXISTS idx_company_claims_company ON company_claims(company_id)`);
+        await db_1.pool.query(`CREATE INDEX IF NOT EXISTS idx_company_claims_status  ON company_claims(status)`);
+        // ── 2. Phase 3a expansion: 36 employers, 60+ branches, 100+ jobs ────────
+        // Catalogue lives in ./local-jobs-seed-data.ts so it can grow without
+        // bloating this file. Inserts are IDEMPOTENT — we use ON CONFLICT(slug)
+        // for companies and unique-constraint guards for branches/jobs, so
+        // re-running on every boot just adds whatever's missing.
+        const { SEED_COMPANIES } = await Promise.resolve().then(() => __importStar(require("./local-jobs-seed-data")));
+        // Ensure the unique constraints needed for ON CONFLICT to work.
+        // companies.slug is already UNIQUE from CREATE TABLE. Branches and jobs
+        // get partial-unique indexes so we can detect duplicates without forcing
+        // a hard constraint that would break manual inserts.
+        await db_1.pool.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_branches_company_name
+      ON branches(company_id, name)
+    `).catch(() => { });
+        await db_1.pool.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_local_jobs_seed_dedup
+      ON local_jobs(company_id, title, COALESCE(branch_id, '00000000-0000-0000-0000-000000000000'::uuid))
+    `).catch(() => { });
+        console.log(`[local-jobs] Syncing catalogue of ${SEED_COMPANIES.length} employers (idempotent)…`);
+        let companiesAdded = 0, branchesAdded = 0, jobsAdded = 0;
         const companyIds = {};
-        for (const c of companies) {
+        // Companies — upsert on slug. Existing rows keep their current data so
+        // founder edits via admin panel aren't overwritten by the seed.
+        for (const c of SEED_COMPANIES) {
             const { rows } = await db_1.pool.query(`INSERT INTO companies (name, slug, industry, county, description, website, status, verified_at)
          VALUES ($1, $2, $3, $4, $5, $6, 'approved', NOW())
-         RETURNING id`, [c.name, c.slug, c.industry, c.county, c.desc, c.website]);
+         ON CONFLICT (slug) DO UPDATE SET slug = EXCLUDED.slug
+         RETURNING id, (xmax = 0) AS was_inserted`, [c.name, c.slug, c.industry, c.hqCounty, c.description, c.website]);
             companyIds[c.slug] = rows[0].id;
+            if (rows[0].was_inserted)
+                companiesAdded++;
         }
-        // Sample branches — keep it light. The point of Phase 1 is to demo the
-        // concept, not to be comprehensive.
-        const branches = [
-            { companySlug: "naivas", name: "Naivas Thika Road Mall", county: "Nairobi", town: "Thika Road" },
-            { companySlug: "naivas", name: "Naivas Kahawa Wendani", county: "Kiambu", town: "Kahawa Wendani" },
-            { companySlug: "naivas", name: "Naivas Kisumu Central", county: "Kisumu", town: "Kisumu CBD" },
-            { companySlug: "naivas", name: "Naivas Eldoret Zion", county: "Uasin Gishu", town: "Eldoret" },
-            { companySlug: "quickmart", name: "Quickmart Kilimani", county: "Nairobi", town: "Kilimani" },
-            { companySlug: "quickmart", name: "Quickmart Ruaka", county: "Kiambu", town: "Ruaka" },
-            { companySlug: "carrefour", name: "Carrefour Two Rivers Mall", county: "Nairobi", town: "Runda" },
-            { companySlug: "carrefour", name: "Carrefour Nyali Centre", county: "Mombasa", town: "Nyali" },
-            { companySlug: "magunas", name: "Magunas Ngong Road", county: "Nairobi", town: "Ngong Road" },
-            { companySlug: "java-house", name: "Java House Junction Mall", county: "Nairobi", town: "Ngong Road" },
-            { companySlug: "java-house", name: "Java House Westside", county: "Nairobi", town: "Westlands" },
-            { companySlug: "aga-khan", name: "Aga Khan Hospital Nairobi (Parklands)", county: "Nairobi", town: "Parklands" },
-        ];
+        // Branches — upsert on (company_id, name). Existing branches keep their data.
         const branchIds = {};
-        for (const b of branches) {
-            const { rows } = await db_1.pool.query(`INSERT INTO branches (company_id, name, county, town)
-         VALUES ($1, $2, $3, $4)
-         RETURNING id`, [companyIds[b.companySlug], b.name, b.county, b.town]);
-            branchIds[b.name] = rows[0].id;
+        for (const c of SEED_COMPANIES) {
+            const companyId = companyIds[c.slug];
+            if (!companyId)
+                continue;
+            for (const b of c.branches) {
+                const { rows } = await db_1.pool.query(`INSERT INTO branches (company_id, name, county, town)
+           VALUES ($1, $2, $3, $4)
+           ON CONFLICT (company_id, name) DO UPDATE SET name = EXCLUDED.name
+           RETURNING id, (xmax = 0) AS was_inserted`, [companyId, b.name, b.county, b.town]);
+                // Key by name only — names like "Naivas Thika Road Mall" are unique
+                // enough across the catalogue (and the catalogue authors avoid collisions).
+                branchIds[b.name] = rows[0].id;
+                if (rows[0].was_inserted)
+                    branchesAdded++;
+            }
         }
-        // ~15 jobs across categories & counties. Salaries are illustrative ranges
-        // — real employers will set their own when Phase 3 ships.
+        // Jobs — one role × one branch per company. Idempotent on
+        // (company_id, title, branch_id). Existing jobs keep their data.
         const today = new Date();
         const deadline = new Date(today);
         deadline.setMonth(deadline.getMonth() + 1);
-        const jobs = [
-            { companySlug: "naivas", branchName: "Naivas Thika Road Mall", title: "Store Manager",
-                department: "Operations", vacancies: 1, type: "full_time",
-                salaryMin: 80000, salaryMax: 120000, county: "Nairobi", town: "Thika Road",
-                category: "retail", experience: "senior",
-                requirements: "5+ years retail management experience. Bachelor's degree in business or related field. Strong leadership and inventory control skills.",
-                responsibilities: "Oversee daily branch operations. Lead a team of 40+ staff. Hit monthly sales targets. Manage stock, shrinkage, and customer experience." },
-            { companySlug: "naivas", branchName: "Naivas Kahawa Wendani", title: "Cashier",
-                department: "Front End", vacancies: 6, type: "full_time",
-                salaryMin: 22000, salaryMax: 28000, county: "Kiambu", town: "Kahawa Wendani",
-                category: "retail", experience: "entry",
-                requirements: "KCSE certificate. Good numeracy. Customer-friendly attitude. Previous till experience is a plus but we train.",
-                responsibilities: "Process customer payments accurately. Handle cash and M-Pesa. Reconcile till at end of shift. Greet every customer." },
-            { companySlug: "naivas", branchName: "Naivas Kisumu Central", title: "Security Guard",
-                department: "Security", vacancies: 4, type: "full_time",
-                salaryMin: 18000, salaryMax: 22000, county: "Kisumu", town: "Kisumu CBD",
-                category: "security", experience: "entry",
-                requirements: "KCSE. PSRA-licensed preferred. Physically fit. Clean criminal record.",
-                responsibilities: "Patrol the premises. Operate metal detectors at entry. Monitor CCTV. Respond to incidents." },
-            { companySlug: "naivas", branchName: "Naivas Eldoret Zion", title: "Warehouse Assistant",
-                department: "Logistics", vacancies: 3, type: "full_time",
-                salaryMin: 20000, salaryMax: 25000, county: "Uasin Gishu", town: "Eldoret",
-                category: "logistics", experience: "entry",
-                requirements: "KCSE. Physically capable of lifting 25kg. Forklift licence is a bonus.",
-                responsibilities: "Receive deliveries. Stack stock. Pick orders for branch transfers. Maintain warehouse cleanliness." },
-            { companySlug: "quickmart", branchName: "Quickmart Kilimani", title: "Department Supervisor — Fresh Foods",
-                department: "Fresh Foods", vacancies: 1, type: "full_time",
-                salaryMin: 45000, salaryMax: 60000, county: "Nairobi", town: "Kilimani",
-                category: "retail", experience: "mid",
-                requirements: "Diploma in food technology or related. 3+ years supervising a fresh foods section in a supermarket. Food-safety certification.",
-                responsibilities: "Run the bakery, butchery and fresh produce sections. Manage waste and cold-chain. Lead a team of 12." },
-            { companySlug: "quickmart", branchName: "Quickmart Ruaka", title: "Cleaner",
-                department: "Housekeeping", vacancies: 5, type: "full_time",
-                salaryMin: 14000, salaryMax: 18000, county: "Kiambu", town: "Ruaka",
-                category: "cleaning", experience: "entry",
-                requirements: "Able to read and write. Reliable, punctual, willing to work shifts.",
-                responsibilities: "Clean store aisles, washrooms and back-of-house. Empty bins. Report spills immediately." },
-            { companySlug: "carrefour", branchName: "Carrefour Two Rivers Mall", title: "Customer Service Representative",
-                department: "Customer Service", vacancies: 2, type: "full_time",
-                salaryMin: 32000, salaryMax: 42000, county: "Nairobi", town: "Runda",
-                category: "retail", experience: "mid",
-                requirements: "Diploma. 2+ years in front-line customer service. Fluent English and Swahili.",
-                responsibilities: "Handle customer enquiries, returns and complaints at the service desk. Process refunds. Escalate where needed." },
-            { companySlug: "carrefour", branchName: "Carrefour Nyali Centre", title: "Delivery Driver",
-                department: "Online Fulfilment", vacancies: 4, type: "full_time",
-                salaryMin: 28000, salaryMax: 35000, county: "Mombasa", town: "Nyali",
-                category: "transport", experience: "entry",
-                requirements: "Valid BCE driving licence with 3+ years' clean record. Knowledge of Mombasa & Kilifi.",
-                responsibilities: "Deliver online grocery orders to customer doorsteps. Maintain the cold-chain. Handle cash on delivery." },
-            { companySlug: "magunas", branchName: "Magunas Ngong Road", title: "Butchery Attendant",
-                department: "Butchery", vacancies: 2, type: "full_time",
-                salaryMin: 22000, salaryMax: 30000, county: "Nairobi", town: "Ngong Road",
-                category: "retail", experience: "mid",
-                requirements: "Food-handling certificate. 1+ years experience in a supermarket butchery.",
-                responsibilities: "Cut and pack meat to customer specifications. Maintain hygiene standards. Stock the display fridge." },
-            { companySlug: "java-house", branchName: "Java House Junction Mall", title: "Barista",
-                department: "Bar", vacancies: 3, type: "full_time",
-                salaryMin: 25000, salaryMax: 32000, county: "Nairobi", town: "Ngong Road",
-                category: "hospitality", experience: "entry",
-                requirements: "KCSE. Food-handling certificate. Friendly demeanour. We train you on the espresso machine.",
-                responsibilities: "Prepare hot and cold drinks to spec. Maintain bar cleanliness. Upsell daily features." },
-            { companySlug: "java-house", branchName: "Java House Westside", title: "Restaurant Supervisor",
-                department: "Front of House", vacancies: 1, type: "full_time",
-                salaryMin: 50000, salaryMax: 65000, county: "Nairobi", town: "Westlands",
-                category: "hospitality", experience: "senior",
-                requirements: "Diploma in hospitality management. 4+ years in a busy restaurant. Strong people-management skills.",
-                responsibilities: "Run the front-of-house shift. Lead a team of 18 servers and hosts. Drive guest satisfaction scores." },
-            { companySlug: "java-house", branchName: "Java House Junction Mall", title: "Cook — Hot Kitchen",
-                department: "Kitchen", vacancies: 2, type: "full_time",
-                salaryMin: 28000, salaryMax: 36000, county: "Nairobi", town: "Ngong Road",
-                category: "hospitality", experience: "mid",
-                requirements: "Diploma in culinary arts or 3+ years equivalent kitchen experience. Food-safety certification.",
-                responsibilities: "Prepare menu items to standard. Maintain station cleanliness. Manage stock rotation." },
-            { companySlug: "aga-khan", branchName: "Aga Khan Hospital Nairobi (Parklands)", title: "Registered Nurse — Outpatient",
-                department: "Outpatient Services", vacancies: 3, type: "full_time",
-                salaryMin: 85000, salaryMax: 120000, county: "Nairobi", town: "Parklands",
-                category: "healthcare", experience: "mid",
-                requirements: "BScN or KRCHN. Active Nursing Council of Kenya licence. BLS-certified. 2+ years post-internship.",
-                responsibilities: "Provide patient assessment and care in the outpatient clinics. Administer medications. Document electronically." },
-            { companySlug: "aga-khan", branchName: "Aga Khan Hospital Nairobi (Parklands)", title: "Hospital Cleaner",
-                department: "Environmental Services", vacancies: 6, type: "full_time",
-                salaryMin: 18000, salaryMax: 24000, county: "Nairobi", town: "Parklands",
-                category: "cleaning", experience: "entry",
-                requirements: "KCSE preferred but not required. Able to follow infection-prevention protocols. Willing to work shifts.",
-                responsibilities: "Clean and disinfect wards, theatres and public areas. Handle medical waste per protocol. Restock supplies." },
-            { companySlug: "aga-khan", branchName: "Aga Khan Hospital Nairobi (Parklands)", title: "Pharmacy Technologist",
-                department: "Pharmacy", vacancies: 2, type: "full_time",
-                salaryMin: 50000, salaryMax: 70000, county: "Nairobi", town: "Parklands",
-                category: "healthcare", experience: "mid",
-                requirements: "Diploma in Pharmaceutical Technology. Active PPB licence. 2+ years hospital pharmacy experience.",
-                responsibilities: "Dispense outpatient prescriptions. Maintain inventory accuracy. Counsel patients on medication use." },
-        ];
-        for (const j of jobs) {
-            await db_1.pool.query(`INSERT INTO local_jobs (
-            company_id, branch_id, title, department, vacancies, employment_type,
-            salary_min, salary_max, requirements, responsibilities, deadline,
-            county, town, experience_level, category, status
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 'open')`, [
-                companyIds[j.companySlug],
-                branchIds[j.branchName] || null,
-                j.title, j.department, j.vacancies, j.type,
-                j.salaryMin, j.salaryMax, j.requirements, j.responsibilities,
-                deadline.toISOString().slice(0, 10),
-                j.county, j.town, j.experience, j.category,
-            ]);
+        const deadlineStr = deadline.toISOString().slice(0, 10);
+        for (const c of SEED_COMPANIES) {
+            const companyId = companyIds[c.slug];
+            if (!companyId)
+                continue;
+            // For each role × each branch the company has, create one job. That
+            // gives small companies (1-2 branches) ~4 jobs and larger ones (Naivas,
+            // Safaricom) 8-12 jobs. Total across 36 employers lands around 110-130
+            // jobs, comfortably over the 100+ target Tony asked for.
+            for (const role of c.roles) {
+                for (const branch of c.branches) {
+                    const branchId = branchIds[branch.name];
+                    if (!branchId)
+                        continue;
+                    const { rowCount } = await db_1.pool.query(`INSERT INTO local_jobs (
+                company_id, branch_id, title, department, vacancies, employment_type,
+                salary_min, salary_max, requirements, responsibilities, deadline,
+                county, town, experience_level, category, status
+             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 'open')
+             ON CONFLICT DO NOTHING`, [
+                        companyId, branchId, role.title, role.department, role.vacancies, role.type,
+                        role.salaryMin, role.salaryMax, role.requirements, role.responsibilities,
+                        deadlineStr, branch.county, branch.town, role.experience, role.category,
+                    ]).catch((err) => {
+                        // ON CONFLICT may not yet have the index if this is a fresh deploy
+                        // racing with the index creation — just continue.
+                        console.warn(`[local-jobs] job insert non-fatal: ${err?.message}`);
+                        return { rowCount: 0 };
+                    });
+                    if ((rowCount ?? 0) > 0)
+                        jobsAdded++;
+                }
+            }
         }
-        console.log(`[local-jobs] Seeded ${companies.length} companies, ${branches.length} branches, ${jobs.length} jobs`);
+        console.log(`[local-jobs] Catalogue sync: +${companiesAdded} companies, +${branchesAdded} branches, +${jobsAdded} jobs.`);
+        return;
+        /* legacy hand-written 15-job array below — superseded by SEED_COMPANIES
+           catalogue. Kept commented out so we have an easy rollback path if the
+           catalogue-driven seed ever breaks. Safe to delete after a clean deploy.
+        const _legacyJobs: any[] = [
+          { companySlug: "naivas", branchName: "Naivas Thika Road Mall", title: "Store Manager",
+            department: "Operations", vacancies: 1, type: "full_time",
+            salaryMin: 80_000, salaryMax: 120_000, county: "Nairobi", town: "Thika Road",
+            category: "retail", experience: "senior",
+            requirements: "5+ years retail management experience. Bachelor's degree in business or related field. Strong leadership and inventory control skills.",
+            responsibilities: "Oversee daily branch operations. Lead a team of 40+ staff. Hit monthly sales targets. Manage stock, shrinkage, and customer experience." },
+          { companySlug: "naivas", branchName: "Naivas Kahawa Wendani", title: "Cashier",
+            department: "Front End", vacancies: 6, type: "full_time",
+            salaryMin: 22_000, salaryMax: 28_000, county: "Kiambu", town: "Kahawa Wendani",
+            category: "retail", experience: "entry",
+            requirements: "KCSE certificate. Good numeracy. Customer-friendly attitude. Previous till experience is a plus but we train.",
+            responsibilities: "Process customer payments accurately. Handle cash and M-Pesa. Reconcile till at end of shift. Greet every customer." },
+          { companySlug: "naivas", branchName: "Naivas Kisumu Central", title: "Security Guard",
+            department: "Security", vacancies: 4, type: "full_time",
+            salaryMin: 18_000, salaryMax: 22_000, county: "Kisumu", town: "Kisumu CBD",
+            category: "security", experience: "entry",
+            requirements: "KCSE. PSRA-licensed preferred. Physically fit. Clean criminal record.",
+            responsibilities: "Patrol the premises. Operate metal detectors at entry. Monitor CCTV. Respond to incidents." },
+          { companySlug: "naivas", branchName: "Naivas Eldoret Zion", title: "Warehouse Assistant",
+            department: "Logistics", vacancies: 3, type: "full_time",
+            salaryMin: 20_000, salaryMax: 25_000, county: "Uasin Gishu", town: "Eldoret",
+            category: "logistics", experience: "entry",
+            requirements: "KCSE. Physically capable of lifting 25kg. Forklift licence is a bonus.",
+            responsibilities: "Receive deliveries. Stack stock. Pick orders for branch transfers. Maintain warehouse cleanliness." },
+          { companySlug: "quickmart", branchName: "Quickmart Kilimani", title: "Department Supervisor — Fresh Foods",
+            department: "Fresh Foods", vacancies: 1, type: "full_time",
+            salaryMin: 45_000, salaryMax: 60_000, county: "Nairobi", town: "Kilimani",
+            category: "retail", experience: "mid",
+            requirements: "Diploma in food technology or related. 3+ years supervising a fresh foods section in a supermarket. Food-safety certification.",
+            responsibilities: "Run the bakery, butchery and fresh produce sections. Manage waste and cold-chain. Lead a team of 12." },
+          { companySlug: "quickmart", branchName: "Quickmart Ruaka", title: "Cleaner",
+            department: "Housekeeping", vacancies: 5, type: "full_time",
+            salaryMin: 14_000, salaryMax: 18_000, county: "Kiambu", town: "Ruaka",
+            category: "cleaning", experience: "entry",
+            requirements: "Able to read and write. Reliable, punctual, willing to work shifts.",
+            responsibilities: "Clean store aisles, washrooms and back-of-house. Empty bins. Report spills immediately." },
+          { companySlug: "carrefour", branchName: "Carrefour Two Rivers Mall", title: "Customer Service Representative",
+            department: "Customer Service", vacancies: 2, type: "full_time",
+            salaryMin: 32_000, salaryMax: 42_000, county: "Nairobi", town: "Runda",
+            category: "retail", experience: "mid",
+            requirements: "Diploma. 2+ years in front-line customer service. Fluent English and Swahili.",
+            responsibilities: "Handle customer enquiries, returns and complaints at the service desk. Process refunds. Escalate where needed." },
+          { companySlug: "carrefour", branchName: "Carrefour Nyali Centre", title: "Delivery Driver",
+            department: "Online Fulfilment", vacancies: 4, type: "full_time",
+            salaryMin: 28_000, salaryMax: 35_000, county: "Mombasa", town: "Nyali",
+            category: "transport", experience: "entry",
+            requirements: "Valid BCE driving licence with 3+ years' clean record. Knowledge of Mombasa & Kilifi.",
+            responsibilities: "Deliver online grocery orders to customer doorsteps. Maintain the cold-chain. Handle cash on delivery." },
+          { companySlug: "magunas", branchName: "Magunas Ngong Road", title: "Butchery Attendant",
+            department: "Butchery", vacancies: 2, type: "full_time",
+            salaryMin: 22_000, salaryMax: 30_000, county: "Nairobi", town: "Ngong Road",
+            category: "retail", experience: "mid",
+            requirements: "Food-handling certificate. 1+ years experience in a supermarket butchery.",
+            responsibilities: "Cut and pack meat to customer specifications. Maintain hygiene standards. Stock the display fridge." },
+          { companySlug: "java-house", branchName: "Java House Junction Mall", title: "Barista",
+            department: "Bar", vacancies: 3, type: "full_time",
+            salaryMin: 25_000, salaryMax: 32_000, county: "Nairobi", town: "Ngong Road",
+            category: "hospitality", experience: "entry",
+            requirements: "KCSE. Food-handling certificate. Friendly demeanour. We train you on the espresso machine.",
+            responsibilities: "Prepare hot and cold drinks to spec. Maintain bar cleanliness. Upsell daily features." },
+          { companySlug: "java-house", branchName: "Java House Westside", title: "Restaurant Supervisor",
+            department: "Front of House", vacancies: 1, type: "full_time",
+            salaryMin: 50_000, salaryMax: 65_000, county: "Nairobi", town: "Westlands",
+            category: "hospitality", experience: "senior",
+            requirements: "Diploma in hospitality management. 4+ years in a busy restaurant. Strong people-management skills.",
+            responsibilities: "Run the front-of-house shift. Lead a team of 18 servers and hosts. Drive guest satisfaction scores." },
+          { companySlug: "java-house", branchName: "Java House Junction Mall", title: "Cook — Hot Kitchen",
+            department: "Kitchen", vacancies: 2, type: "full_time",
+            salaryMin: 28_000, salaryMax: 36_000, county: "Nairobi", town: "Ngong Road",
+            category: "hospitality", experience: "mid",
+            requirements: "Diploma in culinary arts or 3+ years equivalent kitchen experience. Food-safety certification.",
+            responsibilities: "Prepare menu items to standard. Maintain station cleanliness. Manage stock rotation." },
+          { companySlug: "aga-khan", branchName: "Aga Khan Hospital Nairobi (Parklands)", title: "Registered Nurse — Outpatient",
+            department: "Outpatient Services", vacancies: 3, type: "full_time",
+            salaryMin: 85_000, salaryMax: 120_000, county: "Nairobi", town: "Parklands",
+            category: "healthcare", experience: "mid",
+            requirements: "BScN or KRCHN. Active Nursing Council of Kenya licence. BLS-certified. 2+ years post-internship.",
+            responsibilities: "Provide patient assessment and care in the outpatient clinics. Administer medications. Document electronically." },
+          { companySlug: "aga-khan", branchName: "Aga Khan Hospital Nairobi (Parklands)", title: "Hospital Cleaner",
+            department: "Environmental Services", vacancies: 6, type: "full_time",
+            salaryMin: 18_000, salaryMax: 24_000, county: "Nairobi", town: "Parklands",
+            category: "cleaning", experience: "entry",
+            requirements: "KCSE preferred but not required. Able to follow infection-prevention protocols. Willing to work shifts.",
+            responsibilities: "Clean and disinfect wards, theatres and public areas. Handle medical waste per protocol. Restock supplies." },
+          { companySlug: "aga-khan", branchName: "Aga Khan Hospital Nairobi (Parklands)", title: "Pharmacy Technologist",
+            department: "Pharmacy", vacancies: 2, type: "full_time",
+            salaryMin: 50_000, salaryMax: 70_000, county: "Nairobi", town: "Parklands",
+            category: "healthcare", experience: "mid",
+            requirements: "Diploma in Pharmaceutical Technology. Active PPB licence. 2+ years hospital pharmacy experience.",
+            responsibilities: "Dispense outpatient prescriptions. Maintain inventory accuracy. Counsel patients on medication use." },
+        ];
+        */
     }
     catch (err) {
         // 2026-06: critical that bootstrap failure NEVER takes down the live
