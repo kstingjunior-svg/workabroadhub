@@ -18,6 +18,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { KenyaCareersApplySheet } from "@/components/kenya-careers-apply-sheet";
 
 interface JobDetail {
   id: string;
@@ -105,6 +106,7 @@ export default function KenyaCareersJob() {
   const [job,     setJob]     = useState<JobDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState<string | null>(null);
+  const [applyOpen, setApplyOpen] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -179,13 +181,14 @@ export default function KenyaCareersJob() {
   }, [params?.id]);
 
   function handleApplyClick() {
-    // Phase 1: applications launch later — keep the click discoverable but
-    // honest. Phase 2 will replace this with the actual application sheet.
-    toast({
-      title: "Applications open soon",
-      description: "We're getting the application form ready — applications open in a few days. We'll email you when it's live.",
-    });
+    // 2026-06 Phase 2: opens the apply sheet which handles all 4 user states
+    // (anonymous → signin, free → upgrade, paid → form, hit-daily-limit →
+    // higher-tier upsell). Tier check happens server-side in /apply-status.
+    setApplyOpen(true);
   }
+
+  // Suppress unused warning for the toast hook — kept in case of future inline notifications.
+  void toast;
 
   if (loading) {
     return (
@@ -391,6 +394,16 @@ export default function KenyaCareersJob() {
           </Card>
         )}
       </div>
+
+      {/* Phase 2: Apply sheet — handles all 4 user states (anon/free/paid/limit). */}
+      <KenyaCareersApplySheet
+        open={applyOpen}
+        onClose={() => setApplyOpen(false)}
+        jobId={job.id}
+        jobTitle={job.title}
+        companyName={job.company.name}
+        companyVerified={job.company.verified}
+      />
     </div>
   );
 }

@@ -125,6 +125,7 @@ const AccountPaymentStatus = lazyWithRetry(() => import("@/pages/account-payment
 // from overseas-jobs / payments / subscriptions)
 const KenyaCareers    = lazyWithRetry(() => import("@/pages/kenya-careers"));
 const KenyaCareersJob = lazyWithRetry(() => import("@/pages/kenya-careers-job"));
+const KenyaCareersMyApplications = lazyWithRetry(() => import("@/pages/kenya-careers-my-applications"));
 const ServiceOrderFlow = lazyWithRetry(() => import("@/pages/service-order-flow"));
 const LoginPage = lazyWithRetry(() => import("@/pages/login"));
 const ForgotPassword = lazyWithRetry(() => import("@/pages/forgot-password"));
@@ -349,6 +350,7 @@ const LazyAccountVerify = withSuspense(AccountVerify);
 const LazyAccountPaymentStatus = withSuspense(AccountPaymentStatus);
 const LazyKenyaCareers    = withSuspense(KenyaCareers);
 const LazyKenyaCareersJob = withSuspense(KenyaCareersJob);
+const LazyKenyaCareersMyApplications = withSuspense(KenyaCareersMyApplications);
 const LazyServiceOrderFlow = withSuspense(ServiceOrderFlow);
 const LazyReferrals = withSuspense(Referrals);
 const LazyReferralTerms = withSuspense(ReferralTerms);
@@ -501,9 +503,10 @@ function AuthenticatedRoutes() {
       <Route path="/my-overview" component={LazyMyOverview} />
       <Route path="/account/verify" component={LazyAccountVerify} />
       <Route path="/account/payment-status" component={LazyAccountPaymentStatus} />
-      {/* Kenya Careers — Phase 1 public browse */}
+      {/* Kenya Careers — Phase 1 public browse + Phase 2 applications */}
       <Route path="/kenya-careers" component={LazyKenyaCareers} />
       <Route path="/kenya-careers/job/:id" component={LazyKenyaCareersJob} />
+      <Route path="/kenya-careers/my-applications" component={LazyKenyaCareersMyApplications} />
       <Route path="/services/order/:slug" component={LazyServiceOrderFlow} />
       <Route path="/login" component={LazyLoginPage} />
       <Route path="/signup" component={LazyLoginPage} />

@@ -16,7 +16,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import {
-  Briefcase, MapPin, Building2, Search, Loader2, BadgeCheck, ChevronRight, Users, Globe2,
+  Briefcase, MapPin, Building2, Search, Loader2, BadgeCheck, ChevronRight, Users, Globe2, Inbox,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -287,6 +287,17 @@ export default function KenyaCareers() {
       </section>
 
       <div className="max-w-5xl mx-auto px-4">
+        {/* 2026-06 Phase 2: quick link to "My applications" so signed-in users
+            can track what they've sent. The link is harmless for anonymous
+            users — server will route them to /login. */}
+        <div className="mt-4 flex justify-end">
+          <Link href="/kenya-careers/my-applications">
+            <Button variant="ghost" size="sm" className="text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-900/20" data-testid="link-my-applications">
+              <Inbox className="h-4 w-4 mr-1.5" /> My applications
+            </Button>
+          </Link>
+        </div>
+
         {/* ── FEATURED EMPLOYERS STRIP ─────────────────────────────────── */}
         {employers.length > 0 && (
           <section className="mt-6">
