@@ -42,6 +42,7 @@ import { WeveBeenWhereYouAre } from "@/components/weve-been-where-you-are";
 import { DashboardSuccessStories } from "@/components/dashboard-success-stories";
 import { DashboardBestMatch } from "@/components/dashboard-best-match";
 import { DashboardVisaJobsLocked } from "@/components/dashboard-visa-jobs-locked";
+import { DashboardKenyaCareersCard } from "@/components/dashboard-kenya-careers-card";
 import { LiveActivityStrip } from "@/components/live-activity-strip";
 import { AgencyAlertBanner } from "@/components/agency-alert-banner";
 import { VerificationBanner } from "@/components/verification-banner";
@@ -1362,6 +1363,12 @@ export default function Dashboard() {
             apply" overlay → drives Pro upgrades from a position of value,
             not pressure. Pro/admin users get direct portal apply links. */}
         <DashboardVisaJobsLocked />
+
+        {/* ── KENYA CAREERS — local-employer jobs (Phase 1) ────────────────
+            2026-06: pairs with the visa-sponsored card above so users see
+            both paths — overseas and in-country. Free public browse, no
+            Pro gate. Shows live stats from /api/local-jobs/stats. */}
+        <DashboardKenyaCareersCard />
 
         {/* ── JOB DESTINATIONS — 9-country grid (RIGHT UNDER 50 JOBS) ─────
             User feedback: this is the conversion hot-spot. Show every

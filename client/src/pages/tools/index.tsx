@@ -78,6 +78,22 @@ const TOOLS = [
     cta: "Browse Jobs",
     requiresAuth: false,
   },
+  // 2026-06: Kenya Careers Phase 1 — local-employer recruitment portal.
+  // Sits next to Visa Sponsorship Jobs because they're the two job-browsing
+  // entry points (overseas vs in-country). Free to browse, no auth required.
+  {
+    id: "kenya-careers",
+    href: "/kenya-careers",
+    icon: Briefcase,
+    iconBg: "bg-emerald-100 dark:bg-emerald-900/30",
+    iconColor: "text-emerald-600 dark:text-emerald-400",
+    label: "Kenya Careers",
+    badge: "New · Local",
+    badgeColor: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300",
+    description: "Real jobs right here in Kenya — Naivas, Quickmart, Carrefour, Java House, hospitals, and more. Filter by county, employer or category. No visa needed.",
+    cta: "Browse Kenya Jobs",
+    requiresAuth: false,
+  },
   {
     id: "cv-templates",
     href: "/tools/cv-templates",

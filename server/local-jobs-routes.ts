@@ -1,0 +1,347 @@
+/**
+ * Local Jobs Routes — Kenya Careers Phase 1 (public read-only)
+ *
+ * 2026-06: Phase 1 of the Kenya Careers employer portal. Read-only public
+ * browsing endpoints for the new /kenya-careers section. Strictly isolated
+ * from the existing payment / auth / visa-jobs / subscription systems:
+ *
+ *   • Mounted under a separate /api/local-jobs prefix (no collision with
+ *     /api/jobs or /api/jobs/sponsorship which serve the overseas board)
+ *   • No isAuthenticated middleware — fully public so SEO crawls work
+ *   • No FK joins back into the existing users/jobs/payments tables
+ *   • All writes (apply, post job, approve company) live in future phases
+ *
+ * Endpoints:
+ *   GET /api/local-jobs                — paginated job list with filters
+ *   GET /api/local-jobs/filters        — distinct counties/categories/companies
+ *                                        for dropdowns
+ *   GET /api/local-jobs/companies      — list of approved companies with job counts
+ *   GET /api/local-jobs/stats          — total jobs / counties served / employers
+ *   GET /api/local-jobs/:id            — single job detail with company + branch
+ */
+import type { Express, Request, Response } from "express";
+import { pool } from "./db";
+
+const VALID_EMPLOYMENT_TYPES = new Set(["full_time", "part_time", "contract", "internship", "casual"]);
+const VALID_EXPERIENCE       = new Set(["entry", "mid", "senior", "any"]);
+
+export function registerLocalJobsRoutes(app: Express): void {
+  // ─── GET /api/local-jobs ──────────────────────────────────────────────────
+  // Public job list with optional filters. No auth required.
+  // Query params:
+  //   county    — exact match
+  //   category  — exact match
+  //   companyId — exact match
+  //   experienceLevel — entry|mid|senior|any
+  //   employmentType  — full_time|part_time|contract|internship|casual
+  //   search    — ILIKE on title / department / company name
+  //   limit     — default 24, max 100
+  //   offset    — default 0
+  app.get("/api/local-jobs", async (req: Request, res: Response) => {
+    try {
+      const {
+        county, category, companyId, experienceLevel, employmentType, search,
+      } = req.query as Record<string, string | undefined>;
+      const limit  = Math.min(Number(req.query.limit  ?? 24), 100);
+      const offset = Math.max(Number(req.query.offset ?? 0),  0);
+
+      const conditions: string[] = ["j.status = 'open'", "c.status = 'approved'"];
+      const params: any[] = [];
+      const push = (clause: string, value: any) => {
+        params.push(value);
+        conditions.push(clause.replace("$$", `$${params.length}`));
+      };
+
+      if (county)       push("j.county = $$",                county);
+      if (category)     push("j.category = $$",              category);
+      if (companyId)    push("j.company_id = $$",            companyId);
+      if (experienceLevel && VALID_EXPERIENCE.has(experienceLevel)) {
+        push("j.experience_level = $$",                       experienceLevel);
+      }
+      if (employmentType && VALID_EMPLOYMENT_TYPES.has(employmentType)) {
+        push("j.employment_type = $$",                        employmentType);
+      }
+      if (search && search.trim()) {
+        const term = `%${search.trim()}%`;
+        params.push(term, term, term);
+        const i = params.length;
+        conditions.push(
+          `(j.title ILIKE $${i - 2} OR j.department ILIKE $${i - 1} OR c.name ILIKE $${i})`,
+        );
+      }
+
+      const where = conditions.join(" AND ");
+
+      // Count + page in parallel
+      const [countResult, listResult] = await Promise.all([
+        pool.query<{ total: string }>(
+          `SELECT COUNT(*)::text AS total
+             FROM local_jobs j
+             JOIN companies   c ON c.id = j.company_id
+            WHERE ${where}`,
+          params,
+        ),
+        pool.query<{
+          id: string; title: string; department: string | null; vacancies: number;
+          employment_type: string | null;
+          salary_min: number | null; salary_max: number | null;
+          county: string | null; town: string | null;
+          experience_level: string | null; category: string | null;
+          deadline: Date | null;
+          created_at: Date;
+          company_id: string; company_name: string; company_slug: string | null;
+          company_industry: string | null; company_verified_at: Date | null;
+          branch_id: string | null; branch_name: string | null;
+        }>(
+          `SELECT
+              j.id, j.title, j.department, j.vacancies, j.employment_type,
+              j.salary_min, j.salary_max, j.county, j.town,
+              j.experience_level, j.category, j.deadline, j.created_at,
+              c.id AS company_id, c.name AS company_name, c.slug AS company_slug,
+              c.industry AS company_industry, c.verified_at AS company_verified_at,
+              b.id AS branch_id, b.name AS branch_name
+             FROM local_jobs j
+             JOIN companies c ON c.id = j.company_id
+        LEFT JOIN branches  b ON b.id = j.branch_id
+            WHERE ${where}
+            ORDER BY j.created_at DESC, j.id
+            LIMIT ${limit} OFFSET ${offset}`,
+          params,
+        ),
+      ]);
+
+      const total = Number(countResult.rows[0]?.total ?? "0");
+
+      const jobs = listResult.rows.map((r) => ({
+        id:              r.id,
+        title:           r.title,
+        department:      r.department,
+        vacancies:       r.vacancies,
+        employmentType:  r.employment_type,
+        salaryMin:       r.salary_min,
+        salaryMax:       r.salary_max,
+        county:          r.county,
+        town:            r.town,
+        experienceLevel: r.experience_level,
+        category:        r.category,
+        deadline:        r.deadline,
+        createdAt:       r.created_at,
+        company: {
+          id:        r.company_id,
+          name:      r.company_name,
+          slug:      r.company_slug,
+          industry:  r.company_industry,
+          verified:  !!r.company_verified_at,
+        },
+        branch: r.branch_id ? { id: r.branch_id, name: r.branch_name } : null,
+      }));
+
+      res.setHeader("Cache-Control", "public, max-age=60");
+      res.json({ total, limit, offset, jobs });
+    } catch (err: any) {
+      // Bootstrap may have failed (tables missing). Return empty list rather
+      // than 500 so the public page still loads — Phase 1 is best-effort.
+      if (err?.code === "42P01") {
+        return res.json({ total: 0, limit: 24, offset: 0, jobs: [] });
+      }
+      console.error("[GET /api/local-jobs]", err?.message);
+      res.status(500).json({ message: "Could not load local jobs." });
+    }
+  });
+
+  // ─── GET /api/local-jobs/filters ──────────────────────────────────────────
+  // Distinct values for the filter dropdowns. Cached aggressively because
+  // these change rarely once Phase 3 ships employer posting.
+  app.get("/api/local-jobs/filters", async (_req: Request, res: Response) => {
+    try {
+      const [countiesRes, categoriesRes, companiesRes] = await Promise.all([
+        pool.query<{ county: string }>(
+          `SELECT DISTINCT county FROM local_jobs WHERE status='open' AND county IS NOT NULL ORDER BY county`,
+        ),
+        pool.query<{ category: string }>(
+          `SELECT DISTINCT category FROM local_jobs WHERE status='open' AND category IS NOT NULL ORDER BY category`,
+        ),
+        pool.query<{ id: string; name: string }>(
+          `SELECT id, name FROM companies WHERE status='approved' ORDER BY name`,
+        ),
+      ]);
+      res.setHeader("Cache-Control", "public, max-age=300");
+      res.json({
+        counties:   countiesRes.rows.map((r) => r.county),
+        categories: categoriesRes.rows.map((r) => r.category),
+        companies:  companiesRes.rows,
+      });
+    } catch (err: any) {
+      if (err?.code === "42P01") {
+        return res.json({ counties: [], categories: [], companies: [] });
+      }
+      console.error("[GET /api/local-jobs/filters]", err?.message);
+      res.status(500).json({ message: "Could not load filters." });
+    }
+  });
+
+  // ─── GET /api/local-jobs/companies ────────────────────────────────────────
+  // Public list of approved employers + their open-job counts. Powers the
+  // "Featured Employers" strip on the landing page.
+  app.get("/api/local-jobs/companies", async (_req: Request, res: Response) => {
+    try {
+      const { rows } = await pool.query<{
+        id: string; name: string; slug: string | null;
+        industry: string | null; county: string | null;
+        verified_at: Date | null; logo_url: string | null;
+        job_count: string;
+      }>(`
+        SELECT
+            c.id, c.name, c.slug, c.industry, c.county,
+            c.verified_at, c.logo_url,
+            COUNT(j.id) FILTER (WHERE j.status = 'open')::text AS job_count
+          FROM companies c
+     LEFT JOIN local_jobs j ON j.company_id = c.id
+         WHERE c.status = 'approved'
+      GROUP BY c.id
+      ORDER BY c.name
+      `);
+
+      res.setHeader("Cache-Control", "public, max-age=300");
+      res.json({
+        companies: rows.map((r) => ({
+          id:       r.id,
+          name:     r.name,
+          slug:     r.slug,
+          industry: r.industry,
+          county:   r.county,
+          logoUrl:  r.logo_url,
+          verified: !!r.verified_at,
+          jobCount: Number(r.job_count),
+        })),
+      });
+    } catch (err: any) {
+      if (err?.code === "42P01") return res.json({ companies: [] });
+      console.error("[GET /api/local-jobs/companies]", err?.message);
+      res.status(500).json({ message: "Could not load companies." });
+    }
+  });
+
+  // ─── GET /api/local-jobs/stats ────────────────────────────────────────────
+  // Headline numbers for the landing hero: "X jobs · Y employers · Z counties".
+  app.get("/api/local-jobs/stats", async (_req: Request, res: Response) => {
+    try {
+      const { rows: [stats] } = await pool.query<{
+        total_jobs: string; total_employers: string; total_counties: string; total_vacancies: string;
+      }>(`
+        SELECT
+          (SELECT COUNT(*)::text                                FROM local_jobs WHERE status='open')      AS total_jobs,
+          (SELECT COUNT(DISTINCT company_id)::text              FROM local_jobs WHERE status='open')      AS total_employers,
+          (SELECT COUNT(DISTINCT county)::text                  FROM local_jobs WHERE status='open' AND county IS NOT NULL) AS total_counties,
+          (SELECT COALESCE(SUM(vacancies), 0)::text             FROM local_jobs WHERE status='open')      AS total_vacancies
+      `);
+      res.setHeader("Cache-Control", "public, max-age=300");
+      res.json({
+        totalJobs:      Number(stats?.total_jobs      ?? "0"),
+        totalEmployers: Number(stats?.total_employers ?? "0"),
+        totalCounties:  Number(stats?.total_counties  ?? "0"),
+        totalVacancies: Number(stats?.total_vacancies ?? "0"),
+      });
+    } catch (err: any) {
+      if (err?.code === "42P01") {
+        return res.json({ totalJobs: 0, totalEmployers: 0, totalCounties: 0, totalVacancies: 0 });
+      }
+      console.error("[GET /api/local-jobs/stats]", err?.message);
+      res.status(500).json({ message: "Could not load stats." });
+    }
+  });
+
+  // ─── GET /api/local-jobs/:id ──────────────────────────────────────────────
+  // Single job detail with full company + branch info. Used by the job
+  // detail page at /kenya-careers/job/:id.
+  app.get("/api/local-jobs/:id", async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      // Reject obviously-malformed IDs early so we don't burn a query
+      if (!/^[0-9a-f-]{8,}$/i.test(id)) {
+        return res.status(400).json({ message: "Invalid job id." });
+      }
+
+      const { rows: [job] } = await pool.query<{
+        id: string; title: string; department: string | null; vacancies: number;
+        employment_type: string | null;
+        salary_min: number | null; salary_max: number | null;
+        requirements: string | null; responsibilities: string | null;
+        deadline: Date | null; county: string | null; town: string | null;
+        experience_level: string | null; category: string | null;
+        status: string; created_at: Date;
+        company_id: string; company_name: string; company_slug: string | null;
+        company_industry: string | null; company_description: string | null;
+        company_website: string | null; company_verified_at: Date | null;
+        company_county: string | null;
+        branch_id: string | null; branch_name: string | null;
+        branch_county: string | null; branch_town: string | null;
+        branch_location: string | null;
+      }>(`
+        SELECT
+            j.id, j.title, j.department, j.vacancies, j.employment_type,
+            j.salary_min, j.salary_max, j.requirements, j.responsibilities,
+            j.deadline, j.county, j.town, j.experience_level, j.category,
+            j.status, j.created_at,
+            c.id AS company_id, c.name AS company_name, c.slug AS company_slug,
+            c.industry AS company_industry, c.description AS company_description,
+            c.website AS company_website, c.verified_at AS company_verified_at,
+            c.county AS company_county,
+            b.id AS branch_id, b.name AS branch_name,
+            b.county AS branch_county, b.town AS branch_town,
+            b.location_detail AS branch_location
+          FROM local_jobs j
+          JOIN companies   c ON c.id = j.company_id
+     LEFT JOIN branches    b ON b.id = j.branch_id
+         WHERE j.id = $1
+           AND c.status = 'approved'
+         LIMIT 1
+      `, [id]);
+
+      if (!job) return res.status(404).json({ message: "Job not found or no longer available." });
+
+      res.setHeader("Cache-Control", "public, max-age=60");
+      res.json({
+        id:              job.id,
+        title:           job.title,
+        department:      job.department,
+        vacancies:       job.vacancies,
+        employmentType:  job.employment_type,
+        salaryMin:       job.salary_min,
+        salaryMax:       job.salary_max,
+        requirements:    job.requirements,
+        responsibilities: job.responsibilities,
+        deadline:        job.deadline,
+        county:          job.county,
+        town:            job.town,
+        experienceLevel: job.experience_level,
+        category:        job.category,
+        status:          job.status,
+        createdAt:       job.created_at,
+        company: {
+          id:          job.company_id,
+          name:        job.company_name,
+          slug:        job.company_slug,
+          industry:    job.company_industry,
+          description: job.company_description,
+          website:     job.company_website,
+          verified:    !!job.company_verified_at,
+          county:      job.company_county,
+        },
+        branch: job.branch_id ? {
+          id:       job.branch_id,
+          name:     job.branch_name,
+          county:   job.branch_county,
+          town:     job.branch_town,
+          location: job.branch_location,
+        } : null,
+      });
+    } catch (err: any) {
+      if (err?.code === "42P01") {
+        return res.status(404).json({ message: "Job not found." });
+      }
+      console.error(`[GET /api/local-jobs/:id]`, err?.message);
+      res.status(500).json({ message: "Could not load job." });
+    }
+  });
+}

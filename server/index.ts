@@ -522,6 +522,21 @@ app.use((req, res, next) => {
 
     await registerRoutes(httpServer, app);
 
+    // 2026-06: Kenya Careers Phase 1 — public local-jobs portal. Mounted
+    // under /api/local-jobs (separate from the overseas /api/jobs board)
+    // so a regression in this new code can't take down the live paid flows.
+    // Bootstrap creates the 4 new tables (companies, branches, local_jobs,
+    // local_job_applications) and seeds ~6 sample employers if the
+    // companies table is empty.
+    try {
+      const { registerLocalJobsRoutes } = await import("./local-jobs-routes");
+      registerLocalJobsRoutes(app);
+      const { bootstrapLocalJobs } = await import("./lib/local-jobs-bootstrap");
+      await bootstrapLocalJobs();
+    } catch (err: any) {
+      console.error("[Server] ❌ Kenya Careers bootstrap failed (non-fatal):", err?.message);
+    }
+
     // 2026-06: ensure the plans table has rows for trial/basic/monthly/
     // yearly/pro/pro_referral before any manual-grant endpoint can fire.
     // Was previously missing and broke admin grants with the message
