@@ -12,7 +12,7 @@ import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import {
   Briefcase, MapPin, ArrowLeft, BadgeCheck, Loader2, CheckCircle2,
-  Clock, XCircle, Trophy, ChevronRight, Inbox,
+  Clock, XCircle, Trophy, ChevronRight, Inbox, Eye, MessageCircle,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -20,7 +20,7 @@ import { Button } from "@/components/ui/button";
 
 interface ApplicationRow {
   id:        string;
-  status:    "submitted" | "shortlisted" | "rejected" | "hired" | string;
+  status:    "submitted" | "under_review" | "shortlisted" | "interview" | "hired" | "rejected" | string;
   appliedAt: string;
   updatedAt: string;
   coverNote: string | null;
@@ -39,10 +39,12 @@ interface ApplicationRow {
 }
 
 const STATUS_META: Record<string, { label: string; icon: any; color: string; bgClass: string }> = {
-  submitted:   { label: "Submitted",        icon: Clock,         color: "blue",    bgClass: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 ring-blue-200" },
-  shortlisted: { label: "Shortlisted",      icon: CheckCircle2,  color: "emerald", bgClass: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300 ring-emerald-200" },
-  hired:       { label: "Hired",            icon: Trophy,        color: "amber",   bgClass: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 ring-amber-200" },
-  rejected:    { label: "Not selected",     icon: XCircle,       color: "muted",   bgClass: "bg-muted text-muted-foreground" },
+  submitted:    { label: "Submitted",    icon: Clock,         color: "blue",    bgClass: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 ring-blue-200" },
+  under_review: { label: "Under review", icon: Eye,           color: "indigo",  bgClass: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 ring-indigo-200" },
+  shortlisted:  { label: "Shortlisted",  icon: CheckCircle2,  color: "emerald", bgClass: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300 ring-emerald-200" },
+  interview:    { label: "Interview",    icon: MessageCircle, color: "violet",  bgClass: "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300 ring-violet-200" },
+  hired:        { label: "Hired",        icon: Trophy,        color: "amber",   bgClass: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 ring-amber-200" },
+  rejected:     { label: "Not selected", icon: XCircle,       color: "muted",   bgClass: "bg-muted text-muted-foreground" },
 };
 
 function timeAgo(iso: string | null | undefined): string {

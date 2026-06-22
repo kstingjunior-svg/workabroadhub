@@ -145,6 +145,27 @@ export async function bootstrapLocalJobs(): Promise<void> {
       ON local_job_applications(applicant_user_id, applied_at DESC)
     `);
 
+    // Phase 2.5: extra applicant fields. Founder asked for county / highest
+    // education / years of experience / certificates upload so employers can
+    // pre-filter on the basics. All nullable to keep Phase 2 backfill simple
+    // — early applications without these still work.
+    await pool.query(`ALTER TABLE local_job_applications ADD COLUMN IF NOT EXISTS applicant_county    VARCHAR(60)`);
+    await pool.query(`ALTER TABLE local_job_applications ADD COLUMN IF NOT EXISTS highest_education   VARCHAR(80)`);
+    await pool.query(`ALTER TABLE local_job_applications ADD COLUMN IF NOT EXISTS years_experience    INTEGER`);
+    await pool.query(`ALTER TABLE local_job_applications ADD COLUMN IF NOT EXISTS certificates_url    TEXT`);
+
+    // Direct company_id stamp on the application row, so employer-side queries
+    // (Phase 3) don't need to join through local_jobs every time.
+    // Backfilled via a simple UPDATE for any pre-Phase-2.5 applications.
+    await pool.query(`ALTER TABLE local_job_applications ADD COLUMN IF NOT EXISTS company_id UUID`);
+    await pool.query(`
+      UPDATE local_job_applications a
+         SET company_id = j.company_id
+        FROM local_jobs j
+       WHERE a.job_id = j.id AND a.company_id IS NULL
+    `).catch(() => { /* table may be empty — non-fatal */ });
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_local_app_company ON local_job_applications(company_id)`);
+
     // ── 2. Seed sample data ─────────────────────────────────────────────────
     // Only seed if companies table is empty. Idempotent.
     const { rows: [{ count }] } = await pool.query<{ count: string }>(

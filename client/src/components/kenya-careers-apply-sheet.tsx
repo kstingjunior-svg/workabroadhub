@@ -16,9 +16,34 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { CheckCircle2, Upload, Loader2, X, Sparkles, BadgeCheck, AlertCircle, Lock } from "lucide-react";
+import { CheckCircle2, Upload, Loader2, X, Sparkles, BadgeCheck, AlertCircle, Lock, FileBadge2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+
+// Phase 2.5: Kenya's 47 counties — used in the apply form county dropdown.
+// Sorted alphabetically; matches the canonical IEBC list.
+const KENYA_COUNTIES = [
+  "Baringo", "Bomet", "Bungoma", "Busia", "Elgeyo-Marakwet", "Embu", "Garissa",
+  "Homa Bay", "Isiolo", "Kajiado", "Kakamega", "Kericho", "Kiambu", "Kilifi",
+  "Kirinyaga", "Kisii", "Kisumu", "Kitui", "Kwale", "Laikipia", "Lamu",
+  "Machakos", "Makueni", "Mandera", "Marsabit", "Meru", "Migori", "Mombasa",
+  "Murang'a", "Nairobi", "Nakuru", "Nandi", "Narok", "Nyamira", "Nyandarua",
+  "Nyeri", "Samburu", "Siaya", "Taita-Taveta", "Tana River", "Tharaka-Nithi",
+  "Trans Nzoia", "Turkana", "Uasin Gishu", "Vihiga", "Wajir", "West Pokot",
+];
+
+const EDUCATION_LEVELS = [
+  "KCSE",
+  "Certificate",
+  "Diploma",
+  "Higher Diploma",
+  "Bachelor's Degree",
+  "Master's Degree",
+  "PhD",
+  "Professional Certification",
+  "Other",
+];
 
 interface ApplyStatus {
   canApply:    boolean;
@@ -48,8 +73,14 @@ export function KenyaCareersApplySheet({
   const [submitted, setSubmitted] = useState<{ message: string; appsToday: number; dailyLimit: number } | null>(null);
   const [coverNote, setCoverNote] = useState("");
   const [cvFile, setCvFile] = useState<File | null>(null);
+  const [certFile, setCertFile] = useState<File | null>(null);
+  // Phase 2.5 extra fields
+  const [county, setCounty] = useState("");
+  const [education, setEducation] = useState("");
+  const [yearsExperience, setYearsExperience] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cvInputRef   = useRef<HTMLInputElement>(null);
+  const certInputRef = useRef<HTMLInputElement>(null);
 
   // Fetch tier status whenever the sheet opens
   useEffect(() => {
@@ -80,8 +111,12 @@ export function KenyaCareersApplySheet({
     setError(null);
     try {
       const fd = new FormData();
-      if (cvFile) fd.append("cv", cvFile);
-      if (coverNote.trim()) fd.append("coverNote", coverNote.trim());
+      if (cvFile)   fd.append("cv",           cvFile);
+      if (certFile) fd.append("certificates", certFile);
+      if (coverNote.trim())       fd.append("coverNote",       coverNote.trim());
+      if (county)                  fd.append("county",          county);
+      if (education)               fd.append("education",       education);
+      if (yearsExperience)         fd.append("yearsExperience", yearsExperience);
       const res = await fetch(`/api/local-jobs/jobs/${jobId}/apply`, {
         method: "POST",
         body: fd,
@@ -247,10 +282,63 @@ export function KenyaCareersApplySheet({
                 We'll send your phone, email and (if attached) your CV to <strong>{companyName}</strong>. They'll contact you directly if you're shortlisted.
               </p>
 
+              {/* County */}
+              <div>
+                <label htmlFor="apply-county" className="text-sm font-medium block mb-1.5">
+                  County you're based in
+                </label>
+                <select
+                  id="apply-county"
+                  value={county}
+                  onChange={(e) => setCounty(e.target.value)}
+                  className="w-full text-sm border rounded-md px-3 py-2 bg-background"
+                  data-testid="apply-county-input"
+                >
+                  <option value="">Select your county…</option>
+                  {KENYA_COUNTIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+
+              {/* Education + years */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label htmlFor="apply-edu" className="text-sm font-medium block mb-1.5">
+                    Highest education
+                  </label>
+                  <select
+                    id="apply-edu"
+                    value={education}
+                    onChange={(e) => setEducation(e.target.value)}
+                    className="w-full text-sm border rounded-md px-3 py-2 bg-background"
+                    data-testid="apply-education-input"
+                  >
+                    <option value="">Select…</option>
+                    {EDUCATION_LEVELS.map((l) => <option key={l} value={l}>{l}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="apply-years" className="text-sm font-medium block mb-1.5">
+                    Years of experience
+                  </label>
+                  <Input
+                    id="apply-years"
+                    type="number"
+                    min={0}
+                    max={50}
+                    inputMode="numeric"
+                    placeholder="e.g. 3"
+                    value={yearsExperience}
+                    onChange={(e) => setYearsExperience(e.target.value.replace(/[^0-9]/g, "").slice(0, 2))}
+                    className="text-sm"
+                    data-testid="apply-years-input"
+                  />
+                </div>
+              </div>
+
               {/* CV upload */}
               <div>
                 <label className="text-sm font-medium block mb-1.5">
-                  CV (optional — PDF or Word, max 5 MB)
+                  CV (PDF or Word, max 5 MB)
                 </label>
                 {cvFile ? (
                   <div className="flex items-center justify-between gap-2 p-2 rounded-md border bg-muted/30 text-sm">
@@ -258,7 +346,7 @@ export function KenyaCareersApplySheet({
                     <button
                       type="button"
                       className="text-xs text-rose-700 dark:text-rose-300 hover:underline"
-                      onClick={() => { setCvFile(null); if (fileInputRef.current) fileInputRef.current.value = ""; }}
+                      onClick={() => { setCvFile(null); if (cvInputRef.current) cvInputRef.current.value = ""; }}
                     >
                       Remove
                     </button>
@@ -268,7 +356,7 @@ export function KenyaCareersApplySheet({
                     <Upload className="h-4 w-4" />
                     <span>Tap to attach your CV</span>
                     <input
-                      ref={fileInputRef}
+                      ref={cvInputRef}
                       type="file"
                       accept=".pdf,.docx,.doc,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword"
                       className="hidden"
@@ -287,10 +375,52 @@ export function KenyaCareersApplySheet({
                 )}
               </div>
 
-              {/* Cover note */}
+              {/* Certificates upload (optional) */}
+              <div>
+                <label className="text-sm font-medium block mb-1.5 flex items-center gap-1">
+                  <FileBadge2 className="h-3.5 w-3.5" />
+                  Certificates (optional)
+                </label>
+                {certFile ? (
+                  <div className="flex items-center justify-between gap-2 p-2 rounded-md border bg-muted/30 text-sm">
+                    <span className="truncate flex-1">{certFile.name}</span>
+                    <button
+                      type="button"
+                      className="text-xs text-rose-700 dark:text-rose-300 hover:underline"
+                      onClick={() => { setCertFile(null); if (certInputRef.current) certInputRef.current.value = ""; }}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ) : (
+                  <label className="flex items-center justify-center gap-2 p-3 rounded-md border-2 border-dashed border-muted-foreground/30 hover:border-emerald-400 cursor-pointer text-sm text-muted-foreground">
+                    <Upload className="h-4 w-4" />
+                    <span>Diploma / transcripts (PDF or photo)</span>
+                    <input
+                      ref={certInputRef}
+                      type="file"
+                      accept=".pdf,.docx,.doc,.jpg,.jpeg,.png,.webp,application/pdf,image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f && f.size > 5 * 1024 * 1024) {
+                          setError("That certificate file is over 5 MB. Compress it or scan at lower resolution.");
+                          return;
+                        }
+                        setCertFile(f ?? null);
+                        setError(null);
+                      }}
+                      data-testid="apply-cert-input"
+                    />
+                  </label>
+                )}
+                <p className="text-[10px] text-muted-foreground mt-1">A clear phone photo of your highest certificate is fine.</p>
+              </div>
+
+              {/* Cover letter */}
               <div>
                 <label className="text-sm font-medium block mb-1.5">
-                  Short note (optional)
+                  Cover letter (optional)
                 </label>
                 <Textarea
                   placeholder="Why do you want this role? Keep it short — 2-3 sentences is fine."
