@@ -233,6 +233,25 @@ async function bootstrapLocalJobs() {
     `);
         await db_1.pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_notify_company_email ON employer_notify_signups(company_id, email)`);
         await db_1.pool.query(`CREATE INDEX IF NOT EXISTS idx_notify_company ON employer_notify_signups(company_id)`);
+        // 2026-06 Phase 4: company_admins links a WAH user account to a company
+        // they're allowed to manage (post jobs, edit profile, see applications).
+        // A user becomes an admin in two ways:
+        //   1. Their company_claims row gets approved by Tony  →  auto-insert
+        //   2. Tony grants directly via admin panel
+        // A user can manage multiple companies; a company can have multiple admins
+        // (HR manager + recruiter + branch manager all need access).
+        await db_1.pool.query(`
+      CREATE TABLE IF NOT EXISTS company_admins (
+        id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id  UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        user_id     UUID NOT NULL,
+        role        VARCHAR(24) NOT NULL DEFAULT 'admin',  -- admin|recruiter|viewer (Phase 5)
+        added_by    UUID,                                  -- admin who granted (null = self-claim)
+        created_at  TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+        await db_1.pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_company_admin_user ON company_admins(company_id, user_id)`);
+        await db_1.pool.query(`CREATE INDEX IF NOT EXISTS idx_company_admin_user ON company_admins(user_id)`);
         // ── 2. Phase 3a expansion: 36 employers, 60+ branches, 100+ jobs ────────
         // Catalogue lives in ./local-jobs-seed-data.ts so it can grow without
         // bloating this file. Inserts are IDEMPOTENT — we use ON CONFLICT(slug)
