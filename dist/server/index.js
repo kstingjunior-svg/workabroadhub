@@ -452,16 +452,28 @@ app.use((req, res, next) => {
         // IMPORTANT:
         // registerRoutes(app)
         // NOT registerRoutes(httpServer, app)
-        await (0, routes_1.registerRoutes)(httpServer, app);
-        // 2026-06: Kenya Careers Phase 1 — public local-jobs portal. Mounted
-        // under /api/local-jobs (separate from the overseas /api/jobs board)
-        // so a regression in this new code can't take down the live paid flows.
-        // Bootstrap creates the 4 new tables (companies, branches, local_jobs,
-        // local_job_applications) and seeds ~6 sample employers if the
-        // companies table is empty.
+        // 2026-06 CRITICAL ORDERING: Kenya Careers /api/local-jobs/* routes must
+        // be registered BEFORE registerRoutes(), because registerRoutes() ends
+        // with an `app.use("/api", 404)` catch-all (server/routes.ts ~line 21454)
+        // that would otherwise intercept every /api/local-jobs/* request and
+        // return 404 — exactly the bug the founder reported as "Could not load
+        // jobs right now" on /kenya-careers. Express matches routes in
+        // registration order, so registering here guarantees our handlers win.
+        //
+        // Bootstrap (DDL + seed) still runs AFTER registerRoutes — it doesn't
+        // affect routing, only fills the tables in. Tables get created lazily;
+        // if bootstrap fails the routes still respond (they catch 42P01 and
+        // return empty arrays).
         try {
             const { registerLocalJobsRoutes } = await Promise.resolve().then(() => __importStar(require("./local-jobs-routes")));
             registerLocalJobsRoutes(app);
+        }
+        catch (err) {
+            console.error("[Server] ❌ Kenya Careers route registration failed (non-fatal):", err?.message);
+        }
+        await (0, routes_1.registerRoutes)(httpServer, app);
+        // Bootstrap can run after registerRoutes — it only touches the DB.
+        try {
             const { bootstrapLocalJobs } = await Promise.resolve().then(() => __importStar(require("./lib/local-jobs-bootstrap")));
             await bootstrapLocalJobs();
         }
