@@ -190,6 +190,37 @@ export async function bootstrapLocalJobs(): Promise<void> {
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_company_claims_company ON company_claims(company_id)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_company_claims_status  ON company_claims(status)`);
 
+    // 2026-06 SAFETY: founder flagged that the seeded jobs are NOT real
+    // postings — Naivas, Aga Khan etc. never authorised them. Until real
+    // employers post real jobs, every seeded row gets is_seed=true and
+    // applications on those rows are blocked at the API layer. This is the
+    // legal safety net. When Phase 4 (employer self-service) ships, real
+    // employer postings will have is_seed=false and accept applications.
+    await pool.query(`ALTER TABLE local_jobs ADD COLUMN IF NOT EXISTS is_seed BOOLEAN NOT NULL DEFAULT false`);
+    // Backfill: every row currently in local_jobs was inserted from the
+    // catalogue, so mark them all as seed. Safe to re-run.
+    await pool.query(`UPDATE local_jobs SET is_seed = true WHERE is_seed = false`).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_local_jobs_is_seed ON local_jobs(is_seed) WHERE is_seed = true`);
+
+    // 2026-06 SAFETY: when a visitor tries to apply for a sample listing,
+    // they see a "Notify me when {Company} starts posting real jobs" CTA
+    // instead. Their email/phone lands here so Tony can email them when
+    // Phase 4 onboards the actual employer. No payment, no false promise.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS employer_notify_signups (
+        id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id  UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        email       VARCHAR(160) NOT NULL,
+        phone       VARCHAR(40),
+        signed_up_user_id UUID,                -- optional — present if signed in
+        source_job_id UUID,                    -- which sample job triggered this signup
+        notified_at TIMESTAMP,                 -- null until we actually email them
+        created_at  TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_notify_company_email ON employer_notify_signups(company_id, email)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_notify_company ON employer_notify_signups(company_id)`);
+
     // ── 2. Phase 3a expansion: 36 employers, 60+ branches, 100+ jobs ────────
     // Catalogue lives in ./local-jobs-seed-data.ts so it can grow without
     // bloating this file. Inserts are IDEMPOTENT — we use ON CONFLICT(slug)
@@ -272,8 +303,8 @@ export async function bootstrapLocalJobs(): Promise<void> {
             `INSERT INTO local_jobs (
                 company_id, branch_id, title, department, vacancies, employment_type,
                 salary_min, salary_max, requirements, responsibilities, deadline,
-                county, town, experience_level, category, status
-             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 'open')
+                county, town, experience_level, category, status, is_seed
+             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 'open', true)
              ON CONFLICT DO NOTHING`,
             [
               companyId, branchId, role.title, role.department, role.vacancies, role.type,

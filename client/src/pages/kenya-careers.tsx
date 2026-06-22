@@ -37,6 +37,7 @@ interface Job {
   category: string | null;
   deadline: string | null;
   createdAt: string;
+  isSeed: boolean;   // 2026-06 SAFETY: true = sample listing, applications disabled
   company: { id: string; name: string; slug: string | null; industry: string | null; verified: boolean };
   branch: { id: string; name: string } | null;
 }
@@ -231,6 +232,10 @@ export default function KenyaCareers() {
           category:        raw?.category ?? null,
           deadline:        raw?.deadline ?? null,
           createdAt:       String(raw?.createdAt ?? new Date().toISOString()),
+          // 2026-06 SAFETY: default to true if the server didn't tell us
+          // (old shell, missing column). Safer to flag an unknown job as
+          // sample than to misrepresent it as a real opening.
+          isSeed:          raw?.isSeed !== false,
           company: {
             id:       String(raw?.company?.id ?? ""),
             name:     String(raw?.company?.name ?? "Employer"),
@@ -284,8 +289,13 @@ export default function KenyaCareers() {
             Kenya Careers
           </h1>
           <p className="text-emerald-50 text-base md:text-lg max-w-xl mx-auto">
-            Real jobs from Naivas, Quickmart, Carrefour, Java House, hospitals and more —
-            right here in Kenya. No visa needed.
+            See what jobs at Kenya's top employers — Naivas, Quickmart, Carrefour, Java House,
+            hospitals and more — typically look like. Be the first to know when they post real openings.
+          </p>
+          {/* 2026-06 SAFETY: honest disclosure in the hero. Every listing is
+              labelled "Sample" until the employer onboards. No misrepresentation. */}
+          <p className="text-emerald-100/90 text-xs mt-2 max-w-md mx-auto">
+            All current listings are samples — we're onboarding employers now. Tap "Notify me" on any role to be alerted when real applications open.
           </p>
 
           {stats && (
@@ -494,10 +504,24 @@ export default function KenyaCareers() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 flex-wrap mb-1">
                         <h3 className="font-semibold text-base leading-tight">{j.title}</h3>
-                        {timeAgo(j.createdAt) === "today" && (
-                          <span className="text-[9px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200 px-1.5 py-0.5 rounded uppercase tracking-wide ring-1 ring-emerald-200 dark:ring-emerald-800">
-                            New today
+                        {/* 2026-06 SAFETY: every seeded job carries this badge so
+                            visitors can see at a glance that this isn't a verified
+                            employer posting. Real employer postings (Phase 4) will
+                            have isSeed=false and won't show this badge. */}
+                        {j.isSeed ? (
+                          <span
+                            className="text-[9px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200 px-1.5 py-0.5 rounded uppercase tracking-wide ring-1 ring-amber-300 dark:ring-amber-800"
+                            data-testid={`badge-sample-${j.id}`}
+                            title="This is a sample listing — the employer hasn't been onboarded yet"
+                          >
+                            Sample listing
                           </span>
+                        ) : (
+                          timeAgo(j.createdAt) === "today" && (
+                            <span className="text-[9px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200 px-1.5 py-0.5 rounded uppercase tracking-wide ring-1 ring-emerald-200 dark:ring-emerald-800">
+                              New today
+                            </span>
+                          )
                         )}
                       </div>
                       <div className="flex items-center gap-1.5 text-sm text-muted-foreground">

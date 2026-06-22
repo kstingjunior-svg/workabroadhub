@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { KenyaCareersApplySheet } from "@/components/kenya-careers-apply-sheet";
 import { KenyaCareersClaimSheet } from "@/components/kenya-careers-claim-sheet";
+import { KenyaCareersNotifySheet } from "@/components/kenya-careers-notify-sheet";
 
 interface JobDetail {
   id: string;
@@ -38,6 +39,7 @@ interface JobDetail {
   category: string | null;
   status: string;
   createdAt: string;
+  isSeed: boolean;   // 2026-06 SAFETY: true = sample listing, no real applications
   company: {
     id: string;
     name: string;
@@ -109,6 +111,7 @@ export default function KenyaCareersJob() {
   const [error,   setError]   = useState<string | null>(null);
   const [applyOpen, setApplyOpen] = useState(false);
   const [claimOpen, setClaimOpen] = useState(false);
+  const [notifyOpen, setNotifyOpen] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -154,6 +157,9 @@ export default function KenyaCareersJob() {
           category:        data?.category ?? null,
           status:          String(data?.status ?? "open"),
           createdAt:       String(data?.createdAt ?? new Date().toISOString()),
+          // 2026-06 SAFETY: default to true if unknown (safer to label
+          // unknown-provenance as sample than to misrepresent it as real).
+          isSeed:          data?.isSeed !== false,
           company: {
             id:          String(data?.company?.id ?? ""),
             name:        String(data?.company?.name ?? "Employer"),
@@ -315,18 +321,48 @@ export default function KenyaCareersJob() {
               </div>
             )}
 
-            {/* Apply button — Phase 1 placeholder */}
+            {/* 2026-06 SAFETY: Sample-listing disclosure for seed jobs. The
+                Apply button is REPLACED with a Notify-me CTA — no payment,
+                no false promise that the application reaches the employer. */}
+            {job.isSeed && (
+              <div className="mt-5 rounded-lg bg-amber-50 dark:bg-amber-900/20 ring-1 ring-amber-300 dark:ring-amber-800 p-4">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="h-5 w-5 text-amber-700 dark:text-amber-300 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-semibold text-amber-900 dark:text-amber-200 text-sm mb-1">
+                      Sample listing — {job.company.name} hasn't been onboarded yet
+                    </p>
+                    <p className="text-xs text-amber-800 dark:text-amber-300/90 leading-relaxed">
+                      We're showing what jobs at {job.company.name} typically look like, but they haven't confirmed listings with WorkAbroad Hub yet. Tap below and we'll email you the moment they start posting real openings.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="mt-5 flex flex-wrap gap-2">
-              <Button
-                size="lg"
-                onClick={handleApplyClick}
-                disabled={!!closed}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                data-testid="btn-apply-local-job"
-              >
-                <Sparkles className="h-4 w-4 mr-1.5" />
-                {closed ? "Applications closed" : "Apply for this job"}
-              </Button>
+              {job.isSeed ? (
+                <Button
+                  size="lg"
+                  onClick={() => setNotifyOpen(true)}
+                  className="bg-amber-600 hover:bg-amber-700 text-white"
+                  data-testid="btn-notify-local-job"
+                >
+                  <Sparkles className="h-4 w-4 mr-1.5" />
+                  Notify me when {job.company.name} starts hiring
+                </Button>
+              ) : (
+                <Button
+                  size="lg"
+                  onClick={handleApplyClick}
+                  disabled={!!closed}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                  data-testid="btn-apply-local-job"
+                >
+                  <Sparkles className="h-4 w-4 mr-1.5" />
+                  {closed ? "Applications closed" : "Apply for this job"}
+                </Button>
+              )}
               {job.company.website && (
                 <Button asChild variant="outline" size="lg">
                   <a href={job.company.website} target="_blank" rel="noopener noreferrer">
@@ -423,6 +459,15 @@ export default function KenyaCareersJob() {
         onClose={() => setClaimOpen(false)}
         companyId={job.company.id}
         companyName={job.company.name}
+      />
+
+      {/* 2026-06 SAFETY: Notify-me sheet for sample listings (replaces Apply) */}
+      <KenyaCareersNotifySheet
+        open={notifyOpen}
+        onClose={() => setNotifyOpen(false)}
+        companyId={job.company.id}
+        companyName={job.company.name}
+        jobId={job.id}
       />
 
       {/* Phase 2: Apply sheet — handles all 4 user states (anon/free/paid/limit). */}
