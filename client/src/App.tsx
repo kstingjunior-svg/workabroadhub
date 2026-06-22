@@ -129,6 +129,10 @@ const KenyaCareersMyApplications = lazyWithRetry(() => import("@/pages/kenya-car
 const KenyaCareersAdmin = lazyWithRetry(() => import("@/pages/admin/kenya-careers-admin"));
 const KenyaCareersCompany = lazyWithRetry(() => import("@/pages/kenya-careers-company"));
 const KenyaCareersEmployers = lazyWithRetry(() => import("@/pages/kenya-careers-employers"));
+// Phase 4 employer portal — dashboard, manage, register
+const EmployerDashboard = lazyWithRetry(() => import("@/pages/employer/employer-dashboard"));
+const EmployerManage = lazyWithRetry(() => import("@/pages/employer/employer-manage"));
+const EmployerRegisterCompany = lazyWithRetry(() => import("@/pages/employer/employer-register-company"));
 const ServiceOrderFlow = lazyWithRetry(() => import("@/pages/service-order-flow"));
 const LoginPage = lazyWithRetry(() => import("@/pages/login"));
 const ForgotPassword = lazyWithRetry(() => import("@/pages/forgot-password"));
@@ -357,6 +361,9 @@ const LazyKenyaCareersMyApplications = withSuspense(KenyaCareersMyApplications);
 const LazyKenyaCareersAdmin = withSuspense(KenyaCareersAdmin);
 const LazyKenyaCareersCompany = withSuspense(KenyaCareersCompany);
 const LazyKenyaCareersEmployers = withSuspense(KenyaCareersEmployers);
+const LazyEmployerDashboard = withSuspense(EmployerDashboard);
+const LazyEmployerManage = withSuspense(EmployerManage);
+const LazyEmployerRegisterCompany = withSuspense(EmployerRegisterCompany);
 const LazyServiceOrderFlow = withSuspense(ServiceOrderFlow);
 const LazyReferrals = withSuspense(Referrals);
 const LazyReferralTerms = withSuspense(ReferralTerms);
@@ -516,6 +523,10 @@ function AuthenticatedRoutes() {
       <Route path="/admin/kenya-careers" component={LazyKenyaCareersAdmin} />
       <Route path="/kenya-careers/company/:slug" component={LazyKenyaCareersCompany} />
       <Route path="/employers" component={LazyKenyaCareersEmployers} />
+      {/* Phase 4: employer self-service portal */}
+      <Route path="/employer/dashboard" component={LazyEmployerDashboard} />
+      <Route path="/employer/register-company" component={LazyEmployerRegisterCompany} />
+      <Route path="/employer/companies/:id/manage" component={LazyEmployerManage} />
       <Route path="/services/order/:slug" component={LazyServiceOrderFlow} />
       <Route path="/login" component={LazyLoginPage} />
       <Route path="/signup" component={LazyLoginPage} />

@@ -93,24 +93,30 @@ export default function KenyaCareersEmployers() {
           )}
 
           <div className="flex flex-wrap justify-center gap-3 pt-4">
-            <Button
-              size="lg"
-              className="bg-white text-emerald-800 hover:bg-emerald-50"
-              asChild
-            >
-              <a href="#claim">
-                <Building2 className="h-4 w-4 mr-1.5" /> Claim your company
-              </a>
-            </Button>
-            <Button
-              size="lg"
-              variant="outline"
-              className="text-white border-white/40 bg-white/10 hover:bg-white/20"
-              asChild
-            >
-              <a href="#contact">Talk to our team</a>
-            </Button>
+            <Link href="/employer/dashboard">
+              <Button
+                size="lg"
+                className="bg-white text-emerald-800 hover:bg-emerald-50"
+                data-testid="hero-dashboard"
+              >
+                <Building2 className="h-4 w-4 mr-1.5" /> Employer dashboard
+              </Button>
+            </Link>
+            <Link href="/employer/register-company">
+              <Button
+                size="lg"
+                variant="outline"
+                className="text-white border-white/40 bg-white/10 hover:bg-white/20"
+                data-testid="hero-register"
+              >
+                Register new company
+              </Button>
+            </Link>
           </div>
+          <p className="text-xs text-emerald-100/90 mt-3">
+            Already claimed a profile? <Link href="/employer/dashboard"><a className="underline">Sign in to your dashboard</a></Link>
+            {" "}· Existing company? Find it in the Featured Employers below and tap "Claim".
+          </p>
         </div>
       </section>
 

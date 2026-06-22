@@ -1178,6 +1178,525 @@ export function registerLocalJobsRoutes(app: Express): void {
     }
   });
 
+  // ════════════════════════════════════════════════════════════════════════
+  // EMPLOYER PORTAL (Phase 4)
+  // ════════════════════════════════════════════════════════════════════════
+  // Routes under /api/employer/* are for HR managers / recruiters managing
+  // their company's listings. A user becomes an employer admin when:
+  //   • Their company_claims row is approved (auto-inserts company_admins)
+  //   • Tony grants them directly via the admin panel
+  // Permission check is per-endpoint via isCompanyAdmin() — never trust
+  // the client to send a companyId without re-verifying.
+
+  /**
+   * Returns true if the given userId is listed as an admin/recruiter on
+   * the given companyId. Throws on DB error so the caller can 500 cleanly.
+   */
+  async function isCompanyAdmin(userId: string, companyId: string): Promise<boolean> {
+    const { rows } = await pool.query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count FROM company_admins
+        WHERE user_id = $1 AND company_id = $2 LIMIT 1`,
+      [userId, companyId],
+    ).catch(() => ({ rows: [{ count: "0" }] }) as any);
+    return Number(rows?.[0]?.count ?? 0) > 0;
+  }
+
+  // ─── GET /api/employer/me ─────────────────────────────────────────────────
+  // Returns the companies the signed-in user can manage, with job + app counts.
+  app.get("/api/employer/me", async (req: any, res: Response) => {
+    const userId = readSessionUserId(req);
+    if (!userId) return res.status(401).json({ message: "Please sign in." });
+
+    try {
+      const { rows: companies } = await pool.query<{
+        id: string; name: string; slug: string | null;
+        logo_url: string | null; industry: string | null;
+        county: string | null; verified_at: Date | null;
+        status: string; role: string;
+        job_count: string; real_job_count: string; app_count: string;
+      }>(`
+        SELECT
+            c.id, c.name, c.slug, c.logo_url, c.industry, c.county,
+            c.verified_at, c.status, ca.role,
+            (SELECT COUNT(*) FROM local_jobs WHERE company_id = c.id AND status = 'open')::text AS job_count,
+            (SELECT COUNT(*) FROM local_jobs WHERE company_id = c.id AND status = 'open' AND COALESCE(is_seed, false) = false)::text AS real_job_count,
+            (SELECT COUNT(*) FROM local_job_applications WHERE company_id = c.id)::text AS app_count
+          FROM company_admins ca
+          JOIN companies c ON c.id = ca.company_id
+         WHERE ca.user_id = $1
+         ORDER BY c.name
+      `, [userId]).catch(() => ({ rows: [] }) as any);
+
+      res.json({
+        userId,
+        companies: companies.map((r: any) => ({
+          id:           r.id,
+          name:         r.name,
+          slug:         r.slug,
+          logoUrl:      r.logo_url,
+          industry:     r.industry,
+          county:       r.county,
+          verified:     !!r.verified_at,
+          status:       r.status,
+          role:         r.role,
+          openJobs:     Number(r.job_count ?? 0),
+          realJobs:     Number(r.real_job_count ?? 0),
+          applications: Number(r.app_count ?? 0),
+        })),
+      });
+    } catch (err: any) {
+      console.error("[GET /api/employer/me]", err?.message);
+      res.status(500).json({ message: "Could not load your employer dashboard." });
+    }
+  });
+
+  // ─── GET /api/employer/companies/:id ──────────────────────────────────────
+  // Full company data for the manage page — profile, branches, jobs,
+  // recent applications. Auth: must be admin of this company.
+  app.get("/api/employer/companies/:id", async (req: any, res: Response) => {
+    const userId = readSessionUserId(req);
+    if (!userId) return res.status(401).json({ message: "Please sign in." });
+    try {
+      const { id } = req.params;
+      if (!await isCompanyAdmin(userId, id)) {
+        return res.status(403).json({ message: "You don't have access to this company." });
+      }
+
+      const [companyRes, branchesRes, jobsRes, appsRes] = await Promise.all([
+        pool.query(`
+          SELECT id, name, slug, logo_url, industry, address, county,
+                 contact_name, phone, email, description, website,
+                 verified_at, status
+            FROM companies WHERE id = $1 LIMIT 1
+        `, [id]),
+        pool.query(`
+          SELECT id, name, county, town, location_detail, manager_name, contact_phone
+            FROM branches WHERE company_id = $1 ORDER BY county, name
+        `, [id]),
+        pool.query(`
+          SELECT j.id, j.title, j.department, j.vacancies, j.employment_type,
+                 j.salary_min, j.salary_max, j.county, j.town,
+                 j.experience_level, j.category, j.deadline, j.status, j.created_at,
+                 COALESCE(j.is_seed, false) AS is_seed,
+                 b.id AS branch_id, b.name AS branch_name,
+                 (SELECT COUNT(*) FROM local_job_applications WHERE job_id = j.id)::int AS app_count
+            FROM local_jobs j
+       LEFT JOIN branches b ON b.id = j.branch_id
+           WHERE j.company_id = $1
+           ORDER BY j.created_at DESC
+        `, [id]),
+        pool.query(`
+          SELECT a.id, a.status, a.applied_at, a.applicant_name, a.email, a.phone,
+                 a.applicant_county, a.highest_education, a.years_experience,
+                 a.cv_url, a.certificates_url, a.cover_note,
+                 j.id AS job_id, j.title AS job_title
+            FROM local_job_applications a
+            JOIN local_jobs j ON j.id = a.job_id
+           WHERE a.company_id = $1
+           ORDER BY a.applied_at DESC
+           LIMIT 100
+        `, [id]),
+      ]);
+
+      const c: any = companyRes.rows[0];
+      if (!c) return res.status(404).json({ message: "Company not found." });
+
+      res.json({
+        company: {
+          id: c.id, name: c.name, slug: c.slug, logoUrl: c.logo_url,
+          industry: c.industry, address: c.address, county: c.county,
+          contactName: c.contact_name, phone: c.phone, email: c.email,
+          description: c.description, website: c.website,
+          verified: !!c.verified_at, status: c.status,
+        },
+        branches: branchesRes.rows.map((b: any) => ({
+          id: b.id, name: b.name, county: b.county, town: b.town,
+          location: b.location_detail, managerName: b.manager_name, contactPhone: b.contact_phone,
+        })),
+        jobs: jobsRes.rows.map((j: any) => ({
+          id: j.id, title: j.title, department: j.department, vacancies: j.vacancies,
+          employmentType: j.employment_type, salaryMin: j.salary_min, salaryMax: j.salary_max,
+          county: j.county, town: j.town, experienceLevel: j.experience_level,
+          category: j.category, deadline: j.deadline, status: j.status,
+          createdAt: j.created_at, isSeed: j.is_seed, applicationCount: j.app_count,
+          branch: j.branch_id ? { id: j.branch_id, name: j.branch_name } : null,
+        })),
+        applications: appsRes.rows.map((a: any) => ({
+          id: a.id, status: a.status, appliedAt: a.applied_at,
+          applicantName: a.applicant_name, email: a.email, phone: a.phone,
+          county: a.applicant_county, education: a.highest_education,
+          yearsExperience: a.years_experience, cvUrl: a.cv_url,
+          certificatesUrl: a.certificates_url, coverNote: a.cover_note,
+          jobId: a.job_id, jobTitle: a.job_title,
+        })),
+      });
+    } catch (err: any) {
+      console.error("[GET /api/employer/companies/:id]", err?.message);
+      res.status(500).json({ message: "Could not load company." });
+    }
+  });
+
+  // ─── POST /api/employer/companies/:id/jobs ────────────────────────────────
+  // Employer posts a real job. Auto-marks is_seed=false because real
+  // employer postings ARE real openings. Validates admin.
+  app.post("/api/employer/companies/:id/jobs", async (req: any, res: Response) => {
+    const userId = readSessionUserId(req);
+    if (!userId) return res.status(401).json({ message: "Please sign in." });
+    try {
+      const { id } = req.params;
+      if (!await isCompanyAdmin(userId, id)) {
+        return res.status(403).json({ message: "You don't have access to this company." });
+      }
+
+      const b = req.body ?? {};
+      const branchId       = String(b.branchId       ?? "").trim() || null;
+      const title          = String(b.title          ?? "").trim().slice(0, 200);
+      const department     = String(b.department     ?? "").trim().slice(0, 120) || null;
+      const vacancies      = Math.max(1, Math.min(999, Number(b.vacancies ?? 1)));
+      const employmentType = String(b.employmentType ?? "full_time").trim();
+      const salaryMin      = b.salaryMin != null && b.salaryMin !== "" ? Number(b.salaryMin) : null;
+      const salaryMax      = b.salaryMax != null && b.salaryMax !== "" ? Number(b.salaryMax) : null;
+      const requirements   = String(b.requirements   ?? "").trim() || null;
+      const responsibilities = String(b.responsibilities ?? "").trim() || null;
+      const deadline       = String(b.deadline       ?? "").trim().slice(0, 10) || null;
+      const county         = String(b.county         ?? "").trim().slice(0, 60) || null;
+      const town           = String(b.town           ?? "").trim().slice(0, 80) || null;
+      const experience     = String(b.experienceLevel ?? "any").trim();
+      const category       = String(b.category       ?? "other").trim();
+
+      if (!title || title.length < 3) return res.status(400).json({ message: "Job title is required (min 3 chars)." });
+      if (!VALID_EMPLOYMENT_TYPES.has(employmentType)) return res.status(400).json({ message: "Invalid employment type." });
+      if (!VALID_EXPERIENCE.has(experience)) return res.status(400).json({ message: "Invalid experience level." });
+      if (salaryMin != null && salaryMax != null && salaryMax < salaryMin) {
+        return res.status(400).json({ message: "Max salary must be greater than or equal to min salary." });
+      }
+
+      const { rows: [job] } = await pool.query<{ id: string }>(`
+        INSERT INTO local_jobs (
+          company_id, branch_id, title, department, vacancies, employment_type,
+          salary_min, salary_max, requirements, responsibilities, deadline,
+          county, town, experience_level, category, status, is_seed
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 'open', false)
+        RETURNING id
+      `, [
+        id, branchId, title, department, vacancies, employmentType,
+        salaryMin, salaryMax, requirements, responsibilities, deadline,
+        county, town, experience, category,
+      ]);
+
+      console.log(`[employer/post-job] userId=${userId} companyId=${id} jobId=${job.id} title="${title}"`);
+      res.json({ success: true, jobId: job.id, message: `Job "${title}" published.` });
+    } catch (err: any) {
+      console.error("[POST /api/employer/companies/:id/jobs]", err?.message);
+      res.status(500).json({ message: "Could not publish job." });
+    }
+  });
+
+  // ─── PATCH /api/employer/companies/:id ────────────────────────────────────
+  // Edit company profile — description, website, logo URL, contact info.
+  // Status (approved/pending/suspended) is admin-only and not editable here.
+  app.patch("/api/employer/companies/:id", async (req: any, res: Response) => {
+    const userId = readSessionUserId(req);
+    if (!userId) return res.status(401).json({ message: "Please sign in." });
+    try {
+      const { id } = req.params;
+      if (!await isCompanyAdmin(userId, id)) {
+        return res.status(403).json({ message: "You don't have access to this company." });
+      }
+
+      const b = req.body ?? {};
+      // Editable fields only — name + slug + status NOT editable by employer
+      const description = b.description != null ? String(b.description).trim().slice(0, 2000) : undefined;
+      const website     = b.website     != null ? String(b.website).trim().slice(0, 240)      : undefined;
+      const logoUrl     = b.logoUrl     != null ? String(b.logoUrl).trim().slice(0, 500)      : undefined;
+      const industry    = b.industry    != null ? String(b.industry).trim().slice(0, 80)      : undefined;
+      const county      = b.county      != null ? String(b.county).trim().slice(0, 60)        : undefined;
+      const address     = b.address     != null ? String(b.address).trim().slice(0, 500)      : undefined;
+      const phone       = b.phone       != null ? String(b.phone).trim().slice(0, 40)         : undefined;
+      const email       = b.email       != null ? String(b.email).trim().slice(0, 160).toLowerCase() : undefined;
+
+      const updates: string[] = [];
+      const params: any[] = [];
+      const push = (col: string, val: any) => {
+        params.push(val);
+        updates.push(`${col} = $${params.length}`);
+      };
+      if (description !== undefined) push("description", description || null);
+      if (website     !== undefined) push("website",     website     || null);
+      if (logoUrl     !== undefined) push("logo_url",    logoUrl     || null);
+      if (industry    !== undefined) push("industry",    industry    || null);
+      if (county      !== undefined) push("county",      county      || null);
+      if (address     !== undefined) push("address",     address     || null);
+      if (phone       !== undefined) push("phone",       phone       || null);
+      if (email       !== undefined) push("email",       email       || null);
+
+      if (updates.length === 0) return res.status(400).json({ message: "Nothing to update." });
+
+      updates.push("updated_at = NOW()");
+      params.push(id);
+      await pool.query(`UPDATE companies SET ${updates.join(", ")} WHERE id = $${params.length}`, params);
+
+      console.log(`[employer/edit-profile] userId=${userId} companyId=${id} fieldsUpdated=${updates.length - 1}`);
+      res.json({ success: true, message: "Profile updated." });
+    } catch (err: any) {
+      console.error("[PATCH /api/employer/companies/:id]", err?.message);
+      res.status(500).json({ message: "Could not update profile." });
+    }
+  });
+
+  // ─── POST /api/employer/companies/:id/branches ────────────────────────────
+  // Add a new branch to a company they manage.
+  app.post("/api/employer/companies/:id/branches", async (req: any, res: Response) => {
+    const userId = readSessionUserId(req);
+    if (!userId) return res.status(401).json({ message: "Please sign in." });
+    try {
+      const { id } = req.params;
+      if (!await isCompanyAdmin(userId, id)) {
+        return res.status(403).json({ message: "You don't have access to this company." });
+      }
+
+      const b = req.body ?? {};
+      const name = String(b.name ?? "").trim().slice(0, 160);
+      const county = String(b.county ?? "").trim().slice(0, 60) || null;
+      const town = String(b.town ?? "").trim().slice(0, 80) || null;
+
+      if (!name || name.length < 2) return res.status(400).json({ message: "Branch name is required." });
+
+      const { rows: [branch] } = await pool.query<{ id: string }>(`
+        INSERT INTO branches (company_id, name, county, town)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (company_id, name) DO UPDATE SET county = EXCLUDED.county, town = EXCLUDED.town
+        RETURNING id
+      `, [id, name, county, town]);
+
+      res.json({ success: true, branchId: branch.id, message: `Branch "${name}" added.` });
+    } catch (err: any) {
+      console.error("[POST /api/employer/companies/:id/branches]", err?.message);
+      res.status(500).json({ message: "Could not add branch." });
+    }
+  });
+
+  // ─── PATCH /api/employer/jobs/:id ─────────────────────────────────────────
+  // Edit a job they posted. Validates admin via the job's company_id.
+  // Quick win: close a job by sending {status: "closed"}.
+  app.patch("/api/employer/jobs/:id", async (req: any, res: Response) => {
+    const userId = readSessionUserId(req);
+    if (!userId) return res.status(401).json({ message: "Please sign in." });
+    try {
+      const { id } = req.params;
+      const { rows: [job] } = await pool.query<{ company_id: string }>(
+        `SELECT company_id FROM local_jobs WHERE id = $1 LIMIT 1`, [id],
+      );
+      if (!job) return res.status(404).json({ message: "Job not found." });
+      if (!await isCompanyAdmin(userId, job.company_id)) {
+        return res.status(403).json({ message: "You don't manage this job's company." });
+      }
+
+      const b = req.body ?? {};
+      const status = b.status != null ? String(b.status).trim() : undefined;
+      if (status && !["open", "closed", "draft"].includes(status)) {
+        return res.status(400).json({ message: "Invalid status." });
+      }
+
+      if (status) {
+        await pool.query(`UPDATE local_jobs SET status = $1, updated_at = NOW() WHERE id = $2`, [status, id]);
+      }
+      res.json({ success: true, message: status ? `Job status set to ${status}.` : "Updated." });
+    } catch (err: any) {
+      console.error("[PATCH /api/employer/jobs/:id]", err?.message);
+      res.status(500).json({ message: "Could not update job." });
+    }
+  });
+
+  // ─── PATCH /api/employer/applications/:id ─────────────────────────────────
+  // Employer updates an applicant status — shortlist / reject / hire.
+  app.patch("/api/employer/applications/:id", async (req: any, res: Response) => {
+    const userId = readSessionUserId(req);
+    if (!userId) return res.status(401).json({ message: "Please sign in." });
+    try {
+      const { id } = req.params;
+      const { rows: [appRow] } = await pool.query<{ company_id: string }>(
+        `SELECT company_id FROM local_job_applications WHERE id = $1 LIMIT 1`, [id],
+      );
+      if (!appRow) return res.status(404).json({ message: "Application not found." });
+      if (!await isCompanyAdmin(userId, appRow.company_id)) {
+        return res.status(403).json({ message: "You don't manage this applicant's company." });
+      }
+
+      const newStatus = String(req.body?.status ?? "").trim();
+      const valid = ["submitted", "under_review", "shortlisted", "interview", "hired", "rejected"];
+      if (!valid.includes(newStatus)) {
+        return res.status(400).json({ message: `Status must be one of: ${valid.join(", ")}` });
+      }
+      await pool.query(`UPDATE local_job_applications SET status = $1, updated_at = NOW() WHERE id = $2`, [newStatus, id]);
+      res.json({ success: true, status: newStatus });
+    } catch (err: any) {
+      console.error("[PATCH /api/employer/applications/:id]", err?.message);
+      res.status(500).json({ message: "Could not update application." });
+    }
+  });
+
+  // ─── POST /api/employer/register-company ──────────────────────────────────
+  // Register a brand-new company (not in the seed catalogue). Creates the
+  // companies row with status='pending' AND inserts a company_claims row so
+  // admin can review + verify the registrant's right to manage. Once
+  // approved, the registrant is auto-promoted to company admin.
+  app.post("/api/employer/register-company", async (req: any, res: Response) => {
+    const userId = readSessionUserId(req);
+    if (!userId) return res.status(401).json({ message: "Please sign in to register a company." });
+    try {
+      const b = req.body ?? {};
+      const name        = String(b.name        ?? "").trim().slice(0, 160);
+      const industry    = String(b.industry    ?? "").trim().slice(0, 80)  || null;
+      const county      = String(b.county      ?? "").trim().slice(0, 60)  || null;
+      const description = String(b.description ?? "").trim().slice(0, 2000) || null;
+      const website     = String(b.website     ?? "").trim().slice(0, 240) || null;
+      const contactName = String(b.contactName ?? "").trim().slice(0, 120) || null;
+      const phone       = String(b.phone       ?? "").trim().slice(0, 40)  || null;
+      const email       = String(b.email       ?? "").trim().slice(0, 160).toLowerCase() || null;
+      const role        = String(b.role        ?? "").trim().slice(0, 120) || null;
+      const evidenceUrl = String(b.evidenceUrl ?? "").trim().slice(0, 500) || null;
+
+      if (!name || name.length < 2) return res.status(400).json({ message: "Company name is required." });
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return res.status(400).json({ message: "Valid work email is required." });
+      }
+
+      // Slug from name (best-effort, may collide — append timestamp suffix on conflict)
+      const baseSlug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 80) || "company";
+
+      const { rows: [company] } = await pool.query<{ id: string; name: string }>(`
+        INSERT INTO companies (name, slug, industry, county, description, website, contact_name, phone, email, status)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending')
+        ON CONFLICT (slug) DO UPDATE SET slug = $2 || '-' || (extract(epoch from now())::bigint)
+        RETURNING id, name
+      `, [name, baseSlug, industry, county, description, website, contactName, phone, email]);
+
+      // Submit a claim so admin reviews the registrant too
+      await pool.query(`
+        INSERT INTO company_claims (
+          company_id, claimant_name, claimant_email, claimant_phone,
+          role_at_company, message, evidence_url
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `, [
+        company.id, contactName || email, email, phone, role,
+        `Registered NEW company: ${name}`, evidenceUrl,
+      ]).catch(() => { /* table created above */ });
+
+      // Email Tony
+      (async () => {
+        try {
+          const { sendEmail } = await import("./email");
+          await sendEmail({
+            to: "hello@workabroadhub.tech",
+            subject: `[Kenya Careers] New company registered: ${name}`,
+            html: `
+              <div style="font-family:-apple-system,Segoe UI,sans-serif;max-width:520px;color:#1a2530;">
+                <h3>New company registered — needs verification</h3>
+                <p><strong>${name}</strong> was registered by <strong>${contactName || email}</strong> (${email}${phone ? `, ${phone}` : ""}).</p>
+                ${industry ? `<p><strong>Industry:</strong> ${industry}</p>` : ""}
+                ${county   ? `<p><strong>County:</strong> ${county}</p>`     : ""}
+                ${role     ? `<p><strong>Their role:</strong> ${role}</p>`   : ""}
+                ${evidenceUrl ? `<p><strong>License/cert URL:</strong> <a href="${evidenceUrl}">${evidenceUrl}</a></p>` : ""}
+                <p><strong>Status:</strong> pending verification</p>
+                <p><a href="https://workabroadhub.tech/admin/kenya-careers">Review in admin panel →</a></p>
+              </div>`,
+            text: `New company registered: ${name}\nBy: ${contactName || email} (${email})\n${role ? `Role: ${role}\n` : ""}${evidenceUrl ? `License: ${evidenceUrl}\n` : ""}Status: pending. Review: https://workabroadhub.tech/admin/kenya-careers`,
+          });
+        } catch (err: any) {
+          console.warn("[register-company] founder notification email failed:", err?.message);
+        }
+      })();
+
+      console.log(`[employer/register] userId=${userId} created companyId=${company.id} name="${name}" status=pending`);
+      res.json({
+        success: true,
+        companyId: company.id,
+        message: `Got it! We've received your registration for ${company.name} and emailed our team. We'll review and verify within 1-2 business days.`,
+      });
+    } catch (err: any) {
+      console.error("[POST /api/employer/register-company]", err?.message);
+      res.status(500).json({ message: "Could not register company. Try again or email hello@workabroadhub.tech." });
+    }
+  });
+
+  // ─── POST /api/admin/local-jobs/claims/:id/approve ────────────────────────
+  // Admin approves a claim → auto-grant company-admin access to the claimant.
+  // Looks up the claimant by email (since claims store email, not userId), so
+  // the user must have a WAH account with that email when this runs.
+  app.post("/api/admin/local-jobs/claims/:id/approve", async (req: any, res: Response) => {
+    const adminId = await requireAdminInline(req, res);
+    if (!adminId) return;
+    try {
+      const { id } = req.params;
+      const { rows: [claim] } = await pool.query<{
+        company_id: string; claimant_email: string;
+      }>(`SELECT company_id, claimant_email FROM company_claims WHERE id = $1 LIMIT 1`, [id]);
+      if (!claim) return res.status(404).json({ message: "Claim not found." });
+
+      // Find the user by email
+      const { rows: [userRow] } = await pool.query<{ id: string }>(
+        `SELECT id FROM users WHERE LOWER(email) = LOWER($1) LIMIT 1`,
+        [claim.claimant_email],
+      );
+      if (!userRow) {
+        return res.status(400).json({
+          message: `No WAH account found with email ${claim.claimant_email}. Ask the claimant to sign up first, then re-approve.`,
+        });
+      }
+
+      // Insert into company_admins (idempotent)
+      await pool.query(`
+        INSERT INTO company_admins (company_id, user_id, role, added_by)
+        VALUES ($1, $2, 'admin', $3)
+        ON CONFLICT (company_id, user_id) DO NOTHING
+      `, [claim.company_id, userRow.id, adminId]);
+
+      // Mark the claim approved + approve the company + stamp verified_at
+      await pool.query(`
+        UPDATE company_claims SET status = 'approved', reviewed_at = NOW(), reviewed_by = $2
+         WHERE id = $1
+      `, [id, adminId]);
+      await pool.query(`
+        UPDATE companies
+           SET status = 'approved',
+               verified_at = COALESCE(verified_at, NOW()),
+               updated_at = NOW()
+         WHERE id = $1
+      `, [claim.company_id]);
+
+      console.log(`[admin] adminId=${adminId} approved claim=${id} → granted user=${userRow.id} as admin of company=${claim.company_id}`);
+      res.json({ success: true, message: "Claim approved — claimant now has employer access." });
+    } catch (err: any) {
+      console.error("[POST /api/admin/local-jobs/claims/:id/approve]", err?.message);
+      res.status(500).json({ message: "Could not approve claim." });
+    }
+  });
+
+  // ─── POST /api/admin/local-jobs/grant-admin ───────────────────────────────
+  // Tony's shortcut to grant himself or any user direct employer-admin
+  // access to a company — useful for QA, demos, or when a claim came in via
+  // WhatsApp instead of the form.
+  app.post("/api/admin/local-jobs/grant-admin", async (req: any, res: Response) => {
+    const adminId = await requireAdminInline(req, res);
+    if (!adminId) return;
+    try {
+      const { userId, companyId } = req.body ?? {};
+      if (!userId || !companyId) {
+        return res.status(400).json({ message: "userId and companyId are required." });
+      }
+      await pool.query(`
+        INSERT INTO company_admins (company_id, user_id, role, added_by)
+        VALUES ($1, $2, 'admin', $3)
+        ON CONFLICT (company_id, user_id) DO NOTHING
+      `, [companyId, userId, adminId]);
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error("[POST /api/admin/local-jobs/grant-admin]", err?.message);
+      res.status(500).json({ message: "Could not grant admin." });
+    }
+  });
+
   // ─── ADMIN ENDPOINTS ─────────────────────────────────────────────────────
   // 2026-06 Phase 2.5: founder asked for the basic admin moderation tools
   // before the full employer dashboard ships in Phase 3:
@@ -1478,7 +1997,7 @@ export function registerLocalJobsRoutes(app: Express): void {
     const adminId = await requireAdminInline(req, res);
     if (!adminId) return;
     try {
-      const [companiesRes, jobsRes, appsRes] = await Promise.all([
+      const [companiesRes, jobsRes, appsRes, claimsRes] = await Promise.all([
         pool.query(`
           SELECT c.id, c.name, c.industry, c.county, c.status, c.verified_at,
                  (SELECT COUNT(*) FROM local_jobs WHERE company_id = c.id)::int AS job_count
@@ -1501,11 +2020,22 @@ export function registerLocalJobsRoutes(app: Express): void {
             JOIN companies   c ON c.id = j.company_id
            ORDER BY a.applied_at DESC LIMIT 100
         `),
+        pool.query(`
+          SELECT cl.id, cl.company_id, cl.claimant_name, cl.claimant_email,
+                 cl.claimant_phone, cl.role_at_company, cl.message,
+                 cl.evidence_url, cl.status, cl.created_at,
+                 c.name AS company_name
+            FROM company_claims cl
+            JOIN companies c ON c.id = cl.company_id
+           ORDER BY cl.status = 'pending' DESC, cl.created_at DESC
+           LIMIT 100
+        `).catch(() => ({ rows: [] }) as any),
       ]);
       res.json({
         companies:    companiesRes.rows,
         jobs:         jobsRes.rows,
         applications: appsRes.rows,
+        claims:       claimsRes.rows,
       });
     } catch (err: any) {
       console.error("[GET /api/admin/local-jobs/overview]", err?.message);
