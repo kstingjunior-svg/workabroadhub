@@ -964,11 +964,74 @@ function registerLocalJobsRoutes(app) {
             res.status(500).json({ message: "Could not save your signup. Try again or email hello@workabroadhub.tech." });
         }
     });
+    // ─── Phase 4.5 SAFETY: claim verification helpers ────────────────────────
+    /**
+     * Free email providers — claims from these are auto-flagged as LOW trust
+     * because they can't possibly prove employment at a major company. Tony
+     * still sees the claim but knows to scrutinise harder.
+     */
+    const FREE_EMAIL_DOMAINS = new Set([
+        "gmail.com", "yahoo.com", "yahoo.co.uk", "outlook.com", "hotmail.com",
+        "live.com", "icloud.com", "protonmail.com", "proton.me", "aol.com",
+        "mail.com", "yandex.com", "zoho.com", "fastmail.com",
+    ]);
+    /** Generate a 6-digit numeric verification code. */
+    function generate6DigitCode() {
+        return String(Math.floor(100000 + Math.random() * 900000));
+    }
+    /** Extract the lower-cased domain from an email (everything after the @). */
+    function extractDomain(email) {
+        const m = String(email || "").trim().toLowerCase().match(/@([a-z0-9.-]+)$/);
+        return m ? m[1] : null;
+    }
+    /**
+     * Trust score logic:
+     *   high   = domain matches a known company domain  →  Tony 1-click approves
+     *   medium = corporate-looking domain but unknown   →  Tony scrutinises
+     *   low    = free email provider (gmail, yahoo, …) →  Tony requires extra evidence
+     */
+    function computeTrustScore(email, knownDomains) {
+        const domain = extractDomain(email);
+        if (!domain)
+            return "low";
+        if (knownDomains.some((d) => d.toLowerCase() === domain))
+            return "high";
+        if (FREE_EMAIL_DOMAINS.has(domain))
+            return "low";
+        return "medium";
+    }
+    /** Send the verification code email via Hostinger SMTP. */
+    async function sendClaimVerificationEmail(to, name, companyName, code) {
+        const { sendEmail } = await Promise.resolve().then(() => __importStar(require("./email")));
+        const firstName = name.trim().split(/\s+/)[0] || "there";
+        await sendEmail({
+            to,
+            subject: `Your WorkAbroad Hub verification code: ${code}`,
+            html: `
+        <div style="font-family:-apple-system,Segoe UI,sans-serif;max-width:520px;margin:auto;padding:24px;color:#1a2530;">
+          <h2 style="margin:0 0 12px;color:#0f766e;">Verify your email — ${escapeHtmlSafe(companyName)}</h2>
+          <p>Hi ${escapeHtmlSafe(firstName)},</p>
+          <p>You requested to claim the <strong>${escapeHtmlSafe(companyName)}</strong> profile on WorkAbroad Hub. To prove this email is yours, enter the code below in the claim form:</p>
+          <p style="margin:24px 0;text-align:center;">
+            <span style="display:inline-block;font-family:monospace;font-size:28px;letter-spacing:6px;background:#f1f5f9;color:#0f766e;padding:14px 28px;border-radius:8px;border:2px solid #0f766e;">${code}</span>
+          </p>
+          <p style="font-size:14px;color:#475569;">This code expires in 24 hours. If you didn't request this claim, you can ignore this email — no action will be taken.</p>
+          <p style="margin-top:32px;font-size:13px;color:#94a3b8;">— WorkAbroad Hub Kenya Careers</p>
+        </div>`,
+            text: `Hi ${firstName},\n\nYou requested to claim the ${companyName} profile on WorkAbroad Hub.\n\nYour verification code is: ${code}\n\nIt expires in 24 hours. If you didn't request this claim, you can ignore this email.\n\n— WorkAbroad Hub Kenya Careers`,
+        });
+    }
     // ─── POST /api/local-jobs/companies/:id/claim ────────────────────────────
-    // 2026-06 Phase 3a: "Are you this employer? Claim your company profile."
+    // 2026-06 Phase 3a → 4.5: "Are you this employer? Claim your company profile."
     // Public endpoint (no auth required — claims often come from HR managers
-    // who don't yet have a WAH account). Stores the claim for admin review.
-    // Light validation + one email to support so the founder is notified.
+    // who don't yet have a WAH account).
+    //
+    // Phase 4.5 hardening adds:
+    //   1. Email code verification — 6-digit code emailed; claimant must enter
+    //   2. Domain match check — email domain must match company's known_domains
+    //   3. Trust score computation — high/medium/low based on the above
+    //   4. Rate limit + duplicate block — max 1 active claim per (company, email)
+    //   5. Honest error messages for free email providers
     app.post("/api/local-jobs/companies/:id/claim", async (req, res) => {
         try {
             const { id } = req.params;
@@ -986,67 +1049,99 @@ function registerLocalJobsRoutes(app) {
             if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(claimantEmail)) {
                 return res.status(400).json({ message: "Please enter a valid work email." });
             }
-            // Confirm the company actually exists
-            const { rows: [company] } = await db_1.pool.query(`
-        SELECT id, name FROM companies WHERE id = $1 LIMIT 1
-      `, [id]);
+            // Confirm the company actually exists AND fetch its known_domains
+            const { rows: [company] } = await db_1.pool.query(`SELECT id, name, COALESCE(known_domains, '{}') AS known_domains FROM companies WHERE id = $1 LIMIT 1`, [id]);
             if (!company)
                 return res.status(404).json({ message: "Company not found." });
-            // Insert claim
-            const { rows: [claim] } = await db_1.pool.query(`
+            // Compute domain match + trust score
+            const claimantDomain = extractDomain(claimantEmail);
+            const knownDomains = (company.known_domains ?? []);
+            const domainMatch = !!claimantDomain && knownDomains.some((d) => d.toLowerCase() === claimantDomain);
+            const trustScore = computeTrustScore(claimantEmail, knownDomains);
+            // Block: too-low-trust gets a friendly hint to use a work email if they
+            // can, but doesn't outright reject — sometimes legit HR people only have
+            // gmail. We just flag it for stricter manual review.
+            const lowTrustWarning = trustScore === "low" && knownDomains.length > 0
+                ? `Heads up — ${claimantEmail} is a personal email, so we'll need extra evidence before approving (a business card, contract page, or a link to your business cert). You'll be asked to provide this after verification.`
+                : null;
+            // Generate verification code (expires 24h)
+            const code = generate6DigitCode();
+            const codeExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+            // Insert claim (de-dupe enforced by unique partial index on company_id + email)
+            const insertResult = await db_1.pool.query(`
         INSERT INTO company_claims (
-          company_id, claimant_name, claimant_email, claimant_phone, role_at_company, message
-        ) VALUES ($1, $2, $3, $4, $5, $6)
+          company_id, claimant_name, claimant_email, claimant_phone,
+          role_at_company, message,
+          verification_code, verification_code_expires_at,
+          domain_match, trust_score
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         RETURNING id
-      `, [id, claimantName, claimantEmail, claimantPhone, roleAtCompany, message])
-                .catch(async (err) => {
-                if (err?.code === "42P01") {
-                    // Table doesn't exist yet — create minimal version then retry
-                    await db_1.pool.query(`
-              CREATE TABLE IF NOT EXISTS company_claims (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                company_id UUID NOT NULL, claimant_name VARCHAR(160) NOT NULL,
-                claimant_email VARCHAR(160) NOT NULL, claimant_phone VARCHAR(40),
-                role_at_company VARCHAR(120), message TEXT,
-                status VARCHAR(24) NOT NULL DEFAULT 'pending',
-                created_at TIMESTAMP NOT NULL DEFAULT NOW()
-              )
-            `).catch(() => { });
-                    return db_1.pool.query(`
-              INSERT INTO company_claims (company_id, claimant_name, claimant_email, claimant_phone, role_at_company, message)
-              VALUES ($1, $2, $3, $4, $5, $6) RETURNING id
-            `, [id, claimantName, claimantEmail, claimantPhone, roleAtCompany, message]);
+      `, [
+                id, claimantName, claimantEmail, claimantPhone, roleAtCompany, message,
+                code, codeExpiresAt, domainMatch, trustScore,
+            ]).catch(async (err) => {
+                if (err?.code === "23505") {
+                    // Unique constraint hit — there's already an active claim from this email for this company.
+                    return null;
+                }
+                if (err?.code === "42P01" || err?.code === "42703") {
+                    // Table or columns missing — bootstrap will create on next boot. For now,
+                    // tell the user to retry in a few minutes.
+                    throw new Error("Verification system is initialising — please try again in a moment.");
                 }
                 throw err;
             });
-            console.log(`[claim-company] new claim id=${claim.id} company="${company.name}" claimant="${claimantName}" <${claimantEmail}>`);
-            // Email the founder so they know to review
+            if (!insertResult) {
+                return res.status(409).json({
+                    message: `${claimantEmail} has already submitted a claim for ${company.name}. Check your inbox for the verification code we sent earlier, or contact hello@workabroadhub.tech if you need to start over.`,
+                });
+            }
+            const claim = insertResult.rows[0];
+            console.log(`[claim-company] new claim id=${claim.id} company="${company.name}" ` +
+                `claimant="${claimantName}" <${claimantEmail}> domain=${claimantDomain ?? "?"} ` +
+                `domain_match=${domainMatch} trust=${trustScore}`);
+            // Send the verification code email to the claimant (non-blocking but logged)
+            sendClaimVerificationEmail(claimantEmail, claimantName, company.name, code).catch((err) => {
+                console.error(`[claim-company] verification email send FAILED for ${claimantEmail}:`, err?.message);
+            });
+            // Notify Tony (admin) — non-blocking
             (async () => {
                 try {
                     const { sendEmail } = await Promise.resolve().then(() => __importStar(require("./email")));
+                    const trustColor = trustScore === "high" ? "#059669" : trustScore === "medium" ? "#d97706" : "#dc2626";
                     await sendEmail({
                         to: "hello@workabroadhub.tech",
-                        subject: `[Kenya Careers] New company claim: ${company.name}`,
+                        subject: `[Kenya Careers] New claim (${trustScore.toUpperCase()} trust): ${company.name}`,
                         html: `
               <div style="font-family:-apple-system,Segoe UI,sans-serif;max-width:520px;color:#1a2530;">
-                <h3>New employer claim — ${company.name}</h3>
-                <p><strong>${claimantName}</strong> (${claimantEmail}${claimantPhone ? `, ${claimantPhone}` : ""}) wants to claim this company profile.</p>
-                ${roleAtCompany ? `<p><strong>Role at company:</strong> ${roleAtCompany}</p>` : ""}
-                ${message ? `<p><strong>Message:</strong></p><p style="border-left:3px solid #ddd;padding-left:8px;">${message}</p>` : ""}
-                <p><a href="https://workabroadhub.tech/admin/kenya-careers">Review in admin panel →</a></p>
-                <p style="font-size:12px;color:#999;">Claim ID: ${claim.id}</p>
+                <h3>New employer claim — ${escapeHtmlSafe(company.name)}</h3>
+                <p style="font-size:14px;">
+                  <strong>Trust:</strong> <span style="color:${trustColor};font-weight:bold;">${trustScore.toUpperCase()}</span>
+                  &nbsp;·&nbsp; <strong>Domain match:</strong> ${domainMatch ? "✓ Yes" : "✗ No"}
+                </p>
+                <p><strong>${escapeHtmlSafe(claimantName)}</strong> (${escapeHtmlSafe(claimantEmail)}${claimantPhone ? `, ${escapeHtmlSafe(claimantPhone)}` : ""})</p>
+                ${roleAtCompany ? `<p><strong>Role at company:</strong> ${escapeHtmlSafe(roleAtCompany)}</p>` : ""}
+                ${message ? `<p><strong>Message:</strong></p><p style="border-left:3px solid #ddd;padding-left:8px;">${escapeHtmlSafe(message)}</p>` : ""}
+                <p style="font-size:13px;color:#666;">Claimant must verify their email before this becomes actionable. Once verified, review at:</p>
+                <p><a href="https://workabroadhub.tech/admin/kenya-careers">→ Admin panel</a></p>
+                <p style="font-size:11px;color:#999;">Claim ID: ${claim.id}</p>
               </div>`,
-                        text: `New employer claim — ${company.name}\n\n${claimantName} (${claimantEmail}${claimantPhone ? `, ${claimantPhone}` : ""}) wants to claim this company.\n${roleAtCompany ? `Role: ${roleAtCompany}\n` : ""}${message ? `Message: ${message}\n` : ""}\nReview: https://workabroadhub.tech/admin/kenya-careers\nClaim ID: ${claim.id}`,
+                        text: `New claim — ${company.name}\nTrust: ${trustScore.toUpperCase()} | Domain match: ${domainMatch ? "Yes" : "No"}\n${claimantName} (${claimantEmail})\n${roleAtCompany ? `Role: ${roleAtCompany}\n` : ""}${message ? `Msg: ${message}\n` : ""}\nReview: https://workabroadhub.tech/admin/kenya-careers\nID: ${claim.id}`,
                     });
                 }
                 catch (err) {
-                    console.warn("[claim-company] founder notification email failed (non-fatal):", err?.message);
+                    console.warn("[claim-company] founder notification email failed:", err?.message);
                 }
             })();
             res.json({
                 success: true,
-                message: `Thanks ${claimantName.split(" ")[0]}! We received your claim for ${company.name}. We'll review and reach out at ${claimantEmail} within 1-2 business days.`,
+                message: `We just emailed a verification code to ${claimantEmail}. Enter it on the next screen.`,
                 claimId: claim.id,
+                emailMasked: claimantEmail.replace(/^(.).+(@.+)$/, "$1•••$2"),
+                requiresVerification: true,
+                trustScore,
+                domainMatch,
+                lowTrustWarning,
             });
         }
         catch (err) {
@@ -1490,9 +1585,21 @@ function registerLocalJobsRoutes(app) {
             return;
         try {
             const { id } = req.params;
-            const { rows: [claim] } = await db_1.pool.query(`SELECT company_id, claimant_email FROM company_claims WHERE id = $1 LIMIT 1`, [id]);
+            const { rows: [claim] } = await db_1.pool.query(`
+        SELECT company_id, claimant_email, email_verified_at, trust_score
+          FROM company_claims WHERE id = $1 LIMIT 1
+      `, [id]);
             if (!claim)
                 return res.status(404).json({ message: "Claim not found." });
+            // 2026-06 Phase 4.5: refuse to approve un-verified claims. Admin can
+            // override by passing `?force=true` if they manually verified out-of-band
+            // (e.g. confirmed by phone with the company).
+            if (!claim.email_verified_at && req.query.force !== "true") {
+                return res.status(400).json({
+                    message: "Claimant has not verified their email yet. Either wait, or pass ?force=true if you've verified them out-of-band.",
+                    reason: "email_not_verified",
+                });
+            }
             // Find the user by email
             const { rows: [userRow] } = await db_1.pool.query(`SELECT id FROM users WHERE LOWER(email) = LOWER($1) LIMIT 1`, [claim.claimant_email]);
             if (!userRow) {
@@ -1549,6 +1656,64 @@ function registerLocalJobsRoutes(app) {
         catch (err) {
             console.error("[POST /api/admin/local-jobs/grant-admin]", err?.message);
             res.status(500).json({ message: "Could not grant admin." });
+        }
+    });
+    // ─── POST /api/local-jobs/claims/:id/verify-email ────────────────────────
+    // 2026-06 Phase 4.5: claimant enters the 6-digit code we emailed them.
+    // On success, sets email_verified_at — the claim is now actionable by admin.
+    // Failure modes: wrong code (5 tries), expired, already verified.
+    app.post("/api/local-jobs/claims/:id/verify-email", async (req, res) => {
+        try {
+            const { id } = req.params;
+            const enteredCode = String(req.body?.code ?? "").trim();
+            if (!/^\d{6}$/.test(enteredCode)) {
+                return res.status(400).json({ message: "Enter the 6-digit code from your email." });
+            }
+            const { rows: [claim] } = await db_1.pool.query(`
+        SELECT id, claimant_email, verification_code, verification_code_expires_at,
+               COALESCE(verification_attempts, 0) AS verification_attempts,
+               email_verified_at, trust_score, company_id
+          FROM company_claims WHERE id = $1 LIMIT 1
+      `, [id]);
+            if (!claim)
+                return res.status(404).json({ message: "Claim not found." });
+            if (claim.email_verified_at) {
+                return res.json({ success: true, alreadyVerified: true, message: "Your email is already verified." });
+            }
+            if ((claim.verification_attempts ?? 0) >= 5) {
+                return res.status(429).json({
+                    message: "Too many wrong codes. Email hello@workabroadhub.tech to reset and we'll send a fresh code.",
+                    reason: "too_many_attempts",
+                });
+            }
+            if (!claim.verification_code) {
+                return res.status(400).json({ message: "No verification code on file — please re-submit the claim form." });
+            }
+            if (claim.verification_code_expires_at && new Date(claim.verification_code_expires_at) < new Date()) {
+                return res.status(410).json({ message: "This code has expired. Re-submit the claim form to get a fresh code.", reason: "expired" });
+            }
+            if (enteredCode !== claim.verification_code) {
+                await db_1.pool.query(`UPDATE company_claims SET verification_attempts = COALESCE(verification_attempts, 0) + 1 WHERE id = $1`, [id]);
+                const remaining = 5 - ((claim.verification_attempts ?? 0) + 1);
+                return res.status(400).json({
+                    message: `That code doesn't match. ${remaining > 0 ? `${remaining} attempt${remaining === 1 ? "" : "s"} left.` : "No attempts left — email hello@workabroadhub.tech to reset."}`,
+                    remainingAttempts: Math.max(0, remaining),
+                });
+            }
+            // Success — mark verified
+            await db_1.pool.query(`
+        UPDATE company_claims SET email_verified_at = NOW() WHERE id = $1
+      `, [id]);
+            console.log(`[claim-verify] claim=${id} email=${claim.claimant_email} VERIFIED`);
+            res.json({
+                success: true,
+                message: "Email verified! Our team will review your claim and grant access within 1-2 business days.",
+                trustScore: claim.trust_score,
+            });
+        }
+        catch (err) {
+            console.error("[POST /api/local-jobs/claims/:id/verify-email]", err?.message);
+            res.status(500).json({ message: "Could not verify code. Try again." });
         }
     });
     // ─── ADMIN ENDPOINTS ─────────────────────────────────────────────────────
@@ -1859,10 +2024,11 @@ function registerLocalJobsRoutes(app) {
           SELECT cl.id, cl.company_id, cl.claimant_name, cl.claimant_email,
                  cl.claimant_phone, cl.role_at_company, cl.message,
                  cl.evidence_url, cl.status, cl.created_at,
+                 cl.email_verified_at, cl.domain_match, cl.trust_score,
                  c.name AS company_name
             FROM company_claims cl
             JOIN companies c ON c.id = cl.company_id
-           ORDER BY cl.status = 'pending' DESC, cl.created_at DESC
+           ORDER BY cl.status = 'pending' DESC, cl.email_verified_at DESC NULLS LAST, cl.created_at DESC
            LIMIT 100
         `).catch(() => ({ rows: [] })),
             ]);

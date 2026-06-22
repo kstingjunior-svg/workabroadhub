@@ -152,6 +152,7 @@ exports.SEED_COMPANIES = [
     { slug: "naivas", name: "Naivas Supermarkets", industry: "Retail", category: "retail", hqCounty: "Nairobi",
         description: "Kenya's largest supermarket chain with 90+ branches across the country.",
         website: "https://naivas.online",
+        knownDomains: ["naivas.online", "naivas.co.ke"],
         branches: [
             { name: "Naivas Thika Road Mall", county: "Nairobi", town: "Thika Road" },
             { name: "Naivas Kahawa Wendani", county: "Kiambu", town: "Kahawa Wendani" },
@@ -162,6 +163,7 @@ exports.SEED_COMPANIES = [
     { slug: "quickmart", name: "Quickmart Limited", industry: "Retail", category: "retail", hqCounty: "Nairobi",
         description: "Fast-growing retail chain serving customers across Kenya since 2006.",
         website: "https://quickmart.co.ke",
+        knownDomains: ["quickmart.co.ke"],
         branches: [
             { name: "Quickmart Kilimani", county: "Nairobi", town: "Kilimani" },
             { name: "Quickmart Ruaka", county: "Kiambu", town: "Ruaka" },
@@ -172,6 +174,7 @@ exports.SEED_COMPANIES = [
     { slug: "carrefour", name: "Carrefour Kenya (Majid Al Futtaim)", industry: "Retail", category: "retail", hqCounty: "Nairobi",
         description: "International hypermarket operator with branches in Nairobi, Mombasa and Kisumu.",
         website: "https://www.carrefour.ke",
+        knownDomains: ["carrefour.ke", "carrefour.com", "majidalfuttaim.com"],
         branches: [
             { name: "Carrefour Two Rivers Mall", county: "Nairobi", town: "Runda" },
             { name: "Carrefour Nyali Centre", county: "Mombasa", town: "Nyali" },
@@ -181,6 +184,7 @@ exports.SEED_COMPANIES = [
     { slug: "chandarana", name: "Chandarana Foodplus", industry: "Retail", category: "retail", hqCounty: "Nairobi",
         description: "Premium grocery retailer focused on imported and high-end food products.",
         website: "https://chandaranafoodplus.com",
+        knownDomains: ["chandaranafoodplus.com", "chandarana.co.ke"],
         branches: [
             { name: "Chandarana Lavington Mall", county: "Nairobi", town: "Lavington" },
             { name: "Chandarana Diani", county: "Kwale", town: "Diani" },
@@ -189,6 +193,7 @@ exports.SEED_COMPANIES = [
     { slug: "magunas", name: "Magunas Supermarket", industry: "Retail", category: "retail", hqCounty: "Nairobi",
         description: "Family-owned Kenyan retailer known for fresh produce and competitive prices.",
         website: null,
+        knownDomains: ["magunas.co.ke"],
         branches: [
             { name: "Magunas Ngong Road", county: "Nairobi", town: "Ngong Road" },
             { name: "Magunas Nyeri", county: "Nyeri", town: "Nyeri Town" },
@@ -197,6 +202,7 @@ exports.SEED_COMPANIES = [
     { slug: "eastmatt", name: "Eastmatt Supermarket", industry: "Retail", category: "retail", hqCounty: "Nairobi",
         description: "Mid-tier supermarket chain serving Nairobi's eastern suburbs.",
         website: null,
+        knownDomains: ["eastmattsupermarket.co.ke", "eastmatt.co.ke"],
         branches: [
             { name: "Eastmatt Outer Ring Road", county: "Nairobi", town: "Donholm" },
             { name: "Eastmatt Mlolongo", county: "Machakos", town: "Mlolongo" },
@@ -206,6 +212,7 @@ exports.SEED_COMPANIES = [
     { slug: "equity-bank", name: "Equity Bank Kenya", industry: "Banking", category: "banking", hqCounty: "Nairobi",
         description: "Kenya's largest bank by customer numbers, serving over 14 million account holders across East Africa.",
         website: "https://equitygroupholdings.com",
+        knownDomains: ["equitybank.co.ke", "equitygroupholdings.com", "equitybankgroup.com"],
         branches: [
             { name: "Equity Bank Hospital Road", county: "Nairobi", town: "Upper Hill" },
             { name: "Equity Bank Eldoret", county: "Uasin Gishu", town: "Eldoret" },
@@ -215,6 +222,7 @@ exports.SEED_COMPANIES = [
     { slug: "kcb-bank", name: "KCB Bank Kenya", industry: "Banking", category: "banking", hqCounty: "Nairobi",
         description: "Kenya Commercial Bank — East Africa's largest bank by assets.",
         website: "https://kcbgroup.com",
+        knownDomains: ["kcbgroup.com", "kcb.co.ke", "kcbbankgroup.com"],
         branches: [
             { name: "KCB Kencom House", county: "Nairobi", town: "Nairobi CBD" },
             { name: "KCB Kisumu Branch", county: "Kisumu", town: "Kisumu" },
@@ -224,6 +232,7 @@ exports.SEED_COMPANIES = [
     { slug: "co-op-bank", name: "Co-operative Bank of Kenya", industry: "Banking", category: "banking", hqCounty: "Nairobi",
         description: "Kenya's third-largest bank, owned by the country's co-operative movement.",
         website: "https://co-opbank.co.ke",
+        knownDomains: ["co-opbank.co.ke", "coopbank.co.ke"],
         branches: [
             { name: "Co-op Bank Co-operative House", county: "Nairobi", town: "Nairobi CBD" },
             { name: "Co-op Bank Meru", county: "Meru", town: "Meru Town" },
@@ -232,6 +241,7 @@ exports.SEED_COMPANIES = [
     { slug: "ncba-bank", name: "NCBA Bank Kenya", industry: "Banking", category: "banking", hqCounty: "Nairobi",
         description: "Result of the 2019 NIC + CBA merger — partners with Safaricom on M-Shwari and Fuliza.",
         website: "https://ncbagroup.com",
+        knownDomains: ["ncbagroup.com", "ncba.co.ke"],
         branches: [
             { name: "NCBA Mara Road", county: "Nairobi", town: "Upper Hill" },
             { name: "NCBA Westlands", county: "Nairobi", town: "Westlands" },
@@ -240,6 +250,7 @@ exports.SEED_COMPANIES = [
     { slug: "absa-bank", name: "Absa Bank Kenya", industry: "Banking", category: "banking", hqCounty: "Nairobi",
         description: "Formerly Barclays Kenya — South African banking group with extensive Kenyan branch network.",
         website: "https://www.absabank.co.ke",
+        knownDomains: ["absa.co.ke", "absabank.co.ke", "absa.africa"],
         branches: [
             { name: "Absa Bank Queensway", county: "Nairobi", town: "Nairobi CBD" },
             { name: "Absa Bank Nyali", county: "Mombasa", town: "Nyali" },
@@ -248,6 +259,7 @@ exports.SEED_COMPANIES = [
     { slug: "stanbic-bank", name: "Stanbic Bank Kenya", industry: "Banking", category: "banking", hqCounty: "Nairobi",
         description: "Subsidiary of Standard Bank Group — focused on corporate and high-net-worth clients.",
         website: "https://www.stanbicbank.co.ke",
+        knownDomains: ["stanbicbank.co.ke", "stanbic.com", "standardbank.com"],
         branches: [
             { name: "Stanbic Stanbic Centre", county: "Nairobi", town: "Westlands" },
         ], roles: BANKING_ROLES.slice(0, 2),
@@ -256,6 +268,7 @@ exports.SEED_COMPANIES = [
     { slug: "aga-khan", name: "Aga Khan University Hospital", industry: "Healthcare", category: "healthcare", hqCounty: "Nairobi",
         description: "Tertiary teaching hospital providing specialist care in Nairobi and across East Africa.",
         website: "https://hospitals.aku.edu/nairobi",
+        knownDomains: ["aku.edu", "akhsk.org", "agakhanhospitals.org"],
         branches: [
             { name: "Aga Khan Hospital Nairobi (Parklands)", county: "Nairobi", town: "Parklands" },
             { name: "Aga Khan Hospital Mombasa", county: "Mombasa", town: "Mombasa" },
@@ -265,6 +278,7 @@ exports.SEED_COMPANIES = [
     { slug: "nairobi-hospital", name: "The Nairobi Hospital", industry: "Healthcare", category: "healthcare", hqCounty: "Nairobi",
         description: "Leading private hospital in East Africa — established 1954.",
         website: "https://thenairobihosp.org",
+        knownDomains: ["thenairobihosp.org", "nairobihospital.org"],
         branches: [
             { name: "Nairobi Hospital Argwings Kodhek", county: "Nairobi", town: "Hurlingham" },
             { name: "Nairobi Hospital Capital Centre Clinic", county: "Nairobi", town: "South B" },
@@ -273,6 +287,7 @@ exports.SEED_COMPANIES = [
     { slug: "mp-shah", name: "MP Shah Hospital", industry: "Healthcare", category: "healthcare", hqCounty: "Nairobi",
         description: "Multi-specialty private hospital in Parklands — over 80 years serving Kenya.",
         website: "https://www.mpshahhosp.org",
+        knownDomains: ["mpshahhosp.org", "mpshah.org"],
         branches: [
             { name: "MP Shah Parklands Main", county: "Nairobi", town: "Parklands" },
         ], roles: HEALTHCARE_ROLES.slice(0, 4),
@@ -280,6 +295,7 @@ exports.SEED_COMPANIES = [
     { slug: "mater", name: "Mater Misericordiae Hospital", industry: "Healthcare", category: "healthcare", hqCounty: "Nairobi",
         description: "Faith-based teaching hospital in South B — operated by the Sisters of Mercy.",
         website: "https://materkenya.com",
+        knownDomains: ["materkenya.com", "thematerhospital.co.ke"],
         branches: [
             { name: "Mater Hospital South B", county: "Nairobi", town: "South B" },
         ], roles: HEALTHCARE_ROLES.slice(0, 4),
@@ -288,6 +304,7 @@ exports.SEED_COMPANIES = [
     { slug: "sarova", name: "Sarova Hotels & Lodges", industry: "Hospitality", category: "hospitality", hqCounty: "Nairobi",
         description: "Pan-African hotel group with properties across Kenya — Stanley, Panafric, Whitesands and safari lodges.",
         website: "https://www.sarovahotels.com",
+        knownDomains: ["sarovahotels.com"],
         branches: [
             { name: "Sarova Stanley Nairobi", county: "Nairobi", town: "Nairobi CBD" },
             { name: "Sarova Whitesands Mombasa", county: "Mombasa", town: "Bamburi" },
@@ -297,6 +314,7 @@ exports.SEED_COMPANIES = [
     { slug: "serena", name: "Serena Hotels", industry: "Hospitality", category: "hospitality", hqCounty: "Nairobi",
         description: "Tourism Promotion Services — luxury hotel and safari brand under the Aga Khan Development Network.",
         website: "https://www.serenahotels.com",
+        knownDomains: ["serenahotels.com", "tps.co.ke"],
         branches: [
             { name: "Nairobi Serena Hotel", county: "Nairobi", town: "Nairobi CBD" },
             { name: "Mara Serena Safari Lodge", county: "Narok", town: "Maasai Mara" },
@@ -306,6 +324,7 @@ exports.SEED_COMPANIES = [
     { slug: "prideinn", name: "PrideInn Hotels & Resorts", industry: "Hospitality", category: "hospitality", hqCounty: "Mombasa",
         description: "Kenyan-owned chain with city and beach properties from Westlands to Diani.",
         website: "https://prideinnhotels.com",
+        knownDomains: ["prideinnhotels.com"],
         branches: [
             { name: "PrideInn Azure Hotel", county: "Nairobi", town: "Westlands" },
             { name: "PrideInn Paradise Beach Resort", county: "Kilifi", town: "Shanzu" },
@@ -314,6 +333,7 @@ exports.SEED_COMPANIES = [
     { slug: "kempinski", name: "Villa Rosa Kempinski", industry: "Hospitality", category: "hospitality", hqCounty: "Nairobi",
         description: "5-star European luxury hotel — flagship of Kempinski's East African presence.",
         website: "https://www.kempinski.com/en/nairobi",
+        knownDomains: ["kempinski.com"],
         branches: [
             { name: "Villa Rosa Kempinski Nairobi", county: "Nairobi", town: "Westlands" },
         ], roles: HOSPITALITY_ROLES.slice(0, 3),
@@ -322,6 +342,7 @@ exports.SEED_COMPANIES = [
     { slug: "java-house", name: "Java House Africa", industry: "Hospitality", category: "hospitality", hqCounty: "Nairobi",
         description: "Pan-African coffee and food chain with branches across East Africa.",
         website: "https://www.javahouseafrica.com",
+        knownDomains: ["javahouseafrica.com", "java-house.com"],
         branches: [
             { name: "Java House Junction Mall", county: "Nairobi", town: "Ngong Road" },
             { name: "Java House Westside", county: "Nairobi", town: "Westlands" },
@@ -331,6 +352,7 @@ exports.SEED_COMPANIES = [
     { slug: "kfc-kenya", name: "KFC Kenya", industry: "Hospitality", category: "hospitality", hqCounty: "Nairobi",
         description: "Quick-service restaurant chain — operated under licence by Kuku Foods.",
         website: "https://kfc.co.ke",
+        knownDomains: ["kfc.co.ke", "kukufoodsea.com"],
         branches: [
             { name: "KFC Westlands", county: "Nairobi", town: "Westlands" },
             { name: "KFC Sarit Centre", county: "Nairobi", town: "Westlands" },
@@ -340,6 +362,7 @@ exports.SEED_COMPANIES = [
     { slug: "artcaffe", name: "Artcaffe Group", industry: "Hospitality", category: "hospitality", hqCounty: "Nairobi",
         description: "Lifestyle café chain operating Artcaffe, Inti, Espresso Lab and Crepe & Burger.",
         website: "https://www.artcaffekenya.com",
+        knownDomains: ["artcaffekenya.com", "artcaffe.co.ke"],
         branches: [
             { name: "Artcaffe Westgate Mall", county: "Nairobi", town: "Westlands" },
             { name: "Artcaffe Yaya Centre", county: "Nairobi", town: "Kilimani" },
@@ -348,6 +371,7 @@ exports.SEED_COMPANIES = [
     { slug: "pizza-inn", name: "Pizza Inn", industry: "Hospitality", category: "hospitality", hqCounty: "Nairobi",
         description: "Quick-service pizza chain — part of the Famous Brands portfolio.",
         website: "https://www.pizzainn.co.ke",
+        knownDomains: ["pizzainn.co.ke", "famousbrands.co.za"],
         branches: [
             { name: "Pizza Inn Sarit Centre", county: "Nairobi", town: "Westlands" },
             { name: "Pizza Inn Nakuru", county: "Nakuru", town: "Nakuru" },
@@ -357,6 +381,7 @@ exports.SEED_COMPANIES = [
     { slug: "g4s", name: "G4S Kenya", industry: "Security", category: "security", hqCounty: "Nairobi",
         description: "Global security solutions company — largest private security employer in Kenya.",
         website: "https://www.g4s.com/en-ke",
+        knownDomains: ["g4s.com", "ke.g4s.com"],
         branches: [
             { name: "G4S Witu Road Office", county: "Nairobi", town: "Industrial Area" },
             { name: "G4S Mombasa", county: "Mombasa", town: "Mombasa" },
@@ -366,6 +391,7 @@ exports.SEED_COMPANIES = [
     { slug: "sga", name: "SGA Security", industry: "Security", category: "security", hqCounty: "Nairobi",
         description: "Securex Agencies Limited — Kenyan-owned security services firm operating since 1971.",
         website: "https://sga.co.ke",
+        knownDomains: ["sga.co.ke", "securex.co.ke"],
         branches: [
             { name: "SGA Mombasa Road HQ", county: "Nairobi", town: "Industrial Area" },
             { name: "SGA Eldoret", county: "Uasin Gishu", town: "Eldoret" },
@@ -374,6 +400,7 @@ exports.SEED_COMPANIES = [
     { slug: "wells-fargo", name: "Wells Fargo Kenya", industry: "Security", category: "security", hqCounty: "Nairobi",
         description: "Cash-in-transit and electronic security specialists.",
         website: "https://wellsfargo.co.ke",
+        knownDomains: ["wellsfargo.co.ke", "wellsfargoltd.com"],
         branches: [
             { name: "Wells Fargo HQ", county: "Nairobi", town: "Industrial Area" },
             { name: "Wells Fargo Mombasa", county: "Mombasa", town: "Mombasa" },
@@ -383,6 +410,7 @@ exports.SEED_COMPANIES = [
     { slug: "brookside", name: "Brookside Dairy", industry: "Manufacturing", category: "other", hqCounty: "Kiambu",
         description: "East Africa's largest dairy processor — owns Tuzo, Delamere and Ilara brands.",
         website: "https://www.brookside.co.ke",
+        knownDomains: ["brookside.co.ke"],
         branches: [
             { name: "Brookside Ruiru Plant", county: "Kiambu", town: "Ruiru" },
             { name: "Brookside Eldoret Depot", county: "Uasin Gishu", town: "Eldoret" },
@@ -391,6 +419,7 @@ exports.SEED_COMPANIES = [
     { slug: "bidco", name: "Bidco Africa", industry: "Manufacturing", category: "other", hqCounty: "Kiambu",
         description: "Pan-African FMCG manufacturer — cooking oil, soaps, detergents and food products.",
         website: "https://bidcoafrica.com",
+        knownDomains: ["bidcoafrica.com", "bidco.co.ke"],
         branches: [
             { name: "Bidco Thika Industrial Plant", county: "Kiambu", town: "Thika" },
         ], roles: MANUFACTURING_ROLES,
@@ -398,6 +427,7 @@ exports.SEED_COMPANIES = [
     { slug: "del-monte", name: "Del Monte Kenya", industry: "Manufacturing", category: "other", hqCounty: "Murang'a",
         description: "Major pineapple grower and processor — exports across Europe and the Middle East.",
         website: "https://www.delmonte.com",
+        knownDomains: ["delmonte.com", "freshdelmonte.com"],
         branches: [
             { name: "Del Monte Thika Cannery", county: "Kiambu", town: "Thika" },
             { name: "Del Monte Plantation Murang'a", county: "Murang'a", town: "Murang'a" },
@@ -406,6 +436,7 @@ exports.SEED_COMPANIES = [
     { slug: "bamburi", name: "Bamburi Cement", industry: "Manufacturing", category: "construction", hqCounty: "Mombasa",
         description: "East Africa's leading cement and building solutions manufacturer.",
         website: "https://www.lafarge.co.ke",
+        knownDomains: ["bamburicement.com", "lafarge.co.ke", "holcim.com"],
         branches: [
             { name: "Bamburi Cement Mombasa Plant", county: "Mombasa", town: "Bamburi" },
             { name: "Bamburi Cement Nairobi Plant", county: "Machakos", town: "Athi River" },
@@ -415,6 +446,7 @@ exports.SEED_COMPANIES = [
     { slug: "safaricom", name: "Safaricom", industry: "Telecom", category: "other", hqCounty: "Nairobi",
         description: "Kenya's largest mobile operator — owners of M-Pesa, serving 40+ million subscribers.",
         website: "https://www.safaricom.co.ke",
+        knownDomains: ["safaricom.co.ke", "safaricomplc.com"],
         branches: [
             { name: "Safaricom House Westlands", county: "Nairobi", town: "Westlands" },
             { name: "Safaricom Shop Garden City", county: "Nairobi", town: "Thika Road" },
@@ -425,6 +457,7 @@ exports.SEED_COMPANIES = [
     { slug: "airtel-kenya", name: "Airtel Kenya", industry: "Telecom", category: "other", hqCounty: "Nairobi",
         description: "Bharti Airtel subsidiary — Kenya's second-largest mobile network.",
         website: "https://www.airtelkenya.com",
+        knownDomains: ["airtelkenya.com", "airtel.com", "airtel.africa"],
         branches: [
             { name: "Airtel HQ Parkside Towers", county: "Nairobi", town: "Westlands" },
             { name: "Airtel Shop Mombasa Nyali", county: "Mombasa", town: "Nyali" },
@@ -434,6 +467,7 @@ exports.SEED_COMPANIES = [
     { slug: "shell-kenya", name: "Shell (Vivo Energy Kenya)", industry: "Fuel", category: "retail", hqCounty: "Nairobi",
         description: "Vivo Energy operates the Shell brand across Kenya — over 200 service stations.",
         website: "https://www.vivoenergy.com/our-businesses/Kenya",
+        knownDomains: ["vivoenergy.com", "shell.com"],
         branches: [
             { name: "Shell Westlands", county: "Nairobi", town: "Westlands" },
             { name: "Shell Lang'ata Road", county: "Nairobi", town: "Lang'ata" },
@@ -444,6 +478,7 @@ exports.SEED_COMPANIES = [
     { slug: "rubis-kenya", name: "Rubis Energy Kenya", industry: "Fuel", category: "retail", hqCounty: "Nairobi",
         description: "French independent oil major — formerly KenolKobil. 280+ stations across Kenya.",
         website: "https://www.rubis-energie.com",
+        knownDomains: ["rubis-energie.com", "rubisenergy.co.ke"],
         branches: [
             { name: "Rubis Kileleshwa", county: "Nairobi", town: "Kileleshwa" },
             { name: "Rubis Eldoret", county: "Uasin Gishu", town: "Eldoret" },
@@ -453,6 +488,7 @@ exports.SEED_COMPANIES = [
     { slug: "totalenergies", name: "TotalEnergies Kenya", industry: "Fuel", category: "retail", hqCounty: "Nairobi",
         description: "French multi-energy company with 200+ Kenyan service stations.",
         website: "https://services.totalenergies.co.ke",
+        knownDomains: ["totalenergies.co.ke", "totalenergies.com", "total.co.ke"],
         branches: [
             { name: "TotalEnergies Hurlingham", county: "Nairobi", town: "Hurlingham" },
             { name: "TotalEnergies Naivasha", county: "Nakuru", town: "Naivasha" },

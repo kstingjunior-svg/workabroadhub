@@ -204,6 +204,24 @@ async function bootstrapLocalJobs() {
     `);
         await db_1.pool.query(`CREATE INDEX IF NOT EXISTS idx_company_claims_company ON company_claims(company_id)`);
         await db_1.pool.query(`CREATE INDEX IF NOT EXISTS idx_company_claims_status  ON company_claims(status)`);
+        // 2026-06 Phase 4.5: claim verification — email code + domain match +
+        // computed trust score. Added as nullable columns so existing claims
+        // are treated as "untrusted, needs review" — admin sees them flagged.
+        await db_1.pool.query(`ALTER TABLE company_claims ADD COLUMN IF NOT EXISTS verification_code           VARCHAR(8)`);
+        await db_1.pool.query(`ALTER TABLE company_claims ADD COLUMN IF NOT EXISTS verification_code_expires_at TIMESTAMP`);
+        await db_1.pool.query(`ALTER TABLE company_claims ADD COLUMN IF NOT EXISTS verification_attempts       INTEGER NOT NULL DEFAULT 0`);
+        await db_1.pool.query(`ALTER TABLE company_claims ADD COLUMN IF NOT EXISTS email_verified_at           TIMESTAMP`);
+        await db_1.pool.query(`ALTER TABLE company_claims ADD COLUMN IF NOT EXISTS domain_match                BOOLEAN`);
+        await db_1.pool.query(`ALTER TABLE company_claims ADD COLUMN IF NOT EXISTS trust_score                 VARCHAR(8)`); // 'high'|'medium'|'low'
+        // Hard de-dupe: same email can't claim same company more than once active
+        await db_1.pool.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_company_claims_company_email
+      ON company_claims(company_id, LOWER(claimant_email))
+      WHERE status IN ('pending', 'approved')
+    `).catch(() => { });
+        // Companies need a known_domains array for the domain-match check.
+        // Populated from SEED_COMPANIES catalogue below (idempotent UPDATE).
+        await db_1.pool.query(`ALTER TABLE companies ADD COLUMN IF NOT EXISTS known_domains TEXT[]`);
         // 2026-06 SAFETY: founder flagged that the seeded jobs are NOT real
         // postings — Naivas, Aga Khan etc. never authorised them. Until real
         // employers post real jobs, every seeded row gets is_seed=true and
@@ -275,11 +293,14 @@ async function bootstrapLocalJobs() {
         const companyIds = {};
         // Companies — upsert on slug. Existing rows keep their current data so
         // founder edits via admin panel aren't overwritten by the seed.
+        // Phase 4.5: we DO refresh known_domains every time so newly added
+        // domains in the catalogue propagate to production.
         for (const c of SEED_COMPANIES) {
-            const { rows } = await db_1.pool.query(`INSERT INTO companies (name, slug, industry, county, description, website, status, verified_at)
-         VALUES ($1, $2, $3, $4, $5, $6, 'approved', NOW())
-         ON CONFLICT (slug) DO UPDATE SET slug = EXCLUDED.slug
-         RETURNING id, (xmax = 0) AS was_inserted`, [c.name, c.slug, c.industry, c.hqCounty, c.description, c.website]);
+            const { rows } = await db_1.pool.query(`INSERT INTO companies (name, slug, industry, county, description, website, status, verified_at, known_domains)
+         VALUES ($1, $2, $3, $4, $5, $6, 'approved', NOW(), $7)
+         ON CONFLICT (slug) DO UPDATE
+            SET known_domains = EXCLUDED.known_domains
+         RETURNING id, (xmax = 0) AS was_inserted`, [c.name, c.slug, c.industry, c.hqCounty, c.description, c.website, c.knownDomains ?? []]);
             companyIds[c.slug] = rows[0].id;
             if (rows[0].was_inserted)
                 companiesAdded++;
