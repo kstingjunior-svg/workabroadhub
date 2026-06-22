@@ -29,6 +29,44 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.registerLocalJobsRoutes = registerLocalJobsRoutes;
 const multer_1 = __importDefault(require("multer"));
 const db_1 = require("./db");
+/**
+ * 2026-06 Phase 2.5 BUGFIX: read the session-based userId without requiring
+ * the isAuthenticated middleware to have run first.
+ *
+ * Why this exists:
+ *   The Kenya Careers endpoints are PUBLIC by design (anonymous users browse
+ *   freely, signed-in free users see the upgrade card, paid users see the
+ *   form). So we can't put `isAuthenticated` in front of them — it would
+ *   reject anonymous users with 401.
+ *
+ *   But that ALSO means `req.user` is never populated, because populating it
+ *   IS what the isAuthenticated middleware does. So a signed-in user landing
+ *   on /api/local-jobs/me/apply-status was being treated as anonymous, sent
+ *   to /login, and asked to sign in again — which is exactly the bug the
+ *   founder reported ("I'm logged in but it keeps telling me to log in").
+ *
+ *   This helper reads BOTH session paths (customUserId from /api/auth/login
+ *   and passport's req.user from any OAuth flow) without rejecting the
+ *   request. Returns null when no session exists — the caller decides what
+ *   to do.
+ */
+function readSessionUserId(req) {
+    // Path 1: req.user already populated (isAuthenticated ran for a parent route, or req re-used)
+    const fromReqUser = req.user?.claims?.sub ?? req.user?.id;
+    if (fromReqUser)
+        return String(fromReqUser);
+    // Path 2: custom session (the /api/auth/login flow used by the WAH frontend)
+    const fromSession = req.session?.customUserId;
+    if (fromSession)
+        return String(fromSession);
+    // Path 3: passport session (OAuth)
+    if (req.isAuthenticated?.() && req.user) {
+        const fromPassport = req.user?.claims?.sub ?? req.user?.id;
+        if (fromPassport)
+            return String(fromPassport);
+    }
+    return null;
+}
 const VALID_EMPLOYMENT_TYPES = new Set(["full_time", "part_time", "contract", "internship", "casual"]);
 const VALID_EXPERIENCE = new Set(["entry", "mid", "senior", "any"]);
 // 2026-06 Phase 2: tier-gated apply flow. Same KES tiers users already pay for
@@ -369,7 +407,7 @@ function registerLocalJobsRoutes(app) {
     // /pricing.
     app.get("/api/local-jobs/me/apply-status", async (req, res) => {
         try {
-            const userId = req.user?.claims?.sub ?? req.user?.id;
+            const userId = readSessionUserId(req) ?? undefined;
             if (!userId) {
                 return res.json({
                     canApply: false,
@@ -429,7 +467,7 @@ function registerLocalJobsRoutes(app) {
         { name: "certificates", maxCount: 1 },
     ]), async (req, res) => {
         try {
-            const userId = req.user?.claims?.sub ?? req.user?.id;
+            const userId = readSessionUserId(req) ?? undefined;
             if (!userId) {
                 return res.status(401).json({
                     message: "Please sign in to apply.",
@@ -656,7 +694,7 @@ function registerLocalJobsRoutes(app) {
     // Each endpoint inlines the admin check via storage.isUserAdmin() since
     // isAdmin middleware lives in routes.ts and isn't exported.
     async function requireAdminInline(req, res) {
-        const userId = req.user?.claims?.sub ?? req.user?.id;
+        const userId = readSessionUserId(req) ?? undefined;
         if (!userId) {
             res.status(401).json({ message: "Sign in required." });
             return null;
@@ -787,7 +825,7 @@ function registerLocalJobsRoutes(app) {
     // + the job + company they applied to. Powers /kenya-careers/my-applications.
     app.get("/api/local-jobs/me/applications", async (req, res) => {
         try {
-            const userId = req.user?.claims?.sub ?? req.user?.id;
+            const userId = readSessionUserId(req) ?? undefined;
             if (!userId) {
                 return res.status(401).json({ message: "Please sign in." });
             }
