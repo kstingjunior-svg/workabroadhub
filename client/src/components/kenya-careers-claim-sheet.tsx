@@ -11,7 +11,7 @@
  * Tony's inbox.
  */
 import { useState } from "react";
-import { Building2, X, Loader2, CheckCircle2, Sparkles } from "lucide-react";
+import { Building2, X, Loader2, CheckCircle2, Sparkles, ShieldCheck, Mail, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -32,10 +32,20 @@ export function KenyaCareersClaimSheet({ open, onClose, companyId, companyName }
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState<string | null>(null);
+  // Phase 4.5 — two-step flow state
+  const [step, setStep] = useState<"form" | "verify">("form");
+  const [claimId, setClaimId] = useState<string | null>(null);
+  const [emailMasked, setEmailMasked] = useState<string>("");
+  const [trustScore, setTrustScore] = useState<"high" | "medium" | "low" | null>(null);
+  const [lowTrustWarning, setLowTrustWarning] = useState<string | null>(null);
+  const [code, setCode] = useState("");
+  const [verifying, setVerifying] = useState(false);
 
   function reset() {
     setName(""); setEmail(""); setPhone(""); setRole(""); setMessage("");
     setError(null); setSubmitted(null); setSubmitting(false);
+    setStep("form"); setClaimId(null); setEmailMasked(""); setTrustScore(null);
+    setLowTrustWarning(null); setCode(""); setVerifying(false);
   }
 
   async function submit() {
@@ -54,11 +64,45 @@ export function KenyaCareersClaimSheet({ open, onClose, companyId, companyName }
         setError(body?.message || `Submission failed (${res.status}).`);
         return;
       }
-      setSubmitted(body?.message ?? "Thanks — we received your claim.");
+      // Phase 4.5: server emails a verification code; move to step 2
+      if (body?.requiresVerification && body?.claimId) {
+        setClaimId(body.claimId);
+        setEmailMasked(body.emailMasked ?? email);
+        setTrustScore(body.trustScore ?? null);
+        setLowTrustWarning(body.lowTrustWarning ?? null);
+        setStep("verify");
+      } else {
+        // Legacy fallback — older server response shape (shouldn't happen post-deploy)
+        setSubmitted(body?.message ?? "Thanks — we received your claim.");
+      }
     } catch (err: any) {
       setError(err?.message || "Could not submit. Check your connection and try again.");
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function verifyCode() {
+    if (!claimId) return;
+    setVerifying(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/local-jobs/claims/${claimId}/verify-email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ code: code.trim() }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(body?.message || `Verification failed (${res.status}).`);
+        return;
+      }
+      setSubmitted(body?.message ?? "Email verified! We'll review within 1-2 business days.");
+    } catch (err: any) {
+      setError(err?.message || "Could not verify code. Try again.");
+    } finally {
+      setVerifying(false);
     }
   }
 
@@ -96,15 +140,86 @@ export function KenyaCareersClaimSheet({ open, onClose, companyId, companyName }
           {submitted ? (
             <div className="text-center py-2" data-testid="claim-success">
               <CheckCircle2 className="h-10 w-10 text-emerald-600 mx-auto mb-2" />
-              <h3 className="font-semibold mb-1">Claim received</h3>
+              <h3 className="font-semibold mb-1">Email verified</h3>
               <p className="text-sm text-muted-foreground mb-4">{submitted}</p>
               <Button onClick={() => { reset(); onClose(); }} variant="outline">Close</Button>
             </div>
+          ) : step === "verify" ? (
+            /* ─── STEP 2: enter the 6-digit code ─── */
+            <div className="space-y-3" data-testid="claim-verify-step">
+              <div className="text-center">
+                <Mail className="h-10 w-10 text-emerald-600 mx-auto mb-2" />
+                <h3 className="font-semibold mb-1">Check your inbox</h3>
+                <p className="text-sm text-muted-foreground">
+                  We sent a 6-digit code to <strong>{emailMasked}</strong>. Enter it below to prove this email is yours.
+                </p>
+              </div>
+
+              {lowTrustWarning && (
+                <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 ring-1 ring-amber-200 dark:ring-amber-800 p-3 text-xs flex items-start gap-2">
+                  <AlertCircle className="h-3.5 w-3.5 text-amber-700 dark:text-amber-300 shrink-0 mt-0.5" />
+                  <span className="text-amber-900 dark:text-amber-200">{lowTrustWarning}</span>
+                </div>
+              )}
+
+              <div>
+                <label htmlFor="claim-code" className="text-sm font-medium block mb-1">Verification code</label>
+                <Input
+                  id="claim-code"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  placeholder="000000"
+                  inputMode="numeric"
+                  className="text-center text-2xl font-mono tracking-[0.5em]"
+                  maxLength={6}
+                  autoFocus
+                  data-testid="claim-code-input"
+                />
+                <p className="text-[10px] text-muted-foreground mt-1 text-center">
+                  Didn't receive it? Check spam, or wait 1-2 minutes. Code expires in 24 hours.
+                </p>
+              </div>
+
+              {error && (
+                <div className="text-sm text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-900/20 rounded-md p-2">
+                  {error}
+                </div>
+              )}
+
+              <Button
+                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+                onClick={verifyCode}
+                disabled={verifying || code.length !== 6}
+                data-testid="btn-verify-code"
+              >
+                {verifying
+                  ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> Verifying…</>
+                  : <><ShieldCheck className="h-4 w-4 mr-1.5" /> Verify and submit claim</>}
+              </Button>
+              <button
+                type="button"
+                onClick={() => { setStep("form"); setCode(""); setError(null); }}
+                className="text-xs text-muted-foreground hover:underline mx-auto block"
+              >
+                ← Back to claim form
+              </button>
+            </div>
           ) : (
+            /* ─── STEP 1: claim form ─── */
             <div className="space-y-3">
               <p className="text-sm text-muted-foreground">
                 If you work at <strong>{companyName}</strong>, claim this profile to take over the listings and post jobs directly. We'll review your claim within 1-2 business days.
               </p>
+
+              {/* 2026-06 Phase 4.5: honest disclosure about verification.
+                  Stops casual fraud and warns serious fraudsters. */}
+              <div className="rounded-lg bg-slate-100 dark:bg-slate-800/40 ring-1 ring-slate-200 dark:ring-slate-700 p-3 text-xs text-slate-700 dark:text-slate-300 flex items-start gap-2">
+                <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                <span>
+                  <strong>How we verify:</strong> we email a code to the address below + check the domain matches {companyName}'s known emails.
+                  Gmail / Yahoo addresses get extra scrutiny. <strong>Fraudulent claims are deleted and reported to the company.</strong>
+                </span>
+              </div>
 
               <div>
                 <label htmlFor="claim-name" className="text-sm font-medium block mb-1">Your full name</label>

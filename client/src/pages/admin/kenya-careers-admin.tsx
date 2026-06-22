@@ -51,6 +51,10 @@ interface ClaimRow {
   claimant_name: string; claimant_email: string; claimant_phone: string | null;
   role_at_company: string | null; message: string | null;
   evidence_url: string | null; status: string; created_at: string;
+  // Phase 4.5 trust signals
+  email_verified_at: string | null;
+  domain_match: boolean | null;
+  trust_score: "high" | "medium" | "low" | null;
 }
 
 const APPLICATION_STATUSES = ["submitted", "under_review", "shortlisted", "interview", "hired", "rejected"];
@@ -374,68 +378,113 @@ export default function KenyaCareersAdmin() {
             {claims.length === 0 && (
               <Card><CardContent className="p-8 text-center text-muted-foreground">No claims yet.</CardContent></Card>
             )}
-            {claims.map((cl) => (
-              <Card key={cl.id} data-testid={`admin-claim-${cl.id}`}>
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between gap-3 mb-2">
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-sm">{cl.company_name}</h3>
-                      <p className="text-xs text-muted-foreground">
-                        Claimant: <strong>{cl.claimant_name}</strong> · {cl.claimant_email}
-                        {cl.claimant_phone && ` · ${cl.claimant_phone}`}
-                        {cl.role_at_company && ` · ${cl.role_at_company}`}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Submitted {new Date(cl.created_at).toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric" })}
-                      </p>
+            {claims.map((cl) => {
+              const trustCls =
+                cl.trust_score === "high"   ? "border-emerald-300 text-emerald-700 bg-emerald-50" :
+                cl.trust_score === "medium" ? "border-amber-300 text-amber-700 bg-amber-50" :
+                cl.trust_score === "low"    ? "border-rose-300 text-rose-700 bg-rose-50" :
+                                              "border-muted-foreground/30 text-muted-foreground";
+              const isVerified = !!cl.email_verified_at;
+              const canSafeApprove = isVerified && cl.trust_score === "high";
+
+              return (
+                <Card key={cl.id} data-testid={`admin-claim-${cl.id}`} className={!isVerified ? "opacity-75" : ""}>
+                  <CardContent className="p-4">
+                    <div className="flex items-start justify-between gap-3 mb-2">
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-semibold text-sm">{cl.company_name}</h3>
+                        <p className="text-xs text-muted-foreground">
+                          Claimant: <strong>{cl.claimant_name}</strong> · {cl.claimant_email}
+                          {cl.claimant_phone && ` · ${cl.claimant_phone}`}
+                          {cl.role_at_company && ` · ${cl.role_at_company}`}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Submitted {new Date(cl.created_at).toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric" })}
+                        </p>
+                      </div>
+                      <Badge variant="outline" className={
+                        cl.status === "approved" ? "border-emerald-300 text-emerald-700 bg-emerald-50" :
+                        cl.status === "rejected" ? "border-rose-300 text-rose-700 bg-rose-50" :
+                        "border-amber-300 text-amber-700 bg-amber-50"
+                      }>
+                        {cl.status}
+                      </Badge>
                     </div>
-                    <Badge variant="outline" className={
-                      cl.status === "approved" ? "border-emerald-300 text-emerald-700 bg-emerald-50" :
-                      cl.status === "rejected" ? "border-rose-300 text-rose-700 bg-rose-50" :
-                      "border-amber-300 text-amber-700 bg-amber-50"
-                    }>
-                      {cl.status}
-                    </Badge>
-                  </div>
-                  {cl.message && (
-                    <p className="text-xs italic bg-muted/30 rounded p-2 mb-2">"{cl.message}"</p>
-                  )}
-                  <div className="flex flex-wrap gap-1.5">
-                    {cl.evidence_url && (
-                      <Button asChild size="sm" variant="outline">
-                        <a href={cl.evidence_url} target="_blank" rel="noopener noreferrer">
-                          View license/cert <ExternalLink className="h-3 w-3 ml-1" />
-                        </a>
-                      </Button>
+
+                    {/* 2026-06 Phase 4.5: trust signals — at a glance, Tony sees
+                        whether the email was verified and whether the domain
+                        matches the company's known emails. HIGH + verified →
+                        safe to 1-click approve. Anything less → scrutinise. */}
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      <Badge variant="outline" className={trustCls}>
+                        {cl.trust_score?.toUpperCase() ?? "UNKNOWN"} TRUST
+                      </Badge>
+                      <Badge variant="outline" className={isVerified ? "border-emerald-300 text-emerald-700 bg-emerald-50" : "border-rose-300 text-rose-700 bg-rose-50"}>
+                        {isVerified ? "✓ Email verified" : "✗ Email not yet verified"}
+                      </Badge>
+                      <Badge variant="outline" className={cl.domain_match ? "border-emerald-300 text-emerald-700 bg-emerald-50" : "border-muted-foreground/30 text-muted-foreground"}>
+                        Domain {cl.domain_match ? "✓ matches" : "✗ no match"}
+                      </Badge>
+                    </div>
+
+                    {cl.message && (
+                      <p className="text-xs italic bg-muted/30 rounded p-2 mb-2">"{cl.message}"</p>
                     )}
-                    {cl.status === "pending" && (
-                      <Button
-                        size="sm"
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                        disabled={savingId === cl.id}
-                        onClick={async () => {
-                          setSavingId(cl.id);
-                          try {
-                            const res = await fetch(`/api/admin/local-jobs/claims/${cl.id}/approve`, {
-                              method: "POST", credentials: "include",
-                            });
-                            const body = await res.json().catch(() => ({}));
-                            if (!res.ok) {
-                              toast({ variant: "destructive", title: "Approval failed", description: body?.message });
-                            } else {
-                              toast({ title: "Approved", description: "Claimant now has employer access." });
-                              await load();
+
+                    {!isVerified && cl.status === "pending" && (
+                      <p className="text-xs text-amber-700 dark:text-amber-300 mb-2">
+                        Claimant hasn't entered the email code yet — waiting for them to verify before this is actionable.
+                      </p>
+                    )}
+
+                    {cl.trust_score === "low" && isVerified && cl.status === "pending" && (
+                      <p className="text-xs text-rose-700 dark:text-rose-300 mb-2">
+                        Low-trust: claimant used a free email provider. Verify their license URL or contact them out-of-band before approving.
+                      </p>
+                    )}
+
+                    <div className="flex flex-wrap gap-1.5">
+                      {cl.evidence_url && (
+                        <Button asChild size="sm" variant="outline">
+                          <a href={cl.evidence_url} target="_blank" rel="noopener noreferrer">
+                            View license/cert <ExternalLink className="h-3 w-3 ml-1" />
+                          </a>
+                        </Button>
+                      )}
+                      {cl.status === "pending" && (
+                        <Button
+                          size="sm"
+                          className={canSafeApprove ? "bg-emerald-600 hover:bg-emerald-700 text-white" : "bg-amber-600 hover:bg-amber-700 text-white"}
+                          disabled={savingId === cl.id || (!isVerified)}
+                          title={!isVerified ? "Waiting for claimant to verify their email" : (canSafeApprove ? "Safe to approve — domain matches" : "Lower-trust — confirm out-of-band first")}
+                          onClick={async () => {
+                            if (!canSafeApprove && !confirm(`This is a ${cl.trust_score ?? "unknown"}-trust claim. Are you sure you want to grant ${cl.claimant_email} admin access to ${cl.company_name}?`)) {
+                              return;
                             }
-                          } finally { setSavingId(null); }
-                        }}
-                      >
-                        <ShieldCheck className="h-3.5 w-3.5 mr-1" /> Approve + grant access
-                      </Button>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                            setSavingId(cl.id);
+                            try {
+                              const res = await fetch(`/api/admin/local-jobs/claims/${cl.id}/approve`, {
+                                method: "POST", credentials: "include",
+                              });
+                              const body = await res.json().catch(() => ({}));
+                              if (!res.ok) {
+                                toast({ variant: "destructive", title: "Approval failed", description: body?.message });
+                              } else {
+                                toast({ title: "Approved", description: "Claimant now has employer access." });
+                                await load();
+                              }
+                            } finally { setSavingId(null); }
+                          }}
+                        >
+                          <ShieldCheck className="h-3.5 w-3.5 mr-1" />
+                          {canSafeApprove ? "Approve + grant access" : isVerified ? "Approve (lower trust)" : "Awaiting verification"}
+                        </Button>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         )}
       </div>
