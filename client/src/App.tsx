@@ -127,6 +127,8 @@ const KenyaCareers    = lazyWithRetry(() => import("@/pages/kenya-careers"));
 const KenyaCareersJob = lazyWithRetry(() => import("@/pages/kenya-careers-job"));
 const KenyaCareersMyApplications = lazyWithRetry(() => import("@/pages/kenya-careers-my-applications"));
 const KenyaCareersAdmin = lazyWithRetry(() => import("@/pages/admin/kenya-careers-admin"));
+const KenyaCareersCompany = lazyWithRetry(() => import("@/pages/kenya-careers-company"));
+const KenyaCareersEmployers = lazyWithRetry(() => import("@/pages/kenya-careers-employers"));
 const ServiceOrderFlow = lazyWithRetry(() => import("@/pages/service-order-flow"));
 const LoginPage = lazyWithRetry(() => import("@/pages/login"));
 const ForgotPassword = lazyWithRetry(() => import("@/pages/forgot-password"));
@@ -353,6 +355,8 @@ const LazyKenyaCareers    = withSuspense(KenyaCareers);
 const LazyKenyaCareersJob = withSuspense(KenyaCareersJob);
 const LazyKenyaCareersMyApplications = withSuspense(KenyaCareersMyApplications);
 const LazyKenyaCareersAdmin = withSuspense(KenyaCareersAdmin);
+const LazyKenyaCareersCompany = withSuspense(KenyaCareersCompany);
+const LazyKenyaCareersEmployers = withSuspense(KenyaCareersEmployers);
 const LazyServiceOrderFlow = withSuspense(ServiceOrderFlow);
 const LazyReferrals = withSuspense(Referrals);
 const LazyReferralTerms = withSuspense(ReferralTerms);
@@ -510,6 +514,8 @@ function AuthenticatedRoutes() {
       <Route path="/kenya-careers/job/:id" component={LazyKenyaCareersJob} />
       <Route path="/kenya-careers/my-applications" component={LazyKenyaCareersMyApplications} />
       <Route path="/admin/kenya-careers" component={LazyKenyaCareersAdmin} />
+      <Route path="/kenya-careers/company/:slug" component={LazyKenyaCareersCompany} />
+      <Route path="/employers" component={LazyKenyaCareersEmployers} />
       <Route path="/services/order/:slug" component={LazyServiceOrderFlow} />
       <Route path="/login" component={LazyLoginPage} />
       <Route path="/signup" component={LazyLoginPage} />

@@ -16,11 +16,13 @@ import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import {
   ArrowLeft, BadgeCheck, Loader2, ShieldCheck, ShieldAlert, Building2, Briefcase,
-  Inbox, ExternalLink, RefreshCcw,
+  Inbox, ExternalLink, RefreshCcw, Plus, X, Sparkles,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 
 interface CompanyRow {
@@ -54,6 +56,7 @@ export default function KenyaCareersAdmin() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [addJobOpen, setAddJobOpen] = useState(false);
   const { toast } = useToast();
 
   async function load() {
@@ -238,6 +241,19 @@ export default function KenyaCareersAdmin() {
         {/* Jobs */}
         {!loading && !error && tab === "jobs" && (
           <div className="space-y-2">
+            {/* Add Real Job button — bypasses the seed flag so this job
+                accepts real applications and routes them to the employer. */}
+            <div className="flex justify-end -mt-2 mb-2">
+              <Button
+                onClick={() => setAddJobOpen(true)}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                size="sm"
+                data-testid="btn-open-add-job"
+              >
+                <Plus className="h-4 w-4 mr-1.5" /> Add a real job
+              </Button>
+            </div>
+
             {jobs.length === 0 && (
               <Card><CardContent className="p-8 text-center text-muted-foreground">No jobs yet.</CardContent></Card>
             )}
@@ -338,6 +354,244 @@ export default function KenyaCareersAdmin() {
             ))}
           </div>
         )}
+      </div>
+
+      {/* Add Real Job modal — bypasses seed gate. Companies dropdown drawn
+          from the already-loaded admin overview state. */}
+      <AddRealJobModal
+        open={addJobOpen}
+        onClose={() => setAddJobOpen(false)}
+        companies={companies}
+        onJobCreated={() => { setAddJobOpen(false); load(); }}
+      />
+    </div>
+  );
+}
+
+// ─── Add Real Job modal ──────────────────────────────────────────────────────
+// Posts to /api/admin/local-jobs/jobs which creates a job with is_seed=false.
+// That means applications will ACTUALLY route to the named employer (i.e.
+// they show up in the employer's incoming applications when Phase 4 ships,
+// and in the meantime they're visible to Tony in /admin/kenya-careers).
+
+interface AddRealJobModalProps {
+  open: boolean;
+  onClose: () => void;
+  companies: CompanyRow[];
+  onJobCreated: () => void;
+}
+
+function AddRealJobModal({ open, onClose, companies, onJobCreated }: AddRealJobModalProps) {
+  const [companyId, setCompanyId] = useState("");
+  const [title, setTitle] = useState("");
+  const [department, setDepartment] = useState("");
+  const [vacancies, setVacancies] = useState("1");
+  const [employmentType, setEmploymentType] = useState("full_time");
+  const [salaryMin, setSalaryMin] = useState("");
+  const [salaryMax, setSalaryMax] = useState("");
+  const [requirements, setRequirements] = useState("");
+  const [responsibilities, setResponsibilities] = useState("");
+  const [deadline, setDeadline] = useState("");
+  const [county, setCounty] = useState("");
+  const [town, setTown] = useState("");
+  const [experienceLevel, setExperienceLevel] = useState("any");
+  const [category, setCategory] = useState("other");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { toast } = useToast();
+
+  function reset() {
+    setCompanyId(""); setTitle(""); setDepartment(""); setVacancies("1");
+    setEmploymentType("full_time"); setSalaryMin(""); setSalaryMax("");
+    setRequirements(""); setResponsibilities(""); setDeadline("");
+    setCounty(""); setTown(""); setExperienceLevel("any"); setCategory("other");
+    setError(null); setSubmitting(false);
+  }
+
+  async function submit() {
+    setSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/local-jobs/jobs", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId, title, department, vacancies: Number(vacancies),
+          employmentType, salaryMin: salaryMin ? Number(salaryMin) : null,
+          salaryMax: salaryMax ? Number(salaryMax) : null,
+          requirements, responsibilities, deadline,
+          county, town, experienceLevel, category,
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(body?.message || `Create failed (${res.status}).`);
+        return;
+      }
+      toast({ title: "Real job published", description: body?.message || "Applications will route to the employer." });
+      reset();
+      onJobCreated();
+    } catch (err: any) {
+      setError(err?.message || "Could not create job.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (!open) return null;
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm"
+      onClick={() => { reset(); onClose(); }}
+    >
+      <div
+        className="relative bg-background w-full sm:max-w-lg max-h-[92vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+        data-testid="add-real-job-modal"
+      >
+        <button
+          className="absolute top-3 right-3 p-1 rounded-full hover:bg-muted text-muted-foreground"
+          onClick={() => { reset(); onClose(); }}
+          aria-label="Close"
+        >
+          <X className="h-4 w-4" />
+        </button>
+
+        <div className="p-5 sm:p-6">
+          <div className="mb-4">
+            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1">
+              <Sparkles className="h-3 w-3" /> Add a verified real job
+            </p>
+            <h2 className="font-bold text-lg leading-tight">New job posting</h2>
+            <p className="text-xs text-muted-foreground mt-1">
+              This job is created with <code>is_seed=false</code> — applications will be real, applicants will route to the employer.
+            </p>
+          </div>
+
+          <div className="space-y-3">
+            <div>
+              <label htmlFor="ar-company" className="text-sm font-medium block mb-1">Company *</label>
+              <select
+                id="ar-company"
+                value={companyId}
+                onChange={(e) => setCompanyId(e.target.value)}
+                className="w-full text-sm border rounded-md px-3 py-2 bg-background"
+              >
+                <option value="">Select…</option>
+                {companies.filter((c) => c.status === "approved").map((c) => (
+                  <option key={c.id} value={c.id}>{c.name} {c.industry ? `· ${c.industry}` : ""}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="ar-title" className="text-sm font-medium block mb-1">Job title *</label>
+              <Input id="ar-title" value={title} onChange={(e) => setTitle(e.target.value.slice(0, 200))} placeholder="e.g. Cashier" />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label htmlFor="ar-dept" className="text-sm font-medium block mb-1">Department</label>
+                <Input id="ar-dept" value={department} onChange={(e) => setDepartment(e.target.value.slice(0, 120))} placeholder="e.g. Front End" />
+              </div>
+              <div>
+                <label htmlFor="ar-vacs" className="text-sm font-medium block mb-1">Vacancies</label>
+                <Input id="ar-vacs" type="number" min={1} max={999} value={vacancies} onChange={(e) => setVacancies(e.target.value.replace(/\D/g, "").slice(0, 3) || "1")} />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label htmlFor="ar-type" className="text-sm font-medium block mb-1">Type</label>
+                <select id="ar-type" value={employmentType} onChange={(e) => setEmploymentType(e.target.value)} className="w-full text-sm border rounded-md px-3 py-2 bg-background">
+                  <option value="full_time">Full-time</option>
+                  <option value="part_time">Part-time</option>
+                  <option value="contract">Contract</option>
+                  <option value="internship">Internship</option>
+                  <option value="casual">Casual</option>
+                </select>
+              </div>
+              <div>
+                <label htmlFor="ar-exp" className="text-sm font-medium block mb-1">Experience</label>
+                <select id="ar-exp" value={experienceLevel} onChange={(e) => setExperienceLevel(e.target.value)} className="w-full text-sm border rounded-md px-3 py-2 bg-background">
+                  <option value="any">Any level</option>
+                  <option value="entry">Entry</option>
+                  <option value="mid">Mid</option>
+                  <option value="senior">Senior</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label htmlFor="ar-min" className="text-sm font-medium block mb-1">Salary min (KES)</label>
+                <Input id="ar-min" type="number" min={0} value={salaryMin} onChange={(e) => setSalaryMin(e.target.value.replace(/\D/g, ""))} placeholder="20000" />
+              </div>
+              <div>
+                <label htmlFor="ar-max" className="text-sm font-medium block mb-1">Salary max (KES)</label>
+                <Input id="ar-max" type="number" min={0} value={salaryMax} onChange={(e) => setSalaryMax(e.target.value.replace(/\D/g, ""))} placeholder="30000" />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label htmlFor="ar-county" className="text-sm font-medium block mb-1">County</label>
+                <Input id="ar-county" value={county} onChange={(e) => setCounty(e.target.value.slice(0, 60))} placeholder="Nairobi" />
+              </div>
+              <div>
+                <label htmlFor="ar-town" className="text-sm font-medium block mb-1">Town / area</label>
+                <Input id="ar-town" value={town} onChange={(e) => setTown(e.target.value.slice(0, 80))} placeholder="Westlands" />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label htmlFor="ar-cat" className="text-sm font-medium block mb-1">Category</label>
+                <select id="ar-cat" value={category} onChange={(e) => setCategory(e.target.value)} className="w-full text-sm border rounded-md px-3 py-2 bg-background">
+                  {["retail","hospitality","healthcare","construction","transport","security","cleaning","education","logistics","other"].map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="ar-deadline" className="text-sm font-medium block mb-1">Deadline</label>
+                <Input id="ar-deadline" type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
+              </div>
+            </div>
+
+            <div>
+              <label htmlFor="ar-resp" className="text-sm font-medium block mb-1">Responsibilities</label>
+              <Textarea id="ar-resp" rows={3} value={responsibilities} onChange={(e) => setResponsibilities(e.target.value)} placeholder="What the person will do day-to-day…" />
+            </div>
+
+            <div>
+              <label htmlFor="ar-req" className="text-sm font-medium block mb-1">Requirements</label>
+              <Textarea id="ar-req" rows={3} value={requirements} onChange={(e) => setRequirements(e.target.value)} placeholder="Qualifications, certifications, experience…" />
+            </div>
+
+            {error && (
+              <div className="text-sm text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-900/20 rounded-md p-2">
+                {error}
+              </div>
+            )}
+
+            <Button
+              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+              onClick={submit}
+              disabled={submitting || !companyId || !title.trim()}
+              data-testid="btn-submit-add-job"
+            >
+              {submitting
+                ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> Publishing…</>
+                : <><Sparkles className="h-4 w-4 mr-1.5" /> Publish real job</>}
+            </Button>
+            <p className="text-[11px] text-center text-muted-foreground">
+              This job will accept real applications. Applicants pay KES 99/1000/4500 and submit CVs that route to the employer.
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );

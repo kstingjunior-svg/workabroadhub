@@ -415,6 +415,122 @@ export function registerLocalJobsRoutes(app: Express): void {
     }
   });
 
+  // ─── GET /api/local-jobs/companies/:slug ──────────────────────────────────
+  // 2026-06 Phase 3 expansion: dedicated company profile data — used by the
+  // /kenya-careers/company/:slug page. Returns the company itself, its
+  // branches (each with the county/town), and all its currently-open jobs
+  // (with their is_seed flag for the honest "sample" banner).
+  app.get("/api/local-jobs/companies/:slug", async (req: Request, res: Response) => {
+    try {
+      const { slug } = req.params;
+      // Accept either UUID (id) or slug — flexible because the seed catalogue
+      // uses slugs but custom employers added by admin might only have IDs.
+      const byUuid = /^[0-9a-f-]{36}$/i.test(slug);
+      const lookupClause = byUuid ? "id = $1" : "slug = $1";
+
+      const { rows: [company] } = await pool.query<{
+        id: string; name: string; slug: string | null; logo_url: string | null;
+        industry: string | null; address: string | null; county: string | null;
+        contact_name: string | null; phone: string | null; email: string | null;
+        description: string | null; website: string | null;
+        verified_at: Date | null; status: string; created_at: Date;
+      }>(`
+        SELECT id, name, slug, logo_url, industry, address, county,
+               contact_name, phone, email, description, website,
+               verified_at, status, created_at
+          FROM companies
+         WHERE ${lookupClause} AND status = 'approved'
+         LIMIT 1
+      `, [slug]);
+
+      if (!company) {
+        return res.status(404).json({ message: "Company not found." });
+      }
+
+      const [branchesRes, jobsRes] = await Promise.all([
+        pool.query<{
+          id: string; name: string; county: string | null; town: string | null;
+          location_detail: string | null;
+        }>(`
+          SELECT id, name, county, town, location_detail
+            FROM branches WHERE company_id = $1 ORDER BY county, name
+        `, [company.id]),
+        pool.query<{
+          id: string; title: string; department: string | null;
+          vacancies: number; employment_type: string | null;
+          salary_min: number | null; salary_max: number | null;
+          county: string | null; town: string | null;
+          experience_level: string | null; category: string | null;
+          deadline: Date | null; created_at: Date; is_seed: boolean;
+          branch_id: string | null; branch_name: string | null;
+        }>(`
+          SELECT j.id, j.title, j.department, j.vacancies, j.employment_type,
+                 j.salary_min, j.salary_max, j.county, j.town,
+                 j.experience_level, j.category, j.deadline, j.created_at,
+                 COALESCE(j.is_seed, false) AS is_seed,
+                 b.id AS branch_id, b.name AS branch_name
+            FROM local_jobs j
+       LEFT JOIN branches b ON b.id = j.branch_id
+           WHERE j.company_id = $1 AND j.status = 'open'
+           ORDER BY j.is_seed ASC, j.created_at DESC
+        `, [company.id]),
+      ]);
+
+      // Derive "counties served" from branches (no separate field in DB —
+      // branches IS the source of truth for which counties the company
+      // operates in).
+      const countiesServed = Array.from(new Set(
+        branchesRes.rows.map((b) => b.county).filter(Boolean) as string[],
+      )).sort();
+
+      // All-seed-flag — if every job is a seed, the entire company is
+      // unclaimed/sample. UI shows a more prominent disclosure in that case.
+      const allJobsAreSeed = jobsRes.rows.length > 0 && jobsRes.rows.every((j) => j.is_seed);
+      const realJobCount   = jobsRes.rows.filter((j) => !j.is_seed).length;
+
+      res.setHeader("Cache-Control", "public, max-age=120");
+      res.json({
+        id:          company.id,
+        name:        company.name,
+        slug:        company.slug,
+        logoUrl:     company.logo_url,
+        industry:    company.industry,
+        description: company.description,
+        website:     company.website,
+        headquarters: { county: company.county, address: company.address },
+        // 2026-06 SAFETY: hide Verified tick if every job is a seed.
+        verified:    !!company.verified_at && !allJobsAreSeed,
+        allJobsAreSeed,
+        realJobCount,
+        countiesServed,
+        branches: branchesRes.rows.map((b) => ({
+          id: b.id, name: b.name, county: b.county, town: b.town, location: b.location_detail,
+        })),
+        jobs: jobsRes.rows.map((j) => ({
+          id:              j.id,
+          title:           j.title,
+          department:      j.department,
+          vacancies:       j.vacancies,
+          employmentType:  j.employment_type,
+          salaryMin:       j.salary_min,
+          salaryMax:       j.salary_max,
+          county:          j.county,
+          town:            j.town,
+          experienceLevel: j.experience_level,
+          category:        j.category,
+          deadline:        j.deadline,
+          createdAt:       j.created_at,
+          isSeed:          j.is_seed,
+          branch: j.branch_id ? { id: j.branch_id, name: j.branch_name } : null,
+        })),
+      });
+    } catch (err: any) {
+      if (err?.code === "42P01") return res.status(404).json({ message: "Company not found." });
+      console.error(`[GET /api/local-jobs/companies/:slug]`, err?.message);
+      res.status(500).json({ message: "Could not load company profile." });
+    }
+  });
+
   // ─── GET /api/local-jobs/stats ────────────────────────────────────────────
   // Headline numbers for the landing hero: "X jobs · Y employers · Z counties".
   app.get("/api/local-jobs/stats", async (_req: Request, res: Response) => {
@@ -1133,6 +1249,80 @@ export function registerLocalJobsRoutes(app: Express): void {
     } catch (err: any) {
       console.error("[PATCH /api/admin/local-jobs/companies/:id]", err?.message);
       res.status(500).json({ message: "Could not update company." });
+    }
+  });
+
+  // POST /api/admin/local-jobs/jobs — admin manually adds a REAL job that
+  // bypasses the seed gate. Used by Tony's manual curation workflow until
+  // employer self-service ships in Phase 4. The created job has is_seed=false
+  // so applications ARE accepted, payments DO clear, and the candidate
+  // genuinely reaches the employer.
+  app.post("/api/admin/local-jobs/jobs", async (req: any, res: Response) => {
+    const adminId = await requireAdminInline(req, res);
+    if (!adminId) return;
+    try {
+      const b = req.body ?? {};
+      const companyId      = String(b.companyId      ?? "").trim();
+      const branchId       = String(b.branchId       ?? "").trim() || null;
+      const title          = String(b.title          ?? "").trim().slice(0, 200);
+      const department     = String(b.department     ?? "").trim().slice(0, 120) || null;
+      const vacancies      = Math.max(1, Math.min(999, Number(b.vacancies ?? 1)));
+      const employmentType = String(b.employmentType ?? "full_time").trim();
+      const salaryMin      = b.salaryMin != null ? Number(b.salaryMin) : null;
+      const salaryMax      = b.salaryMax != null ? Number(b.salaryMax) : null;
+      const requirements   = String(b.requirements   ?? "").trim() || null;
+      const responsibilities = String(b.responsibilities ?? "").trim() || null;
+      const deadline       = String(b.deadline       ?? "").trim().slice(0, 10) || null;
+      const county         = String(b.county         ?? "").trim().slice(0, 60) || null;
+      const town           = String(b.town           ?? "").trim().slice(0, 80) || null;
+      const experience     = String(b.experienceLevel ?? "any").trim();
+      const category       = String(b.category       ?? "other").trim();
+
+      if (!companyId || !/^[0-9a-f-]{8,}$/i.test(companyId)) {
+        return res.status(400).json({ message: "companyId is required and must be a valid UUID." });
+      }
+      if (!title || title.length < 3) {
+        return res.status(400).json({ message: "Job title is required." });
+      }
+      if (!VALID_EMPLOYMENT_TYPES.has(employmentType)) {
+        return res.status(400).json({ message: `employmentType must be one of: ${[...VALID_EMPLOYMENT_TYPES].join(", ")}` });
+      }
+      if (!VALID_EXPERIENCE.has(experience)) {
+        return res.status(400).json({ message: `experienceLevel must be one of: ${[...VALID_EXPERIENCE].join(", ")}` });
+      }
+
+      // Confirm the company exists and is approved
+      const { rows: [company] } = await pool.query<{ id: string; name: string }>(
+        `SELECT id, name FROM companies WHERE id = $1 AND status = 'approved' LIMIT 1`,
+        [companyId],
+      );
+      if (!company) {
+        return res.status(404).json({ message: "Company not found or not approved." });
+      }
+
+      const { rows: [job] } = await pool.query<{ id: string }>(`
+        INSERT INTO local_jobs (
+          company_id, branch_id, title, department, vacancies, employment_type,
+          salary_min, salary_max, requirements, responsibilities, deadline,
+          county, town, experience_level, category, status, is_seed
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 'open', false)
+        RETURNING id
+      `, [
+        companyId, branchId, title, department, vacancies, employmentType,
+        salaryMin, salaryMax, requirements, responsibilities, deadline,
+        county, town, experience, category,
+      ]);
+
+      console.log(`[admin] adminId=${adminId} created REAL job=${job.id} company="${company.name}" title="${title}"`);
+
+      res.json({
+        success: true,
+        jobId: job.id,
+        message: `Real job "${title}" published at ${company.name}. Applications will reach the employer.`,
+      });
+    } catch (err: any) {
+      console.error("[POST /api/admin/local-jobs/jobs]", err?.message);
+      res.status(500).json({ message: "Could not create job." });
     }
   });
 

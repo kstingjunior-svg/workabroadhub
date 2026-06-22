@@ -317,10 +317,16 @@ export default function KenyaCareers() {
       </section>
 
       <div className="max-w-5xl mx-auto px-4">
-        {/* 2026-06 Phase 2: quick link to "My applications" so signed-in users
-            can track what they've sent. The link is harmless for anonymous
-            users — server will route them to /login. */}
-        <div className="mt-4 flex justify-end">
+        {/* 2026-06 Phase 2: quick links — my applications for jobseekers,
+            employer landing for HR managers. Both are harmless for the wrong
+            audience (jobseekers can ignore employer link; employer link to
+            /login if needed). */}
+        <div className="mt-4 flex justify-end gap-2 flex-wrap">
+          <Link href="/employers">
+            <Button variant="ghost" size="sm" className="text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-900/20" data-testid="link-employers-page">
+              <Building2 className="h-4 w-4 mr-1.5" /> For employers
+            </Button>
+          </Link>
           <Link href="/kenya-careers/my-applications">
             <Button variant="ghost" size="sm" className="text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-900/20" data-testid="link-my-applications">
               <Inbox className="h-4 w-4 mr-1.5" /> My applications
@@ -339,15 +345,14 @@ export default function KenyaCareers() {
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
               {employers.map((e) => (
-                <button
+                <div
                   key={e.id}
-                  onClick={() => setCompanyId(companyId === e.id ? "all" : e.id)}
-                  data-testid={`featured-employer-${e.slug ?? e.id}`}
-                  className={`p-3 rounded-xl border text-left transition-all hover:border-emerald-400 hover:bg-emerald-50/40 dark:hover:bg-emerald-900/10 ${
+                  className={`p-3 rounded-xl border transition-all hover:border-emerald-400 hover:bg-emerald-50/40 dark:hover:bg-emerald-900/10 ${
                     companyId === e.id
                       ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 ring-2 ring-emerald-200 dark:ring-emerald-800"
                       : "border-border bg-card"
                   }`}
+                  data-testid={`featured-employer-${e.slug ?? e.id}`}
                 >
                   <div className="flex items-start justify-between gap-2 mb-1">
                     <span className="font-semibold text-xs leading-tight line-clamp-2">{e.name}</span>
@@ -355,10 +360,25 @@ export default function KenyaCareers() {
                       <BadgeCheck className="h-3.5 w-3.5 text-emerald-600 shrink-0" aria-label="Verified employer" />
                     )}
                   </div>
-                  <div className="text-[10px] text-muted-foreground">
+                  <div className="text-[10px] text-muted-foreground mb-2">
                     {e.jobCount} open · {e.industry ?? "—"}
                   </div>
-                </button>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setCompanyId(companyId === e.id ? "all" : e.id)}
+                      className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-300 hover:underline"
+                      data-testid={`filter-employer-${e.slug ?? e.id}`}
+                    >
+                      Filter
+                    </button>
+                    <span className="text-muted-foreground/40 text-[10px]">·</span>
+                    <Link href={`/kenya-careers/company/${e.slug ?? e.id}`}>
+                      <a className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-300 hover:underline">
+                        View profile
+                      </a>
+                    </Link>
+                  </div>
+                </div>
               ))}
             </div>
           </section>
