@@ -166,88 +166,138 @@ export async function bootstrapLocalJobs(): Promise<void> {
     `).catch(() => { /* table may be empty — non-fatal */ });
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_local_app_company ON local_job_applications(company_id)`);
 
-    // ── 2. Seed sample data ─────────────────────────────────────────────────
-    // Only seed if companies table is empty. Idempotent.
-    const { rows: [{ count }] } = await pool.query<{ count: string }>(
-      `SELECT COUNT(*)::text AS count FROM companies`,
-    );
-    if (Number(count) > 0) {
-      console.log("[local-jobs] DDL ready; companies already seeded.");
-      return;
-    }
+    // Phase 3a: claim-company table. Anyone can submit a claim ("I'm the HR
+    // manager at Naivas — can I take over this profile?"). Admin reviews
+    // each one before granting access. No FK to users table — claims can
+    // come from non-signed-in visitors too.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS company_claims (
+        id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id    UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        claimant_name VARCHAR(160) NOT NULL,
+        claimant_email VARCHAR(160) NOT NULL,
+        claimant_phone VARCHAR(40),
+        role_at_company VARCHAR(120),
+        message       TEXT,
+        evidence_url  TEXT,                            -- future: link to verification email/document
+        status        VARCHAR(24) NOT NULL DEFAULT 'pending',  -- pending|approved|rejected
+        reviewed_by   UUID,                            -- admin userId when actioned
+        reviewed_at   TIMESTAMP,
+        review_note   TEXT,
+        created_at    TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_company_claims_company ON company_claims(company_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_company_claims_status  ON company_claims(status)`);
 
-    console.log("[local-jobs] Seeding sample companies and jobs…");
+    // ── 2. Phase 3a expansion: 36 employers, 60+ branches, 100+ jobs ────────
+    // Catalogue lives in ./local-jobs-seed-data.ts so it can grow without
+    // bloating this file. Inserts are IDEMPOTENT — we use ON CONFLICT(slug)
+    // for companies and unique-constraint guards for branches/jobs, so
+    // re-running on every boot just adds whatever's missing.
 
-    // 6 sample employers — well-known Kenyan brands so early visitors recognise them
-    const companies = [
-      { slug: "naivas",     name: "Naivas Supermarkets",  industry: "Retail",      county: "Nairobi",
-        desc: "Kenya's largest supermarket chain with 90+ branches across the country.",
-        website: "https://naivas.online" },
-      { slug: "quickmart",  name: "Quickmart Limited",    industry: "Retail",      county: "Nairobi",
-        desc: "Fast-growing retail chain serving customers across Kenya since 2006.",
-        website: "https://quickmart.co.ke" },
-      { slug: "carrefour",  name: "Carrefour Kenya (Majid Al Futtaim)", industry: "Retail", county: "Nairobi",
-        desc: "International hypermarket operator with branches in Nairobi, Mombasa and Kisumu.",
-        website: "https://www.carrefour.ke" },
-      { slug: "magunas",    name: "Magunas Supermarket",  industry: "Retail",      county: "Nairobi",
-        desc: "Family-owned Kenyan retailer known for fresh produce and competitive prices.",
-        website: null },
-      { slug: "java-house", name: "Java House Africa",    industry: "Hospitality", county: "Nairobi",
-        desc: "Pan-African coffee and food chain with branches across East Africa.",
-        website: "https://www.javahouseafrica.com" },
-      { slug: "aga-khan",   name: "Aga Khan University Hospital", industry: "Healthcare", county: "Nairobi",
-        desc: "Tertiary teaching hospital providing specialist care in Nairobi and across East Africa.",
-        website: "https://hospitals.aku.edu/nairobi" },
-    ];
+    const { SEED_COMPANIES } = await import("./local-jobs-seed-data");
 
-    // Insert all companies as 'approved' so they show up immediately for Phase 1.
-    // Phase 4 will introduce the admin approval queue and switch the default to 'pending'.
+    // Ensure the unique constraints needed for ON CONFLICT to work.
+    // companies.slug is already UNIQUE from CREATE TABLE. Branches and jobs
+    // get partial-unique indexes so we can detect duplicates without forcing
+    // a hard constraint that would break manual inserts.
+    await pool.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_branches_company_name
+      ON branches(company_id, name)
+    `).catch(() => {});
+    await pool.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_local_jobs_seed_dedup
+      ON local_jobs(company_id, title, COALESCE(branch_id, '00000000-0000-0000-0000-000000000000'::uuid))
+    `).catch(() => {});
+
+    console.log(`[local-jobs] Syncing catalogue of ${SEED_COMPANIES.length} employers (idempotent)…`);
+
+    let companiesAdded = 0, branchesAdded = 0, jobsAdded = 0;
     const companyIds: Record<string, string> = {};
-    for (const c of companies) {
-      const { rows } = await pool.query<{ id: string }>(
+
+    // Companies — upsert on slug. Existing rows keep their current data so
+    // founder edits via admin panel aren't overwritten by the seed.
+    for (const c of SEED_COMPANIES) {
+      const { rows } = await pool.query<{ id: string; was_inserted: boolean }>(
         `INSERT INTO companies (name, slug, industry, county, description, website, status, verified_at)
          VALUES ($1, $2, $3, $4, $5, $6, 'approved', NOW())
-         RETURNING id`,
-        [c.name, c.slug, c.industry, c.county, c.desc, c.website],
+         ON CONFLICT (slug) DO UPDATE SET slug = EXCLUDED.slug
+         RETURNING id, (xmax = 0) AS was_inserted`,
+        [c.name, c.slug, c.industry, c.hqCounty, c.description, c.website],
       );
       companyIds[c.slug] = rows[0].id;
+      if (rows[0].was_inserted) companiesAdded++;
     }
 
-    // Sample branches — keep it light. The point of Phase 1 is to demo the
-    // concept, not to be comprehensive.
-    const branches: Array<{ companySlug: string; name: string; county: string; town: string }> = [
-      { companySlug: "naivas",     name: "Naivas Thika Road Mall",  county: "Nairobi",  town: "Thika Road" },
-      { companySlug: "naivas",     name: "Naivas Kahawa Wendani",   county: "Kiambu",   town: "Kahawa Wendani" },
-      { companySlug: "naivas",     name: "Naivas Kisumu Central",   county: "Kisumu",   town: "Kisumu CBD" },
-      { companySlug: "naivas",     name: "Naivas Eldoret Zion",     county: "Uasin Gishu", town: "Eldoret" },
-      { companySlug: "quickmart",  name: "Quickmart Kilimani",      county: "Nairobi",  town: "Kilimani" },
-      { companySlug: "quickmart",  name: "Quickmart Ruaka",         county: "Kiambu",   town: "Ruaka" },
-      { companySlug: "carrefour",  name: "Carrefour Two Rivers Mall", county: "Nairobi", town: "Runda" },
-      { companySlug: "carrefour",  name: "Carrefour Nyali Centre",  county: "Mombasa",  town: "Nyali" },
-      { companySlug: "magunas",    name: "Magunas Ngong Road",      county: "Nairobi",  town: "Ngong Road" },
-      { companySlug: "java-house", name: "Java House Junction Mall", county: "Nairobi", town: "Ngong Road" },
-      { companySlug: "java-house", name: "Java House Westside",     county: "Nairobi",  town: "Westlands" },
-      { companySlug: "aga-khan",   name: "Aga Khan Hospital Nairobi (Parklands)", county: "Nairobi", town: "Parklands" },
-    ];
-
+    // Branches — upsert on (company_id, name). Existing branches keep their data.
     const branchIds: Record<string, string> = {};
-    for (const b of branches) {
-      const { rows } = await pool.query<{ id: string }>(
-        `INSERT INTO branches (company_id, name, county, town)
-         VALUES ($1, $2, $3, $4)
-         RETURNING id`,
-        [companyIds[b.companySlug], b.name, b.county, b.town],
-      );
-      branchIds[b.name] = rows[0].id;
+    for (const c of SEED_COMPANIES) {
+      const companyId = companyIds[c.slug];
+      if (!companyId) continue;
+      for (const b of c.branches) {
+        const { rows } = await pool.query<{ id: string; was_inserted: boolean }>(
+          `INSERT INTO branches (company_id, name, county, town)
+           VALUES ($1, $2, $3, $4)
+           ON CONFLICT (company_id, name) DO UPDATE SET name = EXCLUDED.name
+           RETURNING id, (xmax = 0) AS was_inserted`,
+          [companyId, b.name, b.county, b.town],
+        );
+        // Key by name only — names like "Naivas Thika Road Mall" are unique
+        // enough across the catalogue (and the catalogue authors avoid collisions).
+        branchIds[b.name] = rows[0].id;
+        if (rows[0].was_inserted) branchesAdded++;
+      }
     }
 
-    // ~15 jobs across categories & counties. Salaries are illustrative ranges
-    // — real employers will set their own when Phase 3 ships.
+    // Jobs — one role × one branch per company. Idempotent on
+    // (company_id, title, branch_id). Existing jobs keep their data.
     const today = new Date();
     const deadline = new Date(today);
     deadline.setMonth(deadline.getMonth() + 1);
+    const deadlineStr = deadline.toISOString().slice(0, 10);
 
-    const jobs = [
+    for (const c of SEED_COMPANIES) {
+      const companyId = companyIds[c.slug];
+      if (!companyId) continue;
+      // For each role × each branch the company has, create one job. That
+      // gives small companies (1-2 branches) ~4 jobs and larger ones (Naivas,
+      // Safaricom) 8-12 jobs. Total across 36 employers lands around 110-130
+      // jobs, comfortably over the 100+ target Tony asked for.
+      for (const role of c.roles) {
+        for (const branch of c.branches) {
+          const branchId = branchIds[branch.name];
+          if (!branchId) continue;
+          const { rowCount } = await pool.query(
+            `INSERT INTO local_jobs (
+                company_id, branch_id, title, department, vacancies, employment_type,
+                salary_min, salary_max, requirements, responsibilities, deadline,
+                county, town, experience_level, category, status
+             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 'open')
+             ON CONFLICT DO NOTHING`,
+            [
+              companyId, branchId, role.title, role.department, role.vacancies, role.type,
+              role.salaryMin, role.salaryMax, role.requirements, role.responsibilities,
+              deadlineStr, branch.county, branch.town, role.experience, role.category,
+            ],
+          ).catch((err: any) => {
+            // ON CONFLICT may not yet have the index if this is a fresh deploy
+            // racing with the index creation — just continue.
+            console.warn(`[local-jobs] job insert non-fatal: ${err?.message}`);
+            return { rowCount: 0 };
+          });
+          if ((rowCount ?? 0) > 0) jobsAdded++;
+        }
+      }
+    }
+
+    console.log(`[local-jobs] Catalogue sync: +${companiesAdded} companies, +${branchesAdded} branches, +${jobsAdded} jobs.`);
+    return;
+
+    /* legacy hand-written 15-job array below — superseded by SEED_COMPANIES
+       catalogue. Kept commented out so we have an easy rollback path if the
+       catalogue-driven seed ever breaks. Safe to delete after a clean deploy.
+    const _legacyJobs: any[] = [
       { companySlug: "naivas", branchName: "Naivas Thika Road Mall", title: "Store Manager",
         department: "Operations", vacancies: 1, type: "full_time",
         salaryMin: 80_000, salaryMax: 120_000, county: "Nairobi", town: "Thika Road",
@@ -339,26 +389,7 @@ export async function bootstrapLocalJobs(): Promise<void> {
         requirements: "Diploma in Pharmaceutical Technology. Active PPB licence. 2+ years hospital pharmacy experience.",
         responsibilities: "Dispense outpatient prescriptions. Maintain inventory accuracy. Counsel patients on medication use." },
     ];
-
-    for (const j of jobs) {
-      await pool.query(
-        `INSERT INTO local_jobs (
-            company_id, branch_id, title, department, vacancies, employment_type,
-            salary_min, salary_max, requirements, responsibilities, deadline,
-            county, town, experience_level, category, status
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 'open')`,
-        [
-          companyIds[j.companySlug],
-          branchIds[j.branchName] || null,
-          j.title, j.department, j.vacancies, j.type,
-          j.salaryMin, j.salaryMax, j.requirements, j.responsibilities,
-          deadline.toISOString().slice(0, 10),
-          j.county, j.town, j.experience, j.category,
-        ],
-      );
-    }
-
-    console.log(`[local-jobs] Seeded ${companies.length} companies, ${branches.length} branches, ${jobs.length} jobs`);
+    */
   } catch (err: any) {
     // 2026-06: critical that bootstrap failure NEVER takes down the live
     // overseas board. Log loudly but always return — the rest of the server

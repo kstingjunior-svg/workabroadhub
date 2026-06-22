@@ -19,6 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { KenyaCareersApplySheet } from "@/components/kenya-careers-apply-sheet";
+import { KenyaCareersClaimSheet } from "@/components/kenya-careers-claim-sheet";
 
 interface JobDetail {
   id: string;
@@ -107,6 +108,7 @@ export default function KenyaCareersJob() {
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState<string | null>(null);
   const [applyOpen, setApplyOpen] = useState(false);
+  const [claimOpen, setClaimOpen] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -393,7 +395,35 @@ export default function KenyaCareersJob() {
             </CardContent>
           </Card>
         )}
+
+        {/* Phase 3a: "Are you this employer?" claim CTA. Shows on every job
+            page — public so HR managers without a WAH account can submit
+            a claim and we'll verify by email. */}
+        <Card className="mt-4 border-dashed">
+          <CardContent className="p-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="text-sm">
+              <p className="font-medium">Are you {job.company.name}?</p>
+              <p className="text-xs text-muted-foreground">Claim this profile to take over the listings and post jobs directly.</p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setClaimOpen(true)}
+              data-testid="btn-claim-company"
+            >
+              Claim profile
+            </Button>
+          </CardContent>
+        </Card>
       </div>
+
+      {/* Phase 3a: Claim sheet */}
+      <KenyaCareersClaimSheet
+        open={claimOpen}
+        onClose={() => setClaimOpen(false)}
+        companyId={job.company.id}
+        companyName={job.company.name}
+      />
 
       {/* Phase 2: Apply sheet — handles all 4 user states (anon/free/paid/limit). */}
       <KenyaCareersApplySheet

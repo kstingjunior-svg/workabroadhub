@@ -49,9 +49,17 @@ interface Stats {
 }
 
 interface Filters {
-  counties:   string[];
+  counties:   string[];     // ALL 47 Kenyan counties (canonical IEBC list)
   categories: string[];
-  companies:  { id: string; name: string }[];
+  industries: string[];
+  companies:  { id: string; name: string; industry: string | null; jobCount: number }[];
+}
+
+// 2026-06 Phase 3a: empty-state suggestions when a filter has 0 results.
+interface EmptySuggestions {
+  message: string;
+  suggestedCounties:  { county: string; jobCount: number }[];
+  suggestedEmployers: { id: string; name: string; industry: string | null; jobCount: number }[];
 }
 
 interface Employer {
@@ -147,6 +155,8 @@ export default function KenyaCareers() {
   const [county,      setCounty]      = useState<string>("all");
   const [category,    setCategory]    = useState<string>("all");
   const [companyId,   setCompanyId]   = useState<string>("all");
+  // Phase 3a: empty-state suggestions when 0 results
+  const [emptySuggestions, setEmptySuggestions] = useState<EmptySuggestions | null>(null);
 
   // Debounced search
   useEffect(() => {
@@ -189,6 +199,7 @@ export default function KenyaCareers() {
     const ac = new AbortController();
     setLoading(true);
     setError(null);
+    setEmptySuggestions(null);
     const params = new URLSearchParams();
     if (county     !== "all") params.set("county",    county);
     if (category   !== "all") params.set("category",  category);
@@ -233,6 +244,15 @@ export default function KenyaCareers() {
         }));
         setJobs(safeJobs);
         setTotal(Number(data.total ?? safeJobs.length));
+
+        // Phase 3a: when the result set is empty, fetch suggestions so the
+        // user sees "no jobs in Garissa yet — try Nairobi (37 jobs) or
+        // Mombasa (12 jobs)" instead of a dead end.
+        if (safeJobs.length === 0) {
+          const suggUrl = `/api/local-jobs/empty-suggestions?${params.toString()}`;
+          const sugg = await safeJson<EmptySuggestions>(suggUrl, ac.signal);
+          if (!cancelled && sugg) setEmptySuggestions(sugg);
+        }
       }
       setLoading(false);
     })();
@@ -401,13 +421,62 @@ export default function KenyaCareers() {
           )}
 
           {!loading && jobs.length === 0 && !error && (
-            <Card>
-              <CardContent className="p-8 text-center text-muted-foreground">
+            <Card data-testid="empty-state">
+              <CardContent className="p-6 text-center">
                 <Briefcase className="h-10 w-10 mx-auto mb-3 opacity-30" />
-                <p>No jobs matching those filters yet.</p>
+                <p className="font-medium text-foreground mb-1">
+                  {emptySuggestions?.message ?? "No jobs matching those filters yet."}
+                </p>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Try a nearby county or a different employer — new jobs land every week.
+                </p>
+
+                {/* Nearby counties with jobs */}
+                {emptySuggestions && emptySuggestions.suggestedCounties.length > 0 && (
+                  <div className="mb-4 text-left">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 text-center">
+                      Counties currently hiring
+                    </p>
+                    <div className="flex flex-wrap gap-2 justify-center">
+                      {emptySuggestions.suggestedCounties.map((c) => (
+                        <button
+                          key={c.county}
+                          onClick={() => setCounty(c.county)}
+                          className="text-xs px-3 py-1.5 rounded-full border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-800 dark:text-emerald-200 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors"
+                          data-testid={`suggest-county-${c.county}`}
+                        >
+                          {c.county} <span className="opacity-70">· {c.jobCount} job{c.jobCount === 1 ? "" : "s"}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Related employers */}
+                {emptySuggestions && emptySuggestions.suggestedEmployers.length > 0 && (
+                  <div className="mb-2 text-left">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 text-center">
+                      Employers hiring now
+                    </p>
+                    <div className="flex flex-wrap gap-2 justify-center">
+                      {emptySuggestions.suggestedEmployers.map((e) => (
+                        <button
+                          key={e.id}
+                          onClick={() => { setCompanyId(e.id); setCounty("all"); }}
+                          className="text-xs px-3 py-1.5 rounded-full border bg-card hover:border-emerald-400 transition-colors"
+                          data-testid={`suggest-employer-${e.id}`}
+                        >
+                          {e.name}
+                          {e.jobCount > 0 && <span className="opacity-70"> · {e.jobCount} open</span>}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {hasAnyFilter && (
-                  <Button variant="link" size="sm" onClick={clearFilters} className="mt-1">
-                    Clear filters and try again
+                  <Button variant="link" size="sm" onClick={clearFilters} className="mt-3">
+                    Clear all filters
                   </Button>
                 )}
               </CardContent>
