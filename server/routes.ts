@@ -2402,6 +2402,186 @@ Crawl-delay: 1`);
     }
   });
 
+  // ─── GET /api/account/payment-status ────────────────────────────────────────
+  // 2026-06: founder asked "client paid KES 99 but can't access". This endpoint
+  // gives the user a one-page diagnostic of what's actually happening with
+  // their account:
+  //   • Their current plan + end date (live from getUserPlan — same source of
+  //     truth the gate uses)
+  //   • Their last 10 payments (status, amount, plan, mpesa receipt)
+  //   • A `verdict` field that explains, in human language, why they do or
+  //     don't have access right now
+  // The frontend renders this at /account/payment-status and offers a
+  // "Recover my plan" button when the verdict is "paid_but_free".
+  app.get("/api/account/payment-status", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+
+      const user = await storage.getUserById(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+
+      const livePlan = await storage.getUserPlan(userId);
+      const sub      = await storage.getUserSubscription(userId);
+
+      // Pull the last 10 payments for this user, newest first.
+      const { rows: payRows } = await pool.query<{
+        id: string; amount: number; status: string; plan_id: string | null;
+        service_id: string | null; mpesa_receipt_number: string | null;
+        created_at: Date; fail_reason: string | null;
+      }>(`
+        SELECT id, amount, status, plan_id, service_id,
+               mpesa_receipt_number, created_at, fail_reason
+          FROM payments
+         WHERE user_id = $1
+         ORDER BY created_at DESC
+         LIMIT 10
+      `, [userId]);
+
+      // Compute a verdict — what's the most useful thing to tell the user RIGHT NOW.
+      const PAID_TIERS = new Set(["trial", "basic", "monthly", "yearly", "pro", "pro_referral"]);
+      const hasPaidPlan = PAID_TIERS.has(livePlan);
+      const stuckPaidPayment = payRows.find(
+        (p) => (p.status === "success" || p.status === "completed")
+            && p.plan_id
+            && !hasPaidPlan,
+      );
+      const pendingPayment = payRows.find(
+        (p) => p.status === "pending" || p.status === "awaiting_payment",
+      );
+      const recentFail = payRows.find(
+        (p) => p.status === "failed"
+            && Date.now() - new Date(p.created_at).getTime() < 24 * 60 * 60_000,
+      );
+
+      let verdict: string;
+      let action: string | null = null;
+      let canSelfRecover = false;
+
+      if (hasPaidPlan && sub?.endDate && sub.endDate > new Date()) {
+        verdict = `active:${livePlan}`;
+        action  = null;
+      } else if (stuckPaidPayment) {
+        verdict = "paid_but_free";
+        action  = `Your KES ${stuckPaidPayment.amount} payment for the ${stuckPaidPayment.plan_id} plan went through (receipt ${stuckPaidPayment.mpesa_receipt_number ?? "n/a"}) but didn't activate. Tap "Activate my plan" — we'll fix it for you in a few seconds.`;
+        canSelfRecover = true;
+      } else if (pendingPayment) {
+        verdict = "payment_pending";
+        action  = `We're still waiting for M-Pesa to confirm your KES ${pendingPayment.amount} payment. Give it 1-2 minutes and refresh. If your M-Pesa shows a successful payment but this page still says "pending", contact support@workabroadhub.tech with your receipt.`;
+      } else if (recentFail) {
+        verdict = "recent_failure";
+        action  = `Your most recent payment attempt failed (${recentFail.fail_reason ?? "no reason given"}). You can try again — go to /pricing.`;
+      } else if (hasPaidPlan) {
+        // Has paid plan but sub expired — auto-downgrade window
+        verdict = "plan_expired";
+        action  = "Your plan has expired. Renew at /pricing to keep access.";
+      } else {
+        verdict = "free_no_payment";
+        action  = "No paid plan on your account. If you've already paid, the M-Pesa receipt may not have reached our system — contact support@workabroadhub.tech with your receipt number.";
+      }
+
+      res.json({
+        userId,
+        email: user.email,
+        phone: user.phone,
+        currentPlan: livePlan,
+        subscription: sub ? {
+          status: sub.status,
+          plan:   sub.plan,
+          endDate: sub.endDate,
+        } : null,
+        payments: payRows.map((p) => ({
+          paymentId:    p.id,
+          amount:       p.amount,
+          status:       p.status,
+          planId:       p.plan_id,
+          serviceId:    p.service_id,
+          mpesaReceipt: p.mpesa_receipt_number,
+          createdAt:    p.created_at,
+          failReason:   p.fail_reason,
+        })),
+        verdict,
+        action,
+        canSelfRecover,
+      });
+    } catch (err: any) {
+      console.error("[GET /api/account/payment-status]", err?.message);
+      res.status(500).json({ message: "Could not load payment status. Try again or contact support." });
+    }
+  });
+
+  // ─── POST /api/account/recover-plan ─────────────────────────────────────────
+  // Self-service plan recovery. Idempotent. Re-runs runPaymentPipeline against
+  // the user's most-recent successful subscription payment. Safe to call
+  // repeatedly — if the plan is already active, this is a no-op.
+  app.post("/api/account/recover-plan", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+
+      const user = await storage.getUserById(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+
+      // Find their most-recent successful subscription payment (within 7 days)
+      const { rows } = await pool.query<{
+        id: string; amount: number; plan_id: string | null;
+        mpesa_receipt_number: string | null;
+      }>(`
+        SELECT id, amount, plan_id, mpesa_receipt_number
+          FROM payments
+         WHERE user_id = $1
+           AND status IN ('success', 'completed')
+           AND plan_id IS NOT NULL AND plan_id <> ''
+           AND created_at > NOW() - INTERVAL '7 days'
+         ORDER BY created_at DESC
+         LIMIT 1
+      `, [userId]);
+
+      if (rows.length === 0) {
+        return res.status(404).json({
+          message: "No recoverable payment found in the last 7 days. If you paid more than a week ago, contact support@workabroadhub.tech with your M-Pesa receipt number.",
+        });
+      }
+
+      const row = rows[0];
+      const payment = await storage.getPaymentById(row.id);
+      if (!payment) return res.status(404).json({ message: "Payment record not found" });
+
+      console.warn(
+        `[recover-plan] User-initiated recovery: userId=${userId} email=${user.email} ` +
+        `paymentId=${row.id} plan=${row.plan_id} KES=${row.amount}`,
+      );
+
+      const { runPaymentPipeline } = await import("./services/paymentPipeline");
+      await runPaymentPipeline({
+        payment,
+        user,
+        method: "mpesa",
+        transactionId: row.mpesa_receipt_number || row.id,
+        planId: row.plan_id!,
+      });
+
+      // Read back to confirm
+      const verify = await storage.getUserById(userId);
+      const newPlan = verify?.plan || "free";
+
+      if (newPlan === "free") {
+        return res.status(500).json({
+          message: "We tried to activate your plan but it didn't stick. Our team has been alerted — please contact support@workabroadhub.tech with your M-Pesa receipt and we'll fix it within the hour.",
+          plan: newPlan,
+        });
+      }
+
+      res.json({
+        message: `Done — your ${newPlan} plan is now active. Refresh the page and you'll see your jobs.`,
+        plan: newPlan,
+      });
+    } catch (err: any) {
+      console.error("[POST /api/account/recover-plan]", err?.message);
+      res.status(500).json({ message: "Recovery failed. Contact support@workabroadhub.tech." });
+    }
+  });
+
   // POST /api/subscriptions/upgrade — M-Pesa STK Push for plan upgrade
   app.post("/api/subscriptions/upgrade", isAuthenticated, async (req: any, res) => {
     try {

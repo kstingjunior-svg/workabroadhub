@@ -209,6 +209,19 @@ httpServer.listen(PORT, "0.0.0.0", () => {
     } catch (err: any) {
       console.error("[Server] ❌ Verification reminder sweep failed to start:", err?.message);
     }
+
+    // 2026-06: paid-but-free reconciler — every 15 min, find users whose
+    // payment status is 'success'/'completed' but whose users.plan is still
+    // 'free' and re-run runPaymentPipeline. Closes the silent gap when
+    // pipeline Step 1 swallows a DB error and leaves a paying KES 99 /
+    // 1,000 / 4,500 user without access. Idempotent — running on an
+    // already-recovered user is a no-op.
+    try {
+      const { startPaidButFreeReconciler } = await import("./lib/paid-but-free-reconciler");
+      startPaidButFreeReconciler();
+    } catch (err: any) {
+      console.error("[Server] ❌ Paid-but-free reconciler failed to start:", err?.message);
+    }
   })();
 });
 

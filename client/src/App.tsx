@@ -119,6 +119,8 @@ const PayPage = lazyWithRetry(() => import("@/pages/pay"));
 const MyDocuments = lazyWithRetry(() => import("@/pages/my-documents"));
 const MyOverview = lazyWithRetry(() => import("@/pages/my-overview"));
 const AccountVerify = lazyWithRetry(() => import("@/pages/account-verify"));
+// 2026-06: self-service payment + plan diagnostic — recovers paid-but-free users
+const AccountPaymentStatus = lazyWithRetry(() => import("@/pages/account-payment-status"));
 const ServiceOrderFlow = lazyWithRetry(() => import("@/pages/service-order-flow"));
 const LoginPage = lazyWithRetry(() => import("@/pages/login"));
 const ForgotPassword = lazyWithRetry(() => import("@/pages/forgot-password"));
@@ -340,6 +342,7 @@ const LazyMyOverview  = withSuspense(MyOverview);
 const LazyMyPayments  = withSuspense(MyPayments);
 const LazyMyDocuments = withSuspense(MyDocuments);
 const LazyAccountVerify = withSuspense(AccountVerify);
+const LazyAccountPaymentStatus = withSuspense(AccountPaymentStatus);
 const LazyServiceOrderFlow = withSuspense(ServiceOrderFlow);
 const LazyReferrals = withSuspense(Referrals);
 const LazyReferralTerms = withSuspense(ReferralTerms);
@@ -491,6 +494,7 @@ function AuthenticatedRoutes() {
       <Route path="/my-documents" component={LazyMyDocuments} />
       <Route path="/my-overview" component={LazyMyOverview} />
       <Route path="/account/verify" component={LazyAccountVerify} />
+      <Route path="/account/payment-status" component={LazyAccountPaymentStatus} />
       <Route path="/services/order/:slug" component={LazyServiceOrderFlow} />
       <Route path="/login" component={LazyLoginPage} />
       <Route path="/signup" component={LazyLoginPage} />
