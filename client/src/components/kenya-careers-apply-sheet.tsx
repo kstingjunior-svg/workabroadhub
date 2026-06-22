@@ -278,6 +278,27 @@ export function KenyaCareersApplySheet({
           {/* Paid tier — show the form */}
           {!loading && !submitted && status?.canApply && (
             <div className="space-y-3" data-testid="apply-form">
+              {/* Visible tier-active badge so the user can SEE that their
+                  paid plan is recognised. Helps Tony verify "if I paid,
+                  applying should work right away". */}
+              <div className="flex items-center gap-2 p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 ring-1 ring-emerald-200 dark:ring-emerald-800 text-xs">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                <span className="flex-1">
+                  <strong className="text-emerald-800 dark:text-emerald-200">
+                    {status.tier === "trial"   && "Your KES 99 Trial is active"}
+                    {status.tier === "basic"   && "Your KES 99 Trial is active"}
+                    {status.tier === "monthly" && "Your KES 1,000 Monthly plan is active"}
+                    {status.tier === "yearly"  && "Your KES 4,500 Yearly plan is active"}
+                    {status.tier === "pro"     && "Your Pro plan is active"}
+                    {status.tier === "pro_referral" && "Your Pro (referral) plan is active"}
+                  </strong>
+                  {" — "}
+                  {status.dailyLimit >= 9999
+                    ? "unlimited applications today."
+                    : `${Math.max(0, status.dailyLimit - status.appsToday)} of ${status.dailyLimit} applications left today.`}
+                </span>
+              </div>
+
               <p className="text-sm text-muted-foreground">
                 We'll send your phone, email and (if attached) your CV to <strong>{companyName}</strong>. They'll contact you directly if you're shortlisted.
               </p>
