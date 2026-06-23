@@ -58,21 +58,35 @@ const COUNTRY_NAMES = {
  * Authorized minimum KES amounts for each plan — used only as a secondary
  * sanity guard after serviceId has already resolved the plan.
  * Plan resolution is always driven by serviceId, never by amount alone.
+ *
+ * 2026-06 BUGFIX: added "basic" + "pro_referral" so admin manual grants
+ * of those tiers pass the amount-floor check correctly.
+ *   - "basic" is the legacy alias for "trial" (same KES 99 / 24h product)
+ *   - "pro_referral" is the 20% referral-discounted Pro (KES 3,600)
  */
 exports.PLAN_MIN_AMOUNTS = {
-    trial: 99, // 1 Day Trial
-    monthly: 1000, // 30-day Monthly
-    yearly: 4500, // 365-day Yearly
+    trial: 99, // 1-day trial
+    basic: 99, // legacy alias for trial
+    monthly: 1000, // 30-day monthly
+    yearly: 4500, // 365-day yearly
     pro: 4500, // legacy alias for yearly
+    pro_referral: 3600, // yearly with 20% referral discount
 };
 /**
  * Duration in days for each plan type.
+ *
+ * 2026-06 BUGFIX (Tony's report): "basic" and "pro_referral" were missing
+ * from this map — admin grants of those tiers fell back to defaults and
+ * gave KES 99 users 365 days of access instead of 24h. All 6 canonical
+ * tier strings now have explicit entries that exactly match the prices.
  */
 exports.PLAN_DURATION_DAYS = {
     trial: 1,
+    basic: 1, // legacy alias for trial — same 24h product
     monthly: 30,
     yearly: 365,
-    pro: 365, // legacy alias — updated from 360 to 365
+    pro: 365, // legacy alias for yearly
+    pro_referral: 365, // referral discount of yearly — same duration
 };
 async function upgradeUserAccount(opts) {
     const { userId, email, phone, planType, transactionId, paymentId, method, amountKes, extraMeta, } = opts;
