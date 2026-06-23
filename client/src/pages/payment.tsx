@@ -341,6 +341,32 @@ export default function Payment() {
       queryClient.invalidateQueries({ queryKey: ["/api/profile"] });
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
 
+      // 2026-06 BUGFIX: Stamp a recent-payment flag in localStorage so any
+      // gate component (Apply button, paywall modals, etc.) can defensively
+      // assume the user is paid for the next 5 minutes — even if a stale
+      // /api/user/plan response transiently says "free" while the callback
+      // is still propagating. Server has matching renewal-protection logic
+      // in getUserPlan, but this gives the client immediate optimism so
+      // the UX doesn't flicker.
+      try {
+        localStorage.setItem("wah:recent-payment", JSON.stringify({
+          ts: Date.now(),
+          planId: planId,
+          amount: paymentAmount,
+        }));
+      } catch { /* localStorage might be disabled — non-fatal */ }
+
+      // Refetch the plan a few more times over the next 90 seconds to catch
+      // any callback that took longer than usual. Each retry forces a fresh
+      // network call (not cached). Stops as soon as the tier changes off "free".
+      const refetchSchedule = [5_000, 15_000, 30_000, 60_000, 90_000];
+      refetchSchedule.forEach((delay) => {
+        setTimeout(() => {
+          queryClient.invalidateQueries({ queryKey: ["/api/user/plan"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+        }, delay);
+      });
+
       const planLabel = planId
         ? planId.charAt(0).toUpperCase() + planId.slice(1)
         : selectedPlan?.planName ?? "Your";
