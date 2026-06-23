@@ -24,6 +24,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CompanyLogo } from "@/components/kenya-careers-company-logo";
+import { KenyaFlag, KenyaFlagStripe } from "@/components/kenya-flag";
 
 interface Stats {
   totalJobs: number;
@@ -66,11 +67,16 @@ export default function KenyaCareersEmployers() {
   return (
     <div className="min-h-screen bg-background pb-16">
       {/* ─────────────── HERO ─────────────── */}
-      <section className="relative bg-gradient-to-br from-emerald-700 via-emerald-600 to-teal-600 text-white pt-12 pb-14 px-4 overflow-hidden">
+      <section className="relative bg-gradient-to-br from-emerald-700 via-emerald-600 to-teal-600 text-white pt-12 pb-16 px-4 overflow-hidden">
         <div className="absolute -top-20 -left-20 w-80 h-80 bg-white/5 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute -bottom-12 -right-12 w-72 h-72 bg-white/5 rounded-full blur-3xl pointer-events-none" />
 
         <div className="relative max-w-3xl mx-auto text-center space-y-4">
+          {/* Kenya flag — banner-style above the headline */}
+          <div className="flex justify-center">
+            <KenyaFlag size="xl" />
+          </div>
+
           <Badge className="bg-white/20 text-white border-white/30 text-xs font-semibold uppercase tracking-widest px-3 py-1">
             For Employers
           </Badge>
@@ -117,6 +123,11 @@ export default function KenyaCareersEmployers() {
             Already claimed a profile? <Link href="/employer/dashboard"><a className="underline">Sign in to your dashboard</a></Link>
             {" "}· Existing company? Find it in the Featured Employers below and tap "Claim".
           </p>
+        </div>
+
+        {/* Kenyan-flag accent stripe at the bottom of the hero */}
+        <div className="absolute bottom-0 left-0 right-0">
+          <KenyaFlagStripe height={4} withFimbriations />
         </div>
       </section>
 

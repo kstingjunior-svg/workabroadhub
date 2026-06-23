@@ -22,6 +22,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { KenyaFlag, KenyaFlagStripe } from "@/components/kenya-flag";
 
 interface Job {
   id: string;
@@ -277,11 +278,16 @@ export default function KenyaCareers() {
   return (
     <div className="min-h-screen bg-background pb-16">
       {/* ── HERO ───────────────────────────────────────────────────────── */}
-      <section className="relative bg-gradient-to-br from-emerald-700 via-emerald-600 to-teal-600 text-white pt-12 pb-10 px-4 overflow-hidden">
+      <section className="relative bg-gradient-to-br from-emerald-700 via-emerald-600 to-teal-600 text-white pt-12 pb-12 px-4 overflow-hidden">
         <div className="absolute -top-20 -left-20 w-80 h-80 bg-white/5 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute -bottom-12 -right-12 w-72 h-72 bg-white/5 rounded-full blur-3xl pointer-events-none" />
 
         <div className="relative max-w-3xl mx-auto text-center space-y-4">
+          {/* Animated Kenya flag above the headline — sits like a banner */}
+          <div className="flex justify-center">
+            <KenyaFlag size="xl" />
+          </div>
+
           <Badge className="bg-white/20 text-white border-white/30 text-xs font-semibold uppercase tracking-widest px-3 py-1">
             <Globe2 className="h-3.5 w-3.5 mr-1.5" /> Now hiring across Kenya
           </Badge>
@@ -313,6 +319,13 @@ export default function KenyaCareers() {
               )}
             </div>
           )}
+        </div>
+
+        {/* Thin Kenyan-flag accent stripe along the bottom of the hero —
+            visually anchors the green hero to the rest of the page in
+            authentic flag colours without overpowering the design. */}
+        <div className="absolute bottom-0 left-0 right-0">
+          <KenyaFlagStripe height={4} withFimbriations />
         </div>
       </section>
 

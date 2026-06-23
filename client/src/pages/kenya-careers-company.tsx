@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CompanyLogo } from "@/components/kenya-careers-company-logo";
 import { KenyaCareersClaimSheet } from "@/components/kenya-careers-claim-sheet";
+import { KenyaFlag, KenyaFlagStripe } from "@/components/kenya-flag";
 
 interface CompanyDetail {
   id: string;
@@ -148,13 +149,19 @@ export default function KenyaCareersCompany() {
   return (
     <div className="min-h-screen bg-background pb-20">
       {/* Header ribbon */}
-      <div className="bg-gradient-to-br from-emerald-700 via-emerald-600 to-teal-600 text-white px-4 pt-4 pb-12">
-        <div className="max-w-3xl mx-auto">
+      <div className="relative bg-gradient-to-br from-emerald-700 via-emerald-600 to-teal-600 text-white px-4 pt-4 pb-12">
+        <div className="max-w-3xl mx-auto flex items-center justify-between">
           <Link href="/kenya-careers">
             <Button variant="ghost" size="sm" className="text-white hover:bg-white/10 -ml-2">
               <ArrowLeft className="h-4 w-4 mr-1.5" /> All Kenya Careers
             </Button>
           </Link>
+          {/* Small Kenya flag in the header — present but unobtrusive */}
+          <KenyaFlag size="md" />
+        </div>
+        {/* Kenyan-flag accent stripe along the bottom of the ribbon */}
+        <div className="absolute bottom-0 left-0 right-0">
+          <KenyaFlagStripe height={3} withFimbriations />
         </div>
       </div>
 

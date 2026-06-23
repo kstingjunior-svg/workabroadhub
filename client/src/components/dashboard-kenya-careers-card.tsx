@@ -13,6 +13,7 @@ import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { Briefcase, MapPin, BadgeCheck, ChevronRight, Building2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { KenyaFlag, KenyaFlagStripe } from "@/components/kenya-flag";
 
 interface Stats {
   totalJobs: number;
@@ -56,10 +57,9 @@ export function DashboardKenyaCareersCard() {
         <CardContent className="p-4 sm:p-5">
           <div className="flex items-start justify-between gap-3">
             <div className="flex-1 min-w-0">
+              {/* Title row: animated Kenya flag (small) + NEW·LOCAL chip */}
               <div className="flex items-center gap-2 mb-1.5">
-                <span className="inline-flex items-center justify-center h-9 w-9 rounded-xl bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300">
-                  <Briefcase className="h-5 w-5" />
-                </span>
+                <KenyaFlag size="sm" />
                 <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 px-1.5 py-0.5 rounded">
                   New · Local
                 </span>
@@ -95,6 +95,10 @@ export function DashboardKenyaCareersCard() {
             <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0" />
           </div>
         </CardContent>
+        {/* Thin Kenyan-flag accent at the card's bottom edge — black / red /
+            green. Ties the card to the Kenya Careers theme without overpowering
+            the existing emerald gradient. */}
+        <KenyaFlagStripe height={3} />
       </Card>
     </Link>
   );
