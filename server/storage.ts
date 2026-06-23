@@ -1469,16 +1469,28 @@ export class DatabaseStorage implements IStorage {
       // • If the subscription has lapsed → use the fresh expiresAt passed in
       //
       // 2026-06 hardening: the previous code defaulted to 360 days if the
-      // caller forgot to pass expiresAt — that's a silent footgun that would
-      // give a KES 99 trial user 360 days of access. Now we compute the
-      // correct default per-plan: trial=1d, monthly=30d, yearly/pro=365d.
+      // caller forgot to pass expiresAt — silent footgun that would give
+      // a KES 99 trial user 360 days of access.
+      //
+      // 2026-06 BUGFIX (Tony's report): "basic" and "pro_referral" were
+      // missing from this map, so admin-grants of those tiers fell back
+      // to PLAN_DAYS.pro = 365 days — wrong! Now every canonical tier
+      // string has a correct entry:
+      //   trial / basic        = 1 day   (KES 99)
+      //   monthly              = 30 days (KES 1,000)
+      //   yearly / pro / pro_referral = 365 days (KES 4,500 / referral disc.)
       const PLAN_DAYS: Record<string, number> = {
-        trial:   1,
-        monthly: 30,
-        yearly:  365,
-        pro:     365,
+        trial:        1,
+        basic:        1,        // legacy alias for trial (same 24h)
+        monthly:      30,
+        yearly:       365,
+        pro:          365,
+        pro_referral: 365,      // referral discount on the yearly plan
       };
-      const defaultDays = PLAN_DAYS[planId] ?? PLAN_DAYS.pro;
+      const defaultDays = PLAN_DAYS[planId] ?? 1;   // safer default: 1d, not 365d
+      if (!(planId in PLAN_DAYS)) {
+        console.warn(`[activateUserPlan] Unknown planId="${planId}" — defaulting to 1 day. Add it to PLAN_DAYS if this is a real plan.`);
+      }
       const now = new Date();
       const freshExpiry  = expiresAt ?? new Date(Date.now() + defaultDays * 86_400_000);
       const duration     = freshExpiry.getTime() - now.getTime();

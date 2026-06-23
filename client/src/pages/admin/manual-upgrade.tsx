@@ -27,14 +27,27 @@ import {
 // Plan tiers map directly to the server's ADMIN_GRANT_VALID list. Pricing
 // shown here mirrors what we ask users to pay so an admin can verify the
 // M-Pesa receipt amount matches the plan they're about to grant.
+//
+// 2026-06: duration shown explicitly so Tony can verify each grant gives
+// the right amount of access. Ordered most-common first (the 3 paid tiers
+// at the top, legacy aliases at the bottom).
 const PLAN_OPTIONS = [
-  { id: "basic",        label: "Basic — KES 99 (24 hrs)",  price: 99    },
-  { id: "monthly",      label: "Monthly — KES 1,000 (30 days)", price: 1000  },
-  { id: "yearly",       label: "Yearly — KES 4,500 (360 days)", price: 4500  },
-  { id: "pro",          label: "Pro (yearly equivalent)",       price: 4500  },
-  { id: "pro_referral", label: "Pro Referral (1 yr — free comp)", price: 0     },
-  { id: "trial",        label: "Trial (24 hrs)",                price: 0     },
+  { id: "trial",        label: "Trial — KES 99 · 24 hours",        price: 99,   durationDays: 1   },
+  { id: "monthly",      label: "Monthly — KES 1,000 · 30 days",    price: 1000, durationDays: 30  },
+  { id: "yearly",       label: "Yearly — KES 4,500 · 365 days",    price: 4500, durationDays: 365 },
+  { id: "pro_referral", label: "Pro (Referral) — KES 3,600 · 365 days", price: 3600, durationDays: 365 },
+  { id: "basic",        label: "Basic — legacy alias for Trial (KES 99 · 24 hours)", price: 99,   durationDays: 1   },
+  { id: "pro",          label: "Pro — legacy alias for Yearly (KES 4,500 · 365 days)", price: 4500, durationDays: 365 },
 ];
+
+function describeExpiry(durationDays: number): string {
+  const now = new Date();
+  const end = new Date(now.getTime() + durationDays * 24 * 60 * 60 * 1000);
+  if (durationDays === 1) return `expires ${end.toLocaleString("en-KE", { hour: "2-digit", minute: "2-digit", day: "numeric", month: "short" })} (tomorrow)`;
+  if (durationDays === 30) return `expires ${end.toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric" })} (~1 month)`;
+  if (durationDays === 365) return `expires ${end.toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric" })} (~1 year)`;
+  return `expires in ${durationDays} days`;
+}
 
 interface DiagnoseResponse {
   email: string;
@@ -86,12 +99,15 @@ export default function AdminManualUpgrade() {
       // the admin doesn't have to re-paste it.
       const firstReceipt = data.payments.find((p) => p.transaction_ref);
       if (firstReceipt?.transaction_ref) setTransactionCode(firstReceipt.transaction_ref);
-      // Pre-pick the plan from the receipt amount if we can.
+      // Pre-pick the plan from the receipt amount if we can. Use the
+      // canonical name (trial / monthly / yearly) over the legacy aliases
+      // (basic / pro) so durations always resolve correctly.
       const matchByAmount = data.payments.find((p) => p.status === "success");
       if (matchByAmount) {
         const amt = Number(matchByAmount.amount);
-        if (amt === 99) setPlanId("basic");
+        if (amt === 99)        setPlanId("trial");
         else if (amt === 1000) setPlanId("monthly");
+        else if (amt === 3600) setPlanId("pro_referral");
         else if (amt === 4500) setPlanId("yearly");
       }
     } catch (err: any) {
@@ -312,6 +328,34 @@ export default function AdminManualUpgrade() {
                   data-testid="input-note"
                 />
               </div>
+
+              {/* 2026-06: explicit grant preview so Tony can verify the
+                  duration BEFORE clicking. Stops the bug where granting
+                  "basic" used to give 365 days by mistake. */}
+              {(() => {
+                const picked = PLAN_OPTIONS.find((p) => p.id === planId);
+                if (!picked) return null;
+                const isPaid = picked.price > 0;
+                return (
+                  <div className={`rounded-lg p-3 text-sm border ${isPaid ? "border-emerald-300 bg-emerald-50 dark:bg-emerald-900/20" : "border-amber-300 bg-amber-50 dark:bg-amber-900/20"}`}>
+                    <div className="font-semibold mb-1 flex items-center gap-1.5">
+                      <ShieldCheck className="h-4 w-4" />
+                      Grant preview
+                    </div>
+                    <div className="text-xs text-foreground/90 leading-relaxed">
+                      Granting <strong>{picked.label}</strong> will:
+                      <ul className="list-disc list-inside mt-1 space-y-0.5">
+                        <li>Set <code>users.plan = "{picked.id}"</code> and create an active subscription</li>
+                        <li>{describeExpiry(picked.durationDays)}</li>
+                        <li>{isPaid
+                          ? `Record a KES ${picked.price.toLocaleString()} payment with receipt "${transactionCode || "<empty>"}"`
+                          : `Record a KES 0 comp payment (no real money charged)`}</li>
+                        <li>Send a real-time WebSocket unlock event to the user's open tabs</li>
+                      </ul>
+                    </div>
+                  </div>
+                );
+              })()}
 
               <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2">
                 <Button
