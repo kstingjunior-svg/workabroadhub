@@ -2173,7 +2173,29 @@ Crawl-delay: 1`);
       const planId = await storage.getUserPlan(userId);
       const plan = await storage.getPlanById(planId);
       const subscription = await storage.getUserSubscription(userId);
-      res.json({ planId, plan, subscription: subscription || null });
+
+      // 2026-06: recentlyExpired flag — when planId is "free" but the user
+      // had a paid subscription that ended within the last 7 days, surface
+      // that to the client. Lets the UI show "Your plan expired on X —
+      // renew to keep access" instead of a cold "Upgrade now" prompt.
+      let recentlyExpired: { plan: string; expiredAt: string } | null = null;
+      if (planId === "free") {
+        const recentExpiry = await pool.query<{ plan: string; end_date: Date }>(
+          `SELECT plan, end_date FROM user_subscriptions
+            WHERE user_id = $1 AND status = 'expired'
+              AND end_date IS NOT NULL
+              AND end_date > NOW() - INTERVAL '7 days'
+              AND end_date < NOW()
+            ORDER BY end_date DESC LIMIT 1`,
+          [userId],
+        ).catch(() => ({ rows: [] }) as any);
+        if (recentExpiry.rows.length > 0) {
+          const r = recentExpiry.rows[0];
+          recentlyExpired = { plan: r.plan, expiredAt: new Date(r.end_date).toISOString() };
+        }
+      }
+
+      res.json({ planId, plan, subscription: subscription || null, recentlyExpired });
     } catch (err: any) {
       res.status(500).json({ message: "Failed to fetch user plan" });
     }
@@ -6465,6 +6487,10 @@ Crawl-delay: 1`);
         method: "mpesa",
         paymentSource: "web",
         amountKes: plan.price,
+        // 2026-06: admin manual grants RESET the clock — Tony's rule:
+        // "we can forget about the days they never used." Stops loophole
+        // where repeated manual grants would stack indefinitely.
+        resetMode: "reset",
         extraMeta: { adminGranted: true, grantedBy: adminId, note: note || "" },
       });
 

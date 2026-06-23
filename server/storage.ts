@@ -1445,7 +1445,13 @@ export class DatabaseStorage implements IStorage {
     return usersPlan;
   }
 
-  async activateUserPlan(userId: string, planId: string, paymentId: string, expiresAt?: Date | null): Promise<UserSubscription> {
+  async activateUserPlan(
+    userId: string,
+    planId: string,
+    paymentId: string,
+    expiresAt?: Date | null,
+    options?: { resetMode?: "extend" | "reset" },
+  ): Promise<UserSubscription> {
     // Use a real DB transaction so all three writes (expire old, insert new, sync users.plan)
     // are atomic.  A crash between any of them can no longer leave inconsistent state.
     const client = await pool.connect();
@@ -1495,9 +1501,25 @@ export class DatabaseStorage implements IStorage {
       const freshExpiry  = expiresAt ?? new Date(Date.now() + defaultDays * 86_400_000);
       const duration     = freshExpiry.getTime() - now.getTime();
       const currentExpiry = existing?.end_date ? new Date(existing.end_date) : null;
-      const finalExpiry  = (currentExpiry && currentExpiry > now)
-        ? new Date(currentExpiry.getTime() + duration)                     // extend
-        : freshExpiry;                                                     // fresh start
+
+      // 2026-06 BUGFIX (Tony's request): resetMode controls whether a fresh
+      // activation EXTENDS the user's remaining time or RESETS the clock.
+      //
+      // resetMode = "extend" (default) — used by M-Pesa re-payments. If the
+      //   user has time left, the new duration is added to it. They don't
+      //   lose what they paid for.
+      //
+      // resetMode = "reset" — used by admin manual grants. Founder explicitly
+      //   said: "we can forget about the days they never used." The new
+      //   period starts from NOW, ignoring any prior subscription. Stops
+      //   loopholes where a user gets repeated manual grants and stacks
+      //   indefinitely.
+      const resetMode = options?.resetMode ?? "extend";
+      const finalExpiry = (resetMode === "reset")
+        ? freshExpiry                                                      // RESET — start fresh from now
+        : (currentExpiry && currentExpiry > now)
+          ? new Date(currentExpiry.getTime() + duration)                   // EXTEND
+          : freshExpiry;                                                   // no existing time → fresh start anyway
 
       // Expire all currently-active rows for this user (keeps the table tidy)
       await client.query(
@@ -1524,15 +1546,21 @@ export class DatabaseStorage implements IStorage {
 
       await client.query("COMMIT");
 
-      if (currentExpiry && currentExpiry > now) {
+      if (resetMode === "reset" && currentExpiry && currentExpiry > now) {
         console.log(
-          `[activateUserPlan] Extended "${planId}" for userId=${userId} ` +
-          `from ${currentExpiry.toISOString()} → ${finalExpiry.toISOString()}`,
+          `[activateUserPlan] RESET "${planId}" for userId=${userId} ` +
+          `| previous expiry ${currentExpiry.toISOString()} discarded ` +
+          `| new expiry ${finalExpiry.toISOString()}`,
+        );
+      } else if (currentExpiry && currentExpiry > now) {
+        console.log(
+          `[activateUserPlan] EXTENDED "${planId}" for userId=${userId} ` +
+          `| ${currentExpiry.toISOString()} → ${finalExpiry.toISOString()}`,
         );
       } else {
         console.log(
-          `[activateUserPlan] Activated "${planId}" for userId=${userId} ` +
-          `| expires=${finalExpiry.toISOString()}`,
+          `[activateUserPlan] ACTIVATED "${planId}" for userId=${userId} ` +
+          `| expires ${finalExpiry.toISOString()}`,
         );
       }
 

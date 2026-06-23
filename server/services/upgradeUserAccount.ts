@@ -41,6 +41,15 @@ export interface UpgradeOptions {
   method: "mpesa" | "paypal";
   amountKes: number;
   extraMeta?: Record<string, unknown>;
+  /**
+   * 2026-06: how to handle existing remaining time on the user's plan.
+   *   "extend" (default) — for organic M-Pesa re-payments. Adds duration
+   *     to any remaining time so paying users don't lose what they paid for.
+   *   "reset" — for admin manual grants. Discards any remaining time and
+   *     starts a fresh period from NOW. Founder's rule for manual grants:
+   *     "we can forget about the days they never used."
+   */
+  resetMode?: "extend" | "reset";
 }
 
 export interface UpgradeResult {
@@ -257,17 +266,23 @@ export async function upgradeUserAccount(opts: UpgradeOptions): Promise<UpgradeR
   const durationMs   = durationDays * 24 * 60 * 60 * 1000;
   const expiresAt    = new Date(Date.now() + durationMs);
 
+  // Thread resetMode through. Default is "extend" (for organic M-Pesa
+  // re-payments). Admin grant-plan endpoint passes "reset" so manual
+  // upgrades discard any leftover time and start a fresh exact-duration
+  // period from NOW.
+  const activationOptions = { resetMode: (opts.resetMode ?? "extend") as "extend" | "reset" };
+
   if (serviceId.startsWith("plan_")) {
-    await storage.activateUserPlan(resolvedUserId, resolvedPlan, paymentId, expiresAt);
+    await storage.activateUserPlan(resolvedUserId, resolvedPlan, paymentId, expiresAt, activationOptions);
     console.log(
       `[Upgrade][${method.toUpperCase()}] User ${resolvedUserId} → ${resolvedPlan} ` +
-      `| expires ${expiresAt.toISOString()} | txn: ${transactionId} | KES ${amountKes}`
+      `| mode=${activationOptions.resetMode} | expires ${expiresAt.toISOString()} | txn: ${transactionId} | KES ${amountKes}`
     );
   } else {
-    await storage.activateUserPlan(resolvedUserId, resolvedPlan, paymentId, expiresAt);
+    await storage.activateUserPlan(resolvedUserId, resolvedPlan, paymentId, expiresAt, activationOptions);
     console.log(
       `[Upgrade][${method.toUpperCase()}] Subscription created for user ${resolvedUserId} → ${resolvedPlan} ` +
-      `| expires ${expiresAt.toISOString()} | txn: ${transactionId} | KES ${amountKes}`
+      `| mode=${activationOptions.resetMode} | expires ${expiresAt.toISOString()} | txn: ${transactionId} | KES ${amountKes}`
     );
   }
 
