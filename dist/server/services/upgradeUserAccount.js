@@ -218,15 +218,20 @@ async function upgradeUserAccount(opts) {
     const durationDays = exports.PLAN_DURATION_DAYS[resolvedPlan] ?? exports.PLAN_DURATION_DAYS.pro;
     const durationMs = durationDays * 24 * 60 * 60 * 1000;
     const expiresAt = new Date(Date.now() + durationMs);
+    // Thread resetMode through. Default is "extend" (for organic M-Pesa
+    // re-payments). Admin grant-plan endpoint passes "reset" so manual
+    // upgrades discard any leftover time and start a fresh exact-duration
+    // period from NOW.
+    const activationOptions = { resetMode: (opts.resetMode ?? "extend") };
     if (serviceId.startsWith("plan_")) {
-        await storage_1.storage.activateUserPlan(resolvedUserId, resolvedPlan, paymentId, expiresAt);
+        await storage_1.storage.activateUserPlan(resolvedUserId, resolvedPlan, paymentId, expiresAt, activationOptions);
         console.log(`[Upgrade][${method.toUpperCase()}] User ${resolvedUserId} → ${resolvedPlan} ` +
-            `| expires ${expiresAt.toISOString()} | txn: ${transactionId} | KES ${amountKes}`);
+            `| mode=${activationOptions.resetMode} | expires ${expiresAt.toISOString()} | txn: ${transactionId} | KES ${amountKes}`);
     }
     else {
-        await storage_1.storage.activateUserPlan(resolvedUserId, resolvedPlan, paymentId, expiresAt);
+        await storage_1.storage.activateUserPlan(resolvedUserId, resolvedPlan, paymentId, expiresAt, activationOptions);
         console.log(`[Upgrade][${method.toUpperCase()}] Subscription created for user ${resolvedUserId} → ${resolvedPlan} ` +
-            `| expires ${expiresAt.toISOString()} | txn: ${transactionId} | KES ${amountKes}`);
+            `| mode=${activationOptions.resetMode} | expires ${expiresAt.toISOString()} | txn: ${transactionId} | KES ${amountKes}`);
     }
     // ── 6. Unlock service access (idempotent) ─────────────────────────────────
     storage_1.storage

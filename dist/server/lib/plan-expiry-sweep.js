@@ -105,6 +105,11 @@ async function runExpirySweep() {
         await db_1.pool.query(`UPDATE users
           SET plan = 'free', subscription_status = 'expired', updated_at = NOW()
         WHERE id = ANY($1::varchar[])`, [userIds]);
+        // 2026-06: pull emails so we can notify each user their plan expired.
+        // Best-effort — if the email fetch fails, sweep still completes.
+        const { rows: contactRows } = await db_1.pool.query(`SELECT id, email, first_name FROM users WHERE id = ANY($1::varchar[]) AND is_active = true`, [userIds]).catch(() => ({ rows: [] }));
+        const contactByUser = new Map();
+        contactRows.forEach((r) => contactByUser.set(r.id, { email: r.email, firstName: r.first_name }));
         // Side effects per user — best-effort, never block the sweep on failures
         for (const row of rows) {
             const userId = row.user_id;
@@ -134,7 +139,45 @@ async function runExpirySweep() {
                 }
             })
                 .catch(() => { });
-            console.log(`[expiry-sweep] expired userId=${userId} previousPlan=${row.plan} endDate=${new Date(row.end_date).toISOString()}`);
+            // 4. Email notification — "your plan has expired, renew to keep access"
+            //    Hostinger SMTP is the primary path; if it fails (rate limit, network
+            //    blip) we just log and move on — the user still sees the paywall on
+            //    their next visit, so they're not silently stuck.
+            const contact = contactByUser.get(userId);
+            if (contact?.email) {
+                const planLabel = row.plan === "trial" || row.plan === "basic"
+                    ? "1-Day Trial (KES 99)"
+                    : row.plan === "monthly"
+                        ? "Monthly plan (KES 1,000)"
+                        : row.plan === "yearly" || row.plan === "pro" || row.plan === "pro_referral"
+                            ? "Yearly plan (KES 4,500)"
+                            : `${row.plan} plan`;
+                Promise.resolve().then(() => __importStar(require("../email"))).then(({ sendEmail }) => sendEmail({
+                    to: contact.email,
+                    subject: `Your WorkAbroad Hub ${planLabel} has expired`,
+                    html: `
+            <div style="font-family:-apple-system,Segoe UI,sans-serif;max-width:520px;margin:auto;padding:24px;color:#1a2530;">
+              <h2 style="margin:0 0 12px;color:#C2461E;">Your plan just expired</h2>
+              <p>Hi ${escapeHtmlForEmail((contact.firstName || "").trim() || "there")},</p>
+              <p>Your <strong>${planLabel}</strong> on WorkAbroad Hub has just expired.</p>
+              <p>Renew in 30 seconds to keep applying to verified overseas jobs, Kenya Careers openings, and unlock the full app:</p>
+              <p style="margin:24px 0;">
+                <a href="https://workabroadhub.tech/pricing"
+                   style="display:inline-block;background:#C2461E;color:#fff;font-weight:600;font-size:14px;
+                          padding:12px 28px;border-radius:8px;text-decoration:none;">
+                  Renew my plan →
+                </a>
+              </p>
+              <p style="font-size:13px;color:#475569;">
+                Plans start at <strong>KES 99 for 24 hours</strong>, or pay <strong>KES 1,000 for 30 days</strong> /
+                <strong>KES 4,500 for the full year</strong>. M-Pesa STK push only — no card needed.
+              </p>
+              <p style="margin-top:32px;font-size:13px;color:#94a3b8;">— Tony &amp; the WorkAbroad Hub team, Nairobi</p>
+            </div>`,
+                    text: `Hi,\n\nYour ${planLabel} on WorkAbroad Hub has expired.\n\nRenew in 30 seconds at https://workabroadhub.tech/pricing — plans start at KES 99 for 24 hours.\n\n— Tony & the WorkAbroad Hub team, Nairobi`,
+                })).catch((err) => console.warn(`[expiry-sweep] email failed for userId=${userId}: ${err?.message}`));
+            }
+            console.log(`[expiry-sweep] expired userId=${userId} previousPlan=${row.plan} endDate=${new Date(row.end_date).toISOString()} ${contact?.email ? "(notified)" : "(no email on file)"}`);
         }
         return { expiredCount: rows.length, expiredUserIds, durationMs: Date.now() - start };
     }
@@ -187,4 +230,10 @@ function stopExpirySweep() {
         _timer = null;
         console.log("[expiry-sweep] Stopped");
     }
+}
+// Tiny HTML escape so user-supplied first names can't break the email template.
+function escapeHtmlForEmail(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+    }[c] || c));
 }

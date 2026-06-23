@@ -1942,7 +1942,24 @@ Crawl-delay: 1`);
             const planId = await storage_1.storage.getUserPlan(userId);
             const plan = await storage_1.storage.getPlanById(planId);
             const subscription = await storage_1.storage.getUserSubscription(userId);
-            res.json({ planId, plan, subscription: subscription || null });
+            // 2026-06: recentlyExpired flag — when planId is "free" but the user
+            // had a paid subscription that ended within the last 7 days, surface
+            // that to the client. Lets the UI show "Your plan expired on X —
+            // renew to keep access" instead of a cold "Upgrade now" prompt.
+            let recentlyExpired = null;
+            if (planId === "free") {
+                const recentExpiry = await db_1.pool.query(`SELECT plan, end_date FROM user_subscriptions
+            WHERE user_id = $1 AND status = 'expired'
+              AND end_date IS NOT NULL
+              AND end_date > NOW() - INTERVAL '7 days'
+              AND end_date < NOW()
+            ORDER BY end_date DESC LIMIT 1`, [userId]).catch(() => ({ rows: [] }));
+                if (recentExpiry.rows.length > 0) {
+                    const r = recentExpiry.rows[0];
+                    recentlyExpired = { plan: r.plan, expiredAt: new Date(r.end_date).toISOString() };
+                }
+            }
+            res.json({ planId, plan, subscription: subscription || null, recentlyExpired });
         }
         catch (err) {
             res.status(500).json({ message: "Failed to fetch user plan" });
@@ -5930,6 +5947,10 @@ Crawl-delay: 1`);
                 method: "mpesa",
                 paymentSource: "web",
                 amountKes: plan.price,
+                // 2026-06: admin manual grants RESET the clock — Tony's rule:
+                // "we can forget about the days they never used." Stops loophole
+                // where repeated manual grants would stack indefinitely.
+                resetMode: "reset",
                 extraMeta: { adminGranted: true, grantedBy: adminId, note: note || "" },
             });
             await storage_1.storage.logAdminAction(adminId, "manual_plan_grant", {
