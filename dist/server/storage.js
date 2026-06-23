@@ -528,18 +528,39 @@ class DatabaseStorage {
         // Always fetch users.plan — used as authoritative fallback for admin-promoted accounts
         const [userRow] = await db_1.db.select({ plan: auth_1.users.plan }).from(auth_1.users).where((0, drizzle_orm_1.eq)(auth_1.users.id, userId));
         const usersPlan = userRow?.plan || "free";
+        // 2026-06 DIAGNOSTIC: log every gate-relevant tier decision with full
+        // context. Founder reported a paying user appearing as "free" — this
+        // makes the audit trail visible in Render logs so we can answer
+        // "what tier did getUserPlan return at time T for user X?" instantly.
+        const logCtx = `userId=${userId} usersPlan="${usersPlan}" subStatus=${sub?.status ?? "none"} subPlan=${sub?.plan ?? "?"} subEnd=${sub?.endDate ? new Date(sub.endDate).toISOString() : "null"}`;
         // If there's an active, non-expired subscription, return its plan
         if (sub && sub.status === "active") {
             if (!sub.endDate || sub.endDate >= new Date()) {
-                if (sub.plan)
+                if (sub.plan) {
+                    // Active + non-expired + plan set — the canonical happy path
                     return sub.plan;
+                }
                 // Subscription is active but plan is null (legacy row) — trust users.plan
                 if (usersPlan !== "free") {
-                    console.info(`[getUserPlan] Active subscription missing plan for userId=${userId} — using users.plan="${usersPlan}"`);
+                    console.info(`[getUserPlan] ${logCtx} → result="${usersPlan}" reason=active_sub_no_plan_field_fallback_users_plan`);
                 }
                 return usersPlan;
             }
-            // Subscription exists but is expired — mark expired, lazy-sync users.plan to "free"
+            // 2026-06 BUGFIX: Renewal protection. Before declaring this user "expired",
+            // check if they have a successful M-Pesa payment in the last 5 minutes.
+            // If so, the callback is probably mid-flight — return their previous plan
+            // until the new subscription row commits. Prevents the "I paid but I'm
+            // back on free" race that founder reported.
+            const recentPayCheck = await db_1.pool.query(`SELECT COUNT(*)::text AS count FROM payments
+          WHERE user_id = $1 AND method = 'mpesa'
+            AND status IN ('success', 'completed')
+            AND created_at > NOW() - INTERVAL '5 minutes'`, [userId]).catch(() => ({ rows: [{ count: "0" }] }));
+            if (Number(recentPayCheck.rows[0]?.count ?? 0) > 0) {
+                console.warn(`[getUserPlan] ${logCtx} → result="${sub.plan ?? usersPlan}" reason=RENEWAL_PROTECTION_recent_payment_within_5min`);
+                return sub.plan || usersPlan;
+            }
+            // Subscription exists but is expired AND no recent payment — proceed with downgrade
+            console.warn(`[getUserPlan] ${logCtx} → result="free" reason=sub_expired_lazy_downgrade`);
             db_1.db.update(schema_1.userSubscriptions).set({ status: "expired", updatedAt: new Date() }).where((0, drizzle_orm_1.eq)(schema_1.userSubscriptions.userId, userId)).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
             db_1.db.update(auth_1.users).set({ plan: "free", subscriptionStatus: "expired", updatedAt: new Date() }).where((0, drizzle_orm_1.eq)(auth_1.users.id, userId)).catch((err) => {
                 console.warn(`[getUserPlan] Could not sync expired plan for userId=${userId}:`, err?.message);
@@ -548,10 +569,22 @@ class DatabaseStorage {
             Promise.resolve().then(() => __importStar(require("./supabaseClient"))).then(({ downgradeSupabaseUser }) => downgradeSupabaseUser(userId)).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
             return "free";
         }
-        // No active subscription in userSubscriptions — fall back to the users.plan column
-        // (handles admin-promoted users or edge cases where the subscription insert failed)
+        // No active subscription in userSubscriptions — but still check for a recent
+        // payment before declaring them free. Same renewal-protection logic.
+        if (usersPlan === "free") {
+            const recentPayCheck = await db_1.pool.query(`SELECT COUNT(*)::text AS count, MAX(plan_id) AS plan_id FROM payments
+          WHERE user_id = $1 AND method = 'mpesa'
+            AND status IN ('success', 'completed')
+            AND plan_id IS NOT NULL
+            AND created_at > NOW() - INTERVAL '5 minutes'`, [userId]).catch(() => ({ rows: [{ count: "0", plan_id: null }] }));
+            if (Number(recentPayCheck.rows[0]?.count ?? 0) > 0) {
+                const protectivePlan = recentPayCheck.rows[0]?.plan_id || "trial";
+                console.warn(`[getUserPlan] ${logCtx} → result="${protectivePlan}" reason=RENEWAL_PROTECTION_no_sub_yet_but_recent_payment`);
+                return protectivePlan;
+            }
+        }
         if (usersPlan !== "free") {
-            console.info(`[getUserPlan] No active subscription for userId=${userId} but users.plan="${usersPlan}" — using fallback`);
+            console.info(`[getUserPlan] ${logCtx} → result="${usersPlan}" reason=no_active_sub_fallback_users_plan`);
         }
         return usersPlan;
     }

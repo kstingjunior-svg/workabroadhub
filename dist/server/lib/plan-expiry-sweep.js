@@ -60,15 +60,40 @@ async function runExpirySweep() {
     const start = Date.now();
     const expiredUserIds = [];
     try {
-        // Single transaction: find + expire all stale active subscriptions atomically.
-        // Returns the user IDs so we can fire follow-up side effects (cache invalidate,
-        // Supabase mirror, WebSocket nudge).
+        // 2026-06 BUGFIX: founder reported a client who paid a 2nd time, app
+        // showed her as paid, then she got bounced to the paywall before her 24h
+        // was up. Root cause: race between the expiry sweep and second-payment
+        // activations. Two specific scenarios fixed here:
+        //
+        //   1. Renewal protection — if a successful M-Pesa payment landed for
+        //      this user in the last 5 minutes, DO NOT expire any of their
+        //      subscriptions. The callback may be mid-flight; the new active
+        //      sub may not yet be committed. Better to wait one sweep cycle.
+        //
+        //   2. Just-created grace period — never expire a subscription that
+        //      was created in the last 60 seconds. Handles clock-skew + commit
+        //      lag where end_date was set in the past somehow.
+        //
+        // Both are conservative — we lose at most 5 min of revenue protection
+        // on truly-expired users, in exchange for never downgrading someone
+        // who just paid.
         const { rows } = await db_1.pool.query(`WITH expired AS (
-         UPDATE user_subscriptions
+         UPDATE user_subscriptions us
             SET status = 'expired', updated_at = NOW()
-          WHERE status = 'active'
-            AND end_date IS NOT NULL
-            AND end_date < NOW()
+          WHERE us.status = 'active'
+            AND us.end_date IS NOT NULL
+            AND us.end_date < NOW()
+            -- Grace period: don't expire freshly-created rows (commit lag, clock skew)
+            AND us.created_at < NOW() - INTERVAL '60 seconds'
+            -- Renewal protection: skip users who had a successful M-Pesa payment in the last 5 min.
+            -- That payment's callback is probably still propagating through runPaymentPipeline.
+            AND NOT EXISTS (
+              SELECT 1 FROM payments p
+               WHERE p.user_id = us.user_id
+                 AND p.method = 'mpesa'
+                 AND p.status IN ('success', 'completed')
+                 AND p.created_at > NOW() - INTERVAL '5 minutes'
+            )
          RETURNING user_id, plan, end_date
        )
        SELECT user_id, plan, end_date FROM expired`);

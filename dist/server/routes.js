@@ -7142,6 +7142,115 @@ Crawl-delay: 1`);
             res.status(500).json({ message: "Backfill failed" });
         }
     });
+    // GET /api/admin/users/:id/plan-diagnostic — full plan + payment timeline
+    // 2026-06: founder needs visibility when a client reports "I paid but
+    // I'm showing as free". This returns:
+    //   - the user's current resolved plan (live getUserPlan call)
+    //   - their users.plan column
+    //   - their last 10 subscription rows (active/expired/cancelled)
+    //   - their last 20 payments
+    //   - a verdict: "ALL GOOD", "PAID BUT DOWNGRADED", "RECENT PAYMENT UNPROCESSED", etc.
+    // Lets Tony eyeball the timeline and immediately see where the gap was.
+    app.get("/api/admin/users/:id/plan-diagnostic", auth_1.isAuthenticated, isAdmin, async (req, res) => {
+        try {
+            const userId = req.params.id;
+            const [{ rows: [user] }, { rows: subs }, { rows: pays }, livePlan,] = await Promise.all([
+                db_1.pool.query(`
+          SELECT id, email, phone, plan, subscription_status, created_at, last_login
+            FROM users WHERE id = $1 LIMIT 1
+        `, [userId]),
+                db_1.pool.query(`
+          SELECT id, status, plan, end_date, start_date, payment_id, created_at, updated_at
+            FROM user_subscriptions WHERE user_id = $1
+           ORDER BY created_at DESC LIMIT 10
+        `, [userId]),
+                db_1.pool.query(`
+          SELECT id, amount, status, plan_id, service_id, method,
+                 mpesa_receipt_number, created_at, fail_reason
+            FROM payments WHERE user_id = $1
+           ORDER BY created_at DESC LIMIT 20
+        `, [userId]),
+                storage_1.storage.getUserPlan(userId).catch((e) => `ERROR: ${e?.message}`),
+            ]);
+            if (!user)
+                return res.status(404).json({ message: "User not found." });
+            const PAID_TIERS = new Set(["trial", "basic", "monthly", "yearly", "pro", "pro_referral"]);
+            const activeSub = subs.find((s) => s.status === "active" && (!s.end_date || new Date(s.end_date) > new Date()));
+            const lastPaid = pays.find((p) => (p.status === "success" || p.status === "completed") && p.plan_id);
+            // Compute verdict
+            const verdicts = [];
+            const livePlanStr = String(livePlan);
+            const isLivePlanPaid = PAID_TIERS.has(livePlanStr);
+            if (isLivePlanPaid && activeSub) {
+                verdicts.push("✓ ALL GOOD — user has active paid plan");
+            }
+            else if (isLivePlanPaid && !activeSub) {
+                verdicts.push("⚠ Live plan says paid but no active subscription row — denormalisation drift");
+            }
+            else if (!isLivePlanPaid && activeSub) {
+                verdicts.push("⚠ Active subscription exists but getUserPlan returned free — sub.endDate may have just expired");
+            }
+            else if (!isLivePlanPaid && lastPaid) {
+                const ageMins = Math.round((Date.now() - new Date(lastPaid.created_at).getTime()) / 60000);
+                if (ageMins < 5) {
+                    verdicts.push(`⚠ RECENT PAYMENT (${ageMins} min ago) but free — callback probably still processing, renewal protection should kick in`);
+                }
+                else {
+                    verdicts.push(`⚠ PAID BUT DOWNGRADED — last successful payment was ${ageMins} min ago (KES ${lastPaid.amount} for plan ${lastPaid.plan_id}), but user is now free. Either subscription expired naturally OR callback failed silently.`);
+                }
+            }
+            else {
+                verdicts.push("ℹ User is on free tier — no recent paid activity");
+            }
+            res.json({
+                userId,
+                email: user.email,
+                phone: user.phone,
+                currentLivePlan: livePlanStr,
+                usersPlanColumn: user.plan,
+                usersSubscriptionStatus: user.subscription_status,
+                createdAt: user.created_at,
+                lastLogin: user.last_login,
+                verdict: verdicts.join(" | "),
+                activeSubscription: activeSub ? {
+                    id: activeSub.id,
+                    plan: activeSub.plan,
+                    status: activeSub.status,
+                    endDate: activeSub.end_date,
+                    startDate: activeSub.start_date,
+                    createdAt: activeSub.created_at,
+                    minutesUntilExpiry: activeSub.end_date
+                        ? Math.round((new Date(activeSub.end_date).getTime() - Date.now()) / 60000)
+                        : null,
+                } : null,
+                subscriptionHistory: subs.map((s) => ({
+                    id: s.id,
+                    plan: s.plan,
+                    status: s.status,
+                    startDate: s.start_date,
+                    endDate: s.end_date,
+                    createdAt: s.created_at,
+                    updatedAt: s.updated_at,
+                })),
+                paymentHistory: pays.map((p) => ({
+                    id: p.id,
+                    amount: p.amount,
+                    status: p.status,
+                    planId: p.plan_id,
+                    serviceId: p.service_id,
+                    method: p.method,
+                    mpesaReceipt: p.mpesa_receipt_number,
+                    failReason: p.fail_reason,
+                    createdAt: p.created_at,
+                    ageMinutes: Math.round((Date.now() - new Date(p.created_at).getTime()) / 60000),
+                })),
+            });
+        }
+        catch (err) {
+            console.error("[GET /api/admin/users/:id/plan-diagnostic]", err?.message);
+            res.status(500).json({ message: err?.message ?? "Diagnostic failed." });
+        }
+    });
     // GET /api/admin/users/:id/payments — payment history for a specific user
     app.get("/api/admin/users/:id/payments", auth_1.isAuthenticated, isAdmin, async (req, res) => {
         try {
