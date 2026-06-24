@@ -12,6 +12,25 @@
     <meta http-equiv="Expires"       content="0" />
     <meta name="version"             content="2026.04.14.003" />
 
+    <!-- 2026-06: Theme persistence — eliminates the flash-of-wrong-theme.
+         Runs SYNCHRONOUSLY before React mounts (and before any styles paint),
+         so the `dark` class is on <html> before the first pixel renders.
+         Reads localStorage.theme; falls back to OS preference if unset.
+         Self-contained, swallows any error so it can never break the page. -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("theme");
+          var prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+          if (t === "dark" || (!t && prefersDark)) {
+            document.documentElement.classList.add("dark");
+          } else {
+            document.documentElement.classList.remove("dark");
+          }
+        } catch (e) { /* never break the page over theme */ }
+      })();
+    </script>
+
     <!-- Version-check: detects when a new build is deployed and offers a reload.
          Works by comparing the content-hash that Vite embeds in the main bundle's
          filename (e.g. "/assets/main-Ab3kQ9.js") between page loads.
