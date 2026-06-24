@@ -73,6 +73,11 @@ export async function runPaidButFreeReconciler(): Promise<SweepResult> {
     //   • Very old payments (>7d — past the trial duration; nothing to recover)
     //   • Deactivated users
     //   • Users with a non-free plan (already recovered, or admin-upgraded)
+    // 2026-06 SAFETY: only scan payments whose plan_id is in the canonical
+    // tier set. Historical payments with `plan_id = 'cv_fix_lite'` (from the
+    // old buggy initiation code) must NOT be picked up — they're service
+    // purchases, not subscriptions, and re-running the pipeline against them
+    // would be a no-op anyway (the pipeline now rejects non-canonical plans).
     const { rows } = await pool.query<StuckPaymentRow>(`
       SELECT
         p.id            AS payment_id,
@@ -87,6 +92,7 @@ export async function runPaidButFreeReconciler(): Promise<SweepResult> {
       WHERE p.status IN ('success', 'completed')
         AND p.plan_id IS NOT NULL
         AND p.plan_id <> ''
+        AND p.plan_id IN ('trial', 'basic', 'monthly', 'yearly', 'pro', 'pro_referral')
         AND p.created_at < NOW() - INTERVAL '${SETTLE_DELAY_MIN} minutes'
         AND p.created_at > NOW() - INTERVAL '${MAX_LOOKBACK_DAYS} days'
         AND u.is_active = true

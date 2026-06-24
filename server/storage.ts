@@ -1452,6 +1452,27 @@ export class DatabaseStorage implements IStorage {
     expiresAt?: Date | null,
     options?: { resetMode?: "extend" | "reset" },
   ): Promise<UserSubscription> {
+    // ── 2026-06 FINAL GUARDRAIL (Tony's CV Fix Lite bug) ────────────────────
+    // Last line of defense. The payment-creation, M-Pesa callback, and
+    // paymentPipeline layers each have their own canonical-tier gate, but
+    // this method is the ultimate writer — every plan activation in the
+    // app eventually hits this function. Hard-block any non-canonical
+    // tier here so a one-off service ID (cv_fix_lite, cover_letter, etc.)
+    // can NEVER become a subscription row, even if a future code path
+    // forgets to gate upstream.
+    const CANONICAL_TIERS = new Set([
+      "trial", "basic", "monthly", "yearly", "pro", "pro_referral",
+    ]);
+    if (!planId || !CANONICAL_TIERS.has(String(planId).toLowerCase())) {
+      const err = new Error(
+        `[activateUserPlan] BLOCKED non-canonical planId="${planId}" for userId=${userId} ` +
+        `paymentId=${paymentId}. Allowed tiers: ${[...CANONICAL_TIERS].join(", ")}. ` +
+        `Service-only payments must not call activateUserPlan — use unlockService instead.`,
+      );
+      console.error(err.message);
+      throw err;
+    }
+
     // Use a real DB transaction so all three writes (expire old, insert new, sync users.plan)
     // are atomic.  A crash between any of them can no longer leave inconsistent state.
     const client = await pool.connect();
