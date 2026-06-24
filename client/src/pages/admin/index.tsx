@@ -705,6 +705,12 @@ export default function AdminDashboard() {
               <ShieldCheck className="h-4 w-4 text-teal-500" /> Moderation Queue
             </a>
           </Button>
+          {/* 2026-06: cleanup tool for users wrongly granted plan access by service payments */}
+          <Button variant="outline" size="sm" asChild data-testid="link-plan-recovery">
+            <a href="/admin/plan-recovery" className="flex items-center gap-1.5">
+              <ShieldCheck className="h-4 w-4 text-amber-600" /> Plan Recovery
+            </a>
+          </Button>
         </div>
 
         <div className="grid lg:grid-cols-2 gap-6">

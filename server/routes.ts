@@ -3984,10 +3984,33 @@ Crawl-delay: 1`);
       if (!resolvedMpesa) return res.status(400).json({ success: false, error: `Service or plan "${mpesaPlanKey}" is not configured for payment.`, message: `Service or plan "${mpesaPlanKey}" is not configured for payment.` });
       const mpesaAmount = resolvedMpesa.finalPrice;
 
-      // Derive planId: subscription plans strip the "plan_" prefix ("plan_pro" → "pro"),
-      // standalone service purchases use the serviceId itself as the slug
-      // e.g. "ats_cv_optimization" → "ats_cv_optimization"
+      // 2026-06 CRITICAL BUGFIX (Tony's report): a client paid KES 99 for
+      // CV Fix Lite and got upgraded to the trial plan with full job-application
+      // access. Root cause: the old code wrote "cv_fix_lite" into payment.planId,
+      // the callback then handed that to runPaymentPipeline → activateUserPlan,
+      // which created a subscription row + flipped users.plan to "cv_fix_lite".
+      // Any code path that did `users.plan !== "free"` then treated them as paid.
+      //
+      // STRICT FIX: payment.planId is ONLY set for actual subscription plan
+      // purchases (canonical tier list below). For one-off service purchases
+      // (CV Fix Lite, ATS optimisation, interview coaching, etc.) planId
+      // stays NULL — the callback then correctly skips plan activation.
+      //
+      // Two variables:
+      //   • derivedPlanId — slug used for service-name lookup (always set)
+      //   • subscriptionPlanId — only set if it's a real subscription tier,
+      //     this is what's written to payment.planId
+      const CANONICAL_PLAN_TIERS = new Set(["trial", "basic", "monthly", "yearly", "pro", "pro_referral"]);
       const derivedPlanId = serviceId.startsWith("plan_") ? serviceId.replace("plan_", "") : serviceId;
+      const isPlanPurchase = serviceId.startsWith("plan_") ||
+                             CANONICAL_PLAN_TIERS.has(derivedPlanId.toLowerCase());
+      const subscriptionPlanId: string | null = isPlanPurchase && CANONICAL_PLAN_TIERS.has(derivedPlanId.toLowerCase())
+        ? derivedPlanId.toLowerCase()
+        : null;
+      if (!subscriptionPlanId && (serviceId === "trial" || serviceId === "monthly" || serviceId === "yearly" || serviceId === "pro" || serviceId === "basic" || serviceId === "pro_referral")) {
+        // shouldn't happen — the include check above covers it — but log just in case
+        console.warn(`[/api/payments/initiate] plan-looking serviceId="${serviceId}" did not resolve to a subscription`);
+      }
 
       // Resolve serviceName: prefer client-provided → plan name map → services table by slug → fallback
       const planNameMap: Record<string, string> = {
@@ -4038,7 +4061,10 @@ Crawl-delay: 1`);
         method,
         phone:        normalizedPhone || phoneNumber || null,
         status:       "pending",
-        planId:       derivedPlanId,
+        // 2026-06 CRITICAL FIX: only set planId if this is a real subscription
+        // tier. CV Fix Lite + other one-off services land here with planId=null
+        // so the M-Pesa callback's runPaymentPipeline won't activate a plan.
+        planId:       subscriptionPlanId,
         serviceId,
         serviceName:  resolvedServiceName,
         // checkoutRequestId is intentionally null here — set by /api/mpesa/stk after Safaricom responds
@@ -4050,7 +4076,7 @@ Crawl-delay: 1`);
         paymentId: pendingPayment.id,
         event:     "payment_row_created",
         ip:        clientIp,
-        metadata:  { phone: normalizedPhone, amount: mpesaAmount, serviceId, planId: derivedPlanId },
+        metadata:  { phone: normalizedPhone, amount: mpesaAmount, serviceId, planId: subscriptionPlanId, derivedSlug: derivedPlanId },
       }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
 
       return res.json({
@@ -5410,11 +5436,26 @@ Crawl-delay: 1`);
             //   • serviceId is "plan_pro" / "plan_basic" → strip the prefix
             //   • serviceId is just "pro" / "basic" / "yearly" / "monthly" → use as-is
             //   • everything else is a one-off service purchase (planId stays null)
+            //
+            // 2026-06 SAFETY: whatever resolves out MUST be in the canonical
+            // tier set. A historical CV Fix Lite payment that snuck planId
+            // "cv_fix_lite" into the DB would otherwise have got handed to
+            // activateUserPlan and granted them a subscription. Hard-gate here.
+            const CALLBACK_VALID_TIERS = new Set(["trial", "basic", "monthly", "yearly", "pro", "pro_referral"]);
             const sid = (payment.serviceId ?? "").toLowerCase();
-            const resolvedPlanId: string | null =
+            const rawCandidate: string | null =
               (payment.planId as string | null) ??
               (sid.startsWith("plan_") ? sid.replace("plan_", "") : null) ??
-              (["pro", "basic", "yearly", "monthly", "trial"].includes(sid) ? sid : null);
+              (CALLBACK_VALID_TIERS.has(sid) ? sid : null);
+            const resolvedPlanId: string | null =
+              rawCandidate && CALLBACK_VALID_TIERS.has(rawCandidate) ? rawCandidate : null;
+            if (rawCandidate && !resolvedPlanId) {
+              console.warn(
+                `[MPESA CALLBACK][SAFETY] payment ${payment.id} had planId="${payment.planId}" / serviceId="${sid}" ` +
+                `that resolved to non-canonical "${rawCandidate}" — refusing to activate subscription. ` +
+                `Service delivery (unlockService, deliverService) still runs.`,
+              );
+            }
 
             await runPaymentPipeline({
               payment: { ...payment, userId: pipelineUser.id, amount: amountPaid ?? payment.amount },
@@ -6534,6 +6575,188 @@ Crawl-delay: 1`);
     } catch (err: any) {
       console.error("[Admin Grant Plan]", err.message);
       res.status(500).json({ message: err.message || "Failed to grant plan" });
+    }
+  });
+
+  // ── Admin: recover users wrongly cross-granted by a service purchase ──────
+  //
+  // 2026-06: For weeks the payment-initiation code wrote the raw serviceId
+  // (e.g. "cv_fix_lite") into payments.plan_id whenever the request didn't
+  // start with "plan_". The callback pipeline then activated that string
+  // AS A SUBSCRIPTION TIER, flipping users.plan to "cv_fix_lite" and
+  // giving them job-application access they never paid for.
+  //
+  // The bug is patched at three layers now (payment creation, callback
+  // gate, pipeline gate), but already-affected users still need
+  // remediation: their users.plan / userStage / isActive and their
+  // user_subscriptions rows are pointing at a fake tier.
+  //
+  // This endpoint:
+  //   1. GET  /api/admin/recover-cross-granted-plans?dryRun=1  → preview
+  //   2. POST /api/admin/recover-cross-granted-plans            → apply
+  //
+  // Identifies any user whose users.plan or user_subscriptions.plan is
+  // NOT one of the six canonical tiers (trial/basic/monthly/yearly/pro/
+  // pro_referral) and NOT already "free". Downgrades them to "free",
+  // expires the bogus subscription row, and writes an audit trail.
+  // SAFE TO RUN REPEATEDLY — second run reports zero affected rows.
+  const RECOVERY_CANONICAL_TIERS = ["trial", "basic", "monthly", "yearly", "pro", "pro_referral"];
+  async function findCrossGrantedRows() {
+    // Users whose plan column points at something that isn't free OR canonical.
+    const placeholders = RECOVERY_CANONICAL_TIERS.map((_, i) => `$${i + 1}`).join(", ");
+    const userRows = await pool.query<{
+      id: string;
+      email: string | null;
+      plan: string;
+      user_stage: string | null;
+    }>(
+      `SELECT id, email, plan, user_stage
+       FROM users
+       WHERE plan IS NOT NULL
+         AND plan <> 'free'
+         AND plan NOT IN (${placeholders})`,
+      RECOVERY_CANONICAL_TIERS,
+    );
+    const subRows = await pool.query<{
+      id: string;
+      user_id: string;
+      plan: string;
+      status: string;
+      end_date: Date | null;
+    }>(
+      `SELECT id, user_id, plan, status, end_date
+       FROM user_subscriptions
+       WHERE plan IS NOT NULL
+         AND plan <> 'free'
+         AND plan NOT IN (${placeholders})`,
+      RECOVERY_CANONICAL_TIERS,
+    );
+    return { userRows: userRows.rows, subRows: subRows.rows };
+  }
+
+  app.get("/api/admin/recover-cross-granted-plans", isAuthenticated, isAdmin, async (_req: any, res) => {
+    try {
+      const { userRows, subRows } = await findCrossGrantedRows();
+      res.json({
+        mode: "preview",
+        canonicalTiers: RECOVERY_CANONICAL_TIERS,
+        affectedUserCount: userRows.length,
+        affectedSubscriptionCount: subRows.length,
+        users: userRows,
+        subscriptions: subRows,
+        note: "Nothing has been changed. POST to this same path to apply.",
+      });
+    } catch (err: any) {
+      console.error("[Admin Recover Cross-Granted]", err?.message);
+      res.status(500).json({ message: err?.message || "Failed to scan" });
+    }
+  });
+
+  app.post("/api/admin/recover-cross-granted-plans", isAuthenticated, isAdmin, async (req: any, res) => {
+    const adminId = req.user?.claims?.sub;
+    const dryRun = req.body?.dryRun === true || req.body?.dryRun === "true";
+    try {
+      const { userRows, subRows } = await findCrossGrantedRows();
+      if (userRows.length === 0 && subRows.length === 0) {
+        return res.json({
+          success: true,
+          mode: dryRun ? "dry-run" : "apply",
+          affectedUserCount: 0,
+          affectedSubscriptionCount: 0,
+          message: "No cross-granted users found. Database is clean.",
+        });
+      }
+
+      if (dryRun) {
+        return res.json({
+          success: true,
+          mode: "dry-run",
+          affectedUserCount: userRows.length,
+          affectedSubscriptionCount: subRows.length,
+          users: userRows,
+          subscriptions: subRows,
+          message: "Dry-run only — no changes applied. POST with dryRun:false to apply.",
+        });
+      }
+
+      // Apply mode — run both fixes in a single transaction so we don't
+      // leave the DB half-recovered if one statement fails.
+      const client = await pool.connect();
+      let usersFixed = 0;
+      let subsFixed = 0;
+      try {
+        await client.query("BEGIN");
+
+        const placeholders = RECOVERY_CANONICAL_TIERS.map((_, i) => `$${i + 1}`).join(", ");
+
+        const userResult = await client.query(
+          `UPDATE users
+             SET plan = 'free',
+                 user_stage = 'registered',
+                 is_active = TRUE,
+                 updated_at = NOW()
+           WHERE plan IS NOT NULL
+             AND plan <> 'free'
+             AND plan NOT IN (${placeholders})
+           RETURNING id, email`,
+          RECOVERY_CANONICAL_TIERS,
+        );
+        usersFixed = userResult.rowCount ?? 0;
+
+        const subResult = await client.query(
+          `UPDATE user_subscriptions
+             SET status = 'expired',
+                 auto_renew = FALSE,
+                 end_date = LEAST(COALESCE(end_date, NOW()), NOW()),
+                 updated_at = NOW()
+           WHERE plan IS NOT NULL
+             AND plan <> 'free'
+             AND plan NOT IN (${placeholders})
+           RETURNING id, user_id, plan`,
+          RECOVERY_CANONICAL_TIERS,
+        );
+        subsFixed = subResult.rowCount ?? 0;
+
+        await client.query("COMMIT");
+
+        // Bust the auth-user cache for every affected user so their next
+        // /api/auth/user request returns the corrected "free" plan
+        // immediately, not a stale 30 s cached "cv_fix_lite" row.
+        try {
+          const { invalidateAuthUserCache } = await import("./lib/auth-user-cache");
+          for (const u of userResult.rows as any[]) {
+            invalidateAuthUserCache(u.id);
+          }
+        } catch { /* best effort */ }
+
+        await storage.logAdminAction(adminId, "recover_cross_granted_plans", {
+          usersFixed,
+          subsFixed,
+          userIds: (userResult.rows as any[]).map((u) => u.id),
+        }).catch(() => {});
+
+        console.log(
+          `[Admin] Recover cross-granted: usersFixed=${usersFixed} subsFixed=${subsFixed} by admin=${adminId}`,
+        );
+
+        res.json({
+          success: true,
+          mode: "apply",
+          affectedUserCount: usersFixed,
+          affectedSubscriptionCount: subsFixed,
+          users: userResult.rows,
+          subscriptions: subResult.rows,
+          message: `Reverted ${usersFixed} user(s) to "free" and expired ${subsFixed} bogus subscription row(s).`,
+        });
+      } catch (txErr: any) {
+        await client.query("ROLLBACK").catch(() => {});
+        throw txErr;
+      } finally {
+        client.release();
+      }
+    } catch (err: any) {
+      console.error("[Admin Recover Cross-Granted Apply]", err?.message);
+      res.status(500).json({ message: err?.message || "Recovery failed" });
     }
   });
 
