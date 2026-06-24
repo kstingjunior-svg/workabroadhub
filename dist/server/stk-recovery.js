@@ -65,14 +65,33 @@ const FAIL_CODES = new Set([1032, 1037, 2001, 17, 1]);
 const TIMEOUT_CODE = 1037;
 let timer = null;
 async function handleSuccess(payment, receipt) {
-    const expiresAt = (0, plans_1.planExpiry)();
     const receiptStr = String(receipt || `RECOVERED-${Date.now()}`);
+    // 2026-06 SAFETY: resolve canonical tier from the payment itself — never
+    // default to "pro" for a service-only payment (CV Fix Lite, etc.).
+    const RECOVERY_VALID_TIERS = new Set(["trial", "basic", "monthly", "yearly", "pro", "pro_referral"]);
+    const sid = (payment.serviceId ?? "").toLowerCase();
+    const fromService = sid.startsWith("plan_") ? sid.replace("plan_", "") : null;
+    const fromPlanId = payment.planId ? String(payment.planId).toLowerCase() : null;
+    const resolvedTier = (fromService && RECOVERY_VALID_TIERS.has(fromService)) ? fromService :
+        (fromPlanId && RECOVERY_VALID_TIERS.has(fromPlanId)) ? fromPlanId :
+            null;
     await storage_1.storage.updatePayment(payment.id, {
         status: "success",
         transactionRef: receiptStr,
         statusLastChecked: new Date(),
     });
-    await storage_1.storage.activateUserPlan(payment.userId, payment.planId || "pro", payment.id, expiresAt);
+    if (!resolvedTier) {
+        // Service-only payment — unlock the service, no subscription activation.
+        console.log(`[StkRecovery] Service-only payment ${payment.id} (serviceId=${sid}) — unlocking service, no plan activation.`);
+        if (sid) {
+            await storage_1.storage.unlockService(payment.userId, sid, payment.id, {
+                recovered: true, receipt: receiptStr,
+            }).catch((err) => console.warn(`[StkRecovery] unlockService failed: ${err?.message}`));
+        }
+        return;
+    }
+    const expiresAt = (0, plans_1.planExpiry)(resolvedTier);
+    await storage_1.storage.activateUserPlan(payment.userId, resolvedTier, payment.id, expiresAt);
     await storage_1.storage.updateUserStage(payment.userId, "paid").catch((err) => {
         console.error("[StkRecovery] updateUserStage failed:", {
             error: err?.message, paymentId: payment?.id, userId: payment?.userId,
@@ -83,8 +102,8 @@ async function handleSuccess(payment, receipt) {
     storage_1.storage.createUserNotification({
         userId: payment.userId,
         type: "success",
-        title: "Pro Plan Activated",
-        message: `Your M-Pesa payment was confirmed (${receiptStr}). Pro plan active — expires ${expiresAt.toLocaleDateString("en-KE")}.`,
+        title: `${resolvedTier.charAt(0).toUpperCase() + resolvedTier.slice(1)} Plan Activated`,
+        message: `Your M-Pesa payment was confirmed (${receiptStr}). ${resolvedTier} plan active — expires ${expiresAt.toLocaleDateString("en-KE")}.`,
     }).catch((err) => {
         console.error("[StkRecovery] createNotification(success) failed:", {
             error: err?.message, paymentId: payment?.id, userId: payment?.userId,
@@ -95,7 +114,7 @@ async function handleSuccess(payment, receipt) {
     Promise.resolve().then(() => __importStar(require("./websocket"))).then(({ notifyUserPlanActivated }) => {
         notifyUserPlanActivated(payment.userId, {
             type: "plan_activated",
-            planId: "pro",
+            planId: resolvedTier,
             expiresAt: expiresAt.toISOString(),
             method: "mpesa",
             transactionId: receiptStr,

@@ -152,7 +152,19 @@ async function reconcileTransaction(tx) {
                 });
                 if (matchedPayment) {
                     console.log(`[Reconciler] ✓ Matched retry_available payment ${matchedPayment.id} via Pull API — TransID: ${transId}, KES ${amount}, phone: ${phone}`);
-                    const expiresAt = new Date(Date.now() + 360 * 24 * 60 * 60 * 1000);
+                    // 2026-06 SAFETY (Tony's CV Fix Lite bug): resolve the canonical
+                    // subscription tier from the payment's own planId/serviceId. If
+                    // there is no canonical tier (the payment was for a one-off
+                    // service like CV Fix Lite), mark it delivered but do NOT
+                    // activate a subscription. Previously this defaulted to "pro"
+                    // and silently upgraded service-payment users to Pro.
+                    const RECON_VALID_TIERS = new Set(["trial", "basic", "monthly", "yearly", "pro", "pro_referral"]);
+                    const sid = (matchedPayment.serviceId ?? "").toLowerCase();
+                    const fromService = sid.startsWith("plan_") ? sid.replace("plan_", "") : null;
+                    const fromPlanId = matchedPayment.planId ? String(matchedPayment.planId).toLowerCase() : null;
+                    const resolvedTier = (fromService && RECON_VALID_TIERS.has(fromService)) ? fromService :
+                        (fromPlanId && RECON_VALID_TIERS.has(fromPlanId)) ? fromPlanId :
+                            null;
                     await storage_1.storage.updatePayment(matchedPayment.id, {
                         status: "success",
                         mpesaReceiptNumber: transId,
@@ -160,17 +172,32 @@ async function reconcileTransaction(tx) {
                         verificationStatus: "verified",
                         verificationNote: `Auto-reconciled via M-Pesa Pull API. TransID: ${transId}, Amount: KES ${amount}`,
                     });
-                    await storage_1.storage.activateUserPlan(matchedPayment.userId, matchedPayment.planId || "pro", matchedPayment.id, expiresAt);
+                    if (!resolvedTier) {
+                        // Service-only payment — unlock the service, no subscription.
+                        console.log(`[Reconciler] Service-only payment ${matchedPayment.id} (serviceId=${sid}) — unlocking service, no plan activation.`);
+                        if (sid) {
+                            await storage_1.storage.unlockService(matchedPayment.userId, sid, matchedPayment.id, {
+                                reconciled: true, transId,
+                            }).catch((err) => console.warn(`[Reconciler] unlockService failed: ${err?.message}`));
+                        }
+                        await db_1.db.execute((0, drizzle_orm_1.sql) `UPDATE mpesa_pull_transactions SET reconciled = TRUE, reconciled_at = NOW() WHERE transaction_id = ${transId}`);
+                        return;
+                    }
+                    // Real subscription — activate the right tier with the right duration.
+                    const PLAN_DAYS = { trial: 1, basic: 1, monthly: 30, yearly: 365, pro: 365, pro_referral: 365 };
+                    const expiresAt = new Date(Date.now() + (PLAN_DAYS[resolvedTier] ?? 1) * 24 * 60 * 60 * 1000);
+                    await storage_1.storage.activateUserPlan(matchedPayment.userId, resolvedTier, matchedPayment.id, expiresAt);
                     await storage_1.storage.updateUserStage(matchedPayment.userId, "paid").catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
                     storage_1.storage.createUserNotification({
                         userId: matchedPayment.userId, type: "success",
-                        title: "Pro Plan Activated",
-                        message: `Your M-Pesa payment was confirmed via reconciliation (${transId}). Pro plan active — expires ${expiresAt.toLocaleDateString("en-KE")}.`,
+                        title: `${resolvedTier.charAt(0).toUpperCase() + resolvedTier.slice(1)} Plan Activated`,
+                        message: `Your M-Pesa payment was confirmed via reconciliation (${transId}). ${resolvedTier} plan active — expires ${expiresAt.toLocaleDateString("en-KE")}.`,
                     }).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
                     const { sendProActivationEmail } = await Promise.resolve().then(() => __importStar(require("./email")));
                     const user = await storage_1.storage.getUserById(matchedPayment.userId).catch(() => null);
-                    if (user?.email)
+                    if (user?.email && (resolvedTier === "pro" || resolvedTier === "yearly")) {
                         sendProActivationEmail(user.email, user.firstName, expiresAt, transId).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+                    }
                     await db_1.db.execute((0, drizzle_orm_1.sql) `UPDATE mpesa_pull_transactions SET reconciled = TRUE, reconciled_at = NOW() WHERE transaction_id = ${transId}`);
                     return;
                 }

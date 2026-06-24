@@ -57,16 +57,29 @@ async function runPaymentPipeline(opts) {
     // ── Step 1: processPayment ──────────────────────────────────────────────────
     // Activate the plan in local Postgres and stamp the payment row delivered.
     // Always awaited — this is authoritative state that other reads depend on.
+    //
+    // 2026-06 SAFETY (Tony's CV Fix Lite bug): defence-in-depth. Even if a
+    // caller hands us a non-canonical planId by mistake, we refuse to create
+    // a subscription row for it. Service-purchase payments STILL get their
+    // unlockService + deliverService steps below — they just don't get a
+    // bogus subscription tied to them. The set must match the canonical
+    // tiers used by every paid-feature gate (PAID_TIERS in routes.ts).
+    const PIPELINE_VALID_TIERS = new Set(["trial", "basic", "monthly", "yearly", "pro", "pro_referral"]);
+    const safePlanId = planId && PIPELINE_VALID_TIERS.has(planId) ? planId : null;
+    if (planId && !safePlanId) {
+        console.warn(`[Pipeline][SAFETY] Refusing to activate non-canonical plan "${planId}" for userId=${user.id} ` +
+            `paymentId=${payment.id}. Service delivery still runs; subscription state untouched.`);
+    }
     try {
-        if (planId && expiresAt) {
-            await storage_1.storage.activateUserPlan(user.id, planId, payment.id, expiresAt);
+        if (safePlanId && expiresAt) {
+            await storage_1.storage.activateUserPlan(user.id, safePlanId, payment.id, expiresAt);
             await db_1.db
                 .update(schema_1.users)
                 .set({
                 // 2026-06: TS cast covers the legacy union; runtime accepts any
                 // string because users.plan is varchar with no DB constraint.
                 // Trial / monthly / yearly all flow through here successfully.
-                plan: planId,
+                plan: safePlanId,
                 userStage: "paid",
                 isActive: true,
                 lastLogin: new Date(),
@@ -83,9 +96,9 @@ async function runPaymentPipeline(opts) {
                     .from(schema_1.users)
                     .where((0, drizzle_orm_1.eq)(schema_1.users.id, user.id))
                     .limit(1);
-                if (!verify || verify.plan !== planId) {
+                if (!verify || verify.plan !== safePlanId) {
                     console.error(`[Pipeline] ⚠ plan persistence MISMATCH for userId=${user.id} — ` +
-                        `expected="${planId}" actual="${verify?.plan ?? "missing"}". ` +
+                        `expected="${safePlanId}" actual="${verify?.plan ?? "missing"}". ` +
                         `Paying user will appear free on next refresh. Investigate now.`);
                 }
             }
@@ -105,10 +118,10 @@ async function runPaymentPipeline(opts) {
             // they're not currently online (no /ws/user connection).
             try {
                 const { updatePlan: presenceUpdatePlan } = await Promise.resolve().then(() => __importStar(require("../lib/presence")));
-                presenceUpdatePlan(user.id, planId, expiresAt);
+                presenceUpdatePlan(user.id, safePlanId, expiresAt);
             }
             catch { /* ignore */ }
-            console.log(`[Pipeline] Step 1 ✓ Plan "${planId}" activated | expires=${expiresAt.toISOString()}`);
+            console.log(`[Pipeline] Step 1 ✓ Plan "${safePlanId}" activated | expires=${expiresAt.toISOString()}`);
         }
         else {
             // Service purchase — mark user as paid but don't touch plan
@@ -173,23 +186,27 @@ async function runPaymentPipeline(opts) {
     // ── Step 4: notify ──────────────────────────────────────────────────────────
     // Real-time WebSocket events — fire-and-forget so a missing WS connection
     // never delays the response back to the gateway.
+    //
+    // 2026-06: gate the "plan_activated" broadcast on safePlanId — if the
+    // caller handed us a service ID dressed up as a plan, we already skipped
+    // activation above, so we must not tell the UI that a plan was activated.
     Promise.resolve().then(() => __importStar(require("../websocket"))).then(({ notifyUserPlanActivated, notifyUserPaymentUpdate }) => {
-        if (planId && expiresAt) {
+        if (safePlanId && expiresAt) {
             notifyUserPlanActivated(user.id, {
                 type: "plan_activated",
-                planId,
+                planId: safePlanId,
                 expiresAt: expiresAt.toISOString(),
                 method,
                 transactionId,
             });
-            console.log(`[Pipeline] Step 4 ✓ notifyUserPlanActivated | planId=${planId}`);
+            console.log(`[Pipeline] Step 4 ✓ notifyUserPlanActivated | planId=${safePlanId}`);
         }
         notifyUserPaymentUpdate(user.id, {
             type: "payment_update",
             paymentId: payment.id,
-            status: planId ? "completed" : "success",
+            status: safePlanId ? "completed" : "success",
             amount: payment.amount,
-            kind: planId ? "subscription" : (serviceId || "other"),
+            kind: safePlanId ? "subscription" : (serviceId || "other"),
         });
     }).catch((err) => {
         console.error("[Pipeline] Step 4 WebSocket notify failed:", {

@@ -564,21 +564,22 @@ async function upgradeIfEligible(user_id, payment) {
         service_id: service.id,
         payment_id: String(payment.id ?? payment.mpesa_code),
     });
-    // For subscription-type services, also run the PRO upgrade path
+    // 2026-06 CRITICAL FIX (Tony's bug class): services flagged `is_subscription`
+    // in the catalogue (whatsapp_support KES 1,000, job_alerts KES 500,
+    // emergency_support KES 300) are RECURRING SERVICES — NOT job-access
+    // subscriptions. They have their own delivery (WhatsApp support, alerts).
+    //
+    // The old code here auto-upgraded ANY is_subscription service to Pro for
+    // 360 days. That meant paying KES 300 for emergency_support gave the
+    // same Pro access as KES 4,500 for the yearly plan. Removed entirely —
+    // the user_services unlock above is the only thing they should get.
+    //
+    // Job-access subscription tiers (trial / monthly / yearly) are now ONLY
+    // activated when the payment's serviceId starts with "plan_". They never
+    // come through this code path because plan_* serviceIds aren't in the
+    // services catalogue.
     if (service.is_subscription) {
-        await (0, supabaseClient_1.upgradeUserToPro)(user_id);
-        try {
-            const localUser = await storage_1.storage.getUserByPhone(payment.phone ?? "");
-            if (localUser) {
-                const expiresAt = new Date();
-                expiresAt.setDate(expiresAt.getDate() + 360);
-                await storage_1.storage.activateUserPlan(localUser.id, "pro", String(payment.id), expiresAt);
-                console.log("✅ LOCAL DB UPGRADED:", localUser.id);
-            }
-        }
-        catch (localErr) {
-            console.error("❌ Local DB upgrade failed:", localErr);
-        }
+        console.log(`[upgradeIfEligible] is_subscription service "${service.slug}" → service-only unlock. NO plan activation.`);
     }
     // Stamp the payment row
     const { error: stampErr } = await supabaseClient_1.supabase
@@ -3592,10 +3593,33 @@ Crawl-delay: 1`);
             if (!resolvedMpesa)
                 return res.status(400).json({ success: false, error: `Service or plan "${mpesaPlanKey}" is not configured for payment.`, message: `Service or plan "${mpesaPlanKey}" is not configured for payment.` });
             const mpesaAmount = resolvedMpesa.finalPrice;
-            // Derive planId: subscription plans strip the "plan_" prefix ("plan_pro" → "pro"),
-            // standalone service purchases use the serviceId itself as the slug
-            // e.g. "ats_cv_optimization" → "ats_cv_optimization"
+            // 2026-06 CRITICAL BUGFIX (Tony's report): a client paid KES 99 for
+            // CV Fix Lite and got upgraded to the trial plan with full job-application
+            // access. Root cause: the old code wrote "cv_fix_lite" into payment.planId,
+            // the callback then handed that to runPaymentPipeline → activateUserPlan,
+            // which created a subscription row + flipped users.plan to "cv_fix_lite".
+            // Any code path that did `users.plan !== "free"` then treated them as paid.
+            //
+            // STRICT FIX: payment.planId is ONLY set for actual subscription plan
+            // purchases (canonical tier list below). For one-off service purchases
+            // (CV Fix Lite, ATS optimisation, interview coaching, etc.) planId
+            // stays NULL — the callback then correctly skips plan activation.
+            //
+            // Two variables:
+            //   • derivedPlanId — slug used for service-name lookup (always set)
+            //   • subscriptionPlanId — only set if it's a real subscription tier,
+            //     this is what's written to payment.planId
+            const CANONICAL_PLAN_TIERS = new Set(["trial", "basic", "monthly", "yearly", "pro", "pro_referral"]);
             const derivedPlanId = serviceId.startsWith("plan_") ? serviceId.replace("plan_", "") : serviceId;
+            const isPlanPurchase = serviceId.startsWith("plan_") ||
+                CANONICAL_PLAN_TIERS.has(derivedPlanId.toLowerCase());
+            const subscriptionPlanId = isPlanPurchase && CANONICAL_PLAN_TIERS.has(derivedPlanId.toLowerCase())
+                ? derivedPlanId.toLowerCase()
+                : null;
+            if (!subscriptionPlanId && (serviceId === "trial" || serviceId === "monthly" || serviceId === "yearly" || serviceId === "pro" || serviceId === "basic" || serviceId === "pro_referral")) {
+                // shouldn't happen — the include check above covers it — but log just in case
+                console.warn(`[/api/payments/initiate] plan-looking serviceId="${serviceId}" did not resolve to a subscription`);
+            }
             // Resolve serviceName: prefer client-provided → plan name map → services table by slug → fallback
             const planNameMap = {
                 trial: (0, plans_1.planLabel)("trial"),
@@ -3646,7 +3670,10 @@ Crawl-delay: 1`);
                 method,
                 phone: normalizedPhone || phoneNumber || null,
                 status: "pending",
-                planId: derivedPlanId,
+                // 2026-06 CRITICAL FIX: only set planId if this is a real subscription
+                // tier. CV Fix Lite + other one-off services land here with planId=null
+                // so the M-Pesa callback's runPaymentPipeline won't activate a plan.
+                planId: subscriptionPlanId,
                 serviceId,
                 serviceName: resolvedServiceName,
                 // checkoutRequestId is intentionally null here — set by /api/mpesa/stk after Safaricom responds
@@ -3657,7 +3684,7 @@ Crawl-delay: 1`);
                 paymentId: pendingPayment.id,
                 event: "payment_row_created",
                 ip: clientIp,
-                metadata: { phone: normalizedPhone, amount: mpesaAmount, serviceId, planId: derivedPlanId },
+                metadata: { phone: normalizedPhone, amount: mpesaAmount, serviceId, planId: subscriptionPlanId, derivedSlug: derivedPlanId },
             }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
             return res.json({
                 success: true,
@@ -4919,10 +4946,22 @@ Crawl-delay: 1`);
                         //   • serviceId is "plan_pro" / "plan_basic" → strip the prefix
                         //   • serviceId is just "pro" / "basic" / "yearly" / "monthly" → use as-is
                         //   • everything else is a one-off service purchase (planId stays null)
+                        //
+                        // 2026-06 SAFETY: whatever resolves out MUST be in the canonical
+                        // tier set. A historical CV Fix Lite payment that snuck planId
+                        // "cv_fix_lite" into the DB would otherwise have got handed to
+                        // activateUserPlan and granted them a subscription. Hard-gate here.
+                        const CALLBACK_VALID_TIERS = new Set(["trial", "basic", "monthly", "yearly", "pro", "pro_referral"]);
                         const sid = (payment.serviceId ?? "").toLowerCase();
-                        const resolvedPlanId = payment.planId ??
+                        const rawCandidate = payment.planId ??
                             (sid.startsWith("plan_") ? sid.replace("plan_", "") : null) ??
-                            (["pro", "basic", "yearly", "monthly", "trial"].includes(sid) ? sid : null);
+                            (CALLBACK_VALID_TIERS.has(sid) ? sid : null);
+                        const resolvedPlanId = rawCandidate && CALLBACK_VALID_TIERS.has(rawCandidate) ? rawCandidate : null;
+                        if (rawCandidate && !resolvedPlanId) {
+                            console.warn(`[MPESA CALLBACK][SAFETY] payment ${payment.id} had planId="${payment.planId}" / serviceId="${sid}" ` +
+                                `that resolved to non-canonical "${rawCandidate}" — refusing to activate subscription. ` +
+                                `Service delivery (unlockService, deliverService) still runs.`);
+                        }
                         await runPaymentPipeline({
                             payment: { ...payment, userId: pipelineUser.id, amount: amountPaid ?? payment.amount },
                             user: pipelineUser,
@@ -5993,8 +6032,166 @@ Crawl-delay: 1`);
             res.status(500).json({ message: err.message || "Failed to grant plan" });
         }
     });
+    // ── Admin: recover users wrongly cross-granted by a service purchase ──────
+    //
+    // 2026-06: For weeks the payment-initiation code wrote the raw serviceId
+    // (e.g. "cv_fix_lite") into payments.plan_id whenever the request didn't
+    // start with "plan_". The callback pipeline then activated that string
+    // AS A SUBSCRIPTION TIER, flipping users.plan to "cv_fix_lite" and
+    // giving them job-application access they never paid for.
+    //
+    // The bug is patched at three layers now (payment creation, callback
+    // gate, pipeline gate), but already-affected users still need
+    // remediation: their users.plan / userStage / isActive and their
+    // user_subscriptions rows are pointing at a fake tier.
+    //
+    // This endpoint:
+    //   1. GET  /api/admin/recover-cross-granted-plans?dryRun=1  → preview
+    //   2. POST /api/admin/recover-cross-granted-plans            → apply
+    //
+    // Identifies any user whose users.plan or user_subscriptions.plan is
+    // NOT one of the six canonical tiers (trial/basic/monthly/yearly/pro/
+    // pro_referral) and NOT already "free". Downgrades them to "free",
+    // expires the bogus subscription row, and writes an audit trail.
+    // SAFE TO RUN REPEATEDLY — second run reports zero affected rows.
+    const RECOVERY_CANONICAL_TIERS = ["trial", "basic", "monthly", "yearly", "pro", "pro_referral"];
+    async function findCrossGrantedRows() {
+        // Users whose plan column points at something that isn't free OR canonical.
+        const placeholders = RECOVERY_CANONICAL_TIERS.map((_, i) => `$${i + 1}`).join(", ");
+        const userRows = await db_1.pool.query(`SELECT id, email, plan, user_stage
+       FROM users
+       WHERE plan IS NOT NULL
+         AND plan <> 'free'
+         AND plan NOT IN (${placeholders})`, RECOVERY_CANONICAL_TIERS);
+        const subRows = await db_1.pool.query(`SELECT id, user_id, plan, status, end_date
+       FROM user_subscriptions
+       WHERE plan IS NOT NULL
+         AND plan <> 'free'
+         AND plan NOT IN (${placeholders})`, RECOVERY_CANONICAL_TIERS);
+        return { userRows: userRows.rows, subRows: subRows.rows };
+    }
+    app.get("/api/admin/recover-cross-granted-plans", auth_1.isAuthenticated, isAdmin, async (_req, res) => {
+        try {
+            const { userRows, subRows } = await findCrossGrantedRows();
+            res.json({
+                mode: "preview",
+                canonicalTiers: RECOVERY_CANONICAL_TIERS,
+                affectedUserCount: userRows.length,
+                affectedSubscriptionCount: subRows.length,
+                users: userRows,
+                subscriptions: subRows,
+                note: "Nothing has been changed. POST to this same path to apply.",
+            });
+        }
+        catch (err) {
+            console.error("[Admin Recover Cross-Granted]", err?.message);
+            res.status(500).json({ message: err?.message || "Failed to scan" });
+        }
+    });
+    app.post("/api/admin/recover-cross-granted-plans", auth_1.isAuthenticated, isAdmin, async (req, res) => {
+        const adminId = req.user?.claims?.sub;
+        const dryRun = req.body?.dryRun === true || req.body?.dryRun === "true";
+        try {
+            const { userRows, subRows } = await findCrossGrantedRows();
+            if (userRows.length === 0 && subRows.length === 0) {
+                return res.json({
+                    success: true,
+                    mode: dryRun ? "dry-run" : "apply",
+                    affectedUserCount: 0,
+                    affectedSubscriptionCount: 0,
+                    message: "No cross-granted users found. Database is clean.",
+                });
+            }
+            if (dryRun) {
+                return res.json({
+                    success: true,
+                    mode: "dry-run",
+                    affectedUserCount: userRows.length,
+                    affectedSubscriptionCount: subRows.length,
+                    users: userRows,
+                    subscriptions: subRows,
+                    message: "Dry-run only — no changes applied. POST with dryRun:false to apply.",
+                });
+            }
+            // Apply mode — run both fixes in a single transaction so we don't
+            // leave the DB half-recovered if one statement fails.
+            const client = await db_1.pool.connect();
+            let usersFixed = 0;
+            let subsFixed = 0;
+            try {
+                await client.query("BEGIN");
+                const placeholders = RECOVERY_CANONICAL_TIERS.map((_, i) => `$${i + 1}`).join(", ");
+                const userResult = await client.query(`UPDATE users
+             SET plan = 'free',
+                 user_stage = 'registered',
+                 is_active = TRUE,
+                 updated_at = NOW()
+           WHERE plan IS NOT NULL
+             AND plan <> 'free'
+             AND plan NOT IN (${placeholders})
+           RETURNING id, email`, RECOVERY_CANONICAL_TIERS);
+                usersFixed = userResult.rowCount ?? 0;
+                const subResult = await client.query(`UPDATE user_subscriptions
+             SET status = 'expired',
+                 auto_renew = FALSE,
+                 end_date = LEAST(COALESCE(end_date, NOW()), NOW()),
+                 updated_at = NOW()
+           WHERE plan IS NOT NULL
+             AND plan <> 'free'
+             AND plan NOT IN (${placeholders})
+           RETURNING id, user_id, plan`, RECOVERY_CANONICAL_TIERS);
+                subsFixed = subResult.rowCount ?? 0;
+                await client.query("COMMIT");
+                // Bust the auth-user cache for every affected user so their next
+                // /api/auth/user request returns the corrected "free" plan
+                // immediately, not a stale 30 s cached "cv_fix_lite" row.
+                try {
+                    const { invalidateAuthUserCache } = await Promise.resolve().then(() => __importStar(require("./lib/auth-user-cache")));
+                    for (const u of userResult.rows) {
+                        invalidateAuthUserCache(u.id);
+                    }
+                }
+                catch { /* best effort */ }
+                await storage_1.storage.logAdminAction(adminId, "recover_cross_granted_plans", {
+                    usersFixed,
+                    subsFixed,
+                    userIds: userResult.rows.map((u) => u.id),
+                }).catch(() => { });
+                console.log(`[Admin] Recover cross-granted: usersFixed=${usersFixed} subsFixed=${subsFixed} by admin=${adminId}`);
+                res.json({
+                    success: true,
+                    mode: "apply",
+                    affectedUserCount: usersFixed,
+                    affectedSubscriptionCount: subsFixed,
+                    users: userResult.rows,
+                    subscriptions: subResult.rows,
+                    message: `Reverted ${usersFixed} user(s) to "free" and expired ${subsFixed} bogus subscription row(s).`,
+                });
+            }
+            catch (txErr) {
+                await client.query("ROLLBACK").catch(() => { });
+                throw txErr;
+            }
+            finally {
+                client.release();
+            }
+        }
+        catch (err) {
+            console.error("[Admin Recover Cross-Granted Apply]", err?.message);
+            res.status(500).json({ message: err?.message || "Recovery failed" });
+        }
+    });
     // ── Admin: activate a plan via a pending payment record ───────────────────
     // Use for pending_manual_verification payments — admin verifies externally then clicks activate.
+    //
+    // 2026-06 SAFETY (Tony's CV Fix Lite bug): this endpoint USED TO default
+    // planId to "pro" whenever serviceId didn't start with "plan_". That meant
+    // clicking "Activate" on a stuck CV Fix Lite (KES 99 service) payment
+    // would upgrade the user to a full Pro subscription. Now we strictly resolve:
+    //   • serviceId "plan_pro" / "plan_monthly" etc. → activate that tier
+    //   • payment.planId already set to canonical tier → activate that tier
+    //   • everything else (CV Fix Lite, Cover Letter, etc.) → DELIVER the
+    //     service only, do NOT activate a subscription
     app.post("/api/admin/payments/:paymentId/activate", auth_1.isAuthenticated, isAdmin, async (req, res) => {
         try {
             const adminId = req.user?.claims?.sub;
@@ -6003,10 +6200,40 @@ Crawl-delay: 1`);
             const payment = await storage_1.storage.getPaymentById(paymentId);
             if (!payment)
                 return res.status(404).json({ message: "Payment not found" });
-            // Parse planId from serviceId (e.g. "plan_pro" → "pro")
-            let planId = "pro";
-            if (payment.serviceId?.startsWith("plan_")) {
-                planId = payment.serviceId.replace("plan_", "");
+            // Strict canonical-tier resolution — never silently fall back to "pro".
+            const ACTIVATE_VALID_TIERS = new Set(["trial", "basic", "monthly", "yearly", "pro", "pro_referral"]);
+            const sid = (payment.serviceId ?? "").toLowerCase();
+            const fromService = sid.startsWith("plan_") ? sid.replace("plan_", "") : null;
+            const fromPlanId = payment.planId ? String(payment.planId).toLowerCase() : null;
+            const planId = (fromService && ACTIVATE_VALID_TIERS.has(fromService)) ? fromService :
+                (fromPlanId && ACTIVATE_VALID_TIERS.has(fromPlanId)) ? fromPlanId :
+                    null;
+            // Service-only payment (e.g. CV Fix Lite KES 99). Mark it delivered,
+            // unlock the service, but do NOT activate a subscription tier.
+            if (!planId) {
+                console.log(`[Admin Activate Payment] payment ${paymentId} has serviceId="${sid}" / planId="${fromPlanId}" — ` +
+                    `treating as service-only purchase. No subscription activated.`);
+                await storage_1.storage.updatePayment(paymentId, {
+                    status: "completed",
+                    deliveryStatus: "delivered",
+                }).catch((err) => console.error("[Admin Activate Payment] update failed:", err?.message));
+                // Best-effort service unlock — non-fatal if it's already unlocked or the row's gone.
+                if (sid && payment.userId) {
+                    await storage_1.storage.unlockService(payment.userId, sid, paymentId, {
+                        adminActivated: true,
+                        activatedBy: adminId,
+                        note: note || "",
+                    }).catch((err) => console.warn(`[Admin Activate Payment] unlockService failed: ${err?.message}`));
+                }
+                await storage_1.storage.logAdminAction(adminId, "manual_service_payment_activate", {
+                    paymentId, userId: payment.userId, serviceId: sid, note: note || "",
+                }).catch(() => { });
+                return res.json({
+                    success: true,
+                    mode: "service_only",
+                    serviceId: sid || null,
+                    message: `Service payment marked delivered. No subscription activated (this was a one-off service, not a plan).`,
+                });
             }
             // Check if user already has an active subscription — true idempotency.
             // If payment is "success"/"completed" AND user already has the plan, skip unless force=true.
@@ -6232,13 +6459,20 @@ Crawl-delay: 1`);
         }
     });
     // POST /api/admin/match-payment — manually link a payment to a user and upgrade them
+    //
+    // 2026-06 SAFETY (Tony's CV Fix Lite bug): used to blanket-upgrade the
+    // matched user to Pro for 360 days regardless of what they actually paid
+    // for. A KES 99 CV Fix Lite payment matched to a user would silently
+    // hand them a full Pro subscription. Now: we inspect the payment's
+    // serviceId/planId and only activate a subscription if it's a real
+    // canonical tier. Service-only payments stay as service unlocks.
     app.post("/api/admin/match-payment", auth_1.isAuthenticated, isAdmin, async (req, res) => {
         try {
             const { payment_id, user_id } = req.body;
-            // 1. Fetch payment to get phone number for local DB lookup
+            // 1. Fetch the payment row (phone + service_id + plan_id) for tier resolution
             const { data: paymentRow } = await supabaseClient_1.supabase
                 .from("payments")
-                .select("phone")
+                .select("phone, service_id, plan_id, amount")
                 .eq("id", payment_id)
                 .single();
             // 2. Update payment in Supabase
@@ -6251,17 +6485,39 @@ Crawl-delay: 1`);
                 match_score: 100,
             })
                 .eq("id", payment_id);
-            // 3. Upgrade user in Supabase (subscriptions table)
+            const MATCH_VALID_TIERS = new Set(["trial", "basic", "monthly", "yearly", "pro", "pro_referral"]);
+            const sid = (paymentRow?.service_id ?? "").toString().toLowerCase();
+            const fromService = sid.startsWith("plan_") ? sid.replace("plan_", "") : null;
+            const fromPlanId = paymentRow?.plan_id ? String(paymentRow.plan_id).toLowerCase() : null;
+            const resolvedTier = (fromService && MATCH_VALID_TIERS.has(fromService)) ? fromService :
+                (fromPlanId && MATCH_VALID_TIERS.has(fromPlanId)) ? fromPlanId :
+                    null;
+            if (!resolvedTier) {
+                // Service-only payment — DO NOT activate a subscription. Just unlock
+                // the specific service via user_services and return.
+                if (sid) {
+                    await supabaseClient_1.supabase.from("user_services").insert({
+                        user_id: String(user_id),
+                        service_id: sid,
+                        payment_id: String(payment_id),
+                    });
+                }
+                console.log(`[MatchPayment] Service-only payment ${payment_id} (serviceId=${sid}) matched to user ${user_id} — no plan activation.`);
+                return res.json({
+                    success: true,
+                    mode: "service_only",
+                    message: `Service "${sid}" linked to user. No subscription activated (this was a one-off service, not a plan).`,
+                });
+            }
+            // Real subscription tier — activate it.
             await (0, supabaseClient_1.upgradeUserToPro)(user_id);
-            // 4. Upgrade local Postgres user so plan-gating is instant
             if (paymentRow?.phone) {
                 try {
                     const localUser = await storage_1.storage.getUserByPhone(paymentRow.phone);
                     if (localUser) {
-                        const expiresAt = new Date();
-                        expiresAt.setDate(expiresAt.getDate() + 360);
-                        await storage_1.storage.activateUserPlan(localUser.id, "pro", String(payment_id), expiresAt);
-                        console.log("✅ LOCAL DB UPGRADED (manual):", localUser.id);
+                        const expiresAt = (0, plans_1.planExpiry)(resolvedTier);
+                        await storage_1.storage.activateUserPlan(localUser.id, resolvedTier, String(payment_id), expiresAt);
+                        console.log(`✅ LOCAL DB UPGRADED (manual): userId=${localUser.id} tier=${resolvedTier}`);
                     }
                     else {
                         console.warn("⚠️ No local user found for phone (manual match):", paymentRow.phone);
@@ -6271,7 +6527,7 @@ Crawl-delay: 1`);
                     console.error("❌ Local DB upgrade failed (manual):", localErr);
                 }
             }
-            res.json({ success: true });
+            res.json({ success: true, tier: resolvedTier });
         }
         catch (err) {
             console.error("❌ Manual match error:", err);
@@ -6554,8 +6810,19 @@ Crawl-delay: 1`);
                         const receipt = queryRes.CallbackMetadata?.Item?.find((i) => i.Name === "MpesaReceiptNumber")?.Value
                             || queryRes.MpesaReceiptNumber || `RECONCILED-${Date.now()}`;
                         await storage_1.storage.updatePayment(payment.id, { status: "success", transactionRef: String(receipt) });
-                        const { activateUserPlan } = await Promise.resolve().then(() => __importStar(require("./services/upgradeUserAccount")));
-                        await activateUserPlan(payment.userId, payment.planId || "pro", payment.id);
+                        // 2026-06 SAFETY: only activate a plan if planId is a real
+                        // subscription tier. Service-only payments stay marked success
+                        // — they get their fulfilment via the pipeline's unlockService
+                        // path, NOT via plan activation.
+                        const RECON_TIERS = new Set(["trial", "basic", "monthly", "yearly", "pro", "pro_referral"]);
+                        const candidateTier = payment.planId ? String(payment.planId).toLowerCase() : null;
+                        if (candidateTier && RECON_TIERS.has(candidateTier)) {
+                            const { activateUserPlan } = await Promise.resolve().then(() => __importStar(require("./services/upgradeUserAccount")));
+                            await activateUserPlan(payment.userId, candidateTier, payment.id);
+                        }
+                        else {
+                            console.log(`[Reconcile/STK-query] Service-only payment ${payment.id} — marked success, no plan activation.`);
+                        }
                     }
                     else if ([1032, 1037, 2001].includes(queryRes.ResultCode)) {
                         await storage_1.storage.updatePayment(payment.id, { status: "failed" });
@@ -7725,10 +7992,16 @@ Crawl-delay: 1`);
     // ── POST /api/admin/stuck-payments/activate-all ───────────────────────────
     // Bulk-activates Pro plan for ALL retry_available payments in one click.
     // IMPORTANT: must be registered BEFORE /:paymentId/activate to avoid route shadowing.
+    //
+    // 2026-06 SAFETY (Tony's CV Fix Lite bug): used to blindly activate "pro"
+    // for every stuck payment, which meant a stuck KES 99 CV Fix Lite payment
+    // would silently upgrade the user to a Pro subscription. Now: each payment's
+    // serviceId/planId is inspected, only canonical subscription tiers are
+    // activated, and service-only payments are simply marked delivered.
     app.post("/api/admin/stuck-payments/activate-all", auth_1.isAuthenticated, isAdmin, async (req, res) => {
         try {
             const adminId = req.user?.claims?.sub;
-            const { planId = "pro" } = req.body;
+            const BULK_ACTIVATE_VALID_TIERS = new Set(["trial", "basic", "monthly", "yearly", "pro", "pro_referral"]);
             const stuck = await storage_1.storage.getPaymentsByStatus("retry_available");
             const results = [];
             for (const payment of stuck) {
@@ -7738,19 +8011,41 @@ Crawl-delay: 1`);
                         results.push({ userId: payment.userId, email: null, status: "user_not_found" });
                         continue;
                     }
-                    const expiresAt = (0, plans_1.planExpiry)();
+                    // Resolve canonical tier for THIS payment — never default to "pro".
+                    const sid = (payment.serviceId ?? "").toLowerCase();
+                    const fromService = sid.startsWith("plan_") ? sid.replace("plan_", "") : null;
+                    const fromPlanId = payment.planId ? String(payment.planId).toLowerCase() : null;
+                    const resolvedTier = (fromService && BULK_ACTIVATE_VALID_TIERS.has(fromService)) ? fromService :
+                        (fromPlanId && BULK_ACTIVATE_VALID_TIERS.has(fromPlanId)) ? fromPlanId :
+                            null;
+                    // Service-only payment (CV Fix Lite, cover letter, etc.) — mark delivered, don't grant a plan.
+                    if (!resolvedTier) {
+                        await storage_1.storage.updatePayment(payment.id, {
+                            status: "completed",
+                            deliveryStatus: "delivered",
+                        });
+                        if (sid) {
+                            await storage_1.storage.unlockService(user.id, sid, payment.id, {
+                                bulkAdminActivated: true,
+                                activatedBy: adminId,
+                            }).catch(() => { });
+                        }
+                        results.push({ userId: user.id, email: user.email ?? null, status: "service_delivered", tier: sid });
+                        continue;
+                    }
+                    const expiresAt = (0, plans_1.planExpiry)(resolvedTier);
                     await storage_1.storage.updatePayment(payment.id, { status: "success" });
-                    await storage_1.storage.activateUserPlan(user.id, "pro", payment.id, expiresAt);
+                    await storage_1.storage.activateUserPlan(user.id, resolvedTier, payment.id, expiresAt);
                     await storage_1.storage.updateUserStage(user.id, "paid").catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
                     storage_1.storage.createUserNotification({
                         userId: user.id, type: "success",
-                        title: "Pro Plan Activated",
-                        message: `Your Pro plan has been activated. Expires ${expiresAt.toLocaleDateString("en-KE")}.`,
+                        title: `${resolvedTier.charAt(0).toUpperCase() + resolvedTier.slice(1)} Plan Activated`,
+                        message: `Your ${resolvedTier} plan has been activated. Expires ${expiresAt.toLocaleDateString("en-KE")}.`,
                     }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
-                    if (user.email) {
+                    if (user.email && (resolvedTier === "pro" || resolvedTier === "yearly")) {
                         (0, email_1.sendProActivationEmail)(user.email, user.firstName, expiresAt, payment.transactionRef).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
                     }
-                    results.push({ userId: user.id, email: user.email ?? null, status: "activated" });
+                    results.push({ userId: user.id, email: user.email ?? null, status: "activated", tier: resolvedTier });
                 }
                 catch (e) {
                     results.push({ userId: payment.userId, email: null, status: `error: ${e.message}` });
@@ -7769,11 +8064,16 @@ Crawl-delay: 1`);
     });
     // ── POST /api/admin/stuck-payments/:paymentId/activate ────────────────────
     // Manually activates the plan for a single stuck payment.
+    //
+    // 2026-06 SAFETY (Tony's CV Fix Lite bug): used to default to "pro". Now
+    // it resolves the canonical tier from the payment's own serviceId/planId
+    // and refuses to activate a subscription for service-only payments.
     app.post("/api/admin/stuck-payments/:paymentId/activate", auth_1.isAuthenticated, isAdmin, async (req, res) => {
         try {
             const adminId = req.user?.claims?.sub;
             const { paymentId } = req.params;
-            const { planId = "pro", note = "" } = req.body;
+            const { note = "" } = req.body;
+            const STUCK_VALID_TIERS = new Set(["trial", "basic", "monthly", "yearly", "pro", "pro_referral"]);
             const payment = await storage_1.storage.getPaymentById(paymentId);
             if (!payment)
                 return res.status(404).json({ message: "Payment not found" });
@@ -7782,24 +8082,56 @@ Crawl-delay: 1`);
             const user = await storage_1.storage.getUserById(payment.userId);
             if (!user)
                 return res.status(404).json({ message: `User ${payment.userId} not found in database` });
-            const expiresAt = (0, plans_1.planExpiry)();
+            // Strict tier resolution — never silently fall back to "pro".
+            const sid = (payment.serviceId ?? "").toLowerCase();
+            const fromService = sid.startsWith("plan_") ? sid.replace("plan_", "") : null;
+            const fromPlanId = payment.planId ? String(payment.planId).toLowerCase() : null;
+            const resolvedTier = (fromService && STUCK_VALID_TIERS.has(fromService)) ? fromService :
+                (fromPlanId && STUCK_VALID_TIERS.has(fromPlanId)) ? fromPlanId :
+                    null;
+            // Service-only purchase — mark delivered + unlock the service, but
+            // do NOT activate a subscription. This is the CV Fix Lite scenario.
+            if (!resolvedTier) {
+                await storage_1.storage.updatePayment(paymentId, {
+                    status: "completed",
+                    deliveryStatus: "delivered",
+                });
+                if (sid) {
+                    await storage_1.storage.unlockService(user.id, sid, paymentId, {
+                        adminActivated: true,
+                        activatedBy: adminId,
+                        note,
+                    }).catch((err) => console.warn(`[StuckPayments] unlockService failed: ${err?.message}`));
+                }
+                await storage_1.storage.logAdminAction(adminId, "manual_stuck_service_payment_activate", {
+                    paymentId, userId: user.id, serviceId: sid, note,
+                }).catch(() => { });
+                console.info(`[StuckPayments] Service payment delivered (no plan activation): paymentId=${paymentId} serviceId=${sid} by admin=${adminId}`);
+                return res.json({
+                    success: true,
+                    mode: "service_only",
+                    message: `Service "${sid}" marked delivered for ${user.email || user.id}. No subscription activated.`,
+                    userId: user.id,
+                });
+            }
+            const expiresAt = (0, plans_1.planExpiry)(resolvedTier);
             await storage_1.storage.updatePayment(paymentId, { status: "success" });
-            await storage_1.storage.activateUserPlan(user.id, "pro", paymentId, expiresAt);
+            await storage_1.storage.activateUserPlan(user.id, resolvedTier, paymentId, expiresAt);
             await storage_1.storage.updateUserStage(user.id, "paid").catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
             storage_1.storage.createUserNotification({
                 userId: user.id,
                 type: "success",
-                title: "Pro Plan Activated",
-                message: `Your Pro plan has been activated. Expires ${expiresAt.toLocaleDateString("en-KE")}.`,
+                title: `${resolvedTier.charAt(0).toUpperCase() + resolvedTier.slice(1)} Plan Activated`,
+                message: `Your ${resolvedTier} plan has been activated. Expires ${expiresAt.toLocaleDateString("en-KE")}.`,
             }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
-            if (user.email) {
+            if (user.email && (resolvedTier === "pro" || resolvedTier === "yearly")) {
                 (0, email_1.sendProActivationEmail)(user.email, user.firstName, expiresAt, payment.transactionRef).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
             }
             await storage_1.storage.logAdminAction(adminId, "manual_stuck_payment_activate", {
-                paymentId, userId: user.id, planId, transactionRef: payment.transactionRef, note,
+                paymentId, userId: user.id, planId: resolvedTier, transactionRef: payment.transactionRef, note,
             }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
-            console.info(`[StuckPayments] Activated ${planId} for userId=${user.id} (${user.email}) paymentId=${paymentId} by admin=${adminId}`);
-            res.json({ success: true, message: `${planId} plan activated for ${user.email || user.id}`, userId: user.id });
+            console.info(`[StuckPayments] Activated ${resolvedTier} for userId=${user.id} (${user.email}) paymentId=${paymentId} by admin=${adminId}`);
+            res.json({ success: true, message: `${resolvedTier} plan activated for ${user.email || user.id}`, userId: user.id, planActivated: resolvedTier });
         }
         catch (err) {
             console.error("[StuckPayments] Activate error:", err.message);
@@ -7850,7 +8182,16 @@ Crawl-delay: 1`);
                 const user = await storage_1.storage.getUserById(payment.userId);
                 if (!user)
                     return res.status(404).json({ message: `User ${payment.userId} not found` });
-                const expiresAt = (0, plans_1.planExpiry)();
+                // 2026-06 SAFETY: resolve canonical tier from the payment itself.
+                // Service-only payments (CV Fix Lite KES 99 etc.) get marked success
+                // + delivered, but NEVER activate a Pro subscription.
+                const ADMIN_QUERY_TIERS = new Set(["trial", "basic", "monthly", "yearly", "pro", "pro_referral"]);
+                const sid = (payment.serviceId ?? "").toLowerCase();
+                const fromService = sid.startsWith("plan_") ? sid.replace("plan_", "") : null;
+                const fromPlanId = payment.planId ? String(payment.planId).toLowerCase() : null;
+                const resolvedTier = (fromService && ADMIN_QUERY_TIERS.has(fromService)) ? fromService :
+                    (fromPlanId && ADMIN_QUERY_TIERS.has(fromPlanId)) ? fromPlanId :
+                        null;
                 await storage_1.storage.updatePayment(paymentId, {
                     status: "success",
                     mpesaReceiptNumber: String(receipt),
@@ -7859,14 +8200,29 @@ Crawl-delay: 1`);
                     verificationNote: `Admin-triggered Safaricom query confirmed. ResultCode=0. Receipt=${receipt}`,
                     statusLastChecked: new Date(),
                 });
-                await storage_1.storage.activateUserPlan(user.id, payment.planId || "pro", paymentId, expiresAt);
+                if (!resolvedTier) {
+                    // Service-only payment — unlock the service, no subscription.
+                    if (sid) {
+                        await storage_1.storage.unlockService(user.id, sid, paymentId, {
+                            adminQueryConfirmed: true, receipt: String(receipt),
+                        }).catch((err) => console.warn(`[Admin/STK-query] unlockService failed: ${err?.message}`));
+                    }
+                    return res.json({
+                        success: true,
+                        mode: "service_only",
+                        message: `Service "${sid}" confirmed delivered for ${user.email || user.id}. No subscription activated.`,
+                        userId: user.id,
+                    });
+                }
+                const expiresAt = (0, plans_1.planExpiry)(resolvedTier);
+                await storage_1.storage.activateUserPlan(user.id, resolvedTier, paymentId, expiresAt);
                 await storage_1.storage.updateUserStage(user.id, "paid").catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
                 storage_1.storage.createUserNotification({
                     userId: user.id, type: "success",
-                    title: "Pro Plan Activated",
-                    message: `Your M-Pesa payment was confirmed by Safaricom (${receipt}). Pro plan active — expires ${expiresAt.toLocaleDateString("en-KE")}.`,
+                    title: `${resolvedTier.charAt(0).toUpperCase() + resolvedTier.slice(1)} Plan Activated`,
+                    message: `Your M-Pesa payment was confirmed by Safaricom (${receipt}). ${resolvedTier} plan active — expires ${expiresAt.toLocaleDateString("en-KE")}.`,
                 }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
-                if (user.email) {
+                if (user.email && (resolvedTier === "pro" || resolvedTier === "yearly")) {
                     (0, email_1.sendProActivationEmail)(user.email, user.firstName, expiresAt, String(receipt)).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
                 }
                 await storage_1.storage.logAdminAction(adminId, "stuck_payment_safaricom_confirmed", {
