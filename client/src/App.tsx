@@ -127,6 +127,7 @@ const KenyaCareers    = lazyWithRetry(() => import("@/pages/kenya-careers"));
 const KenyaCareersJob = lazyWithRetry(() => import("@/pages/kenya-careers-job"));
 const KenyaCareersMyApplications = lazyWithRetry(() => import("@/pages/kenya-careers-my-applications"));
 const KenyaCareersAdmin = lazyWithRetry(() => import("@/pages/admin/kenya-careers-admin"));
+const IeltsInterestAdmin = lazyWithRetry(() => import("@/pages/admin/ielts-interest"));
 const KenyaCareersCompany = lazyWithRetry(() => import("@/pages/kenya-careers-company"));
 const KenyaCareersEmployers = lazyWithRetry(() => import("@/pages/kenya-careers-employers"));
 // Phase 4 employer portal — dashboard, manage, register
@@ -359,6 +360,7 @@ const LazyKenyaCareers    = withSuspense(KenyaCareers);
 const LazyKenyaCareersJob = withSuspense(KenyaCareersJob);
 const LazyKenyaCareersMyApplications = withSuspense(KenyaCareersMyApplications);
 const LazyKenyaCareersAdmin = withSuspense(KenyaCareersAdmin);
+const LazyIeltsInterestAdmin = withSuspense(IeltsInterestAdmin);
 const LazyKenyaCareersCompany = withSuspense(KenyaCareersCompany);
 const LazyKenyaCareersEmployers = withSuspense(KenyaCareersEmployers);
 const LazyEmployerDashboard = withSuspense(EmployerDashboard);
@@ -521,6 +523,7 @@ function AuthenticatedRoutes() {
       <Route path="/kenya-careers/job/:id" component={LazyKenyaCareersJob} />
       <Route path="/kenya-careers/my-applications" component={LazyKenyaCareersMyApplications} />
       <Route path="/admin/kenya-careers" component={LazyKenyaCareersAdmin} />
+      <Route path="/admin/ielts-interest" component={LazyIeltsInterestAdmin} />
       <Route path="/kenya-careers/company/:slug" component={LazyKenyaCareersCompany} />
       <Route path="/employers" component={LazyKenyaCareersEmployers} />
       {/* Phase 4: employer self-service portal */}

@@ -554,6 +554,16 @@ app.use((req, res, next) => {
       console.error("[Server] ❌ Kenya Careers route registration failed (non-fatal):", err?.message);
     }
 
+    // 2026-06 Phase 0: IELTS demand-validation routes. Same ordering
+    // constraint as Kenya Careers — must register BEFORE registerRoutes()
+    // so the /api 404 catch-all doesn't shadow them.
+    try {
+      const { registerIeltsRoutes } = await import("./routes/ielts-routes");
+      registerIeltsRoutes(app);
+    } catch (err: any) {
+      console.error("[Server] ❌ IELTS routes registration failed (non-fatal):", err?.message);
+    }
+
     await registerRoutes(httpServer, app);
 
     // Bootstrap can run after registerRoutes — it only touches the DB.

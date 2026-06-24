@@ -43,6 +43,7 @@ import { DashboardSuccessStories } from "@/components/dashboard-success-stories"
 import { DashboardBestMatch } from "@/components/dashboard-best-match";
 import { DashboardVisaJobsLocked } from "@/components/dashboard-visa-jobs-locked";
 import { DashboardKenyaCareersCard } from "@/components/dashboard-kenya-careers-card";
+import { DashboardIeltsPrepCard } from "@/components/dashboard-ielts-prep-card";
 import { LiveActivityStrip } from "@/components/live-activity-strip";
 import { AgencyAlertBanner } from "@/components/agency-alert-banner";
 import { VerificationBanner } from "@/components/verification-banner";
@@ -1369,6 +1370,12 @@ export default function Dashboard() {
             both paths — overseas and in-country. Free public browse, no
             Pro gate. Shows live stats from /api/local-jobs/stats. */}
         <DashboardKenyaCareersCard />
+
+        {/* ── IELTS PREP — demand validation (Phase 0) ─────────────────────
+            2026-06: founder is exploring a KES 10,000 IELTS prep product.
+            Card collects email + target band + test timing so we can see
+            if demand is real before committing to the 6-12 week build. */}
+        <DashboardIeltsPrepCard />
 
         {/* ── JOB DESTINATIONS — 9-country grid (RIGHT UNDER 50 JOBS) ─────
             User feedback: this is the conversion hot-spot. Show every
