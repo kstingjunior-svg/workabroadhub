@@ -516,6 +516,16 @@ app.use((req, res, next) => {
         catch (err) {
             console.error("[Server] ❌ ensurePlansSeeded failed:", err?.message);
         }
+        // 2026-06: ensure Luxembourg appears as a country with its four real
+        // portals and the honest "skilled workers only" eligibility banner.
+        // Idempotent — re-runs are no-ops. See server/lib/ensure-luxembourg-seeded.ts
+        try {
+            const { ensureLuxembourgSeeded } = await Promise.resolve().then(() => __importStar(require("./lib/ensure-luxembourg-seeded")));
+            await ensureLuxembourgSeeded();
+        }
+        catch (err) {
+            console.error("[Server] ❌ ensureLuxembourgSeeded failed:", err?.message);
+        }
         // Wire Sentry's Express error handler AFTER all routes are registered
         // but BEFORE any custom 500 middleware. No-op if Sentry isn't initialised.
         (0, sentry_1.attachSentryErrorHandler)(app);
