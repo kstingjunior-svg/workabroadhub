@@ -104,9 +104,20 @@ const COUNTRY_CONFIG: Record<string, CountryConfig> = {
     portals: "4+",
     exploreName: "Qatar",
   },
+  // 2026-06 (Tony's "ship it"): Luxembourg added with honest copy. Tags
+  // make the salary floor visible BEFORE the user pays — same logic Tony
+  // applied to Kenya Careers ("don't promise what we can't deliver").
+  "Luxembourg": {
+    flag: "🇱🇺",
+    slug: "luxembourg",
+    desc: "Skilled IT, finance & fund admin only · Blue Card",
+    tags: ["EU Blue Card", "KES 800k+/mo", "Skilled-only"],
+    portals: "4",
+    exploreName: "Luxembourg",
+  },
 };
 
-const TOTAL_PORTALS = 57;
+const TOTAL_PORTALS = 61;
 
 const DB_COUNTRY_NAME_MAP: Record<string, string> = {
   "United Arab Emirates": "UAE",
@@ -116,7 +127,7 @@ const DB_COUNTRY_NAME_MAP: Record<string, string> = {
 
 const COUNTRY_ORDER = [
   "United Kingdom", "Canada", "Australia", "Germany",
-  "Saudi Arabia", "USA", "UAE", "Europe", "Qatar",
+  "Saudi Arabia", "USA", "UAE", "Europe", "Qatar", "Luxembourg",
 ];
 
 interface SponsorshipJob { country: string }

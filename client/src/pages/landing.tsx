@@ -202,13 +202,25 @@ export default function Landing() {
       demand: "High salaries",
       gradient: "from-green-600 to-red-600"
     },
-    { 
-      code: "EU", 
-      name: "Europe", 
+    {
+      code: "EU",
+      name: "Europe",
       tagline: "7 countries covered",
       portals: "14+ verified portals",
       demand: "EU Blue Card",
       gradient: "from-blue-600 to-yellow-500"
+    },
+    {
+      // 2026-06: added per Tony's "ship it" — Luxembourg is real but narrow.
+      // Tagline + demand badge reflect the strict skilled-only nature so
+      // visitors self-select before paying. Full eligibility banner shows
+      // on the /country/luxembourg page (visa_warning section).
+      code: "LU",
+      name: "Luxembourg",
+      tagline: "Skilled IT, finance & fund admin only",
+      portals: "4 verified portals",
+      demand: "EU Blue Card · KES 800k+/mo",
+      gradient: "from-sky-500 to-red-500"
     }
   ];
 
