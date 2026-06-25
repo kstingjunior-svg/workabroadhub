@@ -1463,7 +1463,10 @@ export class DatabaseStorage implements IStorage {
     const CANONICAL_TIERS = new Set([
       "trial", "basic", "monthly", "yearly", "pro", "pro_referral",
     ]);
-    if (!planId || !CANONICAL_TIERS.has(String(planId).toLowerCase())) {
+    // Normalise — trim padding and lowercase. A planId of " Pro " or "PRO"
+    // should pass the gate; only genuinely non-canonical strings throw.
+    const normalisedPlanId = String(planId ?? "").trim().toLowerCase();
+    if (!normalisedPlanId || !CANONICAL_TIERS.has(normalisedPlanId)) {
       const err = new Error(
         `[activateUserPlan] BLOCKED non-canonical planId="${planId}" for userId=${userId} ` +
         `paymentId=${paymentId}. Allowed tiers: ${[...CANONICAL_TIERS].join(", ")}. ` +
@@ -1472,6 +1475,9 @@ export class DatabaseStorage implements IStorage {
       console.error(err.message);
       throw err;
     }
+    // Use the normalised value downstream so all DB writes use the canonical
+    // lowercase form regardless of what the caller passed in.
+    planId = normalisedPlanId;
 
     // Use a real DB transaction so all three writes (expire old, insert new, sync users.plan)
     // are atomic.  A crash between any of them can no longer leave inconsistent state.
