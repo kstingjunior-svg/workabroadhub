@@ -1403,6 +1403,9 @@ export default function Dashboard() {
               { flag: "🇺🇸", code: "US", slug: "usa",       name: "USA",       desc: "H-1B / EB-3",        tone: "from-blue-500/10 to-red-500/10" },
               { flag: "🇶🇦", code: "QA", slug: "uae",       name: "Qatar",     desc: "Tax-free Gulf",      tone: "from-purple-700/10 to-amber-500/10" },
               { flag: "🇧🇭", code: "BH", slug: "uae",       name: "Bahrain",   desc: "Hospitality + GCC",  tone: "from-red-500/10 to-white/0" },
+              // 2026-06 (Tony's "ship it"): Luxembourg, with the salary floor
+              // visible in the desc so users self-select before paying.
+              { flag: "🇱🇺", code: "LU", slug: "luxembourg", name: "Luxembourg", desc: "Skilled only · 800k+/mo", tone: "from-sky-500/10 to-red-500/10" },
             ].map((c) => (
               <Link
                 key={c.name}
