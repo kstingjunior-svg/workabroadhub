@@ -54,15 +54,42 @@ async function importWithRetry<T>(
 
     // Out of retries. If it looks like a chunk-load failure (hash mismatch
     // after deploy), reload the page so the user picks up the fresh shell.
+    //
+    // 2026-06 (Tony's "Just a small detour" report): in-app browsers
+    // (Messenger / WhatsApp / FB / IG) often satisfy reload() from their
+    // internal HTTP cache even when the server sends no-cache. We do three
+    // things to defeat that:
+    //   1. Clear CacheStorage + unregister any service worker so we drop
+    //      every locally-stored asset
+    //   2. Add a ?_t=… cache-buster to the URL so even the in-app cache
+    //      layer has to fetch fresh
+    //   3. Use location.replace() so the broken state isn't on the back stack
     if (isChunkLoadError) {
       try {
         const lastReload = Number(sessionStorage.getItem(RELOAD_KEY) || 0);
         if (Date.now() - lastReload > RELOAD_COOLDOWN_MS) {
           console.warn(
-            "[lazy-with-retry] persistent chunk-load failure — reloading to pick up fresh shell",
+            "[lazy-with-retry] persistent chunk-load failure — hard-reloading to pick up fresh shell",
           );
           sessionStorage.setItem(RELOAD_KEY, String(Date.now()));
-          window.location.reload();
+
+          // Best-effort cache purge before reload
+          try {
+            if ("serviceWorker" in navigator) {
+              const regs = await navigator.serviceWorker.getRegistrations();
+              await Promise.all(regs.map((r) => r.unregister()));
+            }
+          } catch {}
+          try {
+            if ("caches" in window) {
+              const keys = await caches.keys();
+              await Promise.all(keys.map((k) => caches.delete(k)));
+            }
+          } catch {}
+
+          const url = new URL(window.location.href);
+          url.searchParams.set("_t", Date.now().toString());
+          window.location.replace(url.toString());
           // Return a never-resolving promise so React doesn't immediately
           // render the error boundary during the reload.
           return new Promise<T>(() => {});

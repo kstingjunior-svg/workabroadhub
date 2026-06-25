@@ -161,6 +161,39 @@ export default function ErrorPage({
     }
   }
 
+  // 2026-06 (Tony's "Just a small detour" report): the most common cause of
+  // the generic error boundary is a stale index.html in an in-app browser
+  // cache that points at chunk hashes no longer on the server. The default
+  // "Go Back" button doesn't help — it just navigates within the same
+  // broken shell. This helper does a HARD recovery: clears the lazy-retry
+  // cooldown so the next chunk failure can auto-reload again, drops every
+  // service worker + CacheStorage entry (in-app browsers sometimes hold
+  // these from a previous visit), and forces a no-cache reload of the
+  // current URL. The cache-busting query string defeats any HTTP/in-app
+  // cache layer that ignores Cache-Control headers.
+  async function handleHardReload() {
+    try {
+      sessionStorage.removeItem("wah:lazy-retry-reloaded-at");
+    } catch {}
+    try {
+      if ("serviceWorker" in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map((r) => r.unregister()));
+      }
+    } catch {}
+    try {
+      if ("caches" in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((k) => caches.delete(k)));
+      }
+    } catch {}
+    // Add a one-shot ?_t=… so even Messenger/WhatsApp's in-app HTTP cache
+    // can't satisfy this request from its own store.
+    const url = new URL(window.location.href);
+    url.searchParams.set("_t", Date.now().toString());
+    window.location.replace(url.toString());
+  }
+
   function reportIssue() {
     const msg = `Hi WorkAbroad Hub, I encountered an error (Ref: ${errorRef}). Can you help?`;
     window.open(`https://wa.me/${SUPPORT_WHATSAPP}?text=${encodeURIComponent(msg)}`, "_blank");
@@ -250,7 +283,7 @@ export default function ErrorPage({
           style={{ display: "flex", gap: "1rem", justifyContent: "center", flexWrap: "wrap", marginBottom: "2rem" }}
         >
           <button
-            onClick={handleRetryClick}
+            onClick={resolvedType === "general" ? handleHardReload : handleRetryClick}
             style={{
               padding: "12px 28px",
               borderRadius: 100,
@@ -261,17 +294,19 @@ export default function ErrorPage({
               gap: "0.5rem",
               cursor: "pointer",
               transition: "all 0.2s",
-              background: config.autoRetry ? "#1A2530" : "transparent",
-              color: config.autoRetry ? "white" : "#3A4A5A",
-              border: config.autoRetry ? "none" : "1.5px solid #D1CEC8",
+              background: (config.autoRetry || resolvedType === "general") ? "#1A2530" : "transparent",
+              color: (config.autoRetry || resolvedType === "general") ? "white" : "#3A4A5A",
+              border: (config.autoRetry || resolvedType === "general") ? "none" : "1.5px solid #D1CEC8",
             }}
             data-testid="button-go-back"
           >
-            {config.autoRetry
-              ? countdown > 0
-                ? `⟳ Retrying in ${countdown}s…`
-                : "⟳ Try Again"
-              : "← Go Back"}
+            {resolvedType === "general"
+              ? "⟳ Refresh & Continue"
+              : config.autoRetry
+                ? countdown > 0
+                  ? `⟳ Retrying in ${countdown}s…`
+                  : "⟳ Try Again"
+                : "← Go Back"}
           </button>
 
           <button
