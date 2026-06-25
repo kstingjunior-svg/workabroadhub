@@ -18,10 +18,37 @@ function serveStatic(app) {
         return;
     }
     // Hashed assets (Vite emits names like /assets/index-abc123.js) — long-cache.
+    // Everything else (most importantly index.html + the PWA manifest) must
+    // NEVER be cached, because index.html points at the current set of hashed
+    // chunk filenames. If an in-app browser (Messenger / WhatsApp / FB / IG —
+    // they cache HTML aggressively and often ignore ETags) holds a stale
+    // index.html, the chunk URLs it references 404 after a deploy and the
+    // user lands on the React error boundary.
+    //
+    // 2026-06 FIX (Tony's report): a user opened the site from an in-app
+    // browser and immediately got "Just a small detour". Root cause was
+    // express.static serving index.html for `/` with default ETag-based
+    // caching BEFORE the SPA fallback (with no-cache headers) ever ran.
+    // The fallback never matched for "/" so the no-cache headers below it
+    // were dead code. We now set no-cache directly in the setHeaders callback
+    // so every HTML response is fresh.
     app.use(express_1.default.static(distPath, {
+        // Disable ETag — in-app browsers sometimes still return a 200 from
+        // their cache even when the server would respond 304. no-cache below
+        // forces a network revalidation; killing ETag avoids ambiguity.
+        etag: false,
+        lastModified: false,
         setHeaders(res, filePath) {
             if (/\/assets\//.test(filePath)) {
+                // Hashed assets — safe to cache forever, the URL changes on deploy.
                 res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+            }
+            else if (/\.html?$/i.test(filePath) || filePath.endsWith(path_1.default.sep + "manifest.json")) {
+                // index.html + PWA manifest — must always be revalidated so a fresh
+                // deploy is picked up on the very next request.
+                res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+                res.setHeader("Pragma", "no-cache");
+                res.setHeader("Expires", "0");
             }
         },
     }));
