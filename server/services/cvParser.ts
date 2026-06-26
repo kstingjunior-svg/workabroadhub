@@ -37,37 +37,25 @@ export interface ParseCVResult {
 // ─── internal: extract raw text ──────────────────────────────────────────────
 
 async function extractText(fileBuffer: Buffer, fileType: string, filename: string): Promise<string> {
+  // 2026-06: route everything through the shared extractTextFromBuffer
+  // cascade (pdf-parse v2 → pdfjs-dist → BT/ET ops → Tesseract OCR → mammoth
+  // → utf-8). Previously this function had its own inline `pdf-parse v1`
+  // call which always failed under v2 ("pdfParse is not a function") and
+  // every CV was passed through to the fallback anyway. One canonical
+  // extractor = one place to fix bugs.
   let text = "";
-
   try {
-    if (fileType === "application/pdf") {
-      const pdfParse = (await import("pdf-parse")).default;
-      const data = await pdfParse(fileBuffer);
-      text = data.text ?? "";
-    } else if (
-      fileType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    ) {
-      const mammoth = (await import("mammoth")).default ?? (await import("mammoth"));
-      const result = await mammoth.extractRawText({ buffer: fileBuffer });
-      text = result.value ?? "";
-    }
+    const result = await extractTextFromBuffer(fileBuffer, fileType, filename);
+    text = typeof result === "string" ? result : (result?.text ?? "");
   } catch (err: any) {
-    // Propagate known CV error codes; wrap everything else as CV_PARSE_FAILED
     if ((err?.message as string | undefined)?.startsWith("CV_")) throw err;
     throw new Error(CV_ERRORS.PARSE_FAILED);
   }
 
   // 🚨 CRITICAL VALIDATION (reference pattern)
   if (!text || text.length < 200) {
-    // Before giving up, try the full cascade (BT/ET operators + Tesseract OCR)
-    // — catches scanned PDFs that pdf-parse can't read
-    const fallback = await extractTextFromBuffer(fileBuffer, fileType, filename).catch(() => "");
-    if (!fallback || fallback.length < 200) {
-      throw new Error(CV_ERRORS.EMPTY_OR_SCANNED);
-    }
-    return fallback;
+    throw new Error(CV_ERRORS.EMPTY_OR_SCANNED);
   }
-
   return text;
 }
 

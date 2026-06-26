@@ -5,10 +5,10 @@
  * Single shared utility for turning an uploaded file buffer into plain text.
  * Handles PDF, DOCX, plain-text, and unknown formats with a graceful cascade:
  *
- *   PDF  → pdf-parse → pdfjs-dist (fallback) → BT/ET operator extraction → ""
+ *   PDF  → pdfjs-dist (legacy) → BT/ET operator extraction → Tesseract OCR → ""
  *   DOCX → mammoth extractRawText
  *   TXT  → UTF-8 decode
- *   ???  → try each in order: pdf-parse → mammoth → raw UTF-8 strip
+ *   ???  → try each in order: pdfjs-dist → mammoth → raw UTF-8 strip
  *
  * Returns:
  *   { text: string; method: string }
@@ -111,10 +111,32 @@ function extractRawPdfText(buf: Buffer): string {
   }
 }
 
-async function tryPdf(buf: Buffer): Promise<string> {
-  const pdfParse = (await import("pdf-parse")).default;
-  const parsed   = await pdfParse(buf);
-  return parsed.text ?? "";
+/**
+ * pdf-parse extraction — DEPRECATED, kept only to avoid breaking any
+ * downstream importer that might still call it.
+ *
+ * 2026-06 PERMANENT FIX (Tony's daily audit): the installed pdf-parse
+ * (v2.4.5) is a complete rewrite that internally uses pdfjs-dist v5, which
+ * now requires native canvas bindings (DOMMatrix / ImageData / Path2D)
+ * just to LOAD the module in Node.js. Installing canvas on Render is heavy
+ * and brittle; we don't need it. Our pdfjs-dist legacy build (used by
+ * tryPdfJs below) does the same job without canvas and works reliably in
+ * production — every successful CV extraction in the prod logs comes from
+ * that path.
+ *
+ * Old v1 API used to be `const pdfParse = (await import("pdf-parse")).default;`
+ * which only worked because the package exported a function. v2 has no
+ * default export (only the `PDFParse` class), so that call always threw
+ * "pdfParse is not a function" and we silently fell through.
+ *
+ * Rather than wire up the v2 class API and then fail at canvas-polyfill
+ * time, we just stop attempting this path. The cascade below uses
+ * pdfjs-dist as the primary extractor, which is what was always doing the
+ * real work anyway.
+ */
+async function tryPdf(_buf: Buffer): Promise<string> {
+  // No-op — pdfjs-dist legacy (tryPdfJs) is the primary PDF extractor now.
+  return "";
 }
 
 async function tryMammoth(buf: Buffer): Promise<string> {
@@ -124,8 +146,7 @@ async function tryMammoth(buf: Buffer): Promise<string> {
 }
 
 /**
- * pdfjs-dist extraction — handles compressed / cross-reference-stream PDFs
- * that trip up pdf-parse (which relies on an older parser).
+ * pdfjs-dist extraction — handles compressed / cross-reference-stream PDFs.
  * Uses the legacy Node.js build (no canvas dependency required).
  */
 async function tryPdfJs(buf: Buffer): Promise<string> {
@@ -203,57 +224,46 @@ export async function extractTextFromBuffer(
 
   // ── PDF ───────────────────────────────────────────────────────────────────
   if (isPdf) {
-    // Attempt 1: pdf-parse (works on most text-based PDFs)
-    let pdfParseText = "";
-    try {
-      const text = await tryPdf(buffer);
-      if (text.trim().length >= MIN_CV_LENGTH && isReadableText(text)) {
-        return { text, method: "pdf-parse" };
-      }
-      if (text.trim().length >= MIN_CV_LENGTH) {
-        // Extracted chars but quality check failed — save as last-resort fallback
-        // rather than discarding and falling through to the expensive GPT-4o path.
-        console.warn("[extractText] pdf-parse returned low-quality text — keeping as fallback");
-        pdfParseText = text;
-      }
-    } catch (err) {
-      console.warn("[extractText] pdf-parse failed:", err instanceof Error ? err.message : err);
-    }
+    let lowQualityFallback = "";
 
-    // Attempt 2: pdfjs-dist — handles compressed / XRef-stream PDFs that
-    // trip up pdf-parse's older parser.  Fast; no canvas required in Node.js.
-    console.log("[extractText] Trying pdfjs-dist…");
+    // 2026-06 (Tony's audit): pdf-parse is intentionally NOT attempted
+    // here anymore — see the long comment on `tryPdf` for the reason. The
+    // pdfjs-dist legacy build is the primary extractor.
+
+    // Attempt 1: pdfjs-dist legacy build — handles compressed / XRef-stream
+    // PDFs, no native canvas required. This was the de-facto primary
+    // extractor in production already (the old pdf-parse attempt always
+    // failed); now it's officially the first try.
     try {
       const pdfjsText = await tryPdfJs(buffer);
       if (pdfjsText.length >= MIN_CV_LENGTH && isReadableText(pdfjsText)) {
         console.log(`[extractText] pdfjs-dist succeeded (${pdfjsText.length} chars)`);
         return { text: pdfjsText, method: "pdfjs-dist" };
       }
-      // Keep as final fallback if it extracted something but failed readability
-      if (pdfjsText.length >= MIN_CV_LENGTH && !pdfParseText) {
-        pdfParseText = pdfjsText;
+      if (pdfjsText.length >= MIN_CV_LENGTH) {
+        lowQualityFallback = pdfjsText;
         console.warn("[extractText] pdfjs-dist returned low-quality text — keeping as fallback");
       }
     } catch { /* handled inside tryPdfJs */ }
 
-    // Attempt 3: BT/ET operator extraction (only returns readable text or "")
+    // Attempt 2: BT/ET operator extraction (only returns readable text or "")
     const raw = extractRawPdfText(buffer);
     if (raw.length >= MIN_CV_LENGTH) {
       return { text: raw, method: "pdf-raw-fallback" };
     }
 
-    // Attempt 4: Tesseract OCR — handles scanned / image-only PDFs
+    // Attempt 3: Tesseract OCR — handles scanned / image-only PDFs
     const ocrText = await tryOCR(buffer, filename);
     if (ocrText.length >= MIN_CV_LENGTH && isReadableText(ocrText)) {
       return { text: ocrText, method: "tesseract-ocr" };
     }
 
-    // Attempt 5: Return the best text we have even if it failed the readability heuristic —
-    // better to send imperfect text to the AI than nothing (avoids the unreliable
-    // base64-file GPT-4o path which is not supported by all proxies).
-    if (pdfParseText.length >= MIN_CV_LENGTH) {
-      console.warn("[extractText] Using low-quality pdf-parse text as last resort");
-      return { text: pdfParseText, method: "pdf-parse-fallback" };
+    // Attempt 4: Return the best text we have even if it failed the
+    // readability heuristic — better to send imperfect text to the AI than
+    // nothing. Sourced from the pdfjs-dist attempt above.
+    if (lowQualityFallback.length >= MIN_CV_LENGTH) {
+      console.warn("[extractText] Using low-quality pdfjs-dist text as last resort");
+      return { text: lowQualityFallback, method: "pdfjs-fallback" };
     }
 
     // All local extraction methods exhausted.
@@ -278,11 +288,11 @@ export async function extractTextFromBuffer(
   }
 
   // ── Unknown format: cascade ───────────────────────────────────────────────
-  // 1. pdf-parse
+  // 1. pdfjs-dist (was pdf-parse before the v2-API breakage)
   try {
-    const text = await tryPdf(buffer);
+    const text = await tryPdfJs(buffer);
     if (text.trim().length >= MIN_CV_LENGTH && isReadableText(text)) {
-      return { text, method: "pdf-parse-guess" };
+      return { text, method: "pdfjs-guess" };
     }
   } catch { /* try next */ }
 
