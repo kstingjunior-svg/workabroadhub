@@ -7,29 +7,6 @@
 // checking the error code before re-throwing.
 // OCR fallback (Tesseract) is kept for scanned PDFs that pass the parse step
 // but yield < 200 chars of readable text.
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-    __setModuleDefault(result, mod);
-    return result;
-};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -48,34 +25,25 @@ exports.CV_ERRORS = {
 };
 // ─── internal: extract raw text ──────────────────────────────────────────────
 async function extractText(fileBuffer, fileType, filename) {
+    // 2026-06: route everything through the shared extractTextFromBuffer
+    // cascade (pdf-parse v2 → pdfjs-dist → BT/ET ops → Tesseract OCR → mammoth
+    // → utf-8). Previously this function had its own inline `pdf-parse v1`
+    // call which always failed under v2 ("pdfParse is not a function") and
+    // every CV was passed through to the fallback anyway. One canonical
+    // extractor = one place to fix bugs.
     let text = "";
     try {
-        if (fileType === "application/pdf") {
-            const pdfParse = (await Promise.resolve().then(() => __importStar(require("pdf-parse")))).default;
-            const data = await pdfParse(fileBuffer);
-            text = data.text ?? "";
-        }
-        else if (fileType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
-            const mammoth = (await Promise.resolve().then(() => __importStar(require("mammoth")))).default ?? (await Promise.resolve().then(() => __importStar(require("mammoth"))));
-            const result = await mammoth.extractRawText({ buffer: fileBuffer });
-            text = result.value ?? "";
-        }
+        const result = await (0, extract_text_1.extractTextFromBuffer)(fileBuffer, fileType, filename);
+        text = typeof result === "string" ? result : (result?.text ?? "");
     }
     catch (err) {
-        // Propagate known CV error codes; wrap everything else as CV_PARSE_FAILED
         if (err?.message?.startsWith("CV_"))
             throw err;
         throw new Error(exports.CV_ERRORS.PARSE_FAILED);
     }
     // 🚨 CRITICAL VALIDATION (reference pattern)
     if (!text || text.length < 200) {
-        // Before giving up, try the full cascade (BT/ET operators + Tesseract OCR)
-        // — catches scanned PDFs that pdf-parse can't read
-        const fallback = await (0, extract_text_1.extractTextFromBuffer)(fileBuffer, fileType, filename).catch(() => "");
-        if (!fallback || fallback.length < 200) {
-            throw new Error(exports.CV_ERRORS.EMPTY_OR_SCANNED);
-        }
-        return fallback;
+        throw new Error(exports.CV_ERRORS.EMPTY_OR_SCANNED);
     }
     return text;
 }
