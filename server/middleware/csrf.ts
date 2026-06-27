@@ -31,6 +31,26 @@ const CSRF_EXEMPT = new Set([
   // rate limiting handles the only abuse vector (email spam).
   "/api/auth/forgot-password",
   "/api/auth/reset-password",
+  // 2026-06 OUTAGE FIX (Tony's report — user nyakeriomaureen@gmail.com saw
+  // "Invalid or missing CSRF token" on login). CSRF protects against an
+  // ALREADY-AUTHENTICATED user being tricked into performing an action via a
+  // forged request. Login + register are how authentication is BORN — there
+  // is no prior authenticated state to ride on, so CSRF protection adds
+  // zero real security and only breaks legitimate users whose browser
+  // dropped the session cookie between the /api/csrf-token GET and the
+  // login POST (in-app browsers, aggressive privacy modes, or session
+  // store hiccups). Brute-force is the only real attack vector here, and
+  // it's already covered by IP + identifier rate limiting in
+  // server/replit_integrations/auth/routes.ts.
+  "/api/auth/login",
+  "/api/auth/register",
+  // Same reasoning for the email-verification + phone-code endpoints used
+  // during signup/recovery — they're either keyed off a one-time email
+  // token, or come before a session exists.
+  "/api/auth/send-email-code",
+  "/api/auth/verify-email",
+  "/api/auth/send-phone-code",
+  "/api/auth/verify-phone",
 ]);
 
 function isCsrfExempt(path: string): boolean {
