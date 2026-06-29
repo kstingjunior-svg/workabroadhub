@@ -526,6 +526,18 @@ app.use((req, res, next) => {
         catch (err) {
             console.error("[Server] ❌ ensureLuxembourgSeeded failed:", err?.message);
         }
+        // 2026-06 (Tony's bulk update): upsert 581 verified NEA agencies from
+        // the NEA portal export. Idempotent — re-runs update existing rows in
+        // place via ON CONFLICT (license_number). Source-of-truth is the NEA
+        // portal, so an admin manually editing fields between deploys will be
+        // overwritten on the next boot. See server/lib/ensure-nea-agencies-seeded.ts
+        try {
+            const { ensureNeaAgenciesSeeded } = await Promise.resolve().then(() => __importStar(require("./lib/ensure-nea-agencies-seeded")));
+            await ensureNeaAgenciesSeeded();
+        }
+        catch (err) {
+            console.error("[Server] ❌ ensureNeaAgenciesSeeded failed:", err?.message);
+        }
         // Wire Sentry's Express error handler AFTER all routes are registered
         // but BEFORE any custom 500 middleware. No-op if Sentry isn't initialised.
         (0, sentry_1.attachSentryErrorHandler)(app);
