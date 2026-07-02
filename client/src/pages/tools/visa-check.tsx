@@ -18,7 +18,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { SeoHead, buildFaqSchema } from "@/components/seo-head";
 import { trackPageView } from "@/lib/analytics";
-import { apiRequest } from "@/lib/queryClient";
+import { fetchCsrfToken } from "@/lib/queryClient";
 import {
   ShieldCheck,
   ShieldAlert,
@@ -156,12 +156,18 @@ export default function VisaCheckPage() {
     mutationFn: async (f: File) => {
       const form = new FormData();
       form.append("file", f);
-      const res = await apiRequest("POST", "/api/tools/visa-check", form, {
-        skipContentType: true,
+      const csrfToken = await fetchCsrfToken();
+      const res = await fetch("/api/tools/visa-check", {
+        method:      "POST",
+        credentials: "include",
+        headers:     { "X-CSRF-Token": csrfToken },
+        body:        form,
       });
       if (!res.ok) {
-        const err = await res.json().catch(() => ({ message: "Upload failed." }));
-        throw new Error(err.message ?? `HTTP ${res.status}`);
+        const text = await res.text();
+        let msg = "Could not screen this document. Please try again.";
+        try { msg = JSON.parse(text).message ?? msg; } catch {}
+        throw new Error(msg);
       }
       return res.json() as Promise<VisaCheckResult>;
     },
