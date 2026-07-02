@@ -18986,6 +18986,12 @@ Rules:
     // See server/tools/visa-screening.ts + visa-check-endpoint.ts.
     const { registerVisaCheckRoute } = await Promise.resolve().then(() => __importStar(require("./tools/visa-check-endpoint")));
     registerVisaCheckRoute(app);
+    // 2026-07 Offer Letter Screening free tool.
+    //   POST /api/tools/offer-check — upload offer letter (PDF/DOCX/image),
+    //   get 20+ scam-pattern findings, sender-domain check, and risk report.
+    // See server/tools/offer-screening.ts + offer-check-endpoint.ts.
+    const { registerOfferCheckRoute } = await Promise.resolve().then(() => __importStar(require("./tools/offer-check-endpoint")));
+    registerOfferCheckRoute(app);
     // ═══════════════════════════════════════════════════════════════════════════
     // SERVICE ORDER FLOW — unified upload → pay → AI → download for paid services
     // (CV Fix Lite, ATS, Cover Letter, SOP, Country CV Rewrite, Motivation, etc.)

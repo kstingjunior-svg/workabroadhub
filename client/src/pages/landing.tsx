@@ -611,12 +611,12 @@ export default function Landing() {
                 Everything you need to <span className="text-blue-600 dark:text-blue-400">land your overseas job</span>
               </h2>
               <p className="text-muted-foreground max-w-xl mx-auto text-sm sm:text-base">
-                Five free tools built specifically for Kenyans applying for jobs abroad — no sign-in required to get started.
+                Six free tools built specifically for Kenyans applying for jobs abroad — no sign-in required to get started.
               </p>
             </div>
 
-            {/* Tool cards */}
-            <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-5 mb-10">
+            {/* Tool cards — 6 items, 3 per row on desktop, 2 per row on tablet */}
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 mb-10">
 
               {/* 1 — ATS CV Checker */}
               <a href="/tools/ats-cv-checker" data-testid="link-tool-ats" className="group">
@@ -675,7 +675,26 @@ export default function Landing() {
                 </div>
               </a>
 
-              {/* 4 — Visa Sponsorship Jobs */}
+              {/* 4 — Offer Letter Screener (NEW) */}
+              <a href="/tools/offer-check" data-testid="link-tool-offer-check" className="group">
+                <div className="h-full bg-white dark:bg-slate-800 rounded-2xl border border-orange-100 dark:border-slate-700 p-5 shadow-sm hover:shadow-lg hover:border-orange-300 dark:hover:border-orange-700 transition-all duration-300 flex flex-col">
+                  <div className="h-12 w-12 bg-orange-100 dark:bg-orange-900/40 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
+                    <FileText className="h-6 w-6 text-orange-600 dark:text-orange-400" />
+                  </div>
+                  <div className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-orange-600 dark:text-orange-400 mb-1.5">
+                    <Sparkles className="h-3 w-3" /> New · Free
+                  </div>
+                  <h3 className="font-bold text-slate-900 dark:text-white text-base mb-2 leading-tight">Screen an Offer Letter</h3>
+                  <p className="text-xs text-muted-foreground leading-relaxed flex-1 mb-4">
+                    Upload a job offer letter. We scan for 20+ scam patterns, verify the sender email domain, and give you an instant risk report.
+                  </p>
+                  <div className="flex items-center gap-1 text-sm font-semibold text-orange-600 dark:text-orange-400 group-hover:gap-2 transition-all">
+                    Screen Offer <ArrowRight className="h-4 w-4" />
+                  </div>
+                </div>
+              </a>
+
+              {/* 5 — Visa Sponsorship Jobs */}
               <a href="/tools/visa-sponsorship-jobs" data-testid="link-tool-jobs" className="group">
                 <div className="h-full bg-white dark:bg-slate-800 rounded-2xl border border-teal-100 dark:border-slate-700 p-5 shadow-sm hover:shadow-lg hover:border-teal-300 dark:hover:border-teal-700 transition-all duration-300 flex flex-col">
                   <div className="h-12 w-12 bg-teal-100 dark:bg-teal-900/40 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
@@ -694,7 +713,7 @@ export default function Landing() {
                 </div>
               </a>
 
-              {/* 5 — CV Templates */}
+              {/* 6 — CV Templates */}
               <a href="/tools/cv-templates" data-testid="link-tool-templates" className="group">
                 <div className="h-full bg-white dark:bg-slate-800 rounded-2xl border border-purple-100 dark:border-slate-700 p-5 shadow-sm hover:shadow-lg hover:border-purple-300 dark:hover:border-purple-700 transition-all duration-300 flex flex-col">
                   <div className="h-12 w-12 bg-purple-100 dark:bg-purple-900/40 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
