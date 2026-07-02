@@ -10,7 +10,7 @@ import { LandingTrustStrip } from "@/components/landing-trust-strip";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PRO_FEATURES } from "@/lib/plan-features";
-import { Globe, Shield, FileCheck, CheckCircle, AlertTriangle, ExternalLink, Briefcase, GraduationCap, Building2, Sparkles, ArrowRight, BadgeCheck, TrendingUp, Users, HelpCircle, ChevronDown, CreditCard, ClipboardList, MessageCircle, Mail, Phone, MapPin, BarChart3, FileText, ShieldAlert, Download, Wrench, Smartphone, Headphones } from "lucide-react";
+import { Globe, Shield, FileCheck, CheckCircle, AlertTriangle, ExternalLink, Briefcase, GraduationCap, Building2, Sparkles, ArrowRight, BadgeCheck, TrendingUp, Users, HelpCircle, ChevronDown, CreditCard, ClipboardList, MessageCircle, Mail, Phone, MapPin, BarChart3, FileText, ShieldAlert, Download, Wrench, Smartphone, Headphones, ScanLine } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useTranslation } from "react-i18next";
 import { LanguageSelector } from "@/components/language-selector";
@@ -611,12 +611,12 @@ export default function Landing() {
                 Everything you need to <span className="text-blue-600 dark:text-blue-400">land your overseas job</span>
               </h2>
               <p className="text-muted-foreground max-w-xl mx-auto text-sm sm:text-base">
-                Four free tools built specifically for Kenyans applying for jobs abroad — no sign-in required to get started.
+                Five free tools built specifically for Kenyans applying for jobs abroad — no sign-in required to get started.
               </p>
             </div>
 
             {/* Tool cards */}
-            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 mb-10">
+            <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-5 mb-10">
 
               {/* 1 — ATS CV Checker */}
               <a href="/tools/ats-cv-checker" data-testid="link-tool-ats" className="group">
@@ -656,7 +656,26 @@ export default function Landing() {
                 </div>
               </a>
 
-              {/* 3 — Visa Sponsorship Jobs */}
+              {/* 3 — Visa Screening (NEW) */}
+              <a href="/tools/visa-check" data-testid="link-tool-visa-check" className="group">
+                <div className="h-full bg-white dark:bg-slate-800 rounded-2xl border border-indigo-100 dark:border-slate-700 p-5 shadow-sm hover:shadow-lg hover:border-indigo-300 dark:hover:border-indigo-700 transition-all duration-300 flex flex-col">
+                  <div className="h-12 w-12 bg-indigo-100 dark:bg-indigo-900/40 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
+                    <ScanLine className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
+                  </div>
+                  <div className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-indigo-600 dark:text-indigo-400 mb-1.5">
+                    <Sparkles className="h-3 w-3" /> New · Free
+                  </div>
+                  <h3 className="font-bold text-slate-900 dark:text-white text-base mb-2 leading-tight">Screen a Visa</h3>
+                  <p className="text-xs text-muted-foreground leading-relaxed flex-1 mb-4">
+                    Upload a visa or work-permit image. We verify the machine-readable zone, check for tampering signals, and give you an instant risk report.
+                  </p>
+                  <div className="flex items-center gap-1 text-sm font-semibold text-indigo-600 dark:text-indigo-400 group-hover:gap-2 transition-all">
+                    Screen Now <ArrowRight className="h-4 w-4" />
+                  </div>
+                </div>
+              </a>
+
+              {/* 4 — Visa Sponsorship Jobs */}
               <a href="/tools/visa-sponsorship-jobs" data-testid="link-tool-jobs" className="group">
                 <div className="h-full bg-white dark:bg-slate-800 rounded-2xl border border-teal-100 dark:border-slate-700 p-5 shadow-sm hover:shadow-lg hover:border-teal-300 dark:hover:border-teal-700 transition-all duration-300 flex flex-col">
                   <div className="h-12 w-12 bg-teal-100 dark:bg-teal-900/40 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
@@ -675,7 +694,7 @@ export default function Landing() {
                 </div>
               </a>
 
-              {/* 4 — CV Templates */}
+              {/* 5 — CV Templates */}
               <a href="/tools/cv-templates" data-testid="link-tool-templates" className="group">
                 <div className="h-full bg-white dark:bg-slate-800 rounded-2xl border border-purple-100 dark:border-slate-700 p-5 shadow-sm hover:shadow-lg hover:border-purple-300 dark:hover:border-purple-700 transition-all duration-300 flex flex-col">
                   <div className="h-12 w-12 bg-purple-100 dark:bg-purple-900/40 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
