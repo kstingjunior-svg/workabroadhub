@@ -9,6 +9,7 @@ import { storage } from "./storage";
 import { insertJobSchema } from "../shared/schema";
 import { openai } from "./lib/openai";
 import { extractTextFromBuffer, MIN_CV_LENGTH } from "./utils/extract-text";
+import { classifyDocument, checkDocumentType } from "./tools/document-classifier";
 
 // ── Multer config (memory storage, 5 MB limit, PDF/DOCX only) ─────────────────
 const upload = multer({
@@ -368,6 +369,20 @@ export function registerToolsRoutes(
         );
         console.log(`[ATS Check] Extracted ${cvText.length} chars via ${extractMethod}`);
 
+        // ── Document-type gate ──────────────────────────────────────────────
+        // Refuse to analyse a visa / job advert / offer letter as a CV; point
+        // the user at the correct tool. Only run when we have enough text to
+        // classify (below the floor we fall through to the base64-PDF path
+        // which will fail its own sanity checks if the doc isn't a CV).
+        if (cvText.trim().length >= 200) {
+          const classification = classifyDocument({ text: cvText });
+          const wrongDoc = checkDocumentType(classification, "cv");
+          if (wrongDoc) {
+            console.log(`[ATS Check] Rejected: detected=${classification.type} conf=${classification.confidence} for "${req.file.originalname}"`);
+            return res.status(422).json(wrongDoc);
+          }
+        }
+
         // ── Determine if user is logged in for full results gating ────────────
         const isLoggedIn = !!req.user?.id;
 
@@ -685,6 +700,19 @@ Return ONLY the JSON object, no markdown, no extra text.`;
           }
         } else {
           return res.status(415).json({ message: "Unsupported file type. Please upload an image (JPG, PNG, WEBP, screenshot), PDF, or Word document." });
+        }
+
+        // ── Document-type gate ──────────────────────────────────────────────
+        // Refuse to analyse a CV / visa / offer letter as a job advert;
+        // point the user at the correct tool. Only when we have enough text
+        // to classify meaningfully.
+        if (extractedText.trim().length >= 150) {
+          const classification = classifyDocument({ text: extractedText });
+          const wrongDoc = checkDocumentType(classification, "job_advert");
+          if (wrongDoc) {
+            console.log(`[ScamFileCheck] Rejected: detected=${classification.type} conf=${classification.confidence}`);
+            return res.status(422).json(wrongDoc);
+          }
         }
 
         const result = await analyzeScamHybrid(extractedText.slice(0, 5000));

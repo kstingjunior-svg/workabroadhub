@@ -20,6 +20,11 @@ import { SeoHead, buildFaqSchema } from "@/components/seo-head";
 import { trackPageView } from "@/lib/analytics";
 import { fetchCsrfToken } from "@/lib/queryClient";
 import {
+  WrongDocumentCard,
+  isWrongDocumentResponse,
+  type WrongDocumentPayload,
+} from "@/components/wrong-document-card";
+import {
   ShieldCheck,
   ShieldAlert,
   AlertTriangle,
@@ -146,6 +151,7 @@ export default function VisaCheckPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [file, setFile]     = useState<File | null>(null);
   const [result, setResult] = useState<VisaCheckResult | null>(null);
+  const [wrongDoc, setWrongDoc] = useState<WrongDocumentPayload | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
 
   // Analytics
@@ -165,13 +171,25 @@ export default function VisaCheckPage() {
       });
       if (!res.ok) {
         const text = await res.text();
-        let msg = "Could not screen this document. Please try again.";
-        try { msg = JSON.parse(text).message ?? msg; } catch {}
-        throw new Error(msg);
+        // Try parsing the body — it may be a wrongDocumentType payload
+        try {
+          const body = JSON.parse(text);
+          if (isWrongDocumentResponse(body)) {
+            // Throw a custom marker so onError can route to the redirect card
+            const err: any = new Error(body.message);
+            err.wrongDocument = body;
+            throw err;
+          }
+          throw new Error(body.message ?? "Could not screen this document.");
+        } catch (parseErr: any) {
+          if (parseErr?.wrongDocument) throw parseErr;
+          throw new Error("Could not screen this document. Please try again.");
+        }
       }
       return res.json() as Promise<VisaCheckResult>;
     },
     onSuccess: (data) => {
+      setWrongDoc(null);
       setResult(data);
       toast({
         title: data.riskBand === "low"
@@ -182,6 +200,12 @@ export default function VisaCheckPage() {
       });
     },
     onError: (err: any) => {
+      if (err?.wrongDocument) {
+        // Show the redirect card instead of a toast
+        setWrongDoc(err.wrongDocument);
+        setResult(null);
+        return;
+      }
       toast({
         title: "Could not screen this document",
         description: err?.message ?? "Please try again.",
@@ -213,6 +237,7 @@ export default function VisaCheckPage() {
     }
     setFile(f);
     setResult(null);
+    setWrongDoc(null);
     if (isImage) {
       const reader = new FileReader();
       reader.onload = (e) => setPreview(e.target?.result as string);
@@ -225,6 +250,7 @@ export default function VisaCheckPage() {
   const reset = () => {
     setFile(null);
     setResult(null);
+    setWrongDoc(null);
     setPreview(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
@@ -262,8 +288,15 @@ export default function VisaCheckPage() {
           </p>
         </div>
 
+        {/* Wrong-document redirect card */}
+        {wrongDoc && (
+          <div className="space-y-4">
+            <WrongDocumentCard payload={wrongDoc} onTryAnother={reset} />
+          </div>
+        )}
+
         {/* Upload card */}
-        {!result && (
+        {!result && !wrongDoc && (
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">Upload visa image or PDF</CardTitle>

@@ -28,6 +28,11 @@ import {
   HelpCircle,
 } from "lucide-react";
 import { isPaidUser } from "@/lib/plan";
+import {
+  WrongDocumentCard,
+  isWrongDocumentResponse,
+  type WrongDocumentPayload,
+} from "@/components/wrong-document-card";
 
 const ATS_FAQS = [
   { q: "What is an ATS and why does it matter for overseas jobs?", a: "ATS (Applicant Tracking System) is software used by 99% of large employers in the UK, Canada, UAE, and Australia to filter CVs before a human reads them. A CV that fails ATS parsing is rejected automatically, even if you are qualified. Our checker analyses your CV against ATS criteria so you can fix issues before applying." },
@@ -98,6 +103,7 @@ export default function ATSCVChecker() {
   });
   const isPaid = isPaidUser(userPlan?.planId);
   const [result, setResult] = useState<ATSResult | null>(null);
+  const [wrongDoc, setWrongDoc] = useState<WrongDocumentPayload | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [reportId, setReportId] = useState<string | null>(null);
   const [returnedFromLogin, setReturnedFromLogin] = useState(false);
@@ -142,18 +148,23 @@ export default function ATSCVChecker() {
         headers: { "X-CSRF-Token": csrfToken },
       });
       if (!res.ok) {
-        let message = "ATS check failed. Please try again.";
         try {
-          const err = await res.json();
-          message = err.message || message;
-        } catch {
-          // Server returned a non-JSON body (e.g. proxy error page) — use generic message
+          const body = await res.json();
+          if (isWrongDocumentResponse(body)) {
+            const wrongErr: any = new Error(body.message);
+            wrongErr.wrongDocument = body;
+            throw wrongErr;
+          }
+          throw new Error(body.message ?? "ATS check failed. Please try again.");
+        } catch (parseErr: any) {
+          if (parseErr?.wrongDocument) throw parseErr;
+          throw new Error("ATS check failed. Please try again.");
         }
-        throw new Error(message);
       }
       return res.json() as Promise<ATSResult>;
     },
     onSuccess: (data) => {
+      setWrongDoc(null);
       setResult(data);
       setReportId(null);
       setReturnedFromLogin(false);
@@ -162,6 +173,11 @@ export default function ATSCVChecker() {
       if (!data.locked) generateReport(data);
     },
     onError: (err: any) => {
+      if (err?.wrongDocument) {
+        setWrongDoc(err.wrongDocument);
+        setResult(null);
+        return;
+      }
       toast({ title: "Error", description: err.message, variant: "destructive" });
     },
   });
@@ -313,6 +329,16 @@ export default function ATSCVChecker() {
             </p>
           </CardContent>
         </Card>
+
+        {/* Wrong-document redirect */}
+        {wrongDoc && (
+          <div className="space-y-4 mb-6">
+            <WrongDocumentCard
+              payload={wrongDoc}
+              onTryAnother={() => { setWrongDoc(null); setFile(null); }}
+            />
+          </div>
+        )}
 
         {/* Results */}
         {result && (

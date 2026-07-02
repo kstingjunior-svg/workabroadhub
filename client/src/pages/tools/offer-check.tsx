@@ -21,6 +21,11 @@ import { SeoHead, buildFaqSchema } from "@/components/seo-head";
 import { trackPageView } from "@/lib/analytics";
 import { fetchCsrfToken } from "@/lib/queryClient";
 import {
+  WrongDocumentCard,
+  isWrongDocumentResponse,
+  type WrongDocumentPayload,
+} from "@/components/wrong-document-card";
+import {
   ShieldCheck,
   AlertTriangle,
   XCircle,
@@ -157,6 +162,7 @@ export default function OfferCheckPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [file, setFile]     = useState<File | null>(null);
   const [result, setResult] = useState<OfferCheckResult | null>(null);
+  const [wrongDoc, setWrongDoc] = useState<WrongDocumentPayload | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
 
   trackPageView?.("offer-check");
@@ -174,13 +180,23 @@ export default function OfferCheckPage() {
       });
       if (!res.ok) {
         const text = await res.text();
-        let msg = "Could not screen this offer. Please try again.";
-        try { msg = JSON.parse(text).message ?? msg; } catch {}
-        throw new Error(msg);
+        try {
+          const body = JSON.parse(text);
+          if (isWrongDocumentResponse(body)) {
+            const err: any = new Error(body.message);
+            err.wrongDocument = body;
+            throw err;
+          }
+          throw new Error(body.message ?? "Could not screen this offer.");
+        } catch (parseErr: any) {
+          if (parseErr?.wrongDocument) throw parseErr;
+          throw new Error("Could not screen this offer. Please try again.");
+        }
       }
       return res.json() as Promise<OfferCheckResult>;
     },
     onSuccess: (data) => {
+      setWrongDoc(null);
       setResult(data);
       toast({
         title: data.riskBand === "low"
@@ -191,6 +207,11 @@ export default function OfferCheckPage() {
       });
     },
     onError: (err: any) => {
+      if (err?.wrongDocument) {
+        setWrongDoc(err.wrongDocument);
+        setResult(null);
+        return;
+      }
       toast({
         title: "Could not screen this document",
         description: err?.message ?? "Please try again.",
@@ -223,6 +244,7 @@ export default function OfferCheckPage() {
     }
     setFile(f);
     setResult(null);
+    setWrongDoc(null);
     if (isImage) {
       const reader = new FileReader();
       reader.onload = (e) => setPreview(e.target?.result as string);
@@ -235,6 +257,7 @@ export default function OfferCheckPage() {
   const reset = () => {
     setFile(null);
     setResult(null);
+    setWrongDoc(null);
     setPreview(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
@@ -272,7 +295,13 @@ export default function OfferCheckPage() {
           </p>
         </div>
 
-        {!result && (
+        {wrongDoc && (
+          <div className="space-y-4">
+            <WrongDocumentCard payload={wrongDoc} onTryAnother={reset} />
+          </div>
+        )}
+
+        {!result && !wrongDoc && (
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">Upload offer letter</CardTitle>

@@ -34,6 +34,7 @@ const db_1 = require("../db");
 const openai_1 = require("../lib/openai");
 const extract_text_1 = require("../utils/extract-text");
 const offer_screening_1 = require("./offer-screening");
+const document_classifier_1 = require("./document-classifier");
 // ── Multer: 10 MB, PDF/DOCX/image ──────────────────────────────────────────
 const upload = (0, multer_1.default)({
     storage: multer_1.default.memoryStorage(),
@@ -66,24 +67,33 @@ function guestFingerprint(req) {
 async function runVisionPass(buffer, mimetype) {
     const base64 = buffer.toString("base64");
     const safeType = mimetype.startsWith("image/") ? mimetype : "image/jpeg";
-    const prompt = `You are reviewing a job offer letter image for a document-screening tool.
+    const prompt = `You are reviewing an uploaded image for an offer-letter-screening tool.
 
 Return your response as valid JSON matching this exact shape:
 {
+  "documentType": "offer_letter" | "cv" | "job_advert" | "visa" | "unknown",
+  "documentTypeConfidence": 0-100 integer,
   "extractedText": "every visible line of text on the letter, one per line, preserving structure",
   "visionNotes": "2-3 sentences describing what you see and any authenticity concerns",
-  "anomalyFlags": ["short phrases naming specific issues, e.g. 'inconsistent font in salary line', 'missing corporate letterhead'"],
-  "visionConfidence": 0-100 integer estimating how likely this looks like a genuine corporate offer letter,
+  "anomalyFlags": ["short phrases naming specific issues, e.g. 'inconsistent font in salary line'"],
+  "visionConfidence": 0-100 integer estimating how likely this looks like a GENUINE corporate offer letter (only meaningful if documentType='offer_letter'),
   "hasLetterhead": true|false,
   "hasSignature": true|false
 }
 
 Rules:
+- documentType: choose ONE:
+  • "offer_letter"  — a specific personalized job-offer letter from employer to candidate
+  • "cv"            — a CV or résumé (personal work history)
+  • "job_advert"    — a job posting or recruitment advert (employer promoting a role)
+  • "visa"          — a visa page or work permit
+  • "unknown"       — none of the above, or unreadable
+- documentTypeConfidence: how sure you are of the documentType choice.
 - extractedText: capture EVERY visible line.
-- anomalyFlags: only ACTUAL observations. If nothing looks off, empty array.
-- visionConfidence: 80-100 = looks corporate & consistent, 40-79 = concerns, 0-39 = strong forgery indicators OR doesn't look like a real offer letter.
-- hasLetterhead: TRUE if you can see a company logo or branded header at the top.
-- hasSignature: TRUE if you can see a signature (handwritten or digital) near the closing.
+- anomalyFlags: only ACTUAL observations.
+- visionConfidence: only meaningful when documentType='offer_letter'. Otherwise 0.
+- hasLetterhead: TRUE if branded/logo header visible.
+- hasSignature: TRUE if signature visible near closing.
 - Return ONLY the JSON. No commentary, no code fences.`;
     try {
         const resp = await openai_1.openai.chat.completions.create({
@@ -106,6 +116,12 @@ Rules:
         });
         const raw = resp.choices[0]?.message?.content?.trim() ?? "";
         const parsed = JSON.parse(raw);
+        const validTypes = new Set(["visa", "cv", "job_advert", "offer_letter", "unknown"]);
+        const rawType = String(parsed.documentType ?? "").toLowerCase();
+        const documentType = validTypes.has(rawType) ? rawType : null;
+        const documentTypeConfidence = typeof parsed.documentTypeConfidence === "number"
+            ? Math.max(0, Math.min(100, Math.round(parsed.documentTypeConfidence)))
+            : null;
         return {
             text: String(parsed.extractedText ?? ""),
             vision: {
@@ -117,11 +133,13 @@ Rules:
             },
             hasLetterhead: typeof parsed.hasLetterhead === "boolean" ? parsed.hasLetterhead : null,
             hasSignature: typeof parsed.hasSignature === "boolean" ? parsed.hasSignature : null,
+            documentType,
+            documentTypeConfidence,
         };
     }
     catch (err) {
         console.warn("[OfferCheck] Vision pass failed:", err?.message);
-        return { text: "", vision: null, hasLetterhead: null, hasSignature: null };
+        return { text: "", vision: null, hasLetterhead: null, hasSignature: null, documentType: null, documentTypeConfidence: null };
     }
 }
 // ─────────────────────────────────────────────────────────────────────────────
@@ -196,6 +214,8 @@ function registerOfferCheckRoute(app) {
             let vision = null;
             let hasLetterhead = null;
             let hasSignature = null;
+            let visionDocType = null;
+            let visionDocTypeConf = null;
             const isDoc = req.file.mimetype === "application/pdf" ||
                 req.file.mimetype === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
                 req.file.mimetype === "application/msword";
@@ -203,7 +223,6 @@ function registerOfferCheckRoute(app) {
                 const extracted = await (0, extract_text_1.extractTextFromBuffer)(req.file.buffer, req.file.mimetype, req.file.originalname).catch(() => ({ text: "", method: "error" }));
                 ocrText = extracted.text ?? "";
                 method = extracted.method ?? "doc";
-                // If we didn't get enough text (e.g. scanned PDF), fall back to vision
                 if (ocrText.trim().length < 100) {
                     const v = await runVisionPass(req.file.buffer, "image/jpeg").catch(() => null);
                     if (v && v.text) {
@@ -211,6 +230,8 @@ function registerOfferCheckRoute(app) {
                         vision = v.vision;
                         hasLetterhead = v.hasLetterhead;
                         hasSignature = v.hasSignature;
+                        visionDocType = v.documentType;
+                        visionDocTypeConf = v.documentTypeConfidence;
                         method += "+vision";
                     }
                 }
@@ -221,12 +242,27 @@ function registerOfferCheckRoute(app) {
                 vision = v.vision;
                 hasLetterhead = v.hasLetterhead;
                 hasSignature = v.hasSignature;
+                visionDocType = v.documentType;
+                visionDocTypeConf = v.documentTypeConfidence;
                 method = "vision";
             }
             if (!ocrText || ocrText.trim().length < 40) {
                 return res.status(422).json({
                     message: "Could not read enough text from the document. Try a clearer photo or PDF export.",
                 });
+            }
+            // ── Document-type gate ─────────────────────────────────────────
+            const classification = (0, document_classifier_1.classifyDocument)({
+                text: ocrText,
+                visionHint: visionDocType
+                    ? { type: visionDocType, confidence: visionDocTypeConf ?? 0 }
+                    : null,
+            });
+            const wrongDoc = (0, document_classifier_1.checkDocumentType)(classification, "offer_letter");
+            if (wrongDoc) {
+                console.log(`[OfferCheck] Rejected: detected=${classification.type} conf=${classification.confidence} ` +
+                    `for upload="${req.file.originalname}"`);
+                return res.status(422).json(wrongDoc);
             }
             // ── Parse + screen ──────────────────────────────────────────────
             const parsed = (0, offer_screening_1.parseVisibleFields)(ocrText);

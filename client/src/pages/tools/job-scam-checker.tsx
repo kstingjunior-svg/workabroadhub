@@ -27,6 +27,11 @@ import {
   X,
 } from "lucide-react";
 import { isPaidUser } from "@/lib/plan";
+import {
+  WrongDocumentCard,
+  isWrongDocumentResponse,
+  type WrongDocumentPayload,
+} from "@/components/wrong-document-card";
 
 const SCAM_FAQS = [
   { q: "How common are overseas job scams targeting Kenyans?", a: "Job scams targeting Kenyans seeking overseas employment are extremely common. Fraudsters impersonate legitimate employers in the UK, UAE, Saudi Arabia, and Canada, charging fake processing fees, visa fees, or training fees. Thousands of Kenyans lose money every year. Our free checker helps you detect red flags before engaging with any employer." },
@@ -101,6 +106,7 @@ export default function JobScamChecker() {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [feedbackGiven, setFeedbackGiven] = useState<"yes" | "no" | null>(null);
+  const [wrongDoc, setWrongDoc] = useState<WrongDocumentPayload | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: userPlan } = useQuery<{ planId: string } | null>({
@@ -156,15 +162,24 @@ export default function JobScamChecker() {
         body: formData,
       });
       if (!res.ok) {
-        // Guard against non-JSON error responses (e.g. multer/express plain-text errors)
         const text = await res.text();
-        let msg = "File analysis failed. Please try pasting the text manually.";
-        try { msg = JSON.parse(text).message ?? msg; } catch {}
-        throw new Error(msg);
+        try {
+          const body = JSON.parse(text);
+          if (isWrongDocumentResponse(body)) {
+            const wrongErr: any = new Error(body.message);
+            wrongErr.wrongDocument = body;
+            throw wrongErr;
+          }
+          throw new Error(body.message ?? "File analysis failed. Please try pasting the text manually.");
+        } catch (parseErr: any) {
+          if (parseErr?.wrongDocument) throw parseErr;
+          throw new Error("File analysis failed. Please try pasting the text manually.");
+        }
       }
       return res.json() as Promise<ScamResult & { extractedText?: string }>;
     },
     onSuccess: (data) => {
+      setWrongDoc(null);
       if (data.extractedText) setText(data.extractedText);
       const { extractedText: _, ...scamResult } = data as any;
       setResult(scamResult);
@@ -173,6 +188,11 @@ export default function JobScamChecker() {
       generateReport(scamResult);
     },
     onError: (err: any) => {
+      if (err?.wrongDocument) {
+        setWrongDoc(err.wrongDocument);
+        setResult(null);
+        return;
+      }
       toast({ title: "File analysis failed", description: err.message, variant: "destructive" });
     },
   });
@@ -378,6 +398,16 @@ export default function JobScamChecker() {
             </Button>
           </CardContent>
         </Card>
+
+        {/* Wrong-document redirect */}
+        {wrongDoc && (
+          <div className="space-y-4 mt-6">
+            <WrongDocumentCard
+              payload={wrongDoc}
+              onTryAnother={() => { setWrongDoc(null); setUploadedFile(null); }}
+            />
+          </div>
+        )}
 
         {/* Results */}
         {result && cfg && (

@@ -34,6 +34,7 @@ const db_1 = require("../db");
 const openai_1 = require("../lib/openai");
 const extract_text_1 = require("../utils/extract-text");
 const visa_screening_1 = require("./visa-screening");
+const document_classifier_1 = require("./document-classifier");
 // ── Multer: 10 MB, images + PDF only ────────────────────────────────────────
 const upload = (0, multer_1.default)({
     storage: multer_1.default.memoryStorage(),
@@ -60,25 +61,33 @@ function guestFingerprint(req) {
     const ua = String(req.headers["user-agent"] ?? "");
     return crypto_1.default.createHash("sha256").update(`${ip}::${ua}`).digest("hex").slice(0, 32);
 }
-// ── OpenAI Vision: extract text + look for tampering ────────────────────────
+// ── OpenAI Vision: extract text + look for tampering + classify doc type ───
 async function runVisionPass(buffer, mimetype) {
     const base64 = buffer.toString("base64");
     const safeType = mimetype.startsWith("image/") ? mimetype : "image/jpeg";
-    const prompt = `You are reviewing a visa or work-permit image for a document-screening tool.
+    const prompt = `You are reviewing an uploaded image for a visa-screening tool.
 
 Return your response as valid JSON matching this exact shape:
 {
+  "documentType": "visa" | "cv" | "job_advert" | "offer_letter" | "unknown",
+  "documentTypeConfidence": 0-100 integer,
   "extractedText": "every visible line of text on the document, one per line",
   "visionNotes": "2-3 sentences describing what you see and any authenticity concerns",
-  "anomalyFlags": ["short phrases naming specific issues, e.g. 'font inconsistency in date field', 'copy-paste artifact around visa number'"],
-  "visionConfidence": 0-100 integer estimating how likely this looks like a genuine visa document
+  "anomalyFlags": ["short phrases naming specific issues, e.g. 'font inconsistency in date field'"],
+  "visionConfidence": 0-100 integer estimating how likely this looks like a GENUINE visa document (only meaningful if documentType='visa')
 }
 
 Rules:
-- extractedText: capture EVERY visible line, including numbers, dates, MRZ zone at the bottom. Preserve MRZ characters exactly including "<".
-- anomalyFlags: only include ACTUAL observations. If nothing looks off, return an empty array. Do not invent problems.
-- visionConfidence: 80-100 = looks genuine and consistent, 40-79 = some concerns, 0-39 = strong tampering indicators OR does not look like a visa at all.
-- If the image is not a visa/permit at all, set visionConfidence very low and add a flag.
+- documentType: choose ONE of the five values based on what you actually see:
+  • "visa"          — a visa page, work permit, residence permit, or similar government-issued travel/work document
+  • "cv"            — a CV or résumé (personal work history / education / skills)
+  • "job_advert"    — a job posting or recruitment advert (employer promoting a role)
+  • "offer_letter"  — a job offer letter (employer offering a specific role to a specific candidate)
+  • "unknown"       — none of the above with confidence, OR the image is not readable
+- documentTypeConfidence: how sure you are of the documentType choice.
+- extractedText: capture EVERY visible line, including numbers, dates, MRZ zone. Preserve MRZ characters exactly including "<".
+- anomalyFlags: only ACTUAL observations. Empty array if nothing off.
+- visionConfidence: only meaningful when documentType='visa'. Otherwise set to 0.
 - Return ONLY the JSON. No commentary, no code fences.`;
     try {
         const resp = await openai_1.openai.chat.completions.create({
@@ -101,6 +110,12 @@ Rules:
         });
         const raw = resp.choices[0]?.message?.content?.trim() ?? "";
         const parsed = JSON.parse(raw);
+        const validTypes = new Set(["visa", "cv", "job_advert", "offer_letter", "unknown"]);
+        const rawType = String(parsed.documentType ?? "").toLowerCase();
+        const documentType = validTypes.has(rawType) ? rawType : null;
+        const documentTypeConfidence = typeof parsed.documentTypeConfidence === "number"
+            ? Math.max(0, Math.min(100, Math.round(parsed.documentTypeConfidence)))
+            : null;
         return {
             text: String(parsed.extractedText ?? ""),
             vision: {
@@ -110,11 +125,13 @@ Rules:
                     ? Math.max(0, Math.min(100, Math.round(parsed.visionConfidence)))
                     : null,
             },
+            documentType,
+            documentTypeConfidence,
         };
     }
     catch (err) {
         console.warn("[VisaCheck] Vision pass failed:", err?.message);
-        return { text: "", vision: null };
+        return { text: "", vision: null, documentType: null, documentTypeConfidence: null };
     }
 }
 // ── Field parsing from OCR text ─────────────────────────────────────────────
@@ -242,17 +259,19 @@ function registerVisaCheckRoute(app) {
             let ocrText = "";
             let ocrMethod = "";
             let vision = null;
+            let visionDocType = null;
+            let visionDocTypeConf = null;
             if (req.file.mimetype === "application/pdf") {
                 const extracted = await (0, extract_text_1.extractTextFromBuffer)(req.file.buffer, req.file.mimetype, req.file.originalname).catch(() => ({ text: "", method: "error" }));
                 ocrText = extracted.text ?? "";
                 ocrMethod = extracted.method ?? "pdf";
-                // Vision pass is skipped for pure PDFs — they usually have a
-                // clean text layer already. If the PDF was a scan we still try:
                 if (ocrText.trim().length < 50) {
                     const v = await runVisionPass(req.file.buffer, "image/jpeg").catch(() => null);
                     if (v) {
                         ocrText = v.text;
                         vision = v.vision;
+                        visionDocType = v.documentType;
+                        visionDocTypeConf = v.documentTypeConfidence;
                         ocrMethod += "+vision";
                     }
                 }
@@ -261,12 +280,30 @@ function registerVisaCheckRoute(app) {
                 const v = await runVisionPass(req.file.buffer, req.file.mimetype);
                 ocrText = v.text;
                 vision = v.vision;
+                visionDocType = v.documentType;
+                visionDocTypeConf = v.documentTypeConfidence;
                 ocrMethod = "vision";
             }
             if (!ocrText || ocrText.trim().length < 20) {
                 return res.status(422).json({
                     message: "Could not read enough text from the image. Try a clearer photo or a PDF export.",
                 });
+            }
+            // ── Document-type gate ─────────────────────────────────────────
+            // Refuse to run visa screening on a CV / job advert / offer letter
+            // and point the user to the correct tool. Runs after OCR so we have
+            // text to classify; uses the AI vision hint when available.
+            const classification = (0, document_classifier_1.classifyDocument)({
+                text: ocrText,
+                visionHint: visionDocType
+                    ? { type: visionDocType, confidence: visionDocTypeConf ?? 0 }
+                    : null,
+            });
+            const wrongDoc = (0, document_classifier_1.checkDocumentType)(classification, "visa");
+            if (wrongDoc) {
+                console.log(`[VisaCheck] Rejected: detected=${classification.type} conf=${classification.confidence} ` +
+                    `for upload="${req.file.originalname}"`);
+                return res.status(422).json(wrongDoc);
             }
             // ── Parse + screen ──────────────────────────────────────────────
             const parsed = parseVisibleFields(ocrText);

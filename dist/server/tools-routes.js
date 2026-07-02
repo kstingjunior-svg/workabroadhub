@@ -33,6 +33,7 @@ const storage_1 = require("./storage");
 const schema_1 = require("../shared/schema");
 const openai_1 = require("./lib/openai");
 const extract_text_1 = require("./utils/extract-text");
+const document_classifier_1 = require("./tools/document-classifier");
 // ── Multer config (memory storage, 5 MB limit, PDF/DOCX only) ─────────────────
 const upload = (0, multer_1.default)({
     storage: multer_1.default.memoryStorage(),
@@ -328,6 +329,19 @@ function registerToolsRoutes(app, isAuthenticated, isAdmin) {
             }
             const { text: cvText, method: extractMethod } = await (0, extract_text_1.extractTextFromBuffer)(req.file.buffer, req.file.mimetype, req.file.originalname);
             console.log(`[ATS Check] Extracted ${cvText.length} chars via ${extractMethod}`);
+            // ── Document-type gate ──────────────────────────────────────────────
+            // Refuse to analyse a visa / job advert / offer letter as a CV; point
+            // the user at the correct tool. Only run when we have enough text to
+            // classify (below the floor we fall through to the base64-PDF path
+            // which will fail its own sanity checks if the doc isn't a CV).
+            if (cvText.trim().length >= 200) {
+                const classification = (0, document_classifier_1.classifyDocument)({ text: cvText });
+                const wrongDoc = (0, document_classifier_1.checkDocumentType)(classification, "cv");
+                if (wrongDoc) {
+                    console.log(`[ATS Check] Rejected: detected=${classification.type} conf=${classification.confidence} for "${req.file.originalname}"`);
+                    return res.status(422).json(wrongDoc);
+                }
+            }
             // ── Determine if user is logged in for full results gating ────────────
             const isLoggedIn = !!req.user?.id;
             // ── Build the AI message payload ──────────────────────────────────────
@@ -625,6 +639,18 @@ Return ONLY the JSON object, no markdown, no extra text.`;
             }
             else {
                 return res.status(415).json({ message: "Unsupported file type. Please upload an image (JPG, PNG, WEBP, screenshot), PDF, or Word document." });
+            }
+            // ── Document-type gate ──────────────────────────────────────────────
+            // Refuse to analyse a CV / visa / offer letter as a job advert;
+            // point the user at the correct tool. Only when we have enough text
+            // to classify meaningfully.
+            if (extractedText.trim().length >= 150) {
+                const classification = (0, document_classifier_1.classifyDocument)({ text: extractedText });
+                const wrongDoc = (0, document_classifier_1.checkDocumentType)(classification, "job_advert");
+                if (wrongDoc) {
+                    console.log(`[ScamFileCheck] Rejected: detected=${classification.type} conf=${classification.confidence}`);
+                    return res.status(422).json(wrongDoc);
+                }
             }
             const result = await analyzeScamHybrid(extractedText.slice(0, 5000));
             res.json({ ...result, extractedText: extractedText.slice(0, 3000) });
