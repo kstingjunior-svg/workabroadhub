@@ -1248,6 +1248,17 @@ async function registerRoutes(httpServer, app) {
     // Firebase RTDB writes were skipped during a webhook timeout.
     const { registerAdminRevenueSummaryRoute } = await Promise.resolve().then(() => __importStar(require("./routes/admin-revenue-summary")));
     registerAdminRevenueSummaryRoute(app, auth_1.isAuthenticated, isAdmin);
+    // 2026-06 RC1 Sync Engine Developer Operations Dashboard.
+    // Internal-only metrics + triage endpoints for the agency
+    // synchronization subsystem. See docs/rc1/04_PRODUCTION_READINESS.md.
+    //   GET /api/admin/sync/dashboard
+    //   GET /api/admin/sync/runs
+    //   GET /api/admin/sync/runs/:runId
+    //   GET /api/admin/sync/snapshots
+    //   GET /api/admin/sync/events
+    //   GET /api/admin/sync/providers/:slug/health
+    const { registerSyncDashboardRoutes } = await Promise.resolve().then(() => __importStar(require("./routes/admin-sync-dashboard")));
+    registerSyncDashboardRoutes(app, auth_1.isAuthenticated, isAdmin);
     // Track active sessions for the admin dashboard real-time counter.
     // Must run after setupAuth so req.session is populated.
     app.use(active_users_1.trackActiveUser);
@@ -18970,6 +18981,11 @@ Rules:
     // ═══════════════════════════════════════════════════════════════════════════
     const { registerToolsRoutes } = await Promise.resolve().then(() => __importStar(require("./tools-routes")));
     registerToolsRoutes(app, auth_1.isAuthenticated, isAdmin);
+    // 2026-07 Visa Screening free tool.
+    //   POST /api/tools/visa-check — upload visa image/PDF, get risk report.
+    // See server/tools/visa-screening.ts + visa-check-endpoint.ts.
+    const { registerVisaCheckRoute } = await Promise.resolve().then(() => __importStar(require("./tools/visa-check-endpoint")));
+    registerVisaCheckRoute(app);
     // ═══════════════════════════════════════════════════════════════════════════
     // SERVICE ORDER FLOW — unified upload → pay → AI → download for paid services
     // (CV Fix Lite, ATS, Cover Letter, SOP, Country CV Rewrite, Motivation, etc.)

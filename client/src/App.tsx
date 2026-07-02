@@ -217,6 +217,7 @@ const CVTemplates = lazyWithRetry(() => import("@/pages/tools/cv-templates"));
 const JobApplicationAssistant = lazyWithRetry(() => import("@/pages/tools/job-application-assistant"));
 const ToolReport = lazyWithRetry(() => import("@/pages/tools/tool-report"));
 const BulkAgencyVerify = lazyWithRetry(() => import("@/pages/tools/bulk-agency-verify"));
+const VisaCheck = lazyWithRetry(() => import("@/pages/tools/visa-check"));
 const AdminErrorMonitor = lazyWithRetry(() => import("@/pages/admin/error-monitor"));
 
 // =============================================================================
@@ -479,6 +480,7 @@ const LazyCVTemplates = withSuspense(CVTemplates);
 const LazyJobApplicationAssistant = withSuspense(JobApplicationAssistant);
 const LazyToolReport = withSuspense(ToolReport);
 const LazyBulkAgencyVerify = withSuspense(BulkAgencyVerify);
+const LazyVisaCheck = withSuspense(VisaCheck);
 const LazyGlobalOpportunities = withSuspense(GlobalOpportunities);
 
 // =============================================================================
@@ -640,6 +642,7 @@ function AuthenticatedRoutes() {
       <Route path="/tools/job-scam-checker" component={LazyJobScamChecker} />
       <Route path="/tools/visa-sponsorship-jobs" component={LazyVisaSponsorshipJobs} />
       <Route path="/tools/bulk-agency-verify" component={LazyBulkAgencyVerify} />
+      <Route path="/tools/visa-check" component={LazyVisaCheck} />
       <Route path="/global-opportunities" component={LazyGlobalOpportunities} />
       <Route path="/tools/cv-templates" component={LazyCVTemplates} />
       <Route path="/tools/job-application-assistant" component={LazyJobApplicationAssistant} />
@@ -760,6 +763,7 @@ function Router() {
         <Route path="/tools/job-scam-checker" component={LazyJobScamChecker} />
         <Route path="/tools/visa-sponsorship-jobs" component={LazyVisaSponsorshipJobs} />
         <Route path="/tools/bulk-agency-verify" component={LazyBulkAgencyVerify} />
+      <Route path="/tools/visa-check" component={LazyVisaCheck} />
         <Route path="/tools/cv-templates" component={LazyCVTemplates} />
         <Route path="/tools/job-application-assistant" component={LazyJobApplicationAssistant} />
         <Route path="/report/:toolName/:reportId" component={LazyToolReport} />

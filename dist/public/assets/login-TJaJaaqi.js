@@ -1,1 +1,0 @@
-import{al as a,r as o}from"./index-p34_uCGg.js";function s(){const[,t]=a();return o.useEffect(()=>{const e=new URLSearchParams(window.location.search).get("redirect"),r=e?`/?redirect=${encodeURIComponent(e)}`:"/";t(r,{replace:!0})},[]),null}export{s as default};

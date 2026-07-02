@@ -449,6 +449,21 @@ app.use((req, res, next) => {
 // ─────────────────────────────────────────────────────────────────────────────
 (async () => {
     try {
+        // 2026-06 RC1 Sync Engine: fail-fast config validation.
+        // Asserts DATABASE_URL + SESSION_SECRET are present BEFORE we register
+        // any provider or open a pool. Soft warnings (SENTRY_DSN absent,
+        // NODE_ENV unusual, etc.) are logged but non-fatal.
+        // See server/sync/hardening.ts and docs/rc1/PRODUCTION_CHECKLIST.md (B).
+        try {
+            const { validateConfigOrPanic } = await Promise.resolve().then(() => __importStar(require("./sync/hardening")));
+            validateConfigOrPanic();
+        }
+        catch (cfgErr) {
+            console.error("[Server] ❌ Sync engine config validation failed:", cfgErr?.message);
+            // Re-throw — this is a deliberate fail-fast. Boot must not continue
+            // if required env vars are missing.
+            throw cfgErr;
+        }
         // IMPORTANT:
         // registerRoutes(app)
         // NOT registerRoutes(httpServer, app)

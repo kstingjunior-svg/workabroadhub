@@ -12,6 +12,25 @@
     <meta http-equiv="Expires"       content="0" />
     <meta name="version"             content="2026.04.14.003" />
 
+    <!-- 2026-06: Theme persistence — eliminates the flash-of-wrong-theme.
+         Runs SYNCHRONOUSLY before React mounts (and before any styles paint),
+         so the `dark` class is on <html> before the first pixel renders.
+         Reads localStorage.theme; falls back to OS preference if unset.
+         Self-contained, swallows any error so it can never break the page. -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("theme");
+          var prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+          if (t === "dark" || (!t && prefersDark)) {
+            document.documentElement.classList.add("dark");
+          } else {
+            document.documentElement.classList.remove("dark");
+          }
+        } catch (e) { /* never break the page over theme */ }
+      })();
+    </script>
+
     <!-- Version-check: detects when a new build is deployed and offers a reload.
          Works by comparing the content-hash that Vite embeds in the main bundle's
          filename (e.g. "/assets/main-Ab3kQ9.js") between page loads.
@@ -161,6 +180,12 @@
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin="anonymous">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
+
+    <!-- 2026-06 design foundation: Fraunces (display + headings, variable
+         font with optical sizing) + Manrope (body + UI). Loaded with
+         display=swap so first paint isn't blocked. See PART 1 of the
+         WorkAbroad Hub design system spec. -->
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,300..700&family=Manrope:wght@300..700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;1,400&family=Architects+Daughter&family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Fira+Code:wght@300..700&family=Geist+Mono:wght@100..900&family=Geist:wght@100..900&family=IBM+Plex+Mono:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;1,100;1,200;1,300;1,400;1,500;1,600;1,700&family=IBM+Plex+Sans:ital,wght@0,100..700;1,100..700&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Lora:ital,wght@0,400..700;1,400..700&family=Merriweather:ital,opsz,wght@0,18..144,300..900;1,18..144,300..900&family=Montserrat:ital,wght@0,100..900;1,100..900&family=Open+Sans:ital,wght@0,300..800;1,300..800&family=Outfit:wght@100..900&family=Oxanium:wght@200..800&family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&family=Roboto+Mono:ital,wght@0,100..700;1,100..700&family=Roboto:ital,opsz,wght@0,8..144,100..900;1,8..144,100..900&family=Source+Code+Pro:ital,wght@0,200..900;1,200..900&family=Source+Serif+4:ital,opsz,wght@0,8..60,200..900;1,8..60,200..900&family=Space+Grotesk:wght@300..700&family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
     
     <!-- Organization Schema (LocalBusiness + ProfessionalService) -->
@@ -366,8 +391,15 @@
       ]
     }
     </script>
-    <script type="module" crossorigin src="/assets/index-p34_uCGg.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-B4AvcXsb.css">
+    <script type="module" crossorigin src="/assets/index-tEjZ6kiV.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/react-vendor-r13h66Nr.js">
+    <link rel="modulepreload" crossorigin href="/assets/vendor-BYT3tqSa.js">
+    <link rel="modulepreload" crossorigin href="/assets/router-vendor-Dslbjqcu.js">
+    <link rel="modulepreload" crossorigin href="/assets/query-vendor-BU5kfurC.js">
+    <link rel="modulepreload" crossorigin href="/assets/ui-vendor-BpjdfYeq.js">
+    <link rel="modulepreload" crossorigin href="/assets/i18n-vendor-DM6u5B64.js">
+    <link rel="modulepreload" crossorigin href="/assets/firebase-vendor-CrEDS3kv.js">
+    <link rel="stylesheet" crossorigin href="/assets/index-C5h6gGhg.css">
   </head>
   <body>
     <div id="root"></div>

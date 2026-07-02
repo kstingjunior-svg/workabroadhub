@@ -1424,6 +1424,18 @@ export async function registerRoutes(
   const { registerAdminRevenueSummaryRoute } = await import("./routes/admin-revenue-summary");
   registerAdminRevenueSummaryRoute(app, isAuthenticated, isAdmin);
 
+  // 2026-06 RC1 Sync Engine Developer Operations Dashboard.
+  // Internal-only metrics + triage endpoints for the agency
+  // synchronization subsystem. See docs/rc1/04_PRODUCTION_READINESS.md.
+  //   GET /api/admin/sync/dashboard
+  //   GET /api/admin/sync/runs
+  //   GET /api/admin/sync/runs/:runId
+  //   GET /api/admin/sync/snapshots
+  //   GET /api/admin/sync/events
+  //   GET /api/admin/sync/providers/:slug/health
+  const { registerSyncDashboardRoutes } = await import("./routes/admin-sync-dashboard");
+  registerSyncDashboardRoutes(app, isAuthenticated, isAdmin);
+
   // Track active sessions for the admin dashboard real-time counter.
   // Must run after setupAuth so req.session is populated.
   app.use(trackActiveUser);
@@ -20401,6 +20413,12 @@ Rules:
   // ═══════════════════════════════════════════════════════════════════════════
   const { registerToolsRoutes } = await import("./tools-routes");
   registerToolsRoutes(app, isAuthenticated, isAdmin);
+
+  // 2026-07 Visa Screening free tool.
+  //   POST /api/tools/visa-check — upload visa image/PDF, get risk report.
+  // See server/tools/visa-screening.ts + visa-check-endpoint.ts.
+  const { registerVisaCheckRoute } = await import("./tools/visa-check-endpoint");
+  registerVisaCheckRoute(app);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // SERVICE ORDER FLOW — unified upload → pay → AI → download for paid services

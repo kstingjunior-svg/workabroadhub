@@ -1,0 +1,1 @@
+import{a}from"./react-vendor-r13h66Nr.js";import{u as n}from"./router-vendor-Dslbjqcu.js";import"./vendor-BYT3tqSa.js";function p(){const[,r]=n();return a.useEffect(()=>{const e=new URLSearchParams(window.location.search).get("redirect"),t=e&&/^\/(?![/\\])/.test(e)?e:null,o=t?`/?redirect=${encodeURIComponent(t)}`:"/";r(o,{replace:!0})},[]),null}export{p as default};
