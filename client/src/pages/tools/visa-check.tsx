@@ -24,6 +24,7 @@ import {
   isWrongDocumentResponse,
   type WrongDocumentPayload,
 } from "@/components/wrong-document-card";
+import { AskNanjilaButton } from "@/components/ask-nanjila-button";
 import {
   ShieldCheck,
   ShieldAlert,
@@ -378,15 +379,24 @@ export default function VisaCheckPage() {
           <>
             <ResultCard result={result} />
 
-            <div className="mt-6 flex gap-3">
-              <Button onClick={reset} className="flex-1" size="lg">
-                Screen another visa
-              </Button>
-              <Link href="/services/order/work_permit_uae_light" className="flex-1">
-                <Button variant="outline" className="w-full" size="lg">
-                  Get a proper permit guide
+            <div className="mt-6 space-y-3">
+              <AskNanjilaButton
+                topic="visa"
+                summary={`${result.riskBand} risk — score ${result.riskScore}/100`}
+                variant="default"
+                size="lg"
+                className="w-full bg-indigo-600 hover:bg-indigo-700"
+              />
+              <div className="flex gap-3">
+                <Button onClick={reset} className="flex-1" size="lg" variant="outline">
+                  Screen another visa
                 </Button>
-              </Link>
+                <Link href="/services/order/work_permit_uae_light" className="flex-1">
+                  <Button variant="outline" className="w-full" size="lg">
+                    Get a proper permit guide
+                  </Button>
+                </Link>
+              </div>
             </div>
 
             <p className="mt-6 text-xs text-slate-500 dark:text-slate-400 text-center leading-relaxed">

@@ -25,6 +25,7 @@ import {
   isWrongDocumentResponse,
   type WrongDocumentPayload,
 } from "@/components/wrong-document-card";
+import { AskNanjilaButton } from "@/components/ask-nanjila-button";
 import {
   ShieldCheck,
   AlertTriangle,
@@ -384,15 +385,24 @@ export default function OfferCheckPage() {
           <>
             <ResultCard result={result} />
 
-            <div className="mt-6 flex gap-3">
-              <Button onClick={reset} className="flex-1 bg-orange-600 hover:bg-orange-700" size="lg">
-                Screen another offer
-              </Button>
-              <Link href="/services/order/employer_verification" className="flex-1">
-                <Button variant="outline" className="w-full" size="lg">
-                  Get a paid employer check
+            <div className="mt-6 space-y-3">
+              <AskNanjilaButton
+                topic="offer"
+                summary={`${result.riskBand} risk — score ${result.riskScore}/100`}
+                variant="default"
+                size="lg"
+                className="w-full bg-orange-600 hover:bg-orange-700"
+              />
+              <div className="flex gap-3">
+                <Button onClick={reset} className="flex-1" size="lg" variant="outline">
+                  Screen another offer
                 </Button>
-              </Link>
+                <Link href="/services/order/employer_verification" className="flex-1">
+                  <Button variant="outline" className="w-full" size="lg">
+                    Get a paid employer check
+                  </Button>
+                </Link>
+              </div>
             </div>
 
             <p className="mt-6 text-xs text-slate-500 dark:text-slate-400 text-center leading-relaxed">

@@ -32,6 +32,7 @@ import {
   isWrongDocumentResponse,
   type WrongDocumentPayload,
 } from "@/components/wrong-document-card";
+import { AskNanjilaButton } from "@/components/ask-nanjila-button";
 
 const SCAM_FAQS = [
   { q: "How common are overseas job scams targeting Kenyans?", a: "Job scams targeting Kenyans seeking overseas employment are extremely common. Fraudsters impersonate legitimate employers in the UK, UAE, Saudi Arabia, and Canada, charging fake processing fees, visa fees, or training fees. Thousands of Kenyans lose money every year. Our free checker helps you detect red flags before engaging with any employer." },
@@ -482,6 +483,16 @@ export default function JobScamChecker() {
                 )}
               </CardContent>
             </Card>
+
+            {/* Ask Nanjila — protective coaching after any risk finding */}
+            <div className="flex justify-center">
+              <AskNanjilaButton
+                topic="scam"
+                summary={`${result.riskLevel} risk — score ${result.riskScore}/100`}
+                variant={result.riskLevel === "high" ? "default" : "outline"}
+                className={result.riskLevel === "high" ? "bg-red-600 hover:bg-red-700 text-white" : ""}
+              />
+            </div>
 
             {/* Share bar */}
             {reportId && <ReportShareBar toolName="scam" reportId={reportId} />}

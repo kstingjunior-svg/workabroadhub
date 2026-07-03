@@ -33,6 +33,7 @@ import {
   isWrongDocumentResponse,
   type WrongDocumentPayload,
 } from "@/components/wrong-document-card";
+import { AskNanjilaButton } from "@/components/ask-nanjila-button";
 
 const ATS_FAQS = [
   { q: "What is an ATS and why does it matter for overseas jobs?", a: "ATS (Applicant Tracking System) is software used by 99% of large employers in the UK, Canada, UAE, and Australia to filter CVs before a human reads them. A CV that fails ATS parsing is rejected automatically, even if you are qualified. Our checker analyses your CV against ATS criteria so you can fix issues before applying." },
@@ -371,6 +372,15 @@ export default function ATSCVChecker() {
                 )}
               </CardContent>
             </Card>
+
+            {/* Ask Nanjila — turns the one-off check into a coaching conversation */}
+            <div className="flex justify-center">
+              <AskNanjilaButton
+                topic="cv"
+                summary={`score ${result.score}/100`}
+                variant="outline"
+              />
+            </div>
 
             {/* Share bar — shown as soon as report is generated */}
             {reportId && !result.locked && (
