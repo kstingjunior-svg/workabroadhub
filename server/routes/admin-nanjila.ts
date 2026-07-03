@@ -259,27 +259,4 @@ export function registerAdminNanjilaRoutes(
       }
     },
   );
-
-  // ── GET /api/admin/nanjila/concurrency ───────────────────────────────────
-  //
-  // Live capacity snapshot. Assembles process (heap/CPU/event-loop), DB pool
-  // stats, BullMQ queue depths, and recent AI activity in a single object.
-  // Used by the /admin/nanjila-ops dashboard which auto-refreshes every 3s.
-  //
-  // Response shape: see ConcurrencySnapshot in server/nanjila/ops/concurrency.ts
-  // Cost: ~50-200ms depending on DB responsiveness.
-  app.get(
-    "/api/admin/nanjila/concurrency",
-    isAuthenticated, isAdmin,
-    async (_req, res: Response) => {
-      try {
-        const { collectConcurrencySnapshot } = await import("../nanjila/ops/concurrency");
-        const snapshot = await collectConcurrencySnapshot();
-        res.json(snapshot);
-      } catch (err: any) {
-        console.error("[/api/admin/nanjila/concurrency] failed:", err);
-        res.status(500).json({ error: err?.message ?? String(err) });
-      }
-    },
-  );
 }

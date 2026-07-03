@@ -220,7 +220,6 @@ const BulkAgencyVerify = lazyWithRetry(() => import("@/pages/tools/bulk-agency-v
 const VisaCheck = lazyWithRetry(() => import("@/pages/tools/visa-check"));
 const OfferCheck = lazyWithRetry(() => import("@/pages/tools/offer-check"));
 const AdminErrorMonitor = lazyWithRetry(() => import("@/pages/admin/error-monitor"));
-const AdminNanjilaOps = lazyWithRetry(() => import("@/pages/admin/nanjila-ops"));
 
 // =============================================================================
 // Loading Components
@@ -472,7 +471,6 @@ const LazyAdminModeration = withSuspense(AdminModeration);
 // in the route list).
 const LazyAdminSupabaseStats = withSuspense(AdminSupabaseStats);
 const LazyAdminErrorMonitor = withSuspense(AdminErrorMonitor);
-const LazyAdminNanjilaOps = withSuspense(AdminNanjilaOps);
 const LazyPayPage           = withSuspense(PayPage);
 const LazyCommunityPortals = withSuspense(CommunityPortals);
 const LazyToolsHub = withSuspense(ToolsHub);
@@ -599,7 +597,6 @@ function AuthenticatedRoutes() {
       <Route path="/admin/plans" component={LazyAdminPlans} />
       <Route path="/admin/logs" component={LazyAdminLogs} />
       <Route path="/admin/error-monitor" component={LazyAdminErrorMonitor} />
-      <Route path="/admin/nanjila-ops" component={LazyAdminNanjilaOps} />
       <Route path="/admin/funnel" component={LazyAdminFunnel} />
       <Route path="/admin/success-stories" component={LazyAdminSuccessStories} />
       <Route path="/admin/reported-agencies" component={LazyAdminReportedAgencies} />
