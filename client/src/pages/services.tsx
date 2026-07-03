@@ -150,75 +150,8 @@ export default function Services() {
     "ats_cover_bundle",
   ]);
 
-  // 2026-07 Bug fix: free services (price === 0) were being pushed through
-  // /api/pay with amount=0, which the payment endpoint correctly rejects
-  // ("amount and service_id are required"). Real cause: these are actually
-  // free TOOLS, not paid services — they belong under /tools/* not /api/pay.
-  //
-  // This map routes each known free service to its tool page. Any free
-  // service NOT in this map falls back to /tools (the tools index) so the
-  // user still lands somewhere sensible instead of a payment error.
-  //
-  // Match order: service.code → service.slug → service.id → lowercased name.
-  const FREE_SERVICE_TOOL_ROUTES: Record<string, string> = {
-    // CV Health Check — the free ATS scoring tool
-    "cv_health_check":     "/tools/ats-cv-checker",
-    "ats_cv_checker":      "/tools/ats-cv-checker",
-    "cv_check":            "/tools/ats-cv-checker",
-    "ats_check":           "/tools/ats-cv-checker",
-
-    // Job scam checker
-    "job_scam_checker":    "/tools/job-scam-checker",
-    "scam_checker":        "/tools/job-scam-checker",
-    "scam_check":          "/tools/job-scam-checker",
-
-    // Visa Screening
-    "visa_check":          "/tools/visa-check",
-    "visa_screening":      "/tools/visa-check",
-
-    // Offer Letter Screener
-    "offer_check":         "/tools/offer-check",
-    "offer_letter_check":  "/tools/offer-check",
-    "offer_letter_screener":"/tools/offer-check",
-
-    // Free CV Templates
-    "cv_templates":        "/tools/cv-templates",
-    "free_cv_templates":   "/tools/cv-templates",
-
-    // Bulk agency verifier
-    "bulk_agency_verify":  "/tools/bulk-agency-verify",
-    "agency_verify":       "/tools/bulk-agency-verify",
-    "nea_agency_check":    "/tools/bulk-agency-verify",
-  };
-
-  /**
-   * Resolve the correct /tools/* route for a free service, or null if
-   * we can't map it — caller falls back to the /tools index.
-   */
-  function resolveFreeServiceRoute(service: Service): string | null {
-    const candidates = [
-      String(service.code ?? "").toLowerCase(),
-      String(service.slug ?? "").toLowerCase(),
-      String(service.id ?? "").toLowerCase(),
-      String(service.name ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, ""),
-    ].filter(Boolean);
-    for (const key of candidates) {
-      if (FREE_SERVICE_TOOL_ROUTES[key]) return FREE_SERVICE_TOOL_ROUTES[key];
-    }
-    return null;
-  }
-
   async function startPayment(service: Service) {
     trackServerEvent("click_service", { serviceId: service.id });
-
-    // ── FREE SERVICE SHORT-CIRCUIT ──────────────────────────────────────
-    // price === 0 services are free TOOLS, not paid orders. Route them to
-    // their /tools/* page. Never send amount=0 through /api/pay.
-    if (service.price === 0) {
-      const toolRoute = resolveFreeServiceRoute(service);
-      navigate(toolRoute ?? "/tools");
-      return;
-    }
 
     // Route AI-delivered services through the new unified order flow
     const slug = (service.code ?? service.slug ?? service.id ?? "").toLowerCase();
