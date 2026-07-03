@@ -1436,6 +1436,18 @@ export async function registerRoutes(
   const { registerSyncDashboardRoutes } = await import("./routes/admin-sync-dashboard");
   registerSyncDashboardRoutes(app, isAuthenticated, isAdmin);
 
+  // 2026-07 Nanjila OS-evolution Phase A admin endpoints.
+  //   GET   /api/admin/nanjila/flags
+  //   GET   /api/admin/nanjila/capabilities
+  //   PATCH /api/admin/nanjila/capabilities/:slug
+  //   GET   /api/admin/nanjila/trust/:userId
+  //   POST  /api/admin/nanjila/trust/:userId/refresh
+  //   POST  /api/admin/nanjila/trust/sweep
+  //   GET   /api/admin/nanjila/queue
+  // See docs/nanjila/OS_EVOLUTION_PLAN.md §16 Phase A.
+  const { registerAdminNanjilaRoutes } = await import("./routes/admin-nanjila");
+  registerAdminNanjilaRoutes(app, isAuthenticated, isAdmin);
+
   // Track active sessions for the admin dashboard real-time counter.
   // Must run after setupAuth so req.session is populated.
   app.use(trackActiveUser);
