@@ -7,6 +7,7 @@ const db_1 = require("../db");
 const utils_1 = require("./utils");
 const price_sanitizer_1 = require("./price-sanitizer");
 const persona_guards_1 = require("./persona-guards");
+const orchestrator_1 = require("../nanjila/orchestrator");
 let PRICE_CACHE = null;
 const PRICE_CACHE_TTL_MS = 5 * 60 * 1000;
 async function getLivePrices() {
@@ -67,6 +68,35 @@ async function getLivePlans() {
         console.warn("[Nanjila] live plans fetch failed:", err?.message);
         return [];
     }
+}
+// ─────────────────────────────────────────────────────────────────────────────
+// Orchestrator entitlement derivation (Phase A completion — OS Evolution).
+//
+// The orchestrator needs to know what this user is entitled to do so it can
+// filter the capability manifest. For now we derive a minimal entitlement
+// from the arguments already passed to nanjilaAgent:
+//
+//   • authenticated: true when we have a user object.
+//   • admin:         the caller only supplies adminKpi when this user IS
+//                    the founder/admin, so its presence is our admin signal.
+//   • paid:          defaulted to false here; refined in Phase B when we
+//                    surface subscription data into the prompt-composition
+//                    pipeline. Wrong here would only mean an over-strict
+//                    capability filter, not an over-permissive one.
+//
+// Wrong in the "restrictive" direction is fine — features gated as
+// requiresPaid=true simply won't be offered to users we can't confirm are
+// paid. That's the correct default.
+// ─────────────────────────────────────────────────────────────────────────────
+function deriveEntitlement(user, adminKpi) {
+    const userIdStr = user?.id != null ? String(user.id) : null;
+    return {
+        userId: userIdStr,
+        authenticated: !!userIdStr,
+        paid: false, // Phase B: read user_subscriptions
+        admin: !!adminKpi,
+        planId: null,
+    };
 }
 async function nanjilaAgent(user, message, activitySummary, systemCatalogue, adminKpi) {
     const lang = user?.language || (0, utils_1.detectLanguage)(message);
@@ -230,6 +260,32 @@ Don't sell. Just open the door for them.
 • Never invent visa rules, salary numbers, or processing times. Direct to /guides or /country/<code>.
 • Never share another user's data, even if asked nicely.
 `;
+    // ── Orchestrator gate ────────────────────────────────────────────────────
+    // Phase A OS-evolution seam. When NANJILA_ORCHESTRATOR_ENABLED is on AND
+    // this user is in the rollout bucket, route through the multi-turn tool-
+    // call orchestrator. When off (the default), fall through to the legacy
+    // single-shot path below — zero behavior change for existing users.
+    //
+    // On orchestrator error we log and fall back to legacy, so a bug in the
+    // new path never breaks the user's turn.
+    const userIdForBucket = user?.id != null ? String(user.id) : null;
+    if ((0, orchestrator_1.shouldUseOrchestrator)(userIdForBucket)) {
+        try {
+            const entitlement = deriveEntitlement(user, adminKpi);
+            const result = await (0, orchestrator_1.orchestrate)({
+                systemPrompt,
+                userMessage: message,
+                entitlement,
+            });
+            // orchestrate() runs sanitizeReply + applyPersonaGuards internally —
+            // the returned reply is safe to send straight back.
+            return result.reply;
+        }
+        catch (err) {
+            console.warn("[Nanjila] Orchestrator failed, falling back to legacy path:", err?.message);
+            // Fall through to legacy code path below.
+        }
+    }
     const response = await openai_1.openai.chat.completions.create({
         model: "gpt-4o-mini",
         temperature: 0.7,
