@@ -210,9 +210,13 @@ CREATE INDEX IF NOT EXISTS nanjila_job_scores_user_top_idx
 CREATE INDEX IF NOT EXISTS nanjila_job_scores_job_top_idx
   ON nanjila_job_scores (job_id, score DESC);
 
+-- Note: a partial predicate "WHERE stale_at < NOW()" would be rejected by
+-- Postgres with 42P17 ("functions in index predicate must be marked
+-- IMMUTABLE"), because NOW() is STABLE, not IMMUTABLE. A plain index on
+-- stale_at still serves the "find stale scores" query efficiently — the
+-- BullMQ worker filters WHERE stale_at < NOW() at query time.
 CREATE INDEX IF NOT EXISTS nanjila_job_scores_stale_idx
-  ON nanjila_job_scores (stale_at)
-  WHERE stale_at < NOW();
+  ON nanjila_job_scores (stale_at);
 
 -- ── 7. Additive column on user_job_applications for Migration Timeline ────
 --
