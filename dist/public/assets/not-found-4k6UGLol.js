@@ -1,1 +1,0 @@
-import{j as o}from"./react-vendor-r13h66Nr.js";import{O as r}from"./index-BcqykYm4.js";import"./router-vendor-Dslbjqcu.js";import"./vendor-BYT3tqSa.js";import"./query-vendor-BU5kfurC.js";import"./ui-vendor-DUnGUYrH.js";import"./i18n-vendor-DM6u5B64.js";import"./firebase-vendor-CrEDS3kv.js";function a(){return o.jsx(r,{type:"notfound",code:"404"})}export{a as default};
