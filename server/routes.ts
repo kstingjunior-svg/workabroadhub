@@ -19701,15 +19701,21 @@ Rules:
       baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
     });
 
-    // 2026-06: previously { free: 0, basic: 5, pro: Infinity } left trial,
-    // monthly and yearly tiers falling through to `?? 0` — i.e. KES 99 and
-    // KES 1,000 paying customers couldn't use Bulk Apply at all. Now every
-    // paying tier gets unlimited, with the legacy "basic" SKU capped at 5/day
-    // and trial getting a generous 10/day taste.
+    // 2026-07-03 POLICY: WAH does not charge per application. Applying to
+    // jobs is UNLIMITED inside your paid time-window. This limit is
+    // specifically for the AI COVER-LETTER GENERATION endpoint, which spends
+    // real OpenAI money per call. We keep a generous cap on the trial only
+    // (25 AI generations in 24h — enough for any real job hunt) and go
+    // Infinity for every paid monthly/yearly tier.
+    //
+    // If you're tempted to lower this: don't. The bad UX we're recovering
+    // from was a user who paid KES 99, hit a 3/day cap, and thought their
+    // money vanished. Better to overspend a few cents on OpenAI than to
+    // lose a paying customer's trust.
     const BULK_LIMITS: Record<string, number> = {
       free:         0,
-      trial:        10,
-      basic:        5,         // legacy KES 500 SKU
+      trial:        25,        // AI generation cap only — direct apply is unlimited
+      basic:        25,        // legacy KES 500 SKU (treated same as trial now)
       monthly:      Infinity,  // KES 1,000
       yearly:       Infinity,  // KES 4,500
       pro:          Infinity,  // alias for yearly
@@ -19770,15 +19776,23 @@ Rules:
           if (remaining <= 0) {
             return res.json({
               limitReached: true,
-              message: `You have used all ${dailyLimit} bulk applications for today. Your limit resets at midnight. Upgrade to Pro for unlimited applications.`,
+              // Bulk Apply generates AI cover letters. That's what's capped
+              // here — NOT the right to apply to jobs. Direct application
+              // is unlimited within your paid window; this cap only exists
+              // because each AI cover letter costs real money to generate.
+              message: `You've used your ${dailyLimit} AI-generated cover letters for today. You can still apply to any job manually — this only limits the AI writer. Upgrade to Monthly (KES 1,000) or Yearly (KES 4,500) for unlimited AI cover letters.`,
               usedToday,
               dailyLimit,
+              planStillActive: true,
+              affectsAiOnly: true,
             });
           }
           if (jobs.length > remaining) {
             return res.status(400).json({
-              message: `You can only apply to ${remaining} more job(s) today. Upgrade to Pro for higher limits.`,
+              message: `You have ${remaining} AI-generated cover letter${remaining === 1 ? "" : "s"} left today. Reduce your selection or write cover letters manually — direct applying is unlimited. Upgrade to Monthly/Yearly for unlimited AI generation.`,
               remaining,
+              planStillActive: true,
+              affectsAiOnly: true,
             });
           }
         }
@@ -19869,7 +19883,11 @@ Format as JSON: { "coverLetter": "...", "answers": [{"question": "...", "answer"
           const dailyLimit = BULK_LIMITS[planId] ?? 0;
           if (usedToday + applications.length > dailyLimit) {
             return res.status(400).json({
-              message: `Applying to ${applications.length} jobs would exceed your daily limit of ${dailyLimit}. You have ${Math.max(0, dailyLimit - usedToday)} remaining.`,
+              // Bulk submit is the finalise-step of AI Bulk Apply; the cap
+              // is on AI-drafted applications, not on the right to apply.
+              message: `Submitting ${applications.length} AI-drafted applications would exceed today's AI generation limit of ${dailyLimit}. You have ${Math.max(0, dailyLimit - usedToday)} AI credits left. Direct applying is unlimited — you can still apply to any job manually. Upgrade Monthly/Yearly for unlimited AI drafts.`,
+              planStillActive: true,
+              affectsAiOnly: true,
             });
           }
         }

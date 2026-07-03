@@ -201,11 +201,11 @@ export function KenyaCareersApplySheet({
               <CheckCircle2 className="h-10 w-10 text-emerald-600 mx-auto mb-2" />
               <h3 className="font-semibold mb-1">Application sent!</h3>
               <p className="text-sm text-muted-foreground mb-3">{submitted.message}</p>
-              {submitted.dailyLimit < 9999 && (
+              {submitted.appsToday && submitted.appsToday > 0 ? (
                 <p className="text-xs text-muted-foreground mb-4">
-                  You've used <strong>{submitted.appsToday}</strong> of <strong>{submitted.dailyLimit}</strong> applications today.
+                  You've applied to <strong>{submitted.appsToday}</strong> job{submitted.appsToday === 1 ? "" : "s"} in the last 24 hours. Your plan is unlimited — keep going.
                 </p>
-              )}
+              ) : null}
               <div className="flex gap-2 justify-center">
                 <Button onClick={onClose} variant="outline">Browse more jobs</Button>
                 <Button onClick={() => navigate("/kenya-careers/my-applications")} className="bg-emerald-600 hover:bg-emerald-700 text-white">
@@ -246,7 +246,8 @@ export function KenyaCareersApplySheet({
                   One trial subscription covers <strong>both</strong> the overseas board AND Kenya Careers:
                 </p>
                 <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
-                  <li>Apply to <strong>3 jobs per day</strong> (Trial) or <strong>20/day</strong> (Monthly) or <strong>unlimited</strong> (Yearly)</li>
+                  <li><strong>Unlimited applications</strong> — we don't charge per apply</li>
+                  <li>KES 99 = 24 hours &nbsp;·&nbsp; KES 1,000 = 30 days &nbsp;·&nbsp; KES 4,500 = 365 days</li>
                   <li>Verified overseas jobs in 9 countries</li>
                   <li>Salary comparison + country roadmaps</li>
                   <li>CV check + interview practice</li>
@@ -262,15 +263,15 @@ export function KenyaCareersApplySheet({
             </div>
           )}
 
-          {/* Daily limit hit */}
-          {!loading && !submitted && status?.reason === "daily_limit" && (
-            <div className="py-2" data-testid="apply-daily-limit">
+          {/* Rate-limit hit (per-minute bot brake; users almost never see this) */}
+          {!loading && !submitted && (status?.reason === "rate_limit" || status?.reason === "daily_limit") && (
+            <div className="py-2" data-testid="apply-rate-limit">
               <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 ring-1 ring-amber-200 dark:ring-amber-800 p-4 mb-3">
                 <AlertCircle className="h-5 w-5 text-amber-700 dark:text-amber-300 mb-2" />
                 <p className="text-sm">{status.message}</p>
               </div>
-              <Button className="w-full" onClick={() => navigate("/pricing")}>
-                See higher-tier plans
+              <Button className="w-full" variant="outline" onClick={onClose}>
+                Got it — I'll wait a moment
               </Button>
             </div>
           )}
@@ -293,9 +294,8 @@ export function KenyaCareersApplySheet({
                     {status.tier === "pro_referral" && "Your Pro (referral) plan is active"}
                   </strong>
                   {" — "}
-                  {status.dailyLimit >= 9999
-                    ? "unlimited applications today."
-                    : `${Math.max(0, status.dailyLimit - status.appsToday)} of ${status.dailyLimit} applications left today.`}
+                  {"unlimited applications inside your paid window."}
+                  {status.appsToday > 0 && ` You've applied to ${status.appsToday} in the last 24h.`}
                 </span>
               </div>
 
@@ -454,10 +454,10 @@ export function KenyaCareersApplySheet({
                 <p className="text-[10px] text-muted-foreground text-right mt-0.5">{coverNote.length} / 2000</p>
               </div>
 
-              {/* Daily-quota note */}
-              {status.dailyLimit < 9999 && (
+              {/* Running-total note (informational only — plan is unlimited) */}
+              {status.appsToday > 0 && (
                 <p className="text-xs text-muted-foreground">
-                  You've used <strong>{status.appsToday}</strong> of <strong>{status.dailyLimit}</strong> applications today.
+                  You've applied to <strong>{status.appsToday}</strong> job{status.appsToday === 1 ? "" : "s"} in the last 24 hours. Your plan is unlimited.
                 </p>
               )}
 

@@ -68,16 +68,53 @@ const VALID_EXPERIENCE       = new Set(["entry", "mid", "senior", "any"]);
 // from server/routes.ts / server/services/community.ts.
 const KENYA_CAREERS_PAID_TIERS = new Set(["trial", "basic", "monthly", "yearly", "pro", "pro_referral"]);
 
-// Per-day application limits by tier. Encourages upgrade without punishing
-// loyal customers. Yearly users get unlimited applications.
-const DAILY_LIMITS: Record<string, number> = {
-  trial:        3,
-  basic:        3,    // legacy alias for trial
-  monthly:     20,
-  yearly:    9999,    // effectively unlimited
-  pro:       9999,
-  pro_referral: 9999,
-};
+// ── Application volume policy ─────────────────────────────────────────────
+//
+// 2026-07-03 POLICY CHANGE: WAH does NOT charge per application. We charge
+// for TIME-BOUNDED ACCESS to the platform (KES 99 = 24h, KES 1,000 = 30d,
+// KES 4,500 = 365d). Applications inside your access window are unlimited.
+//
+// Why: capping applications made honest users think their subscription was
+// finished after a handful of applies. A user paid KES 99 at 11:45 AM, hit
+// the old 3/day cap, and thought "pesa imeisha" — WhatsApp complaint on
+// 3 July 2026 is what triggered this rewrite.
+//
+// The ONLY brake left is a per-minute rate limit that fires on bots, not
+// real users. 10 applies inside 60s is impossible for a human filling
+// forms; 5/min is a comfortable ceiling for the fastest real job hunter.
+//
+// See docs/pricing/TIME_BASED_ACCESS.md (if you touch this, update that).
+const APPLY_RATE_PER_MINUTE = 10;         // hard ceiling — bot brake only
+const APPLY_RATE_WINDOW_MS  = 60 * 1000;  // sliding 60-second window
+
+// In-memory sliding window per userId. Serverless-friendly enough for our
+// single-node Render deployment; if we ever move to multi-node this should
+// migrate to Redis (Upstash already used by BullMQ).
+const applyRateWindow = new Map<string, number[]>();
+
+function checkApplyRate(userId: string): { allowed: boolean; retryAfterSec: number } {
+  const now = Date.now();
+  const windowStart = now - APPLY_RATE_WINDOW_MS;
+  const recent = (applyRateWindow.get(userId) ?? []).filter(t => t > windowStart);
+  if (recent.length >= APPLY_RATE_PER_MINUTE) {
+    const oldest = recent[0];
+    const retryAfterSec = Math.max(1, Math.ceil((oldest + APPLY_RATE_WINDOW_MS - now) / 1000));
+    return { allowed: false, retryAfterSec };
+  }
+  recent.push(now);
+  applyRateWindow.set(userId, recent);
+  return { allowed: true, retryAfterSec: 0 };
+}
+
+// Periodic cleanup — old entries hang around forever otherwise.
+setInterval(() => {
+  const cutoff = Date.now() - APPLY_RATE_WINDOW_MS;
+  for (const [uid, arr] of applyRateWindow.entries()) {
+    const kept = arr.filter(t => t > cutoff);
+    if (kept.length === 0) applyRateWindow.delete(uid);
+    else applyRateWindow.set(uid, kept);
+  }
+}, 5 * 60 * 1000).unref?.();
 
 // Multer config — memory storage, 5 MB per file limit. Mirrors the existing
 // /api/upload-cv handler so users get a consistent experience.
@@ -675,8 +712,9 @@ export function registerLocalJobsRoutes(app: Express): void {
           reason:      "signin",
           tier:        null,
           appsToday:   0,
-          dailyLimit:  0,
-          message:     "Sign in or sign up first — applying is free with the KES 99 trial.",
+          dailyLimit:  null,
+          unlimited:   false,
+          message:     "Sign in or sign up first — unlimited applying with the KES 99 24-hour pass.",
         });
       }
 
@@ -690,13 +728,16 @@ export function registerLocalJobsRoutes(app: Express): void {
           reason:     "upgrade",
           tier,
           appsToday:  0,
-          dailyLimit: 0,
-          message:    "Unlock applying — KES 99 trial covers both overseas AND Kenya jobs.",
+          dailyLimit: null,
+          unlimited:  false,
+          message:    "Unlock unlimited applying — KES 99 gets you 24 hours, KES 1,000 gets you 30 days, KES 4,500 gets you a full year. No per-application charges.",
         });
       }
 
-      // Paid tier — count today's applications across both job boards.
-      const limit = DAILY_LIMITS[tier] ?? 3;
+      // Paid tier — unlimited applications inside the paid window.
+      // We still return appsToday for the UI to show applicants a running
+      // total (nice-to-have, not a paywall). The only server-side cap is
+      // the per-minute bot brake enforced on POST /apply.
       const { rows: [{ count }] } = await pool.query<{ count: string }>(`
         SELECT COUNT(*)::text AS count
           FROM local_job_applications
@@ -704,18 +745,14 @@ export function registerLocalJobsRoutes(app: Express): void {
            AND applied_at > NOW() - INTERVAL '24 hours'
       `, [userId]).catch(() => ({ rows: [{ count: "0" }] }) as any);
 
-      const appsToday = Number(count ?? "0");
-      const canApply = appsToday < limit;
-
       res.json({
-        canApply,
-        reason:    canApply ? "ok" : "daily_limit",
+        canApply:      true,
+        reason:        "ok",
         tier,
-        appsToday,
-        dailyLimit: limit,
-        message:   canApply
-          ? null
-          : `You've used your ${limit} application${limit === 1 ? "" : "s"} for today. Resets in 24 hours, or upgrade for more daily applications.`,
+        appsToday:     Number(count ?? "0"),
+        dailyLimit:    null,   // unlimited within your access window
+        unlimited:     true,
+        message:       null,
       });
     } catch (err: any) {
       console.error("[GET /api/local-jobs/me/apply-status]", err?.message);
@@ -783,21 +820,19 @@ export function registerLocalJobsRoutes(app: Express): void {
           });
         }
 
-        // ── 2. Daily limit check ───────────────────────────────────────────
-        const limit = DAILY_LIMITS[tier] ?? 3;
-        const { rows: [{ count }] } = await pool.query<{ count: string }>(`
-          SELECT COUNT(*)::text AS count
-            FROM local_job_applications
-           WHERE applicant_user_id = $1
-             AND applied_at > NOW() - INTERVAL '24 hours'
-             AND job_id <> $2
-        `, [userId, jobId]);
-        if (Number(count) >= limit) {
+        // ── 2. Per-minute bot brake (NOT a paywall) ────────────────────────
+        // Applications are unlimited inside your paid window. This only
+        // fires on inhuman submission speeds (>10 applies in 60 seconds)
+        // to protect employers from bot spray. Real applicants filling
+        // forms will never see this.
+        const rate = checkApplyRate(userId);
+        if (!rate.allowed) {
+          console.log(`[kenya-careers/apply] RATE-LIMIT userId=${userId} tier=${tier} retryAfter=${rate.retryAfterSec}s`);
           return res.status(429).json({
-            message: `You've used your ${limit} applications for today. Resets in 24 hours.`,
-            reason:  "daily_limit",
-            appsToday: Number(count),
-            dailyLimit: limit,
+            message: `You're submitting applications very fast. Please wait ${rate.retryAfterSec} seconds before applying to the next job. Your ${tier} plan is still active and there is no daily cap.`,
+            reason:  "rate_limit",
+            retryAfterSec: rate.retryAfterSec,
+            planStillActive: true,
           });
         }
 
@@ -996,17 +1031,29 @@ export function registerLocalJobsRoutes(app: Express): void {
           }
         })();
 
+        // Running 24h total for logging / UI stats (NOT a cap).
+        const { rows: [{ count: appsTodayCount }] } = await pool
+          .query<{ count: string }>(
+            `SELECT COUNT(*)::text AS count
+               FROM local_job_applications
+              WHERE applicant_user_id = $1
+                AND applied_at > NOW() - INTERVAL '24 hours'`,
+            [userId],
+          )
+          .catch(() => ({ rows: [{ count: "1" }] }) as any);
+
         console.log(
           `[kenya-careers/apply] ALLOW userId=${userId} tier=${tier} jobId=${jobId} ` +
-          `company="${job.company_name}" applicationId=${appRow.id} appsToday=${Number(count) + 1}/${limit}`,
+          `company="${job.company_name}" applicationId=${appRow.id} appsToday=${appsTodayCount}`,
         );
 
         res.json({
           success:       true,
           applicationId: appRow.id,
           message:       `Application sent to ${job.company_name}. Check your email — we sent you a confirmation.`,
-          dailyLimit:    limit,
-          appsToday:     Number(count) + 1,
+          appsToday:     Number(appsTodayCount),
+          dailyLimit:    null,   // unlimited within your access window
+          unlimited:     true,
           tier,
         });
       } catch (err: any) {

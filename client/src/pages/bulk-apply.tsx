@@ -347,7 +347,7 @@ export default function BulkApply() {
                 </Link>
               </div>
               <p className="text-xs text-muted-foreground">
-                Free plan includes 3 AI applications per day. No credit card required.
+                Direct applying is unlimited on any paid plan (KES 99 for 24h, KES 1,000 for 30d, KES 4,500 for 365d). Bulk Apply is the AI cover-letter writer — it has its own generation limit because each letter costs real AI compute.
               </p>
             </CardContent>
           </Card>
@@ -360,7 +360,7 @@ export default function BulkApply() {
               <Lock className="h-8 w-8 mx-auto text-amber-500" />
               <h3 className="font-bold">Bulk Apply — Paid Feature</h3>
               <p className="text-sm text-muted-foreground">
-                Bulk Apply is available on Basic (5 jobs/day) and Pro (unlimited) plans. Upgrade to apply to multiple jobs with AI-generated cover letters.
+                Bulk Apply uses AI to write cover letters for many jobs at once. Available on any paid plan (KES 99 trial = 25 AI drafts / 24h, Monthly &amp; Yearly = unlimited AI drafts). Applying to jobs one-by-one is unlimited on every paid tier.
               </p>
               <div className="flex flex-col gap-2">
                 <Link href="/pricing">
@@ -381,7 +381,7 @@ export default function BulkApply() {
           <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg p-3 flex gap-2 text-xs text-amber-800 dark:text-amber-300">
             <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
             <span>
-              You can apply to <strong>{usage.remaining}</strong> more job{usage.remaining !== 1 ? "s" : ""} today (Basic: 5/day limit). Only the first {usage.remaining} will be processed.
+              You have <strong>{usage.remaining}</strong> AI-generated cover letter{usage.remaining !== 1 ? "s" : ""} left today. Only the first {usage.remaining} will be AI-drafted — you can still apply to any job manually. Upgrade Monthly/Yearly for unlimited AI drafts.
             </span>
           </div>
         )}
