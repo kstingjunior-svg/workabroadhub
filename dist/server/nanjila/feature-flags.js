@@ -111,6 +111,14 @@ exports.NanjilaFlags = {
     get trustDashboardEnabled() {
         return boolFlag("NANJILA_TRUST_DASHBOARD_ENABLED", false);
     },
+    /**
+     * Turns on the nightly BullMQ readiness-snapshot job. Safe to enable in
+     * production before the user-facing Trust Dashboard ships — data
+     * accumulates so Phase C has real trend graphs from day one.
+     */
+    get readinessJobEnabled() {
+        return boolFlag("NANJILA_READINESS_JOB_ENABLED", false);
+    },
     // ── Phase D — voice + academy ──────────────────────────────────────────
     get voiceEnabled() {
         return boolFlag("NANJILA_VOICE_ENABLED", false);
@@ -173,6 +181,7 @@ function dumpNanjilaFlags() {
         NANJILA_PREDICTOR_AGENCY_COMPLAINT_ENABLED: exports.NanjilaFlags.predictorAgencyComplaintEnabled,
         NANJILA_DECISIONS_ENABLED: exports.NanjilaFlags.decisionsEnabled,
         NANJILA_TRUST_DASHBOARD_ENABLED: exports.NanjilaFlags.trustDashboardEnabled,
+        NANJILA_READINESS_JOB_ENABLED: exports.NanjilaFlags.readinessJobEnabled,
         NANJILA_VOICE_ENABLED: exports.NanjilaFlags.voiceEnabled,
         NANJILA_ACADEMY_ENABLED: exports.NanjilaFlags.academyEnabled,
         NANJILA_DAILY_COST_CAP_KES: exports.NanjilaFlags.dailyCostCapKes,

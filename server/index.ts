@@ -182,6 +182,20 @@ httpServer.listen(PORT, "0.0.0.0", () => {
       console.error("[Server] ❌ M-Pesa reconciler failed to start:", err?.message);
     }
 
+    // 2026-07 Nanjila Phase A completion: nightly readiness snapshot job.
+    // Gated on NANJILA_READINESS_JOB_ENABLED (default off). When on, boots
+    // the BullMQ worker and schedules the nightly sweep at 03:00 EAT.
+    // The worker + scheduler are both idempotent — safe to call across
+    // process restarts.
+    try {
+      const { startReadinessWorker, scheduleNightlyReadiness } =
+        await import("./nanjila/jobs/nightlyReadiness");
+      startReadinessWorker();
+      await scheduleNightlyReadiness();
+    } catch (err: any) {
+      console.error("[Server] ❌ Nanjila readiness job failed to start:", err?.message);
+    }
+
     // 2026-06 STRICT EXPIRY AUDIT: proactive plan-expiry sweep runs every
     // 60s. Finds any user_subscriptions row where end_date < now() and
     // status='active', flips it to 'expired', syncs users.plan='free',
