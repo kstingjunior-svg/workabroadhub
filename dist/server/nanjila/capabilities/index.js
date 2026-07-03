@@ -29,6 +29,7 @@ exports.resolveCapability = resolveCapability;
 exports.invokeCapability = invokeCapability;
 const db_1 = require("../../db");
 const checkPayment_1 = require("./checkPayment");
+const kaziKaribuReview_1 = require("./kaziKaribuReview");
 // ─────────────────────────────────────────────────────────────────────────────
 // Static registry — every capability the system knows about
 // ─────────────────────────────────────────────────────────────────────────────
@@ -37,6 +38,7 @@ const checkPayment_1 = require("./checkPayment");
 // order for prompt stability.
 const ALL_CAPABILITIES = [
     checkPayment_1.checkPaymentCapability,
+    kaziKaribuReview_1.kaziKaribuReviewCapability,
     // Add new capabilities here as Phase B-D lands.
 ];
 let manifestCache = null;

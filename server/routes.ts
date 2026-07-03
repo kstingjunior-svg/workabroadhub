@@ -1448,6 +1448,13 @@ export async function registerRoutes(
   const { registerAdminNanjilaRoutes } = await import("./routes/admin-nanjila");
   registerAdminNanjilaRoutes(app, isAuthenticated, isAdmin);
 
+  // ── Kazi Karibu — individual employer postings ──────────────────────────
+  // Every route inside is gated behind NanjilaFlags.kaziKaribuEnabled (env
+  // KAZI_KARIBU_ENABLED). Shipping this code without setting the env var
+  // is a no-op — routes return 404. See docs/kazi-karibu/STRATEGY.md.
+  const { registerKaziKaribuRoutes } = await import("./routes/kazi-karibu");
+  registerKaziKaribuRoutes(app, isAuthenticated, isAdmin);
+
   // Track active sessions for the admin dashboard real-time counter.
   // Must run after setupAuth so req.session is populated.
   app.use(trackActiveUser);

@@ -126,6 +126,42 @@ exports.NanjilaFlags = {
     get academyEnabled() {
         return boolFlag("NANJILA_ACADEMY_ENABLED", false);
     },
+    // ── Kazi Karibu — individual employer postings ────────────────────────
+    // See docs/kazi-karibu/STRATEGY.md §28. Master flag defaults OFF: with it
+    // off, every /api/kazi-karibu/* route returns 404, so shipping the code
+    // without setting these env vars is safe.
+    get kaziKaribuEnabled() {
+        return boolFlag("KAZI_KARIBU_ENABLED", false);
+    },
+    /** First post free for phone-verified new accounts. Default ON when master is ON. */
+    get kaziKaribuFirstPostFreeEnabled() {
+        return boolFlag("KAZI_KARIBU_FIRST_POST_FREE_ENABLED", true);
+    },
+    get kaziKaribuBoostEnabled() {
+        return boolFlag("KAZI_KARIBU_BOOST_ENABLED", false);
+    },
+    get kaziKaribuVerifiedBadgeEnabled() {
+        return boolFlag("KAZI_KARIBU_VERIFIED_BADGE_ENABLED", false);
+    },
+    /**
+     * Nanjila Layer-4 pre-publish review. When ON, every submitted post is
+     * reviewed by Nanjila before publishing. When OFF, posts that pass
+     * Layer 3 auto-rules skip Nanjila and go straight to the human queue.
+     */
+    get nanjilaKaziKaribuReviewEnabled() {
+        return boolFlag("NANJILA_KAZI_KARIBU_REVIEW_ENABLED", true);
+    },
+    /**
+     * Comma-separated list of counties allowed to submit posts.
+     * Phase 1: "Nairobi". Phase 2: "Nairobi,Mombasa,Kisumu,Nakuru".
+     * Phase 3: "*" (all counties).
+     */
+    get kaziKaribuCountyAllowlist() {
+        const raw = (process.env.KAZI_KARIBU_COUNTY_ALLOWLIST ?? "Nairobi").trim();
+        if (raw === "*")
+            return []; // empty array = all allowed
+        return raw.split(",").map(s => s.trim()).filter(Boolean);
+    },
     // ── Cost governance ────────────────────────────────────────────────────
     /** Daily cost cap per user (KES). Enforced by orchestrator. */
     get dailyCostCapKes() {
@@ -186,5 +222,11 @@ function dumpNanjilaFlags() {
         NANJILA_ACADEMY_ENABLED: exports.NanjilaFlags.academyEnabled,
         NANJILA_DAILY_COST_CAP_KES: exports.NanjilaFlags.dailyCostCapKes,
         NANJILA_DAILY_COST_CAP_PRO_KES: exports.NanjilaFlags.dailyCostCapProKes,
+        // Kazi Karibu — see docs/kazi-karibu/STRATEGY.md §28
+        KAZI_KARIBU_ENABLED: exports.NanjilaFlags.kaziKaribuEnabled,
+        KAZI_KARIBU_FIRST_POST_FREE_ENABLED: exports.NanjilaFlags.kaziKaribuFirstPostFreeEnabled,
+        KAZI_KARIBU_BOOST_ENABLED: exports.NanjilaFlags.kaziKaribuBoostEnabled,
+        KAZI_KARIBU_VERIFIED_BADGE_ENABLED: exports.NanjilaFlags.kaziKaribuVerifiedBadgeEnabled,
+        NANJILA_KAZI_KARIBU_REVIEW_ENABLED: exports.NanjilaFlags.nanjilaKaziKaribuReviewEnabled,
     };
 }

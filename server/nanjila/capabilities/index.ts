@@ -25,6 +25,7 @@
 import { pool } from "../../db";
 import type { UserEntitlement } from "./types";
 import { checkPaymentCapability } from "./checkPayment";
+import { kaziKaribuReviewCapability } from "./kaziKaribuReview";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Public types
@@ -62,6 +63,7 @@ export interface CapabilityContext {
 
 const ALL_CAPABILITIES: CapabilityDefinition[] = [
   checkPaymentCapability,
+  kaziKaribuReviewCapability,
   // Add new capabilities here as Phase B-D lands.
 ];
 
