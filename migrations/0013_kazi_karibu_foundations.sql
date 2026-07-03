@@ -36,7 +36,9 @@ CREATE TABLE IF NOT EXISTS kazi_karibu_posts (
   duration            TEXT,       -- 'one_off' | 'recurring_weekly' | 'permanent'
   poster_display_name TEXT,
   poster_shows_name   BOOLEAN NOT NULL DEFAULT false,
-  payment_id          UUID REFERENCES payments(id),
+  -- payments.id is VARCHAR (see shared/schema.ts §payments), not UUID.
+  -- Matching type is required for the FK to be creatable.
+  payment_id          VARCHAR REFERENCES payments(id),
   is_first_post_free  BOOLEAN NOT NULL DEFAULT false,
   moderation_state    TEXT NOT NULL DEFAULT 'draft',
   -- Allowed states: 'draft' | 'awaiting_payment' | 'pending_moderation'
