@@ -130,6 +130,13 @@ const KenyaCareersAdmin = lazyWithRetry(() => import("@/pages/admin/kenya-career
 const IeltsInterestAdmin = lazyWithRetry(() => import("@/pages/admin/ielts-interest"));
 const KenyaCareersCompany = lazyWithRetry(() => import("@/pages/kenya-careers-company"));
 const KenyaCareersEmployers = lazyWithRetry(() => import("@/pages/kenya-careers-employers"));
+// Kazi Karibu — individual-employer job postings (Phase 1)
+// docs/kazi-karibu/STRATEGY.md
+const KaziKaribu        = lazyWithRetry(() => import("@/pages/kazi-karibu"));
+const KaziKaribuBrowse  = lazyWithRetry(() => import("@/pages/kazi-karibu-browse"));
+const KaziKaribuJob     = lazyWithRetry(() => import("@/pages/kazi-karibu-job"));
+const KaziKaribuPost    = lazyWithRetry(() => import("@/pages/kazi-karibu-post"));
+const KaziKaribuMyPosts = lazyWithRetry(() => import("@/pages/kazi-karibu-my-posts"));
 // Phase 4 employer portal — dashboard, manage, register
 const EmployerDashboard = lazyWithRetry(() => import("@/pages/employer/employer-dashboard"));
 const EmployerManage = lazyWithRetry(() => import("@/pages/employer/employer-manage"));
@@ -368,6 +375,11 @@ const LazyKenyaCareersAdmin = withSuspense(KenyaCareersAdmin);
 const LazyIeltsInterestAdmin = withSuspense(IeltsInterestAdmin);
 const LazyKenyaCareersCompany = withSuspense(KenyaCareersCompany);
 const LazyKenyaCareersEmployers = withSuspense(KenyaCareersEmployers);
+const LazyKaziKaribu        = withSuspense(KaziKaribu);
+const LazyKaziKaribuBrowse  = withSuspense(KaziKaribuBrowse);
+const LazyKaziKaribuJob     = withSuspense(KaziKaribuJob);
+const LazyKaziKaribuPost    = withSuspense(KaziKaribuPost);
+const LazyKaziKaribuMyPosts = withSuspense(KaziKaribuMyPosts);
 const LazyEmployerDashboard = withSuspense(EmployerDashboard);
 const LazyEmployerManage = withSuspense(EmployerManage);
 const LazyEmployerRegisterCompany = withSuspense(EmployerRegisterCompany);
@@ -526,6 +538,13 @@ function AuthenticatedRoutes() {
       <Route path="/my-overview" component={LazyMyOverview} />
       <Route path="/account/verify" component={LazyAccountVerify} />
       <Route path="/account/payment-status" component={LazyAccountPaymentStatus} />
+      {/* Kazi Karibu — individual employer postings (docs/kazi-karibu/STRATEGY.md) */}
+      <Route path="/kazi-karibu" component={LazyKaziKaribu} />
+      <Route path="/kazi-karibu/browse" component={LazyKaziKaribuBrowse} />
+      <Route path="/kazi-karibu/job/:id" component={LazyKaziKaribuJob} />
+      <Route path="/kazi-karibu/post" component={LazyKaziKaribuPost} />
+      <Route path="/kazi-karibu/my-posts" component={LazyKaziKaribuMyPosts} />
+
       {/* Kenya Careers — Phase 1 public browse + Phase 2 applications */}
       <Route path="/kenya-careers" component={LazyKenyaCareers} />
       <Route path="/kenya-careers/job/:id" component={LazyKenyaCareersJob} />
