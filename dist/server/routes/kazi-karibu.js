@@ -22,12 +22,37 @@
  *   draft → awaiting_payment → pending_moderation → live | held | rejected
  *   live → expired (sweep) | removed (admin)
  */
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.registerKaziKaribuRoutes = registerKaziKaribuRoutes;
+const nanoid_1 = require("nanoid");
 const db_1 = require("../db");
 const feature_flags_1 = require("../nanjila/feature-flags");
 const kazi_karibu_1 = require("@shared/kazi-karibu");
 const scam_rules_1 = require("../lib/scam-rules");
+const kaziKaribuReview_1 = require("../nanjila/capabilities/kaziKaribuReview");
 // ─── Feature-flag guard ─────────────────────────────────────────────────────
 /**
  * Short-circuits with 404 when the feature is off. Using 404 (not 403) so
@@ -102,6 +127,71 @@ function validateDraft(body) {
         posterShowsName: Boolean(body.posterShowsName),
     };
 }
+// ─── Nanjila Layer-4 review runner (shared by submit + status) ──────────────
+/**
+ * Runs the Nanjila pre-publish review capability against a post that is
+ * currently in state 'pending_moderation' and transitions the post to its
+ * final state:
+ *
+ *   APPROVE  → moderation_state='live', publishes for 7 days
+ *   CLARIFY  → moderation_state='held', the poster edits + resubmits
+ *   HOLD     → moderation_state='held', admin queue picks it up
+ *
+ * The capability handler itself writes the audit trail row to
+ * kazi_karibu_moderation; this function only handles the post-state
+ * transition and any side effects (publish timestamps, first-post-free
+ * reputation increment, etc.).
+ *
+ * Returns the final moderation_state so callers can shape their response.
+ */
+async function runNanjilaAndTransition(postId, layer3FlagCodes) {
+    // Flag OFF short-circuit: skip Nanjila entirely and route straight to
+    // human review (state='held') so a broken model outage doesn't block
+    // legitimate posts from getting reviewed manually.
+    if (!feature_flags_1.NanjilaFlags.nanjilaKaziKaribuReviewEnabled) {
+        await db_1.pool.query(`UPDATE kazi_karibu_posts
+          SET moderation_state = 'held', updated_at = NOW()
+        WHERE id = $1 AND moderation_state = 'pending_moderation'`, [postId]);
+        await db_1.pool.query(`INSERT INTO kazi_karibu_moderation (post_id, layer, decision, reason_codes, narrative, actor)
+       VALUES ($1, 'human', 'hold', $2, 'Nanjila review flag OFF — routed to human queue', 'system')`, [postId, ["nanjila_flag_off"]]);
+        return "held";
+    }
+    // Invoke the capability. It writes its own moderation-audit row.
+    const decision = await kaziKaribuReview_1.kaziKaribuReviewCapability.handler({ postId, layer3FlagCodes }, { userId: null, entitlement: { authenticated: false, paid: false, admin: false, planId: null, userId: null }, traceId: `kk-submit-${postId}` }).catch((err) => {
+        console.error(`[KaziKaribu] Nanjila review call threw — falling through to human hold. err=${err?.message}`);
+        return {
+            ok: false,
+            decision: "hold",
+            confidence: 0,
+            rationale: `Nanjila review threw: ${err?.message ?? "unknown"}`,
+            hold_reason_code: "other",
+            promptVersion: "v1.0.0",
+        };
+    });
+    // Transition based on Nanjila's verdict.
+    if (decision.decision === "approve") {
+        await db_1.pool.query(`UPDATE kazi_karibu_posts
+          SET moderation_state = 'live',
+              published_at     = NOW(),
+              expires_at       = NOW() + INTERVAL '7 days',
+              updated_at       = NOW()
+        WHERE id = $1 AND moderation_state = 'pending_moderation'`, [postId]);
+        // Bump the poster's reputation counter.
+        await db_1.pool.query(`INSERT INTO kazi_karibu_poster_reputation (user_id, posts_published, updated_at)
+       SELECT poster_user_id, 1, NOW() FROM kazi_karibu_posts WHERE id = $1
+       ON CONFLICT (user_id) DO UPDATE SET
+         posts_published = kazi_karibu_poster_reputation.posts_published + 1,
+         updated_at      = NOW()`, [postId]).catch(err => console.warn(`[KaziKaribu] reputation bump failed postId=${postId}: ${err?.message}`));
+        return "live";
+    }
+    // clarify OR hold — both land in 'held' so the poster sees the question
+    // OR the admin queue picks it up. The kazi_karibu_moderation row already
+    // captures which one it was and the specific reason.
+    await db_1.pool.query(`UPDATE kazi_karibu_posts
+        SET moderation_state = 'held', updated_at = NOW()
+      WHERE id = $1 AND moderation_state = 'pending_moderation'`, [postId]);
+    return "held";
+}
 // ─── Registration ───────────────────────────────────────────────────────────
 function registerKaziKaribuRoutes(app, isAuthenticated, isAdmin) {
     // ─── POSTER FLOW ──────────────────────────────────────────────────────────
@@ -116,8 +206,12 @@ function registerKaziKaribuRoutes(app, isAuthenticated, isAdmin) {
             if (!userId)
                 return res.status(401).json({ error: "Please sign in first." });
             const parsed = validateDraft(req.body ?? {});
-            if (!parsed.ok) {
-                return res.status(400).json({ error: parsed.error, field: parsed.field });
+            if (parsed.ok !== true) {
+                // TS narrows to the failure branch here — parsed.error and .field
+                // are guaranteed to exist. Using === false rather than !parsed.ok
+                // sidesteps a narrowing quirk seen in certain tsc versions.
+                const fail = parsed;
+                return res.status(400).json({ error: fail.error, field: fail.field });
             }
             // Layer 3.
             const ruleResult = (0, scam_rules_1.evaluatePostAgainstRules)(parsed.ctx);
@@ -180,19 +274,264 @@ function registerKaziKaribuRoutes(app, isAuthenticated, isAdmin) {
     });
     /**
      * POST /api/kazi-karibu/posts/:id/submit
-     * Transition draft → awaiting_payment, initiate M-Pesa STK, on callback
-     * transition to pending_moderation, invoke Nanjila review, transition to
-     * live | held | rejected.
      *
-     * PHASE 1 STATUS: scaffolded, returns 501 until M-Pesa binding lands
-     * in the next commit. Route defined here so the client can be built
-     * against a stable API surface.
+     * Transitions the draft into the paid+moderated lifecycle. See
+     * docs/kazi-karibu/STRATEGY.md §6-§9.
+     *
+     * State flow:
+     *   draft | held  →  (re-run Layer 3)  →  awaiting_payment  →  (M-Pesa STK)
+     *     →  (client polls /status)  →  pending_moderation  →  (Nanjila review)
+     *     →  live | held
+     *
+     * First-post-free short-circuit: if the poster has zero previously-published
+     * posts AND the flag is on, skips the payment step and goes straight to
+     * pending_moderation. Phone verification is still required.
+     *
+     * Response shape (paid path):
+     *   { ok, postId, needsPayment: true, transactionRef, amountKes, state: "awaiting_payment" }
+     *
+     * Response shape (free path):
+     *   { ok, postId, needsPayment: false, state: "live"|"held" }
      */
-    app.post("/api/kazi-karibu/posts/:id/submit", requireKaziKaribuEnabled, isAuthenticated, async (_req, res) => {
-        return res.status(501).json({
-            error: "Not implemented",
-            message: "Payment binding lands in the next Phase-1 commit. Draft persists — resubmit then.",
-        });
+    app.post("/api/kazi-karibu/posts/:id/submit", requireKaziKaribuEnabled, isAuthenticated, async (req, res) => {
+        const t0 = Date.now();
+        const postId = String(req.params.id);
+        const userId = readSessionUserId(req);
+        if (!userId)
+            return res.status(401).json({ error: "Please sign in first." });
+        try {
+            // 1. Load the draft and verify ownership + resubmittable state.
+            const { rows: postRows } = await db_1.pool.query(`SELECT id, poster_user_id, category, county, sub_county, title, description,
+                  budget_min_kes, budget_max_kes, budget_period, duration, moderation_state
+             FROM kazi_karibu_posts
+            WHERE id = $1
+            LIMIT 1`, [postId]);
+            const post = postRows[0];
+            if (!post)
+                return res.status(404).json({ error: "Draft not found." });
+            if (post.poster_user_id !== userId) {
+                return res.status(403).json({ error: "This isn't your draft." });
+            }
+            if (!["draft", "held"].includes(post.moderation_state)) {
+                return res.status(409).json({
+                    error: `This post is in state "${post.moderation_state}" and cannot be re-submitted.`,
+                    state: post.moderation_state,
+                });
+            }
+            // 2. Phone-verified check (Layer 2). Required for every submit.
+            //    Uses users.phone_verified_at (any non-null value counts as verified;
+            //    aging out to 90 days is enforced by /api/pay upstream flows, not here
+            //    — keeping this endpoint's contract narrow).
+            const { rows: userRows } = await db_1.pool.query(`SELECT phone, phone_verified_at FROM users WHERE id = $1 LIMIT 1`, [userId]);
+            const user = userRows[0];
+            if (!user?.phone) {
+                return res.status(400).json({
+                    error: "No phone number on file. Please add your phone number in profile settings before posting.",
+                    code: "NO_PHONE",
+                });
+            }
+            if (!user.phone_verified_at) {
+                return res.status(400).json({
+                    error: "Please verify your phone number before posting on Kazi Karibu.",
+                    code: "PHONE_NOT_VERIFIED",
+                });
+            }
+            // 3. Re-run Layer 3 rules on the server — never trust the draft state
+            //    to have been rules-checked client-side.
+            const ruleCtx = {
+                category: post.category,
+                county: post.county,
+                subCounty: post.sub_county,
+                title: post.title,
+                description: post.description,
+                budgetMinKes: post.budget_min_kes,
+                budgetMaxKes: post.budget_max_kes,
+                budgetPeriod: post.budget_period,
+            };
+            const ruleResult = (0, scam_rules_1.evaluatePostAgainstRules)(ruleCtx);
+            if (ruleResult.hasReject) {
+                // Poster edited to include reject-worthy content since drafting.
+                // Kick it back to 'draft' so they can fix, no payment initiated.
+                await db_1.pool.query(`UPDATE kazi_karibu_posts SET moderation_state = 'draft', updated_at = NOW() WHERE id = $1`, [postId]);
+                return res.status(422).json({
+                    ok: false,
+                    layer: "rules",
+                    decision: "reject",
+                    hits: ruleResult.hits.map(h => ({
+                        ruleId: h.ruleId,
+                        severity: h.severity,
+                        posterReason: h.posterReason,
+                    })),
+                });
+            }
+            // 4. First-post-free eligibility.
+            const { rows: repRows } = await db_1.pool.query(`SELECT posts_published FROM kazi_karibu_poster_reputation WHERE user_id = $1 LIMIT 1`, [userId]);
+            const previouslyPublished = repRows[0]?.posts_published ?? 0;
+            const isFirstPostFree = feature_flags_1.NanjilaFlags.kaziKaribuFirstPostFreeEnabled && previouslyPublished === 0;
+            // Layer 3 flag codes accumulate — passed to Nanjila either way.
+            const layer3FlagCodes = ruleResult.hits
+                .filter(h => h.severity === "flag")
+                .map(h => h.ruleId);
+            // ── Path A: first post free — skip payment, run Nanjila immediately ──
+            if (isFirstPostFree) {
+                await db_1.pool.query(`UPDATE kazi_karibu_posts
+                SET moderation_state    = 'pending_moderation',
+                    is_first_post_free  = true,
+                    updated_at          = NOW()
+              WHERE id = $1 AND moderation_state IN ('draft','held')`, [postId]);
+                const finalState = await runNanjilaAndTransition(postId, layer3FlagCodes);
+                console.log(`[KaziKaribu] SUBMIT free postId=${postId} userId=${userId} finalState=${finalState} ` +
+                    `layer3Flags=${layer3FlagCodes.length} took=${Date.now() - t0}ms`);
+                return res.status(200).json({
+                    ok: true,
+                    postId,
+                    needsPayment: false,
+                    isFirstPostFree: true,
+                    state: finalState,
+                });
+            }
+            // ── Path B: paid post ────────────────────────────────────────────────
+            // Look up the canonical price for kazi_karibu_post_standard. The
+            // service row exists (migration 0013) even when is_active=false — we
+            // don't gate on is_active here since KAZI_KARIBU_ENABLED is the
+            // authoritative on/off switch for this whole surface.
+            const { rows: svcRows } = await db_1.pool.query(`SELECT id, price FROM services WHERE code = $1 LIMIT 1`, [kazi_karibu_1.KAZI_KARIBU_SERVICE_CODES.STANDARD_POST]);
+            const svc = svcRows[0];
+            if (!svc) {
+                console.error(`[KaziKaribu] SUBMIT missing service row for ${kazi_karibu_1.KAZI_KARIBU_SERVICE_CODES.STANDARD_POST}`);
+                return res.status(500).json({ error: "Payment service is not configured. Please contact support." });
+            }
+            const amountKes = Number(svc.price ?? kazi_karibu_1.KAZI_KARIBU_STANDARD_POST_PRICE_KES);
+            // Create a payment record. Same pattern as /api/pay.
+            const transactionRef = `KK-${(0, nanoid_1.nanoid)(12)}`;
+            const normalizedPhone = user.phone.startsWith("0")
+                ? `254${user.phone.slice(1)}`
+                : user.phone;
+            await db_1.pool.query(`INSERT INTO payments (id, user_id, amount, currency, status, method, service_id, transaction_ref, created_at)
+           VALUES ($1, $2, $3, 'KES', 'pending', 'mpesa', $4, $1, NOW())`, [transactionRef, userId, amountKes, svc.id]);
+            // Fire the STK push using the same helper /api/pay uses.
+            let stkResponse;
+            try {
+                const { stkPush } = await Promise.resolve().then(() => __importStar(require("../mpesa")));
+                stkResponse = await stkPush(normalizedPhone, amountKes, "Kazi Karibu — post fee", transactionRef);
+            }
+            catch (err) {
+                console.error(`[KaziKaribu] SUBMIT STK push failed postId=${postId} err=${err?.message}`);
+                // Roll back the payment row to failed so we don't leave orphans.
+                await db_1.pool.query(`UPDATE payments SET status = 'failed', updated_at = NOW() WHERE id = $1`, [transactionRef]).catch(() => { });
+                return res.status(502).json({
+                    error: "Could not reach M-Pesa. Please try again in a moment.",
+                });
+            }
+            // Transition the post to awaiting_payment and link the payment record.
+            await db_1.pool.query(`UPDATE kazi_karibu_posts
+              SET moderation_state = 'awaiting_payment',
+                  payment_id       = $2,
+                  updated_at       = NOW()
+            WHERE id = $1 AND moderation_state IN ('draft','held')`, [postId, transactionRef]);
+            console.log(`[KaziKaribu] SUBMIT paid postId=${postId} userId=${userId} tx=${transactionRef} ` +
+                `amount=${amountKes} stk=${stkResponse?.CheckoutRequestID ?? "?"} took=${Date.now() - t0}ms`);
+            return res.status(200).json({
+                ok: true,
+                postId,
+                needsPayment: true,
+                transactionRef,
+                amountKes,
+                checkoutRequestId: stkResponse?.CheckoutRequestID ?? null,
+                state: "awaiting_payment",
+                hint: "Approve the KES 100 M-Pesa prompt on your phone, then poll /api/kazi-karibu/posts/:id/status to watch for publication.",
+            });
+        }
+        catch (err) {
+            console.error(`[KaziKaribu] SUBMIT unexpected postId=${postId} err=${err?.message}`);
+            return res.status(500).json({ error: "Could not submit your post. Please try again." });
+        }
+    });
+    /**
+     * GET /api/kazi-karibu/posts/:id/status
+     *
+     * Drives the post-payment state transitions and returns the current
+     * lifecycle position. Client polls this after submitting a paid post to
+     * detect when the M-Pesa callback has landed and the post is either live
+     * or held for review.
+     *
+     * This endpoint is idempotent — safe to poll repeatedly. The state
+     * transition uses conditional UPDATE so two concurrent calls can't both
+     * trigger Nanjila.
+     */
+    app.get("/api/kazi-karibu/posts/:id/status", requireKaziKaribuEnabled, isAuthenticated, async (req, res) => {
+        const postId = String(req.params.id);
+        const userId = readSessionUserId(req);
+        if (!userId)
+            return res.status(401).json({ error: "Please sign in first." });
+        try {
+            // 1. Load post + latest payment status.
+            const { rows: postRows } = await db_1.pool.query(`SELECT p.id, p.poster_user_id, p.moderation_state, p.payment_id,
+                  pay.status  AS payment_status,
+                  p.published_at, p.expires_at
+             FROM kazi_karibu_posts p
+        LEFT JOIN payments pay ON pay.id = p.payment_id
+            WHERE p.id = $1
+            LIMIT 1`, [postId]);
+            const post = postRows[0];
+            if (!post)
+                return res.status(404).json({ error: "Post not found." });
+            if (post.poster_user_id !== userId) {
+                return res.status(403).json({ error: "This isn't your post." });
+            }
+            // 2. If awaiting payment, check whether the payment has succeeded.
+            if (post.moderation_state === "awaiting_payment") {
+                const paidStatuses = new Set(["success", "completed", "paid"]);
+                if (post.payment_status && paidStatuses.has(post.payment_status)) {
+                    // Transition to pending_moderation atomically — only if we're
+                    // still the first observer. If two concurrent polls race, only
+                    // one wins the UPDATE and only one triggers Nanjila.
+                    const { rowCount } = await db_1.pool.query(`UPDATE kazi_karibu_posts
+                  SET moderation_state = 'pending_moderation', updated_at = NOW()
+                WHERE id = $1 AND moderation_state = 'awaiting_payment'`, [postId]);
+                    if ((rowCount ?? 0) > 0) {
+                        // We won the race — run Nanjila now.
+                        const finalState = await runNanjilaAndTransition(postId, []);
+                        return res.json({
+                            state: finalState,
+                            paymentState: post.payment_status,
+                            message: finalState === "live"
+                                ? "Payment received. Post is live for 7 days."
+                                : finalState === "held"
+                                    ? "Payment received. Post is being reviewed by our team — you'll hear back within a few hours."
+                                    : "Payment received but review returned an issue. Check the moderation history.",
+                        });
+                    }
+                    // Another poll got here first; fall through and read the
+                    // now-current state below.
+                }
+                else if (post.payment_status === "failed") {
+                    // Payment failed — return the draft to editable state.
+                    await db_1.pool.query(`UPDATE kazi_karibu_posts
+                  SET moderation_state = 'draft', updated_at = NOW()
+                WHERE id = $1 AND moderation_state = 'awaiting_payment'`, [postId]);
+                    return res.json({
+                        state: "draft",
+                        paymentState: "failed",
+                        message: "Your M-Pesa payment did not go through. Please try again.",
+                    });
+                }
+            }
+            // 3. Reload after any transitions above to return the freshest state.
+            const { rows: freshRows } = await db_1.pool.query(`SELECT moderation_state, published_at, expires_at
+             FROM kazi_karibu_posts WHERE id = $1 LIMIT 1`, [postId]);
+            const fresh = freshRows[0];
+            return res.json({
+                state: fresh?.moderation_state ?? post.moderation_state,
+                paymentState: post.payment_status,
+                publishedAt: fresh?.published_at ?? null,
+                expiresAt: fresh?.expires_at ?? null,
+            });
+        }
+        catch (err) {
+            console.error(`[KaziKaribu] STATUS postId=${postId} err=${err?.message}`);
+            return res.status(500).json({ error: "Could not check post status." });
+        }
     });
     /**
      * GET /api/kazi-karibu/posts/mine
@@ -388,7 +727,7 @@ function registerKaziKaribuRoutes(app, isAuthenticated, isAdmin) {
             WHERE created_at > NOW() - INTERVAL '30 days'
             GROUP BY moderation_state`);
             return res.json({
-                window: "30d",
+                period: "30d",
                 byState: Object.fromEntries(byState.map(r => [r.moderation_state, Number(r.c)])),
             });
         }
