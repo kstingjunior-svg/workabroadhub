@@ -125,6 +125,9 @@ function validateDraft(body) {
         ctx: { category, county, subCounty, title, description, budgetMinKes, budgetMaxKes, budgetPeriod },
         duration,
         posterShowsName: Boolean(body.posterShowsName),
+        // Default to true — matches Jiji/OLX pattern where posters expect their
+        // phone to be reachable directly. Poster can opt out at post time.
+        posterShowsPhone: body.posterShowsPhone !== false,
     };
 }
 // ─── Nanjila Layer-4 review runner (shared by submit + status) ──────────────
@@ -286,9 +289,9 @@ function registerKaziKaribuRoutes(app, isAuthenticated, isAdmin) {
             const { rows } = await db_1.pool.query(`INSERT INTO kazi_karibu_posts (
              poster_user_id, category, county, sub_county, title, description,
              budget_min_kes, budget_max_kes, budget_period, duration,
-             poster_display_name, poster_shows_name, moderation_state
+             poster_display_name, poster_shows_name, poster_shows_phone, moderation_state
            )
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'draft')
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'draft')
            RETURNING id`, [
                 userId,
                 parsed.ctx.category,
@@ -302,6 +305,7 @@ function registerKaziKaribuRoutes(app, isAuthenticated, isAdmin) {
                 parsed.duration,
                 parsed.posterShowsName ? null : (0, kazi_karibu_1.defaultPosterDisplayName)(parsed.ctx.subCounty, parsed.ctx.county),
                 parsed.posterShowsName,
+                parsed.posterShowsPhone,
             ]);
             return res.status(201).json({
                 ok: true,
@@ -667,7 +671,8 @@ function registerKaziKaribuRoutes(app, isAuthenticated, isAdmin) {
                 return res.status(400).json({ error: "Invalid id." });
             const { rows } = await db_1.pool.query(`SELECT id, category, county, sub_county, title, description,
                   budget_min_kes, budget_max_kes, budget_period, duration,
-                  poster_display_name, is_boosted, published_at, expires_at
+                  poster_display_name, poster_shows_phone,
+                  is_boosted, published_at, expires_at
              FROM kazi_karibu_posts
             WHERE id = $1 AND moderation_state = 'live' AND expires_at > NOW()
             LIMIT 1`, [id]);
@@ -678,6 +683,110 @@ function registerKaziKaribuRoutes(app, isAuthenticated, isAdmin) {
         catch (err) {
             console.error("[GET /api/kazi-karibu/posts/:id]", err?.message);
             return res.status(500).json({ error: "Could not load post." });
+        }
+    });
+    /**
+     * GET /api/kazi-karibu/posts/:id/contact
+     *
+     * Direct-contact reveal (Option B). Returns the poster's phone/email
+     * ONLY when:
+     *   1. The post's poster_shows_phone flag is TRUE
+     *   2. The requester is signed in (kills anonymous scrapers)
+     *   3. The requester hasn't hit the rate limit (20 views/hour/user)
+     *
+     * Every reveal is logged to kazi_karibu_contact_views for fraud audit
+     * and rate-limit enforcement.
+     */
+    app.get("/api/kazi-karibu/posts/:id/contact", requireKaziKaribuEnabled, isAuthenticated, async (req, res) => {
+        const postId = String(req.params.id);
+        const userId = readSessionUserId(req);
+        if (!userId) {
+            return res.status(401).json({
+                error: "Please sign in to see the poster's contact.",
+                code: "SIGNIN_REQUIRED",
+            });
+        }
+        try {
+            // Rate limit: 20 phone views per hour per user. Anyone scraping
+            // beyond that gets a friendly but firm rejection.
+            const { rows: countRows } = await db_1.pool.query(`SELECT COUNT(*)::text AS c FROM kazi_karibu_contact_views
+            WHERE viewer_user_id = $1 AND viewed_at > NOW() - INTERVAL '1 hour'`, [userId]);
+            const viewsThisHour = Number(countRows[0]?.c ?? 0);
+            if (viewsThisHour >= 20) {
+                console.log(`[KaziKaribu] CONTACT rate-limit blocked userId=${userId} views=${viewsThisHour}`);
+                return res.status(429).json({
+                    error: "You've viewed a lot of contacts recently. Please try again in an hour.",
+                    code: "RATE_LIMIT",
+                });
+            }
+            const { rows } = await db_1.pool.query(`SELECT p.poster_user_id,
+                  p.poster_shows_phone,
+                  p.moderation_state,
+                  u.first_name AS poster_first_name,
+                  u.phone      AS poster_phone,
+                  u.email      AS poster_email
+             FROM kazi_karibu_posts p
+             JOIN users u ON u.id = p.poster_user_id
+            WHERE p.id = $1 AND p.moderation_state = 'live' AND p.expires_at > NOW()
+            LIMIT 1`, [postId]);
+            const rec = rows[0];
+            if (!rec)
+                return res.status(404).json({ error: "Post not found or no longer active." });
+            if (!rec.poster_shows_phone) {
+                return res.status(403).json({
+                    error: "The poster keeps their contact private. Express interest to be shortlisted.",
+                    code: "CONTACT_HIDDEN",
+                });
+            }
+            // Log the view (best-effort; never block on this).
+            db_1.pool.query(`INSERT INTO kazi_karibu_contact_views (post_id, viewer_user_id) VALUES ($1, $2)`, [postId, userId]).catch(err => console.warn(`[KaziKaribu] contact-view log failed: ${err?.message}`));
+            return res.json({
+                firstName: rec.poster_first_name,
+                phone: rec.poster_phone,
+                email: rec.poster_email,
+                viewsThisHour: viewsThisHour + 1,
+            });
+        }
+        catch (err) {
+            console.error(`[GET /api/kazi-karibu/posts/${postId}/contact]`, err?.message);
+            return res.status(500).json({ error: "Could not load contact." });
+        }
+    });
+    /**
+     * DELETE /api/kazi-karibu/posts/:id
+     *
+     * Poster's self-serve removal — used when they've hired someone and
+     * don't want more calls. Transitions state to 'removed' rather than a
+     * hard delete so the moderation audit trail survives.
+     */
+    app.delete("/api/kazi-karibu/posts/:id", requireKaziKaribuEnabled, isAuthenticated, async (req, res) => {
+        const postId = String(req.params.id);
+        const userId = readSessionUserId(req);
+        if (!userId)
+            return res.status(401).json({ error: "Please sign in first." });
+        try {
+            const { rows } = await db_1.pool.query(`SELECT poster_user_id, moderation_state
+             FROM kazi_karibu_posts WHERE id = $1 LIMIT 1`, [postId]);
+            const rec = rows[0];
+            if (!rec)
+                return res.status(404).json({ error: "Post not found." });
+            if (rec.poster_user_id !== userId) {
+                return res.status(403).json({ error: "Only the poster can remove this post." });
+            }
+            if (rec.moderation_state === "removed") {
+                return res.status(200).json({ ok: true, message: "This post was already removed." });
+            }
+            await db_1.pool.query(`UPDATE kazi_karibu_posts
+              SET moderation_state = 'removed',
+                  removed_reason   = 'poster_removed',
+                  updated_at       = NOW()
+            WHERE id = $1`, [postId]);
+            console.log(`[KaziKaribu] DELETE postId=${postId} userId=${userId}`);
+            return res.json({ ok: true, message: "Your post has been removed. Your contact is no longer visible on Kazi Karibu." });
+        }
+        catch (err) {
+            console.error(`[DELETE /api/kazi-karibu/posts/${postId}]`, err?.message);
+            return res.status(500).json({ error: "Could not remove your post. Please try again." });
         }
     });
     // ─── APPLICANT FLOW ────────────────────────────────────────────────────────

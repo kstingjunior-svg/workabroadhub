@@ -14,20 +14,20 @@
 // free-text column in kazi_karibu_posts). But keep the ALLOWED_CATEGORY_IDS
 // set in sync with this list so the server can validate submissions.
 export const KAZI_KARIBU_CATEGORIES = [
-  { id: "house_help",        label: "House help / nanny",         suggestsRecurring: true  },
-  { id: "cleaner",           label: "Cleaner",                    suggestsRecurring: true  },
-  { id: "cook_caterer",      label: "Cook / caterer",             suggestsRecurring: false },
-  { id: "driver",            label: "Driver",                     suggestsRecurring: false },
-  { id: "fundi_mason",       label: "Fundi — mason",              suggestsRecurring: false },
-  { id: "fundi_plumber",     label: "Fundi — plumber",            suggestsRecurring: false },
-  { id: "fundi_electrician", label: "Fundi — electrician",        suggestsRecurring: false },
-  { id: "fundi_painter",     label: "Fundi — painter",            suggestsRecurring: false },
-  { id: "fundi_carpenter",   label: "Fundi — carpenter",          suggestsRecurring: false },
-  { id: "delivery_errand",   label: "Delivery / errand runner",   suggestsRecurring: false },
-  { id: "security_guard",    label: "Security guard / watchman",  suggestsRecurring: true  },
-  { id: "gardener",          label: "Gardener / shamba boy",      suggestsRecurring: true  },
-  { id: "tutor",             label: "Tutor",                      suggestsRecurring: true  },
-  { id: "event_promoter",    label: "Event promoter / staff",     suggestsRecurring: false },
+  { id: "house_help",        label: "House help / nanny",         emoji: "👶", suggestsRecurring: true  },
+  { id: "cleaner",           label: "Cleaner",                    emoji: "🧹", suggestsRecurring: true  },
+  { id: "cook_caterer",      label: "Cook / caterer",             emoji: "🍳", suggestsRecurring: false },
+  { id: "driver",            label: "Driver",                     emoji: "🚗", suggestsRecurring: false },
+  { id: "fundi_mason",       label: "Fundi — mason",              emoji: "🧱", suggestsRecurring: false },
+  { id: "fundi_plumber",     label: "Fundi — plumber",            emoji: "🔧", suggestsRecurring: false },
+  { id: "fundi_electrician", label: "Fundi — electrician",        emoji: "⚡", suggestsRecurring: false },
+  { id: "fundi_painter",     label: "Fundi — painter",            emoji: "🎨", suggestsRecurring: false },
+  { id: "fundi_carpenter",   label: "Fundi — carpenter",          emoji: "🪚", suggestsRecurring: false },
+  { id: "delivery_errand",   label: "Delivery / errand runner",   emoji: "🛵", suggestsRecurring: false },
+  { id: "security_guard",    label: "Security guard / watchman",  emoji: "🛡️", suggestsRecurring: true  },
+  { id: "gardener",          label: "Gardener / shamba boy",      emoji: "🌱", suggestsRecurring: true  },
+  { id: "tutor",             label: "Tutor",                      emoji: "📚", suggestsRecurring: true  },
+  { id: "event_promoter",    label: "Event promoter / staff",     emoji: "🎉", suggestsRecurring: false },
 ] as const;
 
 export type KaziKaribuCategoryId = (typeof KAZI_KARIBU_CATEGORIES)[number]["id"];

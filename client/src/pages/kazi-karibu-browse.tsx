@@ -183,8 +183,11 @@ export default function KaziKaribuBrowse() {
                 >
                   <CardContent className="p-4">
                     <div className="flex items-start justify-between gap-2 mb-2">
-                      <div className="text-xs uppercase font-semibold text-slate-500 dark:text-slate-400">
-                        {KAZI_KARIBU_CATEGORIES.find(c => c.id === post.category)?.label ?? post.category}
+                      <div className="text-xs uppercase font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                        <span className="text-lg" aria-hidden="true">
+                          {KAZI_KARIBU_CATEGORIES.find(c => c.id === post.category)?.emoji ?? "💼"}
+                        </span>
+                        <span>{KAZI_KARIBU_CATEGORIES.find(c => c.id === post.category)?.label ?? post.category}</span>
                       </div>
                       {post.is_boosted && (
                         <Badge className="bg-amber-100 text-amber-800 border-amber-300 text-[10px]">Boosted</Badge>

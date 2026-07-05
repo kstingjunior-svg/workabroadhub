@@ -65,6 +65,9 @@ export default function KaziKaribuPost() {
   const [budgetMax, setBudgetMax] = useState("");
   const [budgetPeriod, setBudgetPeriod] = useState("month");
   const [duration, setDuration] = useState("permanent");
+  // Direct-contact default (Option B). When true, phone shows publicly on the
+  // post. When false, applicants must express interest first.
+  const [posterShowsPhone, setPosterShowsPhone] = useState(true);
 
   // ── Submission state ───────────────────────────────────────────────────
   const [postId, setPostId] = useState<string | null>(null);
@@ -129,6 +132,7 @@ export default function KaziKaribuPost() {
           budgetMaxKes: budgetMax ? Number(budgetMax) : null,
           budgetPeriod,
           duration,
+          posterShowsPhone,
         }),
       });
       const body = await r.json();
@@ -398,6 +402,29 @@ export default function KaziKaribuPost() {
                     {KAZI_KARIBU_DURATIONS.map((d) => (<option key={d.id} value={d.id}>{d.label}</option>))}
                   </select>
                 </div>
+              </div>
+
+              {/* ── Phone visibility toggle ─────────────────────────────── */}
+              <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-3">
+                <label className="flex items-start gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={posterShowsPhone}
+                    onChange={(e) => setPosterShowsPhone(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                    data-testid="input-shows-phone"
+                  />
+                  <div>
+                    <div className="text-sm font-medium text-slate-900 dark:text-white">
+                      Show my phone directly on the post
+                    </div>
+                    <div className="text-xs text-slate-500 mt-0.5">
+                      {posterShowsPhone
+                        ? "Signed-in browsers will see your number and can call you directly. Fastest way to hire."
+                        : "Applicants must express interest first — you review profiles, then choose who to share your number with. Fewer calls but slower."}
+                    </div>
+                  </div>
+                </label>
               </div>
 
               <div className="pt-3 border-t border-slate-200 dark:border-slate-800">

@@ -5,7 +5,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import {
-  ArrowLeft, Briefcase, Clock, Loader2, CheckCircle2, AlertCircle, Ban, EyeOff, FileText,
+  ArrowLeft, Briefcase, Clock, Loader2, CheckCircle2, AlertCircle, Ban, EyeOff, FileText, Trash2,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -65,6 +65,32 @@ export default function KaziKaribuMyPosts() {
   const [posts, setPosts] = useState<MyPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedPostId, setExpandedPostId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  async function deletePost(postId: string, postTitle: string) {
+    if (!confirm(`Remove "${postTitle}"? Applicants will no longer be able to see it or contact you about this post.`)) {
+      return;
+    }
+    setDeletingId(postId);
+    try {
+      const r = await fetch(`/api/kazi-karibu/posts/${postId}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (r.ok) {
+        setPosts(prev => prev.map(p =>
+          p.id === postId ? { ...p, moderation_state: "removed" } : p,
+        ));
+      } else {
+        const body = await r.json().catch(() => ({}));
+        alert(body?.error ?? `Could not remove (${r.status})`);
+      }
+    } catch (err: any) {
+      alert(err?.message ?? "Network error");
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   useEffect(() => {
     document.title = "My posts — Kazi Karibu";
@@ -161,7 +187,7 @@ export default function KaziKaribuMyPosts() {
                         </div>
                       </div>
                       {isLive && (
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 flex-wrap">
                           <Button
                             variant={expandedPostId === p.id ? "default" : "outline"}
                             size="sm"
@@ -173,6 +199,20 @@ export default function KaziKaribuMyPosts() {
                           <Link href={`/kazi-karibu/job/${p.id}`}>
                             <Button variant="outline" size="sm">View post</Button>
                           </Link>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => deletePost(p.id, p.title)}
+                            disabled={deletingId === p.id}
+                            className="border-rose-300 text-rose-700 hover:bg-rose-50 dark:border-rose-800 dark:text-rose-400 dark:hover:bg-rose-900/20"
+                            data-testid={`btn-delete-${p.id}`}
+                          >
+                            {deletingId === p.id ? (
+                              <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> Removing…</>
+                            ) : (
+                              <><Trash2 className="h-3.5 w-3.5 mr-1" /> I've hired · Remove</>
+                            )}
+                          </Button>
                         </div>
                       )}
                     </div>

@@ -7,12 +7,13 @@
 import { useEffect, useState } from "react";
 import { Link, useParams, useLocation } from "wouter";
 import {
-  ArrowLeft, MapPin, Clock, Loader2, AlertCircle, Send, ShieldCheck, Info, Check, X,
+  ArrowLeft, MapPin, Clock, Loader2, AlertCircle, Send, ShieldCheck, Info, Check, X, Phone, Mail, Lock,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { useAuth } from "@/hooks/use-auth";
 import { KAZI_KARIBU_CATEGORIES } from "@shared/kazi-karibu";
 
 interface KaziKaribuPost {
@@ -27,9 +28,16 @@ interface KaziKaribuPost {
   budget_period: string | null;
   duration: string | null;
   poster_display_name: string | null;
+  poster_shows_phone: boolean;
   is_boosted: boolean;
   published_at: string;
   expires_at: string | null;
+}
+
+interface PosterContact {
+  firstName: string | null;
+  phone: string | null;
+  email: string | null;
 }
 
 function formatBudget(p: KaziKaribuPost): string {
@@ -58,6 +66,7 @@ const DURATION_LABEL: Record<string, string> = {
 export default function KaziKaribuJob() {
   const { id } = useParams<{ id: string }>();
   const [, navigate] = useLocation();
+  const { user } = useAuth();
   const [post, setPost] = useState<KaziKaribuPost | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -66,6 +75,31 @@ export default function KaziKaribuJob() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  const [contact, setContact] = useState<PosterContact | null>(null);
+  const [revealingContact, setRevealingContact] = useState(false);
+  const [contactError, setContactError] = useState<string | null>(null);
+
+  async function revealContact() {
+    if (!post) return;
+    if (!user) {
+      navigate(`/login?redirect=/kazi-karibu/job/${post.id}`);
+      return;
+    }
+    setRevealingContact(true);
+    setContactError(null);
+    try {
+      const r = await fetch(`/api/kazi-karibu/posts/${post.id}/contact`, { credentials: "include" });
+      const body = await r.json();
+      if (r.status === 429) { setContactError(body?.error ?? "You've viewed a lot of contacts recently."); return; }
+      if (r.status === 403) { setContactError(body?.error ?? "Contact is not available for this post."); return; }
+      if (!r.ok) { setContactError(body?.error ?? `Could not load contact (${r.status})`); return; }
+      setContact({ firstName: body.firstName ?? null, phone: body.phone ?? null, email: body.email ?? null });
+    } catch (err: any) {
+      setContactError(err?.message ?? "Network error");
+    } finally {
+      setRevealingContact(false);
+    }
+  }
 
   async function submitInterest() {
     if (!post) return;
@@ -193,25 +227,88 @@ export default function KaziKaribuJob() {
               </p>
             </div>
 
-            {/* ── Contact isolation notice ─────────────────────────────── */}
-            <div className="mt-6 flex items-start gap-2 p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
-              <Info className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
-              <div className="text-xs text-blue-800 dark:text-blue-200">
-                <strong>Your safety comes first.</strong> Poster contact details are hidden. Express interest below —
-                the poster will review your profile and reach out if they want to shortlist you.
-                Never send money to a poster; if anyone asks, <Link href="/report-scam"><span className="underline">report it</span></Link>.
+            {/* ── Contact panel: either direct-reveal or contact-isolation ── */}
+            {post.poster_shows_phone ? (
+              // ── Direct-contact mode (Option B default) ────────────────
+              <div className="mt-6">
+                {contact ? (
+                  // Successfully revealed
+                  <div className="p-4 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+                    <div className="text-xs font-semibold text-emerald-800 dark:text-emerald-200 uppercase mb-2 flex items-center gap-1.5">
+                      <ShieldCheck className="h-3.5 w-3.5" /> Poster contact
+                    </div>
+                    <div className="space-y-1.5">
+                      {contact.firstName && (
+                        <div className="text-sm font-semibold text-slate-900 dark:text-white">{contact.firstName}</div>
+                      )}
+                      {contact.phone && (
+                        <a href={`tel:${contact.phone}`} className="flex items-center gap-2 text-base font-medium text-emerald-800 dark:text-emerald-100 hover:underline">
+                          <Phone className="h-4 w-4" /> {contact.phone}
+                        </a>
+                      )}
+                      {contact.email && (
+                        <a href={`mailto:${contact.email}`} className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200 hover:underline">
+                          <Mail className="h-3.5 w-3.5" /> {contact.email}
+                        </a>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-3">
+                      Call or WhatsApp them directly. Never send money — <Link href="/report-scam"><span className="underline">report</span></Link> if they ask.
+                    </p>
+                  </div>
+                ) : (
+                  // Reveal CTA
+                  <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700">
+                    <p className="text-sm text-slate-700 dark:text-slate-200 mb-3">
+                      {user
+                        ? "Reveal the poster's phone to call or WhatsApp them directly."
+                        : "Sign in to see the poster's phone number."}
+                    </p>
+                    <Button
+                      onClick={revealContact}
+                      disabled={revealingContact}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white w-full sm:w-auto"
+                      data-testid="btn-reveal-contact"
+                    >
+                      {revealingContact ? (
+                        <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Loading…</>
+                      ) : user ? (
+                        <><Phone className="h-4 w-4 mr-2" /> Show phone number</>
+                      ) : (
+                        <><Lock className="h-4 w-4 mr-2" /> Sign in to see contact</>
+                      )}
+                    </Button>
+                    {contactError && (
+                      <p className="text-xs text-rose-700 dark:text-rose-300 mt-2">{contactError}</p>
+                    )}
+                  </div>
+                )}
               </div>
-            </div>
+            ) : (
+              // ── Contact-isolation mode (poster opted for interest flow) ──
+              <div className="mt-6 flex items-start gap-2 p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+                <Info className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
+                <div className="text-xs text-blue-800 dark:text-blue-200">
+                  <strong>The poster keeps their contact private.</strong> Express interest below and the poster
+                  will review your profile — they'll reach out if they want to shortlist you.
+                  Never send money to a poster; if anyone asks, <Link href="/report-scam"><span className="underline">report it</span></Link>.
+                </div>
+              </div>
+            )}
 
-            {/* ── Interest CTA ─────────────────────────────────────────── */}
-            <div className="mt-6 flex flex-col sm:flex-row gap-3">
+            {/* ── Interest CTA (always available as secondary path) ────── */}
+            <div className="mt-4 flex flex-col sm:flex-row gap-3">
               <Button
                 onClick={() => setShowInterest(true)}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white flex-1"
+                className={post.poster_shows_phone
+                  ? "bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 flex-1"
+                  : "bg-emerald-600 hover:bg-emerald-700 text-white flex-1"}
                 size="lg"
+                variant={post.poster_shows_phone ? "outline" : "default"}
                 data-testid="btn-show-interest"
               >
-                <Send className="h-4 w-4 mr-2" /> I'm interested
+                <Send className="h-4 w-4 mr-2" />
+                {post.poster_shows_phone ? "Or save my interest" : "I'm interested"}
               </Button>
               <Link href="/kazi-karibu/browse">
                 <Button variant="outline" size="lg" className="w-full sm:w-auto">
