@@ -214,6 +214,73 @@ async function runNanjilaAndTransition(
   return "held";
 }
 
+// ─── Notification helpers ───────────────────────────────────────────────────
+
+/**
+ * Notify the poster that someone expressed interest in their post. Sends
+ * SMS + WhatsApp best-effort in parallel. Never throws — notification
+ * failure must not block the interest submission.
+ *
+ * Kenya is phone-first: SMS + WhatsApp is the highest-signal way to reach
+ * a poster who won't check the web dashboard every day.
+ */
+async function notifyPosterOfInterest(opts: {
+  posterPhone:    string | null;
+  posterFirstName: string | null;
+  postTitle:      string;
+  applicantName:  string;
+}): Promise<void> {
+  if (!opts.posterPhone) return;
+  const greeting = opts.posterFirstName ? `Hi ${opts.posterFirstName}` : "Hi";
+  const message =
+    `${greeting}, ${opts.applicantName} is interested in your Kazi Karibu post: "${opts.postTitle}". ` +
+    `Review their profile: https://workabroadhub.tech/kazi-karibu/my-posts — WorkAbroad Hub`;
+
+  try {
+    const { sendSMS, sendWhatsApp } = await import("../sms");
+    // Fire both in parallel — WhatsApp is free-ish and preferred, SMS is
+    // universal fallback.
+    await Promise.allSettled([
+      sendSMS(opts.posterPhone, message),
+      sendWhatsApp(opts.posterPhone, message),
+    ]);
+    console.log(`[KaziKaribu] Notified poster ${opts.posterPhone} of new interest on "${opts.postTitle}"`);
+  } catch (err: any) {
+    console.warn(`[KaziKaribu] notifyPosterOfInterest failed: ${err?.message}`);
+  }
+}
+
+/**
+ * Notify the applicant that the poster released their contact. Same
+ * dual-channel strategy.
+ */
+async function notifyApplicantOfReveal(opts: {
+  applicantPhone: string | null;
+  applicantFirstName: string | null;
+  postTitle:      string;
+  posterFirstName: string | null;
+  posterPhone:    string | null;
+}): Promise<void> {
+  if (!opts.applicantPhone) return;
+  const greeting = opts.applicantFirstName ? `Hi ${opts.applicantFirstName}` : "Hi";
+  const poster = opts.posterFirstName ?? "The poster";
+  const message =
+    `${greeting}, great news — ${poster} on Kazi Karibu shortlisted you for "${opts.postTitle}" ` +
+    `and shared their contact${opts.posterPhone ? ` (${opts.posterPhone})` : ""}. ` +
+    `See details: https://workabroadhub.tech/kazi-karibu/my-interests — WorkAbroad Hub`;
+
+  try {
+    const { sendSMS, sendWhatsApp } = await import("../sms");
+    await Promise.allSettled([
+      sendSMS(opts.applicantPhone, message),
+      sendWhatsApp(opts.applicantPhone, message),
+    ]);
+    console.log(`[KaziKaribu] Notified applicant ${opts.applicantPhone} of contact reveal on "${opts.postTitle}"`);
+  } catch (err: any) {
+    console.warn(`[KaziKaribu] notifyApplicantOfReveal failed: ${err?.message}`);
+  }
+}
+
 // ─── Registration ───────────────────────────────────────────────────────────
 
 export function registerKaziKaribuRoutes(
@@ -876,6 +943,34 @@ export function registerKaziKaribuRoutes(
         );
 
         console.log(`[KaziKaribu] INTEREST postId=${postId} applicantId=${userId} interestId=${interestRows[0]?.id}`);
+
+        // Fire-and-forget: notify the poster via SMS + WhatsApp. Don't await —
+        // if Twilio/AT is slow the applicant still gets an instant response.
+        (async () => {
+          try {
+            const { rows: posterRows } = await pool.query<{
+              phone: string | null; first_name: string | null; title: string;
+            }>(
+              `SELECT u.phone, u.first_name, p.title
+                 FROM kazi_karibu_posts p JOIN users u ON u.id = p.poster_user_id
+                WHERE p.id = $1 LIMIT 1`,
+              [postId],
+            );
+            const posterInfo = posterRows[0];
+            if (posterInfo) {
+              const applicantName = [u.first_name, u.last_name].filter(Boolean).join(" ").trim() || "A candidate";
+              await notifyPosterOfInterest({
+                posterPhone:     posterInfo.phone,
+                posterFirstName: posterInfo.first_name,
+                postTitle:       posterInfo.title,
+                applicantName,
+              });
+            }
+          } catch (err: any) {
+            console.warn(`[KaziKaribu] notify-poster background failed: ${err?.message}`);
+          }
+        })();
+
         return res.status(201).json({
           ok:        true,
           interestId: interestRows[0].id,
@@ -981,13 +1076,50 @@ export function registerKaziKaribuRoutes(
           return res.status(403).json({ error: "Only the poster can release their contact." });
         }
 
-        if (!rec.contact_revealed_at) {
+        const isFirstReveal = !rec.contact_revealed_at;
+        if (isFirstReveal) {
           await pool.query(
             `UPDATE kazi_karibu_interest SET contact_revealed_at = NOW() WHERE id = $1`,
             [interestId],
           );
         }
         console.log(`[KaziKaribu] REVEAL interestId=${interestId} posterId=${userId}`);
+
+        // Only notify on the FIRST reveal (idempotent) — don't spam if the
+        // poster re-clicks the button.
+        if (isFirstReveal) {
+          (async () => {
+            try {
+              const { rows: notifyRows } = await pool.query<{
+                applicant_phone: string | null;
+                applicant_first_name: string | null;
+                post_title: string;
+              }>(
+                `SELECT u.phone AS applicant_phone,
+                        u.first_name AS applicant_first_name,
+                        p.title AS post_title
+                   FROM kazi_karibu_interest i
+                   JOIN users u ON u.id = i.applicant_user_id
+                   JOIN kazi_karibu_posts p ON p.id = i.post_id
+                  WHERE i.id = $1 LIMIT 1`,
+                [interestId],
+              );
+              const info = notifyRows[0];
+              if (info) {
+                await notifyApplicantOfReveal({
+                  applicantPhone:     info.applicant_phone,
+                  applicantFirstName: info.applicant_first_name,
+                  postTitle:          info.post_title,
+                  posterFirstName:    rec.poster_first_name,
+                  posterPhone:        rec.poster_phone,
+                });
+              }
+            } catch (err: any) {
+              console.warn(`[KaziKaribu] notify-applicant background failed: ${err?.message}`);
+            }
+          })();
+        }
+
         return res.json({
           ok: true,
           posterContact: {
@@ -995,7 +1127,7 @@ export function registerKaziKaribuRoutes(
             phone:     rec.poster_phone,
             email:     rec.poster_email,
           },
-          message: "Your contact has been shared with this applicant. They'll see it on their My Interests page.",
+          message: "Your contact has been shared with this applicant. They'll see it on their My Interests page and get an SMS + WhatsApp.",
         });
       } catch (err: any) {
         console.error(`[KaziKaribu] REVEAL interestId=${interestId} err=${err?.message}`);
