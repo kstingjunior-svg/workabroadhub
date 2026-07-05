@@ -137,6 +137,7 @@ const KaziKaribuBrowse  = lazyWithRetry(() => import("@/pages/kazi-karibu-browse
 const KaziKaribuJob     = lazyWithRetry(() => import("@/pages/kazi-karibu-job"));
 const KaziKaribuPost    = lazyWithRetry(() => import("@/pages/kazi-karibu-post"));
 const KaziKaribuMyPosts = lazyWithRetry(() => import("@/pages/kazi-karibu-my-posts"));
+const KaziKaribuMyInterests = lazyWithRetry(() => import("@/pages/kazi-karibu-my-interests"));
 // Phase 4 employer portal — dashboard, manage, register
 const EmployerDashboard = lazyWithRetry(() => import("@/pages/employer/employer-dashboard"));
 const EmployerManage = lazyWithRetry(() => import("@/pages/employer/employer-manage"));
@@ -380,6 +381,7 @@ const LazyKaziKaribuBrowse  = withSuspense(KaziKaribuBrowse);
 const LazyKaziKaribuJob     = withSuspense(KaziKaribuJob);
 const LazyKaziKaribuPost    = withSuspense(KaziKaribuPost);
 const LazyKaziKaribuMyPosts = withSuspense(KaziKaribuMyPosts);
+const LazyKaziKaribuMyInterests = withSuspense(KaziKaribuMyInterests);
 const LazyEmployerDashboard = withSuspense(EmployerDashboard);
 const LazyEmployerManage = withSuspense(EmployerManage);
 const LazyEmployerRegisterCompany = withSuspense(EmployerRegisterCompany);
@@ -544,6 +546,7 @@ function AuthenticatedRoutes() {
       <Route path="/kazi-karibu/job/:id" component={LazyKaziKaribuJob} />
       <Route path="/kazi-karibu/post" component={LazyKaziKaribuPost} />
       <Route path="/kazi-karibu/my-posts" component={LazyKaziKaribuMyPosts} />
+      <Route path="/kazi-karibu/my-interests" component={LazyKaziKaribuMyInterests} />
 
       {/* Kenya Careers — Phase 1 public browse + Phase 2 applications */}
       <Route path="/kenya-careers" component={LazyKenyaCareers} />

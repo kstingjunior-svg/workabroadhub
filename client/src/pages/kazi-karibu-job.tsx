@@ -7,11 +7,12 @@
 import { useEffect, useState } from "react";
 import { Link, useParams, useLocation } from "wouter";
 import {
-  ArrowLeft, MapPin, Clock, Loader2, AlertCircle, Send, ShieldCheck, Info,
+  ArrowLeft, MapPin, Clock, Loader2, AlertCircle, Send, ShieldCheck, Info, Check, X,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { KAZI_KARIBU_CATEGORIES } from "@shared/kazi-karibu";
 
 interface KaziKaribuPost {
@@ -61,6 +62,39 @@ export default function KaziKaribuJob() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showInterest, setShowInterest] = useState(false);
+  const [message, setMessage] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitted, setSubmitted] = useState(false);
+
+  async function submitInterest() {
+    if (!post) return;
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      const r = await fetch(`/api/kazi-karibu/posts/${post.id}/interest`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ message: message.trim() || undefined }),
+      });
+      const body = await r.json();
+      if (r.status === 401) {
+        setSubmitError("Please sign in to express interest.");
+        setTimeout(() => navigate(`/login?redirect=/kazi-karibu/job/${post.id}`), 800);
+        return;
+      }
+      if (!r.ok) {
+        setSubmitError(body?.error ?? `Could not submit (${r.status})`);
+        return;
+      }
+      setSubmitted(true);
+    } catch (err: any) {
+      setSubmitError(err?.message ?? "Network error — please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   useEffect(() => {
     let ok = true;
@@ -188,24 +222,102 @@ export default function KaziKaribuJob() {
           </CardContent>
         </Card>
 
-        {/* ── Interest modal (Phase 1b: backend still stubbed) ────────── */}
+        {/* ── Interest modal — real submission form ────────────────────── */}
         {showInterest && (
-          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-            <Card className="max-w-md w-full">
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+               onClick={() => !submitting && !submitted && setShowInterest(false)}>
+            <Card className="max-w-md w-full" onClick={(e) => e.stopPropagation()}>
               <CardContent className="p-6">
-                <div className="flex items-start gap-2 p-3 mb-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
-                  <ShieldCheck className="h-4 w-4 text-amber-700 shrink-0 mt-0.5" />
-                  <p className="text-xs text-amber-800 dark:text-amber-200">
-                    The applicant flow is launching soon. For now, please save this job and check back when it opens.
-                  </p>
-                </div>
-                <p className="text-sm text-slate-700 dark:text-slate-300 mb-4">
-                  This job posting is live and real. The button to submit your interest lands next release —
-                  we're finishing the applicant-safety features first.
-                </p>
-                <Button className="w-full" variant="outline" onClick={() => setShowInterest(false)}>
-                  Got it
-                </Button>
+                {submitted ? (
+                  // ── Success state ───────────────────────────────────
+                  <>
+                    <div className="flex items-center justify-center w-12 h-12 rounded-full bg-emerald-100 dark:bg-emerald-900/40 mx-auto mb-3">
+                      <Check className="h-6 w-6 text-emerald-600" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-center text-slate-900 dark:text-white mb-2">
+                      Interest sent
+                    </h3>
+                    <p className="text-sm text-slate-600 dark:text-slate-300 text-center mb-4">
+                      The poster will review your profile and reach out on your registered phone if they want to shortlist you.
+                    </p>
+                    <div className="flex items-start gap-2 p-3 mb-4 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+                      <Info className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
+                      <p className="text-xs text-blue-800 dark:text-blue-200">
+                        Track this in <Link href="/kazi-karibu/my-interests"><span className="underline font-medium">My interests</span></Link>. If the poster releases their contact, it appears there.
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Link href="/kazi-karibu/browse" className="flex-1">
+                        <Button variant="outline" className="w-full">Browse more jobs</Button>
+                      </Link>
+                      <Link href="/kazi-karibu/my-interests" className="flex-1">
+                        <Button className="w-full bg-emerald-600 hover:bg-emerald-700 text-white">My interests</Button>
+                      </Link>
+                    </div>
+                  </>
+                ) : (
+                  // ── Form state ──────────────────────────────────────
+                  <>
+                    <div className="flex items-start justify-between gap-2 mb-3">
+                      <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Express interest</h3>
+                      <button onClick={() => setShowInterest(false)} className="text-slate-400 hover:text-slate-600" data-testid="btn-close-interest">
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                    <p className="text-sm text-slate-600 dark:text-slate-300 mb-4">
+                      Your profile (name, phone, and any career details) will be shared with the poster.
+                      Add a short note if you'd like to introduce yourself.
+                    </p>
+
+                    <div className="flex items-start gap-2 p-3 mb-4 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+                      <ShieldCheck className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
+                      <p className="text-xs text-blue-800 dark:text-blue-200">
+                        <strong>Your safety:</strong> the poster only sees your contact when you express interest.
+                        You'll see theirs when they choose to share it with you. Never send money to a poster.
+                      </p>
+                    </div>
+
+                    <label className="text-sm font-medium block mb-1">Cover note <span className="text-slate-400">(optional)</span></label>
+                    <Textarea
+                      value={message}
+                      onChange={(e) => setMessage(e.target.value)}
+                      placeholder="e.g. I've been a nanny for 5 years, references available. Can start immediately."
+                      rows={4}
+                      maxLength={2000}
+                      data-testid="input-interest-message"
+                    />
+                    <p className="text-xs text-slate-500 mt-1 mb-4 text-right">{message.length}/2000</p>
+
+                    {submitError && (
+                      <div className="p-2 mb-3 rounded bg-rose-50 dark:bg-rose-900/20 text-sm text-rose-700 dark:text-rose-300">
+                        {submitError}
+                      </div>
+                    )}
+
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        className="flex-1"
+                        onClick={() => setShowInterest(false)}
+                        disabled={submitting}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                        onClick={submitInterest}
+                        disabled={submitting}
+                        data-testid="btn-submit-interest"
+                      >
+                        {submitting ? (
+                          <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Sending…</>
+                        ) : (
+                          <><Send className="h-4 w-4 mr-2" /> Send interest</>
+                        )}
+                      </Button>
+                    </div>
+                  </>
+                )}
               </CardContent>
             </Card>
           </div>

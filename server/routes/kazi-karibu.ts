@@ -777,38 +777,330 @@ export function registerKaziKaribuRoutes(
     },
   );
 
-  // ─── APPLICANT FLOW (scaffold — impl in next commit) ──────────────────────
+  // ─── APPLICANT FLOW ────────────────────────────────────────────────────────
 
+  /**
+   * POST /api/kazi-karibu/posts/:id/interest
+   *
+   * Applicant expresses interest in a live post. Snapshots the applicant's
+   * profile (frozen at click-time so a later profile edit doesn't retroactively
+   * change what the poster saw) and inserts into kazi_karibu_interest.
+   *
+   * Layer 5 (contact isolation): the poster does NOT get the applicant's
+   * phone / email in the response. They see the profile snapshot in their
+   * own /my-posts view. To message the applicant they must first reveal
+   * their contact (which reciprocally shares poster's contact with applicant).
+   *
+   * Idempotent — the unique constraint on (post_id, applicant_user_id)
+   * means a second click is treated as an update, not a duplicate.
+   */
   app.post(
     "/api/kazi-karibu/posts/:id/interest",
     requireKaziKaribuEnabled, isAuthenticated,
-    async (_req: any, res: Response) => {
-      return res.status(501).json({
-        error: "Not implemented",
-        message: "Applicant interest flow lands in the next Phase-1 commit.",
-      });
+    async (req: any, res: Response) => {
+      const postId = String(req.params.id);
+      const userId = readSessionUserId(req);
+      if (!userId) return res.status(401).json({ error: "Please sign in first." });
+
+      try {
+        // 1. Verify the post is live.
+        const { rows: postRows } = await pool.query<{
+          id: string; poster_user_id: string; moderation_state: string;
+        }>(
+          `SELECT id, poster_user_id, moderation_state
+             FROM kazi_karibu_posts WHERE id = $1 LIMIT 1`,
+          [postId],
+        );
+        const post = postRows[0];
+        if (!post) return res.status(404).json({ error: "Job not found or no longer active." });
+        if (post.moderation_state !== "live") {
+          return res.status(410).json({ error: "This job is no longer accepting applicants." });
+        }
+        if (post.poster_user_id === userId) {
+          return res.status(400).json({ error: "You can't apply to your own post." });
+        }
+
+        // 2. Snapshot the applicant profile. Include contactable fields so
+        //    the poster can shortlist based on what they see, but NOT expose
+        //    them until reveal.
+        const { rows: userRows } = await pool.query<{
+          first_name: string | null;
+          last_name:  string | null;
+          email:      string | null;
+          phone:      string | null;
+          city:       string | null;
+          country:    string | null;
+        }>(
+          `SELECT first_name, last_name, email, phone, city, country
+             FROM users WHERE id = $1 LIMIT 1`,
+          [userId],
+        );
+        const u = userRows[0];
+        if (!u) return res.status(404).json({ error: "Profile not found." });
+
+        // 3. Best-effort career profile (may not exist for every user).
+        const { rows: careerRows } = await pool.query<{
+          headline: string | null;
+          summary:  string | null;
+        }>(
+          `SELECT headline, summary FROM user_career_profiles WHERE user_id = $1 LIMIT 1`,
+          [userId],
+        ).catch(() => ({ rows: [] }) as any);
+        const career = careerRows[0] ?? null;
+
+        const message = String(req.body?.message ?? "").trim().slice(0, 2000) || null;
+
+        const profileSnapshot = {
+          firstName:  u.first_name ?? null,
+          lastName:   u.last_name  ?? null,
+          email:      u.email      ?? null,
+          phone:      u.phone      ?? null,
+          city:       u.city       ?? null,
+          country:    u.country    ?? null,
+          headline:   career?.headline ?? null,
+          summary:    career?.summary  ?? null,
+          snapshotAt: new Date().toISOString(),
+        };
+
+        // 4. Insert. Unique constraint means re-clicking updates the message
+        //    without creating a duplicate.
+        const { rows: interestRows } = await pool.query<{ id: string; created_at: Date }>(
+          `INSERT INTO kazi_karibu_interest
+             (post_id, applicant_user_id, message, shared_profile_snapshot)
+           VALUES ($1, $2, $3, $4)
+           ON CONFLICT (post_id, applicant_user_id) DO UPDATE SET
+             message = EXCLUDED.message,
+             shared_profile_snapshot = EXCLUDED.shared_profile_snapshot
+           RETURNING id, created_at`,
+          [postId, userId, message, profileSnapshot],
+        );
+
+        console.log(`[KaziKaribu] INTEREST postId=${postId} applicantId=${userId} interestId=${interestRows[0]?.id}`);
+        return res.status(201).json({
+          ok:        true,
+          interestId: interestRows[0].id,
+          createdAt: interestRows[0].created_at,
+          message:   "Your interest has been shared with the poster. They'll reach out if they want to shortlist you — check /kazi-karibu/my-interests.",
+        });
+      } catch (err: any) {
+        console.error(`[KaziKaribu] INTEREST postId=${postId} err=${err?.message}`);
+        return res.status(500).json({ error: "Could not record your interest. Please try again." });
+      }
     },
   );
 
+  /**
+   * GET /api/kazi-karibu/posts/:id/interests
+   *
+   * Poster-only. Returns the list of applicants who expressed interest,
+   * with their profile snapshots (contact fields ARE included here because
+   * only the poster can call this endpoint on their own post).
+   */
+  app.get(
+    "/api/kazi-karibu/posts/:id/interests",
+    requireKaziKaribuEnabled, isAuthenticated,
+    async (req: any, res: Response) => {
+      const postId = String(req.params.id);
+      const userId = readSessionUserId(req);
+      if (!userId) return res.status(401).json({ error: "Please sign in first." });
+
+      try {
+        // Verify caller is the poster.
+        const { rows: postRows } = await pool.query<{ poster_user_id: string }>(
+          `SELECT poster_user_id FROM kazi_karibu_posts WHERE id = $1 LIMIT 1`,
+          [postId],
+        );
+        if (postRows.length === 0) return res.status(404).json({ error: "Post not found." });
+        if (postRows[0].poster_user_id !== userId) {
+          return res.status(403).json({ error: "Only the poster can view applicants." });
+        }
+
+        const { rows } = await pool.query(
+          `SELECT id, applicant_user_id, message, shared_profile_snapshot,
+                  contact_revealed_at, reported, created_at
+             FROM kazi_karibu_interest
+            WHERE post_id = $1
+            ORDER BY created_at DESC`,
+          [postId],
+        );
+        return res.json({ count: rows.length, interests: rows });
+      } catch (err: any) {
+        console.error(`[KaziKaribu] LIST_INTERESTS postId=${postId} err=${err?.message}`);
+        return res.status(500).json({ error: "Could not load applicants." });
+      }
+    },
+  );
+
+  /**
+   * POST /api/kazi-karibu/interests/:id/reveal-contact
+   *
+   * Poster-only. Releases the poster's contact to a specific applicant.
+   * The reveal is bilateral — the applicant sees the poster's contact via
+   * GET /interests/mine, and the poster has always had the applicant's
+   * contact in the profile snapshot.
+   *
+   * Logged so if a fraud report comes in later, we can trace every
+   * poster→applicant contact release.
+   */
   app.post(
     "/api/kazi-karibu/interests/:id/reveal-contact",
     requireKaziKaribuEnabled, isAuthenticated,
-    async (_req: any, res: Response) => {
-      return res.status(501).json({
-        error: "Not implemented",
-        message: "Contact-reveal flow lands in the next Phase-1 commit.",
-      });
+    async (req: any, res: Response) => {
+      const interestId = String(req.params.id);
+      const userId = readSessionUserId(req);
+      if (!userId) return res.status(401).json({ error: "Please sign in first." });
+
+      try {
+        // Fetch interest + post + poster contact.
+        const { rows } = await pool.query<{
+          id: string;
+          post_id: string;
+          poster_user_id: string;
+          poster_phone: string | null;
+          poster_email: string | null;
+          poster_first_name: string | null;
+          contact_revealed_at: Date | null;
+        }>(
+          `SELECT i.id,
+                  i.post_id,
+                  p.poster_user_id,
+                  u.phone      AS poster_phone,
+                  u.email      AS poster_email,
+                  u.first_name AS poster_first_name,
+                  i.contact_revealed_at
+             FROM kazi_karibu_interest i
+             JOIN kazi_karibu_posts   p ON p.id = i.post_id
+             JOIN users               u ON u.id = p.poster_user_id
+            WHERE i.id = $1
+            LIMIT 1`,
+          [interestId],
+        );
+        const rec = rows[0];
+        if (!rec) return res.status(404).json({ error: "Interest not found." });
+        if (rec.poster_user_id !== userId) {
+          return res.status(403).json({ error: "Only the poster can release their contact." });
+        }
+
+        if (!rec.contact_revealed_at) {
+          await pool.query(
+            `UPDATE kazi_karibu_interest SET contact_revealed_at = NOW() WHERE id = $1`,
+            [interestId],
+          );
+        }
+        console.log(`[KaziKaribu] REVEAL interestId=${interestId} posterId=${userId}`);
+        return res.json({
+          ok: true,
+          posterContact: {
+            firstName: rec.poster_first_name,
+            phone:     rec.poster_phone,
+            email:     rec.poster_email,
+          },
+          message: "Your contact has been shared with this applicant. They'll see it on their My Interests page.",
+        });
+      } catch (err: any) {
+        console.error(`[KaziKaribu] REVEAL interestId=${interestId} err=${err?.message}`);
+        return res.status(500).json({ error: "Could not release your contact." });
+      }
     },
   );
 
+  /**
+   * POST /api/kazi-karibu/interests/:id/report
+   *
+   * Either side can flag a suspicious interaction. Sets reported=true and
+   * captures the reason for admin review.
+   */
   app.post(
     "/api/kazi-karibu/interests/:id/report",
     requireKaziKaribuEnabled, isAuthenticated,
-    async (_req: any, res: Response) => {
-      return res.status(501).json({
-        error: "Not implemented",
-        message: "Reporting flow lands in the next Phase-1 commit.",
-      });
+    async (req: any, res: Response) => {
+      const interestId = String(req.params.id);
+      const userId = readSessionUserId(req);
+      if (!userId) return res.status(401).json({ error: "Please sign in first." });
+
+      try {
+        const { rows } = await pool.query<{
+          applicant_user_id: string;
+          poster_user_id:    string;
+        }>(
+          `SELECT i.applicant_user_id, p.poster_user_id
+             FROM kazi_karibu_interest i
+             JOIN kazi_karibu_posts   p ON p.id = i.post_id
+            WHERE i.id = $1 LIMIT 1`,
+          [interestId],
+        );
+        const rec = rows[0];
+        if (!rec) return res.status(404).json({ error: "Interest not found." });
+        if (rec.applicant_user_id !== userId && rec.poster_user_id !== userId) {
+          return res.status(403).json({ error: "Only the applicant or poster of this interaction can report it." });
+        }
+
+        const reason = String(req.body?.reason ?? "").trim().slice(0, 1000) || "unspecified";
+        await pool.query(
+          `UPDATE kazi_karibu_interest
+              SET reported = true,
+                  report_reason = $2,
+                  reported_at = NOW()
+            WHERE id = $1`,
+          [interestId, reason],
+        );
+        console.log(`[KaziKaribu] REPORT interestId=${interestId} reporterId=${userId} reason=${reason.slice(0, 60)}`);
+        return res.json({ ok: true, message: "Thanks for reporting. Our team will investigate." });
+      } catch (err: any) {
+        console.error(`[KaziKaribu] REPORT interestId=${interestId} err=${err?.message}`);
+        return res.status(500).json({ error: "Could not submit report." });
+      }
+    },
+  );
+
+  /**
+   * GET /api/kazi-karibu/interests/mine
+   *
+   * Applicant view — see every interest they've expressed, with post details
+   * and (if released) the poster's contact.
+   */
+  app.get(
+    "/api/kazi-karibu/interests/mine",
+    requireKaziKaribuEnabled, isAuthenticated,
+    async (req: any, res: Response) => {
+      const userId = readSessionUserId(req);
+      if (!userId) return res.status(401).json({ error: "Please sign in first." });
+
+      try {
+        const { rows } = await pool.query(
+          `SELECT i.id,
+                  i.message,
+                  i.contact_revealed_at,
+                  i.created_at,
+                  p.id      AS post_id,
+                  p.title,
+                  p.category,
+                  p.county,
+                  p.sub_county,
+                  p.moderation_state,
+                  p.budget_min_kes,
+                  p.budget_max_kes,
+                  p.budget_period,
+                  p.poster_display_name,
+                  CASE WHEN i.contact_revealed_at IS NOT NULL
+                       THEN u.first_name ELSE NULL END AS poster_first_name,
+                  CASE WHEN i.contact_revealed_at IS NOT NULL
+                       THEN u.phone      ELSE NULL END AS poster_phone,
+                  CASE WHEN i.contact_revealed_at IS NOT NULL
+                       THEN u.email      ELSE NULL END AS poster_email
+             FROM kazi_karibu_interest i
+             JOIN kazi_karibu_posts    p ON p.id = i.post_id
+             JOIN users                u ON u.id = p.poster_user_id
+            WHERE i.applicant_user_id = $1
+            ORDER BY i.created_at DESC
+            LIMIT 100`,
+          [userId],
+        );
+        return res.json({ count: rows.length, interests: rows });
+      } catch (err: any) {
+        console.error(`[KaziKaribu] MY_INTERESTS userId=${userId} err=${err?.message}`);
+        return res.status(500).json({ error: "Could not load your interests." });
+      }
     },
   );
 

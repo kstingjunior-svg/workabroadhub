@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { KAZI_KARIBU_CATEGORIES } from "@shared/kazi-karibu";
+import { KaziKaribuApplicantsPanel } from "@/components/kazi-karibu-applicants-panel";
 
 interface MyPost {
   id: string;
@@ -63,6 +64,7 @@ export default function KaziKaribuMyPosts() {
   const { user, isLoading: authLoading } = useAuth();
   const [posts, setPosts] = useState<MyPost[]>([]);
   const [loading, setLoading] = useState(true);
+  const [expandedPostId, setExpandedPostId] = useState<string | null>(null);
 
   useEffect(() => {
     document.title = "My posts — Kazi Karibu";
@@ -159,11 +161,25 @@ export default function KaziKaribuMyPosts() {
                         </div>
                       </div>
                       {isLive && (
-                        <Link href={`/kazi-karibu/job/${p.id}`}>
-                          <Button variant="outline" size="sm">View live post</Button>
-                        </Link>
+                        <div className="flex gap-2">
+                          <Button
+                            variant={expandedPostId === p.id ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => setExpandedPostId(expandedPostId === p.id ? null : p.id)}
+                            data-testid={`btn-applicants-${p.id}`}
+                          >
+                            {expandedPostId === p.id ? "Hide applicants" : "See applicants"}
+                          </Button>
+                          <Link href={`/kazi-karibu/job/${p.id}`}>
+                            <Button variant="outline" size="sm">View post</Button>
+                          </Link>
+                        </div>
                       )}
                     </div>
+                    {/* Inline applicants panel — fetched only when the poster expands it */}
+                    {isLive && expandedPostId === p.id && (
+                      <KaziKaribuApplicantsPanel postId={p.id} />
+                    )}
                   </CardContent>
                 </Card>
               );
