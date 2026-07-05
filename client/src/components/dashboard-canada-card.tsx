@@ -68,8 +68,17 @@ export function DashboardCanadaCard() {
   const angle = ANGLES[dayOfYear % ANGLES.length];
   const Icon = angle.icon;
 
+  // 2026-07: for free users we route the WHOLE card tap directly to /pricing.
+  // Previously we linked to the destination page and let its <ProOnlyGate>
+  // catch them — which worked, but the loading spinner + paywall handoff felt
+  // like they briefly slipped past the wall. Sending them straight to /pricing
+  // makes the gate explicit at the point-of-click and gives us defence in
+  // depth if the destination page's gate ever regresses. Paid users still go
+  // straight to the destination as before.
+  const target = isPaid ? angle.href : `/pricing?return=${encodeURIComponent(angle.href)}`;
+
   return (
-    <Link href={angle.href}>
+    <Link href={target}>
       <Card
         className="mb-4 cursor-pointer hover:shadow-md transition-all overflow-hidden border-2 border-red-200 dark:border-red-800/60 bg-gradient-to-br from-red-50/60 to-rose-50/40 dark:from-red-950/30 dark:to-rose-950/20 relative"
         data-testid="card-canada-teaser"
