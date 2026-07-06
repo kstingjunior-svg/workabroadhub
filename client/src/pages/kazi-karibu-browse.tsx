@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
-  Briefcase, MapPin, Loader2, Filter, ChevronRight, X,
+  Briefcase, MapPin, Loader2, Filter, ChevronRight, X, Trash2,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +26,8 @@ interface KaziKaribuPost {
   poster_display_name: string | null;
   is_boosted: boolean;
   published_at: string;
+  /** 2026-07: server-computed flag — true when the current viewer posted it. */
+  is_mine?: boolean;
 }
 
 // 47 Kenyan counties — for the filter dropdown. Simplified to a set the user
@@ -75,6 +77,7 @@ export default function KaziKaribuBrowse() {
   const [loading, setLoading] = useState(true);
   const [category, setCategory] = useState(params.get("category") ?? "");
   const [county, setCounty] = useState(params.get("county") ?? "");
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     document.title = "Browse jobs — Kazi Karibu · WorkAbroad Hub";
@@ -89,7 +92,9 @@ export default function KaziKaribuBrowse() {
     qs.set("limit", "48");
     (async () => {
       try {
-        const r = await fetch(`/api/kazi-karibu/posts?${qs}`);
+        // credentials so session cookie rides along — server needs it to
+        // compute is_mine per row.
+        const r = await fetch(`/api/kazi-karibu/posts?${qs}`, { credentials: "include" });
         if (r.status === 404) { if (ok) { setPosts([]); setTotal(0); } return; }
         const body = await r.json();
         if (ok) { setPosts(body.posts ?? []); setTotal(body.total ?? 0); }
@@ -98,6 +103,33 @@ export default function KaziKaribuBrowse() {
     })();
     return () => { ok = false; };
   }, [category, county]);
+
+  // 2026-07: inline delete for the poster's own cards on browse. Same
+  // pattern as the landing page — stops event propagation so the wrapping
+  // <Link> doesn't fire.
+  async function deletePost(e: React.MouseEvent, postId: string, postTitle: string) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!confirm(`Remove "${postTitle}"? Applicants will no longer see it or be able to contact you about this post.`)) return;
+    setDeletingId(postId);
+    try {
+      const r = await fetch(`/api/kazi-karibu/posts/${postId}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (r.ok) {
+        setPosts(prev => prev.filter(p => p.id !== postId));
+        setTotal(t => Math.max(0, t - 1));
+      } else {
+        const body = await r.json().catch(() => ({}));
+        alert(body?.error ?? `Could not remove (${r.status})`);
+      }
+    } catch (err: any) {
+      alert(err?.message ?? "Network error");
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   const activeFilterCount = (category ? 1 : 0) + (county ? 1 : 0);
 
@@ -202,8 +234,27 @@ export default function KaziKaribuBrowse() {
                       </span>
                       <span className="text-slate-400">{timeAgo(post.published_at)}</span>
                     </div>
-                    <div className="mt-2 text-sm text-emerald-700 dark:text-emerald-300 font-semibold">
-                      {formatBudget(post)}
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <div className="text-sm text-emerald-700 dark:text-emerald-300 font-semibold">
+                        {formatBudget(post)}
+                      </div>
+                      {/* 2026-07: poster-only inline delete on browse cards. */}
+                      {post.is_mine && (
+                        <button
+                          type="button"
+                          onClick={(e) => deletePost(e, post.id, post.title)}
+                          disabled={deletingId === post.id}
+                          className="inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded border border-rose-300 text-rose-700 hover:bg-rose-50 dark:border-rose-800 dark:text-rose-400 dark:hover:bg-rose-900/20 disabled:opacity-60"
+                          data-testid={`btn-delete-browse-${post.id}`}
+                          aria-label="I've hired — remove this post"
+                        >
+                          {deletingId === post.id ? (
+                            <><Loader2 className="h-3 w-3 animate-spin" /> Removing…</>
+                          ) : (
+                            <><Trash2 className="h-3 w-3" /> Delete</>
+                          )}
+                        </button>
+                      )}
                     </div>
                   </CardContent>
                 </Card>

@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams, useLocation } from "wouter";
 import {
   ArrowLeft, MapPin, Clock, Loader2, AlertCircle, Send, ShieldCheck, Info, Check, X, Phone, Mail, Lock,
+  Trash2, Users,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -32,6 +33,8 @@ interface KaziKaribuPost {
   is_boosted: boolean;
   published_at: string;
   expires_at: string | null;
+  /** 2026-07: server-computed — true when the current viewer is the poster. */
+  is_mine?: boolean;
 }
 
 interface PosterContact {
@@ -78,6 +81,32 @@ export default function KaziKaribuJob() {
   const [contact, setContact] = useState<PosterContact | null>(null);
   const [revealingContact, setRevealingContact] = useState(false);
   const [contactError, setContactError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  // 2026-07: owner-only delete for when you've hired someone and want to
+  // stop calls. The DELETE endpoint enforces ownership again on the server,
+  // so this is safe even if is_mine were spoofed client-side.
+  async function deleteOwnPost() {
+    if (!post) return;
+    if (!confirm(`Remove "${post.title}"? Applicants will no longer see it or be able to contact you about this post.`)) return;
+    setDeleting(true);
+    try {
+      const r = await fetch(`/api/kazi-karibu/posts/${post.id}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (r.ok) {
+        navigate("/kazi-karibu/my-posts");
+      } else {
+        const body = await r.json().catch(() => ({}));
+        alert(body?.error ?? `Could not remove (${r.status})`);
+        setDeleting(false);
+      }
+    } catch (err: any) {
+      alert(err?.message ?? "Network error");
+      setDeleting(false);
+    }
+  }
 
   async function revealContact() {
     if (!post) return;
@@ -134,7 +163,9 @@ export default function KaziKaribuJob() {
     let ok = true;
     (async () => {
       try {
-        const r = await fetch(`/api/kazi-karibu/posts/${id}`);
+        // credentials so the session cookie rides along — the server needs
+        // it to set post.is_mine=true when the current viewer is the poster.
+        const r = await fetch(`/api/kazi-karibu/posts/${id}`, { credentials: "include" });
         if (r.status === 404) { if (ok) { setError("This job is no longer live."); setLoading(false); } return; }
         const body = await r.json();
         if (ok) { setPost(body.post); setLoading(false); document.title = `${body.post.title} — Kazi Karibu`; }
@@ -227,8 +258,41 @@ export default function KaziKaribuJob() {
               </p>
             </div>
 
-            {/* ── Contact panel: either direct-reveal or contact-isolation ── */}
-            {post.poster_shows_phone ? (
+            {/* ── Owner banner: replaces contact + interest UI when the
+                current viewer is the poster (server-computed is_mine=true).
+                Landing straight from the browse card, the poster gets a
+                one-click "I've hired · Remove" without navigating away. ── */}
+            {post.is_mine ? (
+              <div className="mt-6 p-4 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+                <div className="text-xs font-semibold text-emerald-800 dark:text-emerald-200 uppercase mb-1 flex items-center gap-1.5">
+                  <ShieldCheck className="h-3.5 w-3.5" /> This is your post
+                </div>
+                <p className="text-sm text-slate-700 dark:text-slate-200 mb-3">
+                  Found who you were looking for? Remove the post so applicants stop calling.
+                  You can still see who applied on <Link href="/kazi-karibu/my-posts"><span className="underline font-medium">My posts</span></Link>.
+                </p>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <Link href="/kazi-karibu/my-posts">
+                    <Button variant="outline" className="w-full sm:w-auto">
+                      <Users className="h-4 w-4 mr-2" /> See applicants
+                    </Button>
+                  </Link>
+                  <Button
+                    onClick={deleteOwnPost}
+                    disabled={deleting}
+                    className="w-full sm:w-auto border-rose-300 text-rose-700 hover:bg-rose-50 dark:border-rose-800 dark:text-rose-400 dark:hover:bg-rose-900/20 bg-transparent"
+                    variant="outline"
+                    data-testid="btn-delete-owner"
+                  >
+                    {deleting ? (
+                      <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Removing…</>
+                    ) : (
+                      <><Trash2 className="h-4 w-4 mr-2" /> I've hired · Remove this post</>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            ) : post.poster_shows_phone ? (
               // ── Direct-contact mode (Option B default) ────────────────
               <div className="mt-6">
                 {contact ? (
@@ -296,22 +360,24 @@ export default function KaziKaribuJob() {
               </div>
             )}
 
-            {/* ── Interest CTA (always available as secondary path) ────── */}
+            {/* ── Interest CTA (hidden for the poster of this post). ─────── */}
             <div className="mt-4 flex flex-col sm:flex-row gap-3">
-              <Button
-                onClick={() => setShowInterest(true)}
-                className={post.poster_shows_phone
-                  ? "bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 flex-1"
-                  : "bg-emerald-600 hover:bg-emerald-700 text-white flex-1"}
-                size="lg"
-                variant={post.poster_shows_phone ? "outline" : "default"}
-                data-testid="btn-show-interest"
-              >
-                <Send className="h-4 w-4 mr-2" />
-                {post.poster_shows_phone ? "Or save my interest" : "I'm interested"}
-              </Button>
+              {!post.is_mine && (
+                <Button
+                  onClick={() => setShowInterest(true)}
+                  className={post.poster_shows_phone
+                    ? "bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 flex-1"
+                    : "bg-emerald-600 hover:bg-emerald-700 text-white flex-1"}
+                  size="lg"
+                  variant={post.poster_shows_phone ? "outline" : "default"}
+                  data-testid="btn-show-interest"
+                >
+                  <Send className="h-4 w-4 mr-2" />
+                  {post.poster_shows_phone ? "Or save my interest" : "I'm interested"}
+                </Button>
+              )}
               <Link href="/kazi-karibu/browse">
-                <Button variant="outline" size="lg" className="w-full sm:w-auto">
+                <Button variant="outline" size="lg" className={post.is_mine ? "w-full" : "w-full sm:w-auto"}>
                   Browse more jobs
                 </Button>
               </Link>

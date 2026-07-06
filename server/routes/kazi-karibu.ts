@@ -784,6 +784,12 @@ export function registerKaziKaribuRoutes(
         const limit    = Math.min(Number(req.query.limit  ?? 24), 100);
         const offset   = Math.max(0, Number(req.query.offset ?? 0));
 
+        // 2026-07: read the session user (if any) so we can flag each row
+        // with is_mine=true when the current viewer is the poster. Anonymous
+        // viewers get is_mine=false on every row. We never expose the raw
+        // poster_user_id to the client — it's stripped before send.
+        const sessionUserId = readSessionUserId(req);
+
         const where: string[] = [`moderation_state = 'live'`, `expires_at > NOW()`];
         const params: any[] = [];
         if (category) { params.push(category); where.push(`category = $${params.length}`); }
@@ -792,7 +798,8 @@ export function registerKaziKaribuRoutes(
         const listSql = `
           SELECT id, category, county, sub_county, title, description,
                  budget_min_kes, budget_max_kes, budget_period, duration,
-                 poster_display_name, is_boosted, published_at
+                 poster_display_name, is_boosted, published_at,
+                 poster_user_id
             FROM kazi_karibu_posts
            WHERE ${where.join(" AND ")}
            ORDER BY is_boosted DESC, published_at DESC
@@ -805,11 +812,18 @@ export function registerKaziKaribuRoutes(
           pool.query<{ c: string }>(countSql, params),
         ]);
 
+        // Strip poster_user_id, add is_mine boolean so the client can render
+        // the inline delete button on the poster's own cards.
+        const posts = list.rows.map(({ poster_user_id, ...rest }: any) => ({
+          ...rest,
+          is_mine: sessionUserId != null && poster_user_id === sessionUserId,
+        }));
+
         return res.json({
           total:  Number(count.rows[0]?.c ?? 0),
           limit,
           offset,
-          posts:  list.rows,
+          posts,
         });
       } catch (err: any) {
         console.error("[GET /api/kazi-karibu/posts]", err?.message);
@@ -831,11 +845,17 @@ export function registerKaziKaribuRoutes(
         const id = String(req.params.id);
         if (!/^[0-9a-f-]{8,}$/i.test(id)) return res.status(400).json({ error: "Invalid id." });
 
+        // 2026-07: read session user so the response can carry is_mine=true
+        // when the caller is the poster. Powers the "This is your post" owner
+        // banner + delete button on the detail page.
+        const sessionUserId = readSessionUserId(req);
+
         const { rows } = await pool.query(
           `SELECT id, category, county, sub_county, title, description,
                   budget_min_kes, budget_max_kes, budget_period, duration,
                   poster_display_name, poster_shows_phone,
-                  is_boosted, published_at, expires_at
+                  is_boosted, published_at, expires_at,
+                  poster_user_id
              FROM kazi_karibu_posts
             WHERE id = $1 AND moderation_state = 'live' AND expires_at > NOW()
             LIMIT 1`,
@@ -843,7 +863,14 @@ export function registerKaziKaribuRoutes(
         );
         if (rows.length === 0) return res.status(404).json({ error: "Post not found or no longer active." });
 
-        return res.json({ post: rows[0] });
+        // Strip raw poster_user_id, expose only the is_mine boolean.
+        const { poster_user_id, ...post } = rows[0] as any;
+        return res.json({
+          post: {
+            ...post,
+            is_mine: sessionUserId != null && poster_user_id === sessionUserId,
+          },
+        });
       } catch (err: any) {
         console.error("[GET /api/kazi-karibu/posts/:id]", err?.message);
         return res.status(500).json({ error: "Could not load post." });
