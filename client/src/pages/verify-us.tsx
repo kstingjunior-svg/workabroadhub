@@ -46,10 +46,10 @@ const CREDENTIALS: Credential[] = [
   },
   {
     icon: Shield,
-    label: "NEA Licensed",
+    label: "NEAIMS Licensed",
     value: import.meta.env.VITE_NEA_LICENSE_NUMBER || "RA/2024/01/123",
     verifyUrl: "https://nea.go.ke/licensed-agencies",
-    description: "Our partner agencies appear on the National Employment Authority's official licensed list. Every recruiter we link to must be NEA-verified.",
+    description: "Our partner agencies appear on the National Employment Authority Integrated Management Systems's official licensed list. Every recruiter we link to must be NEAIMS-verified.",
     color: "blue",
   },
   {
@@ -106,7 +106,7 @@ export default function VerifyUsPage() {
           <p className="text-base sm:text-lg text-muted-foreground leading-relaxed">
             Kenyans have been burned by overseas-jobs scams for too long. Here's
             everything you need to verify that WorkAbroad Hub is a real,
-            tax-compliant, NEA-registered business — checkable on official
+            tax-compliant, NEAIMS-registered business — checkable on official
             government registries.
           </p>
         </section>

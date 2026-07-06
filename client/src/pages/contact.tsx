@@ -38,7 +38,7 @@ const formSchema = z.object({
 type FormValues = z.infer<typeof formSchema>;
 
 const topics = [
-  { value: "verification",  label: "NEA Agency Verification" },
+  { value: "verification",  label: "NEAIMS Agency Verification" },
   { value: "payment",       label: "Payment / M-Pesa Issue" },
   { value: "service",       label: "CV / Document Services" },
   { value: "technical",     label: "Technical Support" },

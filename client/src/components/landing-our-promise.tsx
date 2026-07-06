@@ -21,7 +21,7 @@ const PROMISES = [
   {
     icon: CheckCircle2,
     title: "We verify before we recommend.",
-    body: "Every agency we mention is checked against the live NEA registry. Every portal we link to is hand-picked from official employer sites — not directories.",
+    body: "Every agency we mention is checked against the live NEAIMS registry. Every portal we link to is hand-picked from official employer sites — not directories.",
   },
   {
     icon: Compass,

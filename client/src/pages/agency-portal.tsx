@@ -526,7 +526,7 @@ export default function AgencyPortal() {
               <div className="space-y-2">
                 <h1 className="text-2xl font-bold">Agency Portal</h1>
                 <p className="text-muted-foreground max-w-md mx-auto">
-                  Sign in to claim your NEA-licensed agency and purchase visibility packages to reach more job seekers.
+                  Sign in to claim your NEAIMS-licensed agency and purchase visibility packages to reach more job seekers.
                 </p>
               </div>
               <div className="space-y-4 pt-4">
@@ -741,7 +741,7 @@ export default function AgencyPortal() {
             <CardHeader>
               <CardTitle>Claim Your Agency</CardTitle>
               <CardDescription>
-                Search for your NEA-licensed agency to claim and manage your listing
+                Search for your NEAIMS-licensed agency to claim and manage your listing
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -777,7 +777,7 @@ export default function AgencyPortal() {
                     ))
                   ) : (
                     <p className="text-muted-foreground text-center py-4">
-                      No agencies found. Make sure your agency is NEA-licensed.
+                      No agencies found. Make sure your agency is NEAIMS-licensed.
                     </p>
                   )}
                 </div>
@@ -869,7 +869,7 @@ export default function AgencyPortal() {
             <div>
               <p className="font-semibold text-orange-800 dark:text-orange-200 text-sm">Government Verification System Offline</p>
               <p className="text-sm text-orange-700 dark:text-orange-300 mt-0.5">
-                The NEA government licensing system is temporarily unavailable. Your license status below reflects the last known or manually verified state. Automatic re-verification will occur once the system is restored.
+                The NEAIMS government licensing system is temporarily unavailable. Your license status below reflects the last known or manually verified state. Automatic re-verification will occur once the system is restored.
               </p>
             </div>
           </div>
@@ -1048,7 +1048,7 @@ export default function AgencyPortal() {
                   Renew Your License
                 </CardTitle>
                 <CardDescription>
-                  Extend your NEA license validity via M-PESA payment
+                  Extend your NEAIMS license validity via M-PESA payment
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">

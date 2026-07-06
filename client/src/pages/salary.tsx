@@ -143,7 +143,7 @@ export default function SalaryExplorerPage() {
 
         {/* Footer note */}
         <div className="mt-8 text-xs text-muted-foreground text-center max-w-md mx-auto">
-          Figures are 2026 ranges from active NEA-agency contracts, public salary surveys, and
+          Figures are 2026 ranges from active NEAIMS-agency contracts, public salary surveys, and
           diaspora reports. Your contract may differ — verify with your recruiter before signing.
         </div>
       </div>

@@ -488,7 +488,7 @@ function VerifiedPortalsSection() {
         <Shield size={18} className="shrink-0 text-[#4A7C59]" />
         <p className="text-sm text-[#5A6A7A] dark:text-gray-400">
           <strong className="text-[#1A2530] dark:text-white">All portals are independently verified.</strong>
-          {" "}We check NEA licenses, scam databases, and user reports before listing any portal.
+          {" "}We check NEAIMS licenses, scam databases, and user reports before listing any portal.
           Apply directly on employer websites — never pay a recruitment fee.
         </p>
       </div>
@@ -717,7 +717,7 @@ export default function GlobalOpportunitiesPage() {
             <div className="flex flex-wrap gap-6 mt-4">
               {[
                 { icon: "💬", label: "1-on-1 WhatsApp" },
-                { icon: "🛡️", label: "NEA Verification" },
+                { icon: "🛡️", label: "NEAIMS Verification" },
                 { icon: "📄", label: "CV Templates" },
                 { icon: "🔄", label: "360 Day Access" },
               ].map(f => (
@@ -762,7 +762,7 @@ export default function GlobalOpportunitiesPage() {
         >
           <p className="text-sm text-[#5A6A7A] dark:text-gray-400">
             <strong className="text-[#1A2530] dark:text-white">🔒 All job portals are verified by our team.</strong>{" "}
-            We check NEA licenses, scam databases, and user reports before listing any portal.
+            We check NEAIMS licenses, scam databases, and user reports before listing any portal.
           </p>
           <p className="text-sm text-[#5A6A7A] dark:text-gray-400 mt-3">
             WorkAbroad Hub is a career consultation service. We do not charge recruitment fees or guarantee employment.{" "}

@@ -175,7 +175,7 @@ export default function AgenciesMarketplace() {
         <div className="max-w-4xl mx-auto text-center">
           <h1 className="text-3xl font-bold mb-2">Agency Job Marketplace</h1>
           <p className="text-primary-foreground/80 mb-6">
-            Browse jobs from NEA-licensed recruitment agencies. All listings are from verified agencies.
+            Browse jobs from NEAIMS-licensed recruitment agencies. All listings are from verified agencies.
           </p>
           <div className="relative max-w-xl mx-auto">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />

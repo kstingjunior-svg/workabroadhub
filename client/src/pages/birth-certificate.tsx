@@ -183,7 +183,7 @@ function BirthCertificatePaywall() {
           <div className="font-bold mb-0.5">KES 4,500 / year — or KES 1,000 / month</div>
           <div className="text-xs text-white/80 leading-snug">
             Same Pro plan also unlocks passport, good conduct, HELB, KRA,
-            visa & student-visa guides, NEA verification and WhatsApp support.
+            visa & student-visa guides, NEAIMS verification and WhatsApp support.
           </div>
         </div>
 

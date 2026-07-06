@@ -211,7 +211,7 @@ export default function AdminAgencyAddOns() {
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold" data-testid="text-page-title">Agency Premium Add-Ons</h1>
-            <p className="text-muted-foreground">Manage premium features for NEA licensed agencies</p>
+            <p className="text-muted-foreground">Manage premium features for NEAIMS licensed agencies</p>
           </div>
           <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
             <DialogTrigger asChild>

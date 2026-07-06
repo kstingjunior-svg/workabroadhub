@@ -704,7 +704,7 @@ function BottomServicesGrid() {
 /* ── Quick Access Row ── */
 const QUICK_ACCESS = [
   { icon: "🟢", title: "Green Card Guide",  desc: "DV Lottery • FREE eligibility check", href: "/country/usa" },
-  { icon: "🛡️", title: "NEA Agencies",      desc: "1,200+ verified recruiters",          href: "/nea-agencies" },
+  { icon: "🛡️", title: "NEAIMS Agencies",      desc: "1,200+ verified recruiters",          href: "/nea-agencies" },
   { icon: "📄", title: "CV Services",        desc: "ATS optimization • Country-specific", href: "/services" },
   { icon: "🤝", title: "Interview Prep",    desc: "Mock interviews • STAR method",       href: "/services" },
 ];
@@ -778,7 +778,7 @@ function ReferralBannerSection({ refCode }: { refCode?: string }) {
   );
 }
 
-/* ── NEA Trust Banner ── */
+/* ── NEAIMS Trust Banner ── */
 function TrustBanner() {
   const { data: stats } = useQuery<{ expiredAgencies: number; totalAgencies: number }>({
     queryKey: ["/api/public/stats"],
@@ -799,7 +799,7 @@ function TrustBanner() {
           🛡️ Government-Verified Agencies Only
         </h3>
         <p className="text-xs text-gray-500 dark:text-gray-400">
-          Every recruiter is checked against the official NEA database
+          Every recruiter is checked against the official NEAIMS database
         </p>
       </div>
 
@@ -2265,7 +2265,7 @@ export default function Dashboard() {
           </div>
         </Link>
 
-        {/* NEA AGENCIES */}
+        {/* NEAIMS AGENCIES */}
         <Link href="/nea-agencies">
           <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-2 border-green-500 dark:border-green-700 rounded-2xl p-4 cursor-pointer hover:shadow-md hover:scale-[1.01] active:scale-[0.99] transition-all duration-200" data-testid="link-nea-agencies">
             <div className="flex items-center gap-3">
@@ -2274,7 +2274,7 @@ export default function Dashboard() {
               </div>
               <div className="flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-bold text-green-800 dark:text-green-200">NEA Licensed Agencies</span>
+                  <span className="font-bold text-green-800 dark:text-green-200">NEAIMS Licensed Agencies</span>
                   <span className="px-2 py-0.5 bg-green-600 text-white text-[10px] font-bold rounded-full">1,200+</span>
                 </div>
                 <p className="text-sm text-green-700 dark:text-green-400">Government-verified recruitment agencies</p>
@@ -2366,7 +2366,7 @@ export default function Dashboard() {
         {/* ── QUICK ACCESS ROW ─────────────────────────────────────────── */}
         <QuickAccessRow />
 
-        {/* ── NEA TRUST BANNER ─────────────────────────────────────────── */}
+        {/* ── NEAIMS TRUST BANNER ─────────────────────────────────────────── */}
         <TrustBanner />
 
         {/* GUIDANCE TIPS */}

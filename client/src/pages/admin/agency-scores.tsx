@@ -247,7 +247,7 @@ export default function AdminAgencyScores() {
               </Link>
               <div>
                 <h1 className="text-2xl font-bold" data-testid="page-title">Agency Legitimacy Scores</h1>
-                <p className="text-muted-foreground text-sm mt-1">Dynamic trust scoring for NEA agencies</p>
+                <p className="text-muted-foreground text-sm mt-1">Dynamic trust scoring for NEAIMS agencies</p>
               </div>
             </div>
           </div>

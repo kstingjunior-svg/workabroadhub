@@ -35,7 +35,7 @@ export function LandingFinalCta({ onStartClick }: LandingFinalCtaProps) {
           </h2>
 
           <p className="text-base sm:text-lg text-gray-700 dark:text-gray-300 mt-3 max-w-2xl mx-auto leading-relaxed">
-            Skip fake agencies. Get verified portals, NEA license checker, CV templates, and 1-on-1 WhatsApp guidance — at{" "}
+            Skip fake agencies. Get verified portals, NEAIMS license checker, CV templates, and 1-on-1 WhatsApp guidance — at{" "}
             <strong className="text-gray-900 dark:text-white">your own pace</strong>.
           </p>
 
@@ -86,7 +86,7 @@ export function LandingFinalCta({ onStartClick }: LandingFinalCtaProps) {
           <div className="mt-7 inline-flex items-start gap-2 px-4 py-3 rounded-xl bg-white/70 dark:bg-gray-900/50 text-left text-sm text-gray-700 dark:text-gray-300 max-w-2xl mx-auto">
             <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
             <span>
-              <strong className="text-gray-900 dark:text-white">What you get immediately:</strong> live NEA verification, 30+ verified portals, 6 country-specific CV templates, and a 30-minute 1-on-1 WhatsApp session with an advisor.
+              <strong className="text-gray-900 dark:text-white">What you get immediately:</strong> live NEAIMS verification, 30+ verified portals, 6 country-specific CV templates, and a 30-minute 1-on-1 WhatsApp session with an advisor.
             </span>
           </div>
 

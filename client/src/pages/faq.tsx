@@ -27,7 +27,7 @@ const categories = [
       },
       {
         q: "Are you registered / legally operating in Kenya?",
-        a: "Yes. We operate in Nairobi, Kenya, and comply with the Kenya Data Protection Act 2019, the National Employment Authority (NEA) guidelines, and applicable labour laws. We are a consultation service, not a recruitment agency, so NEA agency licensing requirements do not apply to us — but we actively promote the use of NEA-licensed agencies and provide a verified agency database."
+        a: "Yes. We operate in Nairobi, Kenya, and comply with the Kenya Data Protection Act 2019, the National Employment Authority Integrated Management Systems (NEAIMS) guidelines, and applicable labour laws. We are a consultation service, not a recruitment agency, so NEAIMS agency licensing requirements do not apply to us — but we actively promote the use of NEAIMS-licensed agencies and provide a verified agency database."
       },
       {
         q: "What countries do you cover?",
@@ -46,7 +46,7 @@ const categories = [
       },
       {
         q: "What is the difference between the Free and Pro plans?",
-        a: "The Free plan gives you access to our tools (ATS CV Checker, Job Scam Checker) with partial results, and allows you to browse country guides and the NEA agency database. The Pro plan (KES 4,500 / 365 days) unlocks everything — full verified job listings, unlimited AI tools, 1-on-1 WhatsApp consultation, priority listings, ATS CV Checker, application tracker, and all service discounts. You can upgrade at any time."
+        a: "The Free plan gives you access to our tools (ATS CV Checker, Job Scam Checker) with partial results, and allows you to browse country guides and the NEAIMS agency database. The Pro plan (KES 4,500 / 365 days) unlocks everything — full verified job listings, unlimited AI tools, 1-on-1 WhatsApp consultation, priority listings, ATS CV Checker, application tracker, and all service discounts. You can upgrade at any time."
       },
       {
         q: "Do I pay before or after the consultation?",
@@ -96,19 +96,19 @@ const categories = [
     faqs: [
       {
         q: "How do I verify if a recruitment agency is licensed?",
-        a: "Go to our NEA Agencies page and search by agency name or license number. Our database contains 1,295 agencies registered with the National Employment Authority (NEA). A valid license shows a current expiry date. If an agency is not in our database or has an expired license, be very cautious — they are operating illegally."
+        a: "Go to our NEAIMS Agencies page and search by agency name or license number. Our database contains 1,295 agencies registered with the National Employment Authority Integrated Management Systems (NEAIMS). A valid license shows a current expiry date. If an agency is not in our database or has an expired license, be very cautious — they are operating illegally."
       },
       {
         q: "An agency asked me to pay a fee to get a job abroad. Is this legal?",
-        a: "In most cases, no. Legitimate recruitment agencies are paid by the employer, not the worker. Charging workers upfront fees for visa processing, training, or registration is illegal under Kenyan law. The only legitimate fees are passport costs and medical examination fees, which you pay to the relevant government offices directly — not to the agency. If an agency asks for money, verify their NEA license first, and if in doubt, contact us before paying anything."
+        a: "In most cases, no. Legitimate recruitment agencies are paid by the employer, not the worker. Charging workers upfront fees for visa processing, training, or registration is illegal under Kenyan law. The only legitimate fees are passport costs and medical examination fees, which you pay to the relevant government offices directly — not to the agency. If an agency asks for money, verify their NEAIMS license first, and if in doubt, contact us before paying anything."
       },
       {
-        q: "A company says they are NEA-licensed but I can't find them in your database. What should I do?",
-        a: "Our database is updated regularly but may have a short lag. First, try searching by different spellings of the name. If you still can't find them, contact us via WhatsApp and we'll check directly with the NEA registry. Do not proceed with any agency until their license is confirmed."
+        q: "A company says they are NEAIMS-licensed but I can't find them in your database. What should I do?",
+        a: "Our database is updated regularly but may have a short lag. First, try searching by different spellings of the name. If you still can't find them, contact us via WhatsApp and we'll check directly with the NEAIMS registry. Do not proceed with any agency until their license is confirmed."
       },
       {
         q: "What is the Government Manual Override system?",
-        a: "Occasionally, the NEA government database experiences downtime. When this happens, our system automatically flags the affected period and our admins can create manual license verifications based on official documents. You'll see a downtime notice on the NEA page if this is active — it means data may be up to 24 hours old."
+        a: "Occasionally, the NEAIMS government database experiences downtime. When this happens, our system automatically flags the affected period and our admins can create manual license verifications based on official documents. You'll see a downtime notice on the NEAIMS page if this is active — it means data may be up to 24 hours old."
       },
     ]
   },
@@ -123,7 +123,7 @@ const categories = [
       },
       {
         q: "I think I've been scammed. What should I do?",
-        a: "Stop all payments immediately and do not send any more documents or money. Report the scam using our Report Fraud page — we share information with NEA and law enforcement. You should also report it to the Directorate of Criminal Investigations (DCI) Cyber Crime Unit. If you've already paid, contact your bank or M-Pesa to attempt a reversal (this has a short window). Keep all messages, receipts, and contact details as evidence."
+        a: "Stop all payments immediately and do not send any more documents or money. Report the scam using our Report Fraud page — we share information with NEAIMS and law enforcement. You should also report it to the Directorate of Criminal Investigations (DCI) Cyber Crime Unit. If you've already paid, contact your bank or M-Pesa to attempt a reversal (this has a short window). Keep all messages, receipts, and contact details as evidence."
       },
       {
         q: "Someone claiming to be WorkAbroad Hub is asking me for money via a personal number. Is this you?",

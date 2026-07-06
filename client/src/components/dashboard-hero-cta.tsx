@@ -77,7 +77,7 @@ export function DashboardHeroCTA() {
           </div>
           <h3 className="text-lg sm:text-xl font-bold mb-1">🛡️ Is this agency legit?</h3>
           <p className="text-sm text-white/90 mb-3 leading-snug">
-            Check any recruiter against 1,200+ NEA-verified agencies before paying.
+            Check any recruiter against 1,200+ NEAIMS-verified agencies before paying.
           </p>
           <div className="inline-flex items-center gap-1 text-sm font-semibold opacity-90 group-hover:opacity-100">
             Verify now <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />

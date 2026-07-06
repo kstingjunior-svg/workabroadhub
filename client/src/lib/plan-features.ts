@@ -4,13 +4,13 @@
  */
 
 export const FREE_FEATURES = [
-  "NEA license check (3 per day)",
+  "NEAIMS license check (3 per day)",
   "Browse 5 verified portals",
   "Basic CV template",
 ] as const;
 
 export const PRO_FEATURES = [
-  "Unlimited NEA checks",
+  "Unlimited NEAIMS checks",
   "All 30+ portals access",
   "ATS CV scanner",
   "WhatsApp consultation",
@@ -20,7 +20,7 @@ export const PRO_FEATURES = [
 
 /** Rows for side-by-side comparison tables */
 export const PLAN_COMPARISON = [
-  { label: "NEA license checks",     free: "3 per day",       pro: "Unlimited"      },
+  { label: "NEAIMS license checks",     free: "3 per day",       pro: "Unlimited"      },
   { label: "Verified portals",       free: "5 portals",       pro: "30+ portals"    },
   { label: "CV tools",               free: "Basic template",  pro: "ATS CV scanner" },
   { label: "WhatsApp consultation",  free: false,             pro: true             },
@@ -30,7 +30,7 @@ export const PLAN_COMPARISON = [
 
 /** Upgrade modal PLANS — free column */
 export const UPGRADE_MODAL_FREE = [
-  { label: "NEA checks (3 per day)",  included: true  },
+  { label: "NEAIMS checks (3 per day)",  included: true  },
   { label: "5 verified portals",      included: true  },
   { label: "Basic CV template",       included: true  },
   { label: "ATS CV scanner",          included: false },
@@ -41,7 +41,7 @@ export const UPGRADE_MODAL_FREE = [
 
 /** Upgrade modal PLANS — pro column */
 export const UPGRADE_MODAL_PRO = [
-  { label: "Unlimited NEA checks",   included: true },
+  { label: "Unlimited NEAIMS checks",   included: true },
   { label: "All 30+ portals",        included: true },
   { label: "ATS CV scanner",         included: true },
   { label: "WhatsApp consultation",  included: true },

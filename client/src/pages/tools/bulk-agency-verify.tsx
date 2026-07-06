@@ -119,12 +119,12 @@ export default function BulkAgencyVerifyPage() {
             </div>
             <div>
               <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Bulk Agency Verifier</h1>
-              <p className="text-sm text-muted-foreground">Check multiple NEA license numbers at once</p>
+              <p className="text-sm text-muted-foreground">Check multiple NEAIMS license numbers at once</p>
             </div>
           </div>
           <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
-            Paste a list of text containing NEA license numbers (format: <span className="font-mono text-xs bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded">RA/YYYY/MM/N</span>).
-            The tool extracts all license numbers automatically and checks them against the live NEA database of <strong>1,294 agencies</strong>.
+            Paste a list of text containing NEAIMS license numbers (format: <span className="font-mono text-xs bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded">RA/YYYY/MM/N</span>).
+            The tool extracts all license numbers automatically and checks them against the live NEAIMS database of <strong>1,294 agencies</strong>.
           </p>
         </div>
 
@@ -303,7 +303,7 @@ export default function BulkAgencyVerifyPage() {
             </Card>
 
             <p className="text-xs text-center text-muted-foreground">
-              Data sourced from the NEA Kenya registry. Last synced from official NEA records.{" "}
+              Data sourced from the NEAIMS Kenya registry. Last synced from official NEAIMS records.{" "}
               <a href="https://www.nea.go.ke" target="_blank" rel="noopener noreferrer" className="text-teal-600 hover:underline">
                 Verify at nea.go.ke →
               </a>

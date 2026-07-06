@@ -128,7 +128,7 @@ function TaxComplianceCertificatePaywall() {
           <div className="font-bold mb-0.5">KES 4,500 / year — or KES 1,000 / month</div>
           <div className="text-xs text-white/85 leading-snug">
             Same Pro plan also unlocks passport, good conduct, student visa,
-            work visa, work permit assistance, NEA verification, WhatsApp
+            work visa, work permit assistance, NEAIMS verification, WhatsApp
             support and job alerts.
           </div>
         </div>

@@ -241,7 +241,7 @@ export default function AdminAgencies() {
   const pendingReports = reports?.filter(r => r.status === "pending") || [];
 
   return (
-    <AdminLayout title="NEA Agency Registry">
+    <AdminLayout title="NEAIMS Agency Registry">
       <div className="space-y-4">
         <Card className="p-4 bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900">
           <div className="flex items-start gap-3">
@@ -249,7 +249,7 @@ export default function AdminAgencies() {
             <div className="text-sm text-amber-800 dark:text-amber-200">
               <p className="font-medium">Legal Disclaimer</p>
               <p className="text-amber-700 dark:text-amber-300">
-                Agency status information is provided for public awareness only. This platform is not affiliated with or endorsed by the National Employment Authority. Status may change. Always confirm directly with NEA.
+                Agency status information is provided for public awareness only. This platform is not affiliated with or endorsed by the National Employment Authority Integrated Management Systems. Status may change. Always confirm directly with NEAIMS.
               </p>
             </div>
           </div>

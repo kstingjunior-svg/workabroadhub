@@ -143,7 +143,7 @@ export default function AgencyProfile() {
                   </h1>
                   {isLicenseValid ? (
                     <Badge className="bg-green-500 text-white text-xs">
-                      <Shield className="h-3 w-3 mr-1" /> NEA Licensed
+                      <Shield className="h-3 w-3 mr-1" /> NEAIMS Licensed
                     </Badge>
                   ) : (
                     <Badge variant="destructive" className="text-xs">License Expired</Badge>
@@ -386,7 +386,7 @@ export default function AgencyProfile() {
             <span className="font-mono text-xs bg-background px-1 py-0.5 rounded">{agency.licenseNumber}</span>{" "}
             on the{" "}
             <Link href="/nea-agencies">
-              <a className="text-primary underline">NEA Agency Registry</a>
+              <a className="text-primary underline">NEAIMS Agency Registry</a>
             </Link>
             {" "}or at{" "}
             <a

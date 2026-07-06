@@ -90,8 +90,8 @@
     "linkedInOptimizationDesc": "Optimize your profile for recruiters"
   },
   "neaAgencies": {
-    "title": "NEA Licensed Agencies",
-    "subtitle": "Verify recruitment agencies licensed by the National Employment Authority",
+    "title": "NEAIMS Licensed Agencies",
+    "subtitle": "Verify recruitment agencies licensed by the National Employment Authority Integrated Management Systems",
     "searchPlaceholder": "Search by agency name or license number...",
     "validLicense": "Valid License",
     "expiredLicense": "Expired License",

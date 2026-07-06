@@ -14,7 +14,7 @@ import { Crown, CheckCircle2, ArrowRight, Sparkles } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 
 const PRO_FEATURES = [
-  "Unlimited NEA agency checks",
+  "Unlimited NEAIMS agency checks",
   "All 30+ verified job portals",
   "ATS CV scanner — unlimited",
   "WhatsApp Nanjila — direct line",

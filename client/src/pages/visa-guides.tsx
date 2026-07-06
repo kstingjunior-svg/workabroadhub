@@ -321,7 +321,7 @@ export default function VisaGuidesPage() {
               {[
                 { href: "/green-card", label: "🇺🇸 USA Green Card (DV Lottery) Guide", sub: "55,000 permanent residency visas yearly" },
                 { href: "/student-visas", label: "🎓 Student Visa Guide", sub: "Study at top universities in 6 countries" },
-                { href: "/nea-agencies", label: "🔍 NEA Licensed Agencies", sub: "Verify your recruitment agency before you travel" },
+                { href: "/nea-agencies", label: "🔍 NEAIMS Licensed Agencies", sub: "Verify your recruitment agency before you travel" },
                 { href: "/tools/job-scam-checker", label: "🛡️ Job Scam Checker", sub: "Detect fraudulent overseas job offers" },
               ].map((link) => (
                 <Link key={link.href} href={link.href}>

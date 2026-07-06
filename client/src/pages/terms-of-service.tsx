@@ -62,7 +62,7 @@ export default function TermsOfService() {
                 <li><strong>Personalized country and job recommendations</strong> based on your profile</li>
                 <li>Curated links to official, third-party job portals</li>
                 <li>Career guidance resources and educational content</li>
-                <li>NEA Licensed Agency verification information</li>
+                <li>NEAIMS Licensed Agency verification information</li>
                 <li>Optional premium career services (CV writing, interview coaching, etc.)</li>
               </ul>
               <p>
@@ -175,10 +175,10 @@ export default function TermsOfService() {
                 <li>Any transactions or agreements made on external platforms</li>
               </ul>
 
-              <h2>7. NEA Agency Information</h2>
+              <h2>7. NEAIMS Agency Information</h2>
               <p>
-                We provide information about NEA-licensed employment agencies for verification purposes only. 
-                Users should independently verify agency credentials with the National Employment Authority 
+                We provide information about NEAIMS-licensed employment agencies for verification purposes only. 
+                Users should independently verify agency credentials with the National Employment Authority Integrated Management Systems 
                 before engaging their services.
               </p>
 
@@ -255,7 +255,7 @@ export default function TermsOfService() {
               <ul>
                 <li>All job portal links are curated and regularly reviewed by our team for accuracy and legitimacy</li>
                 <li>User-submitted reports of fraudulent agencies or job listings are investigated promptly</li>
-                <li>NEA agency data is verified against official records and updated periodically</li>
+                <li>NEAIMS agency data is verified against official records and updated periodically</li>
                 <li>Career service deliverables undergo quality review before final delivery</li>
                 <li>We remove or flag content that is misleading, harmful, or violates our policies</li>
               </ul>

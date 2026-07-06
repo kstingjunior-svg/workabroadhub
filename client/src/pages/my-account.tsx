@@ -530,7 +530,7 @@ export default function MyAccountPage() {
                       </h4>
                       {key === "pro_plan" && (
                         <p className="text-sm text-[#5A6A7A] dark:text-gray-400">
-                          Unlimited NEA checks · 30+ portals · ATS scanner · WhatsApp consultation
+                          Unlimited NEAIMS checks · 30+ portals · ATS scanner · WhatsApp consultation
                         </p>
                       )}
                       {sub.paidAmount > 0 && (

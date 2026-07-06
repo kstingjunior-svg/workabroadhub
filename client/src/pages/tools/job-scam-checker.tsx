@@ -39,7 +39,7 @@ const SCAM_FAQS = [
   { q: "What are the most common signs of a fake overseas job advert?", a: "Key red flags include: requests to pay any fee upfront (visa, training, registration), generic email addresses like Gmail or Yahoo instead of company domains, salaries that seem unrealistically high, vague job descriptions, pressure to respond urgently, and requests to share personal documents before any interview." },
   { q: "How does the Job Scam Checker detect fraud?", a: "Our rule-based engine scans the text for over 40 known scam signals including fee-request phrases, suspicious contact patterns, unrealistic salary claims, urgency language, and high-risk recruiter patterns. It assigns a risk score from 0–100 and lists every warning signal found." },
   { q: "If a job passes the checker, is it safe?", a: "A low risk score means the advert shows few known scam indicators — it does not guarantee the job is legitimate. Always verify the employer independently: check their website, call their registered office, and never pay any fee before signing a verified employment contract." },
-  { q: "Which countries have the most overseas job scams targeting Kenyans?", a: "The UAE, Saudi Arabia, Malaysia, and some parts of Europe have historically had high rates of scam job adverts targeting Kenyan workers. Always verify NEA-licensed agencies before engaging with recruiters for these destinations." },
+  { q: "Which countries have the most overseas job scams targeting Kenyans?", a: "The UAE, Saudi Arabia, Malaysia, and some parts of Europe have historically had high rates of scam job adverts targeting Kenyan workers. Always verify NEAIMS-licensed agencies before engaging with recruiters for these destinations." },
 ];
 
 interface ScamResult {
@@ -547,16 +547,16 @@ export default function JobScamChecker() {
                   </CardContent>
                 </Card>
 
-                {/* CTA: Verify agency via NEA */}
+                {/* CTA: Verify agency via NEAIMS */}
                 <Card className="border-blue-200 bg-blue-50 dark:bg-blue-900/10 dark:border-blue-800">
                   <CardContent className="p-4 flex items-center justify-between gap-3">
                     <div>
                       <p className="text-sm font-semibold">Verify the Agency</p>
-                      <p className="text-xs text-muted-foreground">Check if this recruiter is NEA-licensed</p>
+                      <p className="text-xs text-muted-foreground">Check if this recruiter is NEAIMS-licensed</p>
                     </div>
                     <Link href="/nea-agencies">
                       <Button size="sm" variant="outline" data-testid="button-verify-agency">
-                        NEA Check <ChevronRight className="h-4 w-4 ml-1" />
+                        NEAIMS Check <ChevronRight className="h-4 w-4 ml-1" />
                       </Button>
                     </Link>
                   </CardContent>
@@ -632,7 +632,7 @@ export default function JobScamChecker() {
         <div className="pb-2">
           <p className="text-xs text-muted-foreground font-semibold mb-2">Related tools & services</p>
           <div className="flex flex-wrap gap-2">
-            <Link href="/agencies"><span className="text-xs text-blue-600 dark:text-blue-400 underline underline-offset-2">Verify NEA Agencies</span></Link>
+            <Link href="/agencies"><span className="text-xs text-blue-600 dark:text-blue-400 underline underline-offset-2">Verify NEAIMS Agencies</span></Link>
             <span className="text-xs text-muted-foreground">·</span>
             <Link href="/tools/visa-sponsorship-jobs"><span className="text-xs text-blue-600 dark:text-blue-400 underline underline-offset-2">Visa Sponsorship Jobs</span></Link>
             <span className="text-xs text-muted-foreground">·</span>

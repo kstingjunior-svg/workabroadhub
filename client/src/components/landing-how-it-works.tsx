@@ -18,7 +18,7 @@ const STEPS = [
     n: 1,
     icon: Shield,
     title: "Check the agency first",
-    body: "Before you pay anyone a single shilling — search them here. Live NEA registry, blacklist, fake-licence warnings. Free, takes 10 seconds.",
+    body: "Before you pay anyone a single shilling — search them here. Live NEAIMS registry, blacklist, fake-licence warnings. Free, takes 10 seconds.",
     accent: "from-emerald-500 to-teal-500",
     chipColor: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300",
   },

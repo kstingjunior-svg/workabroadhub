@@ -25,7 +25,7 @@ const PRO_FEATURE_ROWS  = PRO_FEATURES.map((text)  => ({ icon: "✅", text, incl
 
 const TRUST_ITEMS = [
   { icon: Wallet,     label: "Secure Payments",    desc: "M-Pesa & PayPal — fully encrypted",     color: "text-green-600", bg: "bg-green-50 dark:bg-green-950/30" },
-  { icon: BadgeCheck, label: "Verified Platform",  desc: "NEA-registered agencies only",           color: "text-blue-600",  bg: "bg-blue-50 dark:bg-blue-950/30" },
+  { icon: BadgeCheck, label: "Verified Platform",  desc: "NEAIMS-registered agencies only",           color: "text-blue-600",  bg: "bg-blue-50 dark:bg-blue-950/30" },
   { icon: Shield,     label: "Zero Scams",         desc: "Every listing is manually checked",      color: "text-red-500",   bg: "bg-red-50 dark:bg-red-950/30" },
   { icon: Zap,        label: "Instant Access",     desc: "Plan activates within 60 seconds",       color: "text-amber-500", bg: "bg-amber-50 dark:bg-amber-950/30" },
 ];
@@ -298,7 +298,7 @@ export default function PricingPage() {
           )}
 
           <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-6 mt-8 text-sm text-orange-100">
-            <span className="flex items-center gap-1.5"><Shield className="h-4 w-4 text-green-300" /> <strong className="text-white">NEA verified</strong> agencies</span>
+            <span className="flex items-center gap-1.5"><Shield className="h-4 w-4 text-green-300" /> <strong className="text-white">NEAIMS verified</strong> agencies</span>
             <span className="flex items-center gap-1.5"><TrendingUp className="h-4 w-4 text-yellow-300" /> <strong className="text-white">365 days</strong> full access</span>
             <span className="flex items-center gap-1.5"><Users className="h-4 w-4" /> <strong className="text-white">30+</strong> verified job portals</span>
           </div>
@@ -519,8 +519,8 @@ export default function PricingPage() {
                 icon: <Shield className="h-6 w-6 text-emerald-600" />,
                 bg: "bg-emerald-50 dark:bg-emerald-950/30",
                 border: "border-emerald-200 dark:border-emerald-800",
-                title: "NEA Agency Verification",
-                body: "Check any recruitment agency's license status before paying them a single shilling. Our database covers all NEA-registered agencies in Kenya.",
+                title: "NEAIMS Agency Verification",
+                body: "Check any recruitment agency's license status before paying them a single shilling. Our database covers all NEAIMS-registered agencies in Kenya.",
               },
               {
                 icon: <BadgeCheck className="h-6 w-6 text-blue-600" />,

@@ -19,7 +19,7 @@ const values = [
   {
     icon: Target,
     title: "Kenya-Focused Expertise",
-    desc: "Every piece of advice we give is tailored to Kenyans — local salary expectations, NEA-licensed agency verification, and destination countries that actively hire Kenyan workers.",
+    desc: "Every piece of advice we give is tailored to Kenyans — local salary expectations, NEAIMS-licensed agency verification, and destination countries that actively hire Kenyan workers.",
   },
   {
     icon: Heart,
@@ -29,7 +29,7 @@ const values = [
   {
     icon: Globe,
     title: "Regulatory Compliance",
-    desc: "We operate under the Kenya Data Protection Act 2019, refer only to NEA-licensed agencies, and follow National Employment Authority guidelines on overseas recruitment.",
+    desc: "We operate under the Kenya Data Protection Act 2019, refer only to NEAIMS-licensed agencies, and follow National Employment Authority Integrated Management Systems guidelines on overseas recruitment.",
   },
 ];
 
@@ -44,7 +44,7 @@ const team = [
 
 const milestones = [
   { year: "2019", event: "Founded in Nairobi with a mission to protect Kenyans from overseas job scams" },
-  { year: "2021", event: "Launched our first NEA agency verification database" },
+  { year: "2021", event: "Launched our first NEAIMS agency verification database" },
   { year: "2023", event: "Reached 1,000+ consultations completed" },
   { year: "2024", event: "Launched AI-powered CV checker and Job Scam Detector" },
   { year: "2025", event: "Over 4,200 users served across 6 destination countries" },
@@ -88,7 +88,7 @@ export default function AboutPage() {
         <div className="max-w-4xl mx-auto flex items-start gap-3">
           <Shield className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
           <p className="text-sm text-amber-800">
-            <strong>Important:</strong> WorkAbroad Hub is a <strong>career consultation service</strong>, not a recruitment agency. We do not place workers, charge placement/visa fees, or guarantee employment outcomes. We are not affiliated with any specific employer or foreign government. Always verify any agency through the official <a href="/nea-agencies" className="underline font-medium">NEA register</a>.
+            <strong>Important:</strong> WorkAbroad Hub is a <strong>career consultation service</strong>, not a recruitment agency. We do not place workers, charge placement/visa fees, or guarantee employment outcomes. We are not affiliated with any specific employer or foreign government. Always verify any agency through the official <a href="/nea-agencies" className="underline font-medium">NEAIMS register</a>.
           </p>
         </div>
       </section>
@@ -98,7 +98,7 @@ export default function AboutPage() {
         <div className="max-w-4xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
           {[
             { value: publicStats?.totalUsers ? `${publicStats.totalUsers.toLocaleString()}+` : "…", label: "Users Served" },
-            { value: "1,296", label: "NEA Agencies Verified" },
+            { value: "1,296", label: "NEAIMS Agencies Verified" },
             { value: "30+", label: "Job Portals Curated" },
             { value: "6", label: "Destination Countries" },
           ].map(s => (
@@ -132,7 +132,7 @@ export default function AboutPage() {
               {[
                 "Registered and operating in Nairobi, Kenya",
                 "Compliant with Kenya Data Protection Act 2019",
-                "NEA agency database maintained in real-time",
+                "NEAIMS agency database maintained in real-time",
                 "No placement fees — ever",
                 "No employment guarantees — we're honest about that",
                 "Consultations via WhatsApp for accessibility",
@@ -200,8 +200,8 @@ export default function AboutPage() {
               <p className="text-slate-500 text-xs">WorkAbroad Hub, Nairobi, Kenya. Under the Kenya Data Protection Act 2019, you have the right to access, correct, and delete your data.</p>
             </div>
             <div className="bg-white rounded-lg p-4 border border-blue-100">
-              <div className="font-semibold mb-1">NEA Compliance</div>
-              <p className="text-slate-500 text-xs">We maintain a live database of NEA-licensed agencies and encourage users to verify any agency before engaging their services.</p>
+              <div className="font-semibold mb-1">NEAIMS Compliance</div>
+              <p className="text-slate-500 text-xs">We maintain a live database of NEAIMS-licensed agencies and encourage users to verify any agency before engaging their services.</p>
             </div>
             <div className="bg-white rounded-lg p-4 border border-blue-100">
               <div className="font-semibold mb-1">No Guarantee Policy</div>

@@ -403,7 +403,7 @@ export default function Landing() {
                   <strong className="block mb-2 text-xs uppercase tracking-wider" style={{ color: '#1A2530' }}>
                     Official Disclaimer — Please Read
                   </strong>
-                  WorkAbroad Hub is NOT a recruitment agency. We do not charge for job placements, visas, or interviews. Your KES 4,500 consultation fee covers personalized guidance, access to our verified portal database, and NEA verification tools. All job applications are made directly by you on official employer websites.
+                  WorkAbroad Hub is NOT a recruitment agency. We do not charge for job placements, visas, or interviews. Your KES 4,500 consultation fee covers personalized guidance, access to our verified portal database, and NEAIMS verification tools. All job applications are made directly by you on official employer websites.
                 </div>
 
                 {/* Consultation includes */}
@@ -413,7 +413,7 @@ export default function Landing() {
                     {[
                       '1-on-1 WhatsApp session with advisor',
                       'Access to 30+ verified job portals',
-                      'NEA license verification database',
+                      'NEAIMS license verification database',
                       'CV templates for 6 countries',
                     ].map((item) => (
                       <li key={item} className="flex items-start gap-2">
@@ -475,7 +475,7 @@ export default function Landing() {
                 </div>
               </div>
 
-              {/* RIGHT: NEA database — `nea-verify` anchor used by the
+              {/* RIGHT: NEAIMS database — `nea-verify` anchor used by the
                   hero CTA to smooth-scroll on click. */}
               <div id="nea-verify" className="p-7 sm:p-9 scroll-mt-24">
                 <h2
@@ -489,13 +489,13 @@ export default function Landing() {
                     marginBottom: '1.25rem',
                   }}
                 >
-                  NEA License Verification
+                  NEAIMS License Verification
                 </h2>
                 <p className="text-sm mb-5" style={{ color: '#5C6A7A' }}>
-                  Official database of registered employment agencies. Updated weekly.
+                  Official database of registered employment agencies. Updated daily.
                 </p>
 
-                {/* ── INTERACTIVE NEA AGENCY VERIFICATION (Phase 1 redesign) ───
+                {/* ── INTERACTIVE NEAIMS AGENCY VERIFICATION (Phase 1 redesign) ───
                     Replaces the static "ABC Recruitment Ltd." sample card with
                     a live, server-backed search box. User types an agency name,
                     hits Verify, gets a real result from the 1,293-agency table
@@ -776,7 +776,7 @@ export default function Landing() {
 
                 <p className="text-lg text-blue-100/80 leading-relaxed max-w-xl">
                   Stand out from <strong className="text-white">798 expired-license agencies</strong>. Get a verified badge, priority placement in 1,293 listings, and direct contact from
-                  thousands of monthly job-seekers. Built specifically for NEA-licensed recruiters serving Kenyans abroad.
+                  thousands of monthly job-seekers. Built specifically for NEAIMS-licensed recruiters serving Kenyans abroad.
                 </p>
 
                 <p className="text-sm text-emerald-200/90 font-semibold">
@@ -836,7 +836,7 @@ export default function Landing() {
                       <div className="space-y-3 text-sm">
                         <div className="flex items-center gap-3 py-2 border-b border-white/10">
                           <BadgeCheck className="h-4 w-4 text-emerald-400 flex-shrink-0" />
-                          <span className="text-blue-100/80">NEA license verified &amp; publicly displayed</span>
+                          <span className="text-blue-100/80">NEAIMS license verified &amp; publicly displayed</span>
                         </div>
                         <div className="flex items-center gap-3 py-2 border-b border-white/10">
                           <TrendingUp className="h-4 w-4 text-cyan-400 flex-shrink-0" />
@@ -980,7 +980,7 @@ export default function Landing() {
           </div>
         </section>
 
-        {/* NEA Licensed Agencies Section */}
+        {/* NEAIMS Licensed Agencies Section */}
         <section className="py-24 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
           {/* Background gradient */}
           <div className="absolute inset-0 bg-gradient-to-br from-amber-50 via-orange-50/50 to-amber-50 dark:from-amber-950/20 dark:via-orange-950/10 dark:to-amber-950/20" />
@@ -995,7 +995,7 @@ export default function Landing() {
                 </div>
                 
                 <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight">
-                  Verify NEA Licensed{' '}
+                  Verify NEAIMS Licensed{' '}
                   <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-500 to-orange-600">
                     Employment Agencies
                   </span>
@@ -1003,7 +1003,7 @@ export default function Landing() {
                 
                 <p className="text-lg text-muted-foreground leading-relaxed">
                   Before you pay any agency, verify their license status with our comprehensive database 
-                  of <strong>{agencyTotal} NEA-registered agencies</strong>. Know who's legitimate and who's expired.
+                  of <strong>{agencyTotal} NEAIMS-registered agencies</strong>. Know who's legitimate and who's expired.
                 </p>
                 
                 <div className="grid sm:grid-cols-2 gap-4">
@@ -1077,7 +1077,7 @@ export default function Landing() {
                       <CheckCircle className="h-5 w-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5" />
                       <div>
                         <div className="font-semibold text-emerald-700 dark:text-emerald-300">Safe to Work With</div>
-                        <div className="text-sm text-emerald-600 dark:text-emerald-400">This agency has a valid NEA license</div>
+                        <div className="text-sm text-emerald-600 dark:text-emerald-400">This agency has a valid NEAIMS license</div>
                       </div>
                     </div>
                   </div>
@@ -1377,7 +1377,7 @@ export default function Landing() {
               {[
                 { value: "30+", label: "Verified Job Portals", sublabel: "Curated & updated regularly", id: "portals" },
                 { value: "6", label: "Countries Covered", sublabel: "USA, Canada, UK, UAE, Australia, Europe", id: "countries" },
-                { value: agencyTotal, label: "NEA Agencies Verified", sublabel: "Check before you pay", id: "agencies" },
+                { value: agencyTotal, label: "NEAIMS Agencies Verified", sublabel: "Check before you pay", id: "agencies" },
                 { value: "24/7", label: "WhatsApp Support", sublabel: "Career guidance when you need it", id: "support" }
               ].map((stat, index) => (
                 <div key={index} className="text-center p-6 bg-white/5 rounded-2xl border border-white/10 backdrop-blur-sm" data-testid={`stat-${stat.id}`}>
@@ -1412,7 +1412,7 @@ export default function Landing() {
                   What exactly am I paying for with the KES 4,500 fee?
                 </AccordionTrigger>
                 <AccordionContent className="text-muted-foreground pb-5 leading-relaxed">
-                  The KES 4,500 is a one-time career consultation fee that includes: (1) A personalized 1-on-1 WhatsApp consultation with our career advisors who will assess your skills, experience, and goals to recommend the best countries and job types for you, (2) Access to our curated database of 30+ verified job portals across 6 countries (USA, Canada, UK, Australia, UAE, and Europe) for as long as the service remains available, (3) Country-specific CV templates and application guidance, (4) Access to our NEA agency verification database to protect you from scams, and (5) Regular updates as we add new resources and job portals. Access to online resources continues for as long as the service is operational.
+                  The KES 4,500 is a one-time career consultation fee that includes: (1) A personalized 1-on-1 WhatsApp consultation with our career advisors who will assess your skills, experience, and goals to recommend the best countries and job types for you, (2) Access to our curated database of 30+ verified job portals across 6 countries (USA, Canada, UK, Australia, UAE, and Europe) for as long as the service remains available, (3) Country-specific CV templates and application guidance, (4) Access to our NEAIMS agency verification database to protect you from scams, and (5) Regular updates as we add new resources and job portals. Access to online resources continues for as long as the service is operational.
                 </AccordionContent>
               </AccordionItem>
               
@@ -1454,10 +1454,10 @@ export default function Landing() {
               
               <AccordionItem value="item-6" className="bg-card border rounded-xl px-6">
                 <AccordionTrigger className="text-left font-semibold hover:no-underline py-5">
-                  What is the NEA agency verification feature?
+                  What is the NEAIMS agency verification feature?
                 </AccordionTrigger>
                 <AccordionContent className="text-muted-foreground pb-5 leading-relaxed">
-                  The National Employment Authority (NEA) of Kenya licenses private employment agencies that recruit Kenyans for overseas jobs. We maintain a database of {agencyTotal}+ NEA-registered agencies showing their license status (valid or expired). Before you pay any recruitment agency, you can check our database to verify they have a valid NEA license. This protects you from unlicensed operators and scams.
+                  The National Employment Authority Integrated Management Systems (NEAIMS) of Kenya licenses private employment agencies that recruit Kenyans for overseas jobs. We maintain a database of {agencyTotal}+ NEAIMS-registered agencies showing their license status (valid or expired). Before you pay any recruitment agency, you can check our database to verify they have a valid NEAIMS license. This protects you from unlicensed operators and scams.
                 </AccordionContent>
               </AccordionItem>
               
@@ -1523,7 +1523,7 @@ export default function Landing() {
             <div className="space-y-4">
               <h4 className="font-semibold text-white">Resources</h4>
               <ul className="space-y-2 text-sm">
-                <li><a href="/nea-agencies" className="text-slate-400 hover:text-white transition-colors" data-testid="link-footer-nea">NEA Agency Verification</a></li>
+                <li><a href="/nea-agencies" className="text-slate-400 hover:text-white transition-colors" data-testid="link-footer-nea">NEAIMS Agency Verification</a></li>
                 <li><a href="/student-visas" className="text-slate-400 hover:text-white transition-colors" data-testid="link-footer-student-visas">Student Visa Guide</a></li>
                 <li><a href="/visa-assistant" className="text-slate-400 hover:text-white transition-colors" data-testid="link-footer-visa-assistant">✨ AI Visa Assistant</a></li>
                 <li><a href="/visa-guides" className="text-slate-400 hover:text-white transition-colors" data-testid="link-footer-visa-guides">Visa &amp; Immigration Guides</a></li>
@@ -1605,7 +1605,7 @@ export default function Landing() {
               </div>
               <div className="flex items-center gap-1.5 text-slate-400">
                 <Shield className="h-3.5 w-3.5 text-blue-400" />
-                <span>NEA Registered Platform <span className="font-mono text-slate-300">{import.meta.env.VITE_NEA_LICENSE_NUMBER || "RA/2024/01/123"}</span></span>
+                <span>NEAIMS Registered Platform <span className="font-mono text-slate-300">{import.meta.env.VITE_NEA_LICENSE_NUMBER || "RA/2024/01/123"}</span></span>
               </div>
               <div className="flex items-center gap-1.5 text-slate-400">
                 <FileCheck className="h-3.5 w-3.5 text-purple-400" />
