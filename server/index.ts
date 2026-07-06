@@ -677,6 +677,43 @@ app.use((req, res, next) => {
       .catch(() => {});
 
     // ────────────────────────────────────────────────────────────────────────
+    // NEAIMS SYNC — nightly refresh of the government agency registry.
+    // ────────────────────────────────────────────────────────────────────────
+    //
+    // Pulls the full list of licensed / expired / deregistered agencies from
+    // https://api.neaims.go.ke and UPSERTs into nea_agencies. Runs once at
+    // boot (with a 30s delay so the server is ready), then every 24 hours.
+    //
+    // Feature-flagged: set env NEAIMS_SYNC_ENABLED=true to turn on. Off by
+    // default so a bad deploy can't accidentally hammer the government API.
+    //
+    // See server/nea/neaimsSync.ts for the orchestrator and
+    // server/routes/admin-nea-sync.ts for the admin trigger + history UI.
+    if (process.env.NEAIMS_SYNC_ENABLED === "true") {
+      import("./nea/neaimsSync")
+        .then((m) => {
+          const SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
+          const BOOT_DELAY_MS    = 30 * 1000;           // 30 seconds
+          // Delay the boot-time run so we don't compete with startup traffic
+          // and give the DB pool time to warm up.
+          setTimeout(() => {
+            m.runNeaimsSync({ triggeredBy: "boot" })
+              .then((r) => console.log(`[NEAIMS sync] Boot sync ${r.status}: ${r.message}`))
+              .catch((e) => console.warn("[NEAIMS sync] Boot run threw:", e?.message));
+          }, BOOT_DELAY_MS);
+          setInterval(() => {
+            m.runNeaimsSync({ triggeredBy: "schedule" })
+              .then((r) => console.log(`[NEAIMS sync] Scheduled sync ${r.status}: ${r.message}`))
+              .catch((e) => console.warn("[NEAIMS sync] Scheduled run threw:", e?.message));
+          }, SYNC_INTERVAL_MS);
+          console.log(`[NEAIMS sync] Enabled — boot run in ${BOOT_DELAY_MS/1000}s, then every 24h`);
+        })
+        .catch((e) => console.warn("[NEAIMS sync] Module import failed:", e?.message));
+    } else {
+      console.log("[NEAIMS sync] Disabled — set NEAIMS_SYNC_ENABLED=true to enable");
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
     // BACKGROUND STARTUP TASKS (NON-BLOCKING)
     // ────────────────────────────────────────────────────────────────────────
 

@@ -10153,14 +10153,14 @@ exports.NEA_AGENCIES_DATA = [
         "statusOverride": "expired"
     },
     {
-        "licenseNumber": "RA/2023/05/36",
+        "licenseNumber": "PVT-ZQURVD8",
         "agencyName": "Lithium Hart Company Limited",
         "email": "info@lithiumhart.co.ke",
         "website": null,
-        "serviceType": "Foreign & Local Recruitment",
-        "issueDate": "2022-03-31T00:00:00.000Z",
-        "expiryDate": "2024-05-10T00:00:00.000Z",
-        "statusOverride": "expired"
+        "serviceType": "BOTH LOCAL & INTERNATIONAL RENEWAL LICENSE",
+        "issueDate": "2026-06-16T00:00:00.000Z",
+        "expiryDate": "2027-06-16T00:00:00.000Z",
+        "statusOverride": null
     },
     {
         "licenseNumber": "NA/2022/04/6",

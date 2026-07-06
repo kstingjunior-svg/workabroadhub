@@ -1448,6 +1448,17 @@ export async function registerRoutes(
   const { registerAdminNanjilaRoutes } = await import("./routes/admin-nanjila");
   registerAdminNanjilaRoutes(app, isAuthenticated, isAdmin);
 
+  // ── NEAIMS agency-registry sync service ─────────────────────────────────
+  // Admin-only routes for triggering + inspecting the NEAIMS sync that
+  // keeps nea_agencies in step with the government registry at neaims.go.ke.
+  //   POST /api/admin/nea-sync/run       — trigger a sync now
+  //   GET  /api/admin/nea-sync/runs      — history of past runs
+  //   GET  /api/admin/nea-sync/latest    — most recent run summary
+  // The scheduled sync itself is wired in server/index.ts and runs nightly
+  // when NEAIMS_SYNC_ENABLED=true. Off by default.
+  const { registerAdminNeaSyncRoutes } = await import("./routes/admin-nea-sync");
+  registerAdminNeaSyncRoutes(app, isAuthenticated, isAdmin);
+
   // ── Kazi Karibu — individual employer postings ──────────────────────────
   // Every route inside is gated behind NanjilaFlags.kaziKaribuEnabled (env
   // KAZI_KARIBU_ENABLED). Shipping this code without setting the env var
