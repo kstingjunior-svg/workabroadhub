@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -117,6 +117,14 @@ export default function NeaAgenciesPage() {
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  // Cap how many rows render at once. Each card mounts <AgencyRatingDisplay>,
+  // which opens a Firebase Realtime DB listener via useAgencyRatingSummary.
+  // Post-NEAIMS-sync we have 2,600+ agencies — opening that many concurrent
+  // RTDB subscriptions blows past Firebase's client-side listener cap and
+  // crashes the render (surfaces as "Just a small detour"). We cap the
+  // initial page to VISIBLE_PAGE_SIZE and let the user click "Show more".
+  const VISIBLE_PAGE_SIZE = 50;
+  const [visibleCount, setVisibleCount] = useState(VISIBLE_PAGE_SIZE);
   const [isReportOpen, setIsReportOpen] = useState(false);
   const [isEducationOpen, setIsEducationOpen] = useState(false);
   const [selectedAgency, setSelectedAgency] = useState<NeaAgency | null>(null);
@@ -282,6 +290,17 @@ export default function NeaAgenciesPage() {
     const status = getAgencyStatus(agency);
     return status.status === statusFilter;
   });
+
+  // Whenever the user changes what they're looking at (search, status filter),
+  // reset the visible window so they start with the first 50 results and
+  // don't accidentally see a stale "showing 200 of 12" state.
+  useEffect(() => {
+    setVisibleCount(VISIBLE_PAGE_SIZE);
+  }, [searchQuery, statusFilter]);
+
+  const visibleAgencies = filteredAgencies?.slice(0, visibleCount);
+  const totalMatching = filteredAgencies?.length ?? 0;
+  const hasMore = totalMatching > visibleCount;
 
 
   return (
@@ -515,7 +534,7 @@ export default function NeaAgenciesPage() {
           </div>
         ) : (
           <div className="space-y-4">
-            {filteredAgencies?.map(agency => {
+            {visibleAgencies?.map(agency => {
               const status = getAgencyStatus(agency);
               const isExpired = status.status === "expired";
               const isSuspended = status.status === "suspended";
@@ -795,6 +814,20 @@ export default function NeaAgenciesPage() {
                   </p>
                 </CardContent>
               </Card>
+            )}
+            {hasMore && (
+              <div className="flex flex-col items-center gap-2 pt-4">
+                <p className="text-xs text-muted-foreground" data-testid="text-showing-count">
+                  Showing {visibleAgencies?.length} of {totalMatching.toLocaleString()} agencies
+                </p>
+                <Button
+                  variant="outline"
+                  onClick={() => setVisibleCount(c => c + VISIBLE_PAGE_SIZE)}
+                  data-testid="button-show-more-agencies"
+                >
+                  Show more
+                </Button>
+              </div>
             )}
           </div>
         )}
