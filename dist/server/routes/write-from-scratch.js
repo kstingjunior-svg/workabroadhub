@@ -37,7 +37,6 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.registerWriteFromScratchRoutes = registerWriteFromScratchRoutes;
 const db_1 = require("../db");
-const storage_1 = require("../storage");
 const mpesa_1 = require("../mpesa");
 const document_renderer_1 = require("../services/document-renderer");
 const generator_1 = require("../services/writeFromScratch/generator");
@@ -94,45 +93,43 @@ function registerWriteFromScratchRoutes(app) {
                 return res.status(400).json({ error: validationError });
             }
             const userId = currentUserId(req);
-            // Pro users skip payment entirely.
-            let isPro = false;
-            let observedPlan = null;
-            if (userId) {
+            // Everyone pays KES 300 — no Pro bypass. Kept the isPro helper around in
+            // case we want to add it back later, but the current policy is: uniform
+            // per-generation pricing so we don't confuse users about what's "free."
+            //
+            // Phone resolution: prefer the phone in the request body (guest users
+            // typing into the input, or logged-in users overriding), fall back to
+            // the phone we already have on file from signup. This is the "auto-use
+            // registered phone" UX Tony asked for — signed-in users click Generate
+            // and immediately get the STK prompt on their phone.
+            let payerPhone = typeof phone === "string" && phone.trim().length >= 9 ? phone.trim() : null;
+            if (!payerPhone && userId) {
                 try {
-                    observedPlan = await storage_1.storage.getUserPlan(userId);
-                    isPro = isProTier(observedPlan);
+                    const { rows } = await db_1.pool.query(`SELECT phone FROM users WHERE id = $1 LIMIT 1`, [userId]);
+                    const storedPhone = rows[0]?.phone;
+                    if (storedPhone && storedPhone.trim().length >= 9) {
+                        payerPhone = storedPhone.trim();
+                    }
                 }
                 catch (err) {
-                    console.warn("[write-from-scratch] Could not read plan:", err?.message);
+                    console.warn("[write-from-scratch] Could not look up registered phone:", err?.message);
                 }
             }
-            console.log(`[write-from-scratch/init] userId=${userId ?? "guest"} plan=${observedPlan ?? "n/a"} isPro=${isPro}`);
-            // ── Create draft row ─────────────────────────────────────────────
-            const { rows: created } = await db_1.pool.query(`INSERT INTO write_from_scratch_drafts
-           (user_id, doc_type, input_json, status, mpesa_amount, mpesa_phone, paid_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
-         RETURNING id`, [
-                userId,
-                docType,
-                JSON.stringify(input),
-                isPro ? "paid" : "pending_payment",
-                PRICE_KES,
-                phone ?? null,
-                isPro ? new Date() : null,
-            ]);
-            const draftId = created[0].id;
-            // Pro users: no payment step, they can hit /generate straight away.
-            if (isPro) {
-                return res.json({ draftId, isPro: true, status: "paid" });
-            }
-            // ── Free users: STK push ─────────────────────────────────────────
-            if (!phone || typeof phone !== "string" || phone.length < 9) {
-                // Roll back the draft; we won't be able to charge them.
-                await db_1.pool.query(`DELETE FROM write_from_scratch_drafts WHERE id = $1`, [draftId]);
+            console.log(`[write-from-scratch/init] userId=${userId ?? "guest"} payerPhone=${payerPhone ? payerPhone.slice(0, 6) + "…" : "none"}`);
+            // If we still have no phone, we can't charge — ask the client to collect one.
+            if (!payerPhone) {
                 return res.status(400).json({
-                    error: "Please provide the M-Pesa phone number that will pay.",
+                    error: "We need an M-Pesa phone number to send the KES 300 prompt.",
+                    needsPhone: true,
                 });
             }
+            // ── Create draft row ─────────────────────────────────────────────
+            const { rows: created } = await db_1.pool.query(`INSERT INTO write_from_scratch_drafts
+           (user_id, doc_type, input_json, status, mpesa_amount, mpesa_phone)
+         VALUES ($1, $2, $3, 'pending_payment', $4, $5)
+         RETURNING id`, [userId, docType, JSON.stringify(input), PRICE_KES, payerPhone]);
+            const draftId = created[0].id;
+            // ── Kick off STK push ────────────────────────────────────────────
             if (!(0, mpesa_1.isMpesaAvailable)()) {
                 await db_1.pool.query(`DELETE FROM write_from_scratch_drafts WHERE id = $1`, [draftId]);
                 return res.status(503).json({
@@ -141,7 +138,7 @@ function registerWriteFromScratchRoutes(app) {
             }
             let stkResponse;
             try {
-                stkResponse = await (0, mpesa_1.stkPush)(phone, PRICE_KES, `WorkAbroad Hub — ${docTypeLabel(docType)}`, `WAH-WFS-${draftId.slice(0, 8)}`, 
+                stkResponse = await (0, mpesa_1.stkPush)(payerPhone, PRICE_KES, `WorkAbroad Hub — ${docTypeLabel(docType)}`, `WAH-WFS-${draftId.slice(0, 8)}`, 
                 // Route this STK's callback to OUR dedicated endpoint, not the
                 // generic /api/payments/mpesa/callback pipeline. Isolated
                 // paths = no risk of accidentally triggering plan-activation
@@ -161,9 +158,9 @@ function registerWriteFromScratchRoutes(app) {
           WHERE id = $2`, [stkResponse?.CheckoutRequestID ?? null, draftId]);
             return res.json({
                 draftId,
-                isPro: false,
                 status: "pending_payment",
                 mpesaCheckoutId: stkResponse?.CheckoutRequestID ?? null,
+                payerPhone,
                 message: "Check your phone for the M-Pesa prompt and enter your PIN.",
             });
         }
