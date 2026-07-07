@@ -1466,6 +1466,14 @@ export async function registerRoutes(
   const { registerKaziKaribuRoutes } = await import("./routes/kazi-karibu");
   registerKaziKaribuRoutes(app, isAuthenticated, isAdmin);
 
+  // ── Write-from-Scratch — AI document generator (paid tool) ──────────────
+  // Users generate a CV / cover letter / recruitment CV / reference letter
+  // from a short form (no upload required). KES 300 per doc via M-Pesa;
+  // Pro subscribers free. Isolated from the main payment pipeline — its
+  // own M-Pesa callback lives at /api/write-from-scratch/mpesa-callback.
+  const { registerWriteFromScratchRoutes } = await import("./routes/write-from-scratch");
+  registerWriteFromScratchRoutes(app);
+
   // Track active sessions for the admin dashboard real-time counter.
   // Must run after setupAuth so req.session is populated.
   app.use(trackActiveUser);
@@ -22179,20 +22187,4 @@ If your instinct says "3,500", STOP and re-read the SERVICES block above.`;
     res.send(twiml.toString());
   });
 
-  // ── Client-side event tracker ────────────────────────────────────────────────
-  app.post("/api/track-event", async (req: any, res) => {
-    const { userId, event, page, metadata = {} } = req.body;
-
-    if (!event) return res.sendStatus(200);
-
-    await pool.query(
-      `INSERT INTO funnel_events (user_id, event, page, metadata)
-       VALUES ($1, $2, $3, $4)`,
-      [userId ?? req.user?.id ?? null, event, page ?? null, metadata]
-    );
-
-    res.sendStatus(200);
-  });
-
-  return httpServer;
-}
+  // ── Client-side event tracker ────────

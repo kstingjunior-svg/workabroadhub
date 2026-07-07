@@ -79,6 +79,19 @@ const TOOLS = [
     requiresAuth: false,
   },
   {
+    id: "write-from-scratch",
+    href: "/tools/write-from-scratch",
+    icon: FileText,
+    iconBg: "bg-rose-100 dark:bg-rose-900/30",
+    iconColor: "text-rose-600 dark:text-rose-400",
+    label: "Write from Scratch",
+    badge: "KES 300 · Pro Free",
+    badgeColor: "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300",
+    description: "No CV or letter to upload? Tell us who you are and what you need — we'll generate a CV, cover letter, recruitment CV, or reference letter from scratch. Download as Word or PDF.",
+    cta: "Generate a Document",
+    requiresAuth: false,
+  },
+  {
     id: "bulk-agency-verify",
     href: "/tools/bulk-agency-verify",
     icon: ShieldCheck,
@@ -413,25 +426,4 @@ export default function ToolsHub() {
                 </a>
                 <a href="/" className="flex-1">
                   <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full h-9 text-xs gap-1"
-                    data-testid="button-referral-login"
-                  >
-                    Log In
-                  </Button>
-                </a>
-              </div>
-              <p className="text-[10px] text-muted-foreground text-center mt-3">
-                Free to join · No monthly fees · KES 450 per referral · M-Pesa payout
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Bottom spacing */}
-      <div className="h-8" />
-    </div>
-  );
-}
+                    va
