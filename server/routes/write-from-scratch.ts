@@ -463,4 +463,14 @@ function validateInputForType(docType: WriteFromScratchDocType, input: any): str
 }
 
 /**
- * Same idea 
+ * Same idea as server/mpesa.ts getCallbackBaseUrl but scoped locally so we
+ * can override just this route without touching the module-level default.
+ * Falls back to APP_URL / X-Forwarded-Host.
+ */
+function getCallbackBaseUrl(req: Request): string {
+  const explicit = (process.env.APP_URL || "").trim();
+  if (explicit) return explicit.replace(/\/$/, "");
+  const proto = (req.headers["x-forwarded-proto"] as string) || "https";
+  const host = (req.headers["x-forwarded-host"] as string) || req.headers.host;
+  return `${proto}://${host}`;
+}
