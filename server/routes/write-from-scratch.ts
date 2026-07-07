@@ -103,52 +103,56 @@ export function registerWriteFromScratchRoutes(app: Express): void {
 
       const userId = currentUserId(req);
 
-      // Pro users skip payment entirely.
-      let isPro = false;
-      let observedPlan: string | null = null;
-      if (userId) {
+      // Everyone pays KES 300 — no Pro bypass. Kept the isPro helper around in
+      // case we want to add it back later, but the current policy is: uniform
+      // per-generation pricing so we don't confuse users about what's "free."
+      //
+      // Phone resolution: prefer the phone in the request body (guest users
+      // typing into the input, or logged-in users overriding), fall back to
+      // the phone we already have on file from signup. This is the "auto-use
+      // registered phone" UX Tony asked for — signed-in users click Generate
+      // and immediately get the STK prompt on their phone.
+      let payerPhone: string | null =
+        typeof phone === "string" && phone.trim().length >= 9 ? phone.trim() : null;
+
+      if (!payerPhone && userId) {
         try {
-          observedPlan = await storage.getUserPlan(userId);
-          isPro = isProTier(observedPlan);
+          const { rows } = await pool.query(
+            `SELECT phone FROM users WHERE id = $1 LIMIT 1`,
+            [userId],
+          );
+          const storedPhone = rows[0]?.phone as string | null | undefined;
+          if (storedPhone && storedPhone.trim().length >= 9) {
+            payerPhone = storedPhone.trim();
+          }
         } catch (err: any) {
-          console.warn("[write-from-scratch] Could not read plan:", err?.message);
+          console.warn("[write-from-scratch] Could not look up registered phone:", err?.message);
         }
       }
+
       console.log(
-        `[write-from-scratch/init] userId=${userId ?? "guest"} plan=${observedPlan ?? "n/a"} isPro=${isPro}`,
+        `[write-from-scratch/init] userId=${userId ?? "guest"} payerPhone=${payerPhone ? payerPhone.slice(0, 6) + "…" : "none"}`,
       );
+
+      // If we still have no phone, we can't charge — ask the client to collect one.
+      if (!payerPhone) {
+        return res.status(400).json({
+          error: "We need an M-Pesa phone number to send the KES 300 prompt.",
+          needsPhone: true,
+        });
+      }
 
       // ── Create draft row ─────────────────────────────────────────────
       const { rows: created } = await pool.query(
         `INSERT INTO write_from_scratch_drafts
-           (user_id, doc_type, input_json, status, mpesa_amount, mpesa_phone, paid_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+           (user_id, doc_type, input_json, status, mpesa_amount, mpesa_phone)
+         VALUES ($1, $2, $3, 'pending_payment', $4, $5)
          RETURNING id`,
-        [
-          userId,
-          docType,
-          JSON.stringify(input),
-          isPro ? "paid" : "pending_payment",
-          PRICE_KES,
-          phone ?? null,
-          isPro ? new Date() : null,
-        ],
+        [userId, docType, JSON.stringify(input), PRICE_KES, payerPhone],
       );
       const draftId = created[0].id as string;
 
-      // Pro users: no payment step, they can hit /generate straight away.
-      if (isPro) {
-        return res.json({ draftId, isPro: true, status: "paid" });
-      }
-
-      // ── Free users: STK push ─────────────────────────────────────────
-      if (!phone || typeof phone !== "string" || phone.length < 9) {
-        // Roll back the draft; we won't be able to charge them.
-        await pool.query(`DELETE FROM write_from_scratch_drafts WHERE id = $1`, [draftId]);
-        return res.status(400).json({
-          error: "Please provide the M-Pesa phone number that will pay.",
-        });
-      }
+      // ── Kick off STK push ────────────────────────────────────────────
       if (!isMpesaAvailable()) {
         await pool.query(`DELETE FROM write_from_scratch_drafts WHERE id = $1`, [draftId]);
         return res.status(503).json({
@@ -159,7 +163,7 @@ export function registerWriteFromScratchRoutes(app: Express): void {
       let stkResponse;
       try {
         stkResponse = await stkPush(
-          phone,
+          payerPhone,
           PRICE_KES,
           `WorkAbroad Hub — ${docTypeLabel(docType)}`,
           `WAH-WFS-${draftId.slice(0, 8)}`,
@@ -187,9 +191,9 @@ export function registerWriteFromScratchRoutes(app: Express): void {
 
       return res.json({
         draftId,
-        isPro: false,
         status: "pending_payment",
         mpesaCheckoutId: stkResponse?.CheckoutRequestID ?? null,
+        payerPhone,
         message: "Check your phone for the M-Pesa prompt and enter your PIN.",
       });
     } catch (err: any) {
@@ -459,14 +463,4 @@ function validateInputForType(docType: WriteFromScratchDocType, input: any): str
 }
 
 /**
- * Same idea as server/mpesa.ts getCallbackBaseUrl but scoped locally so we
- * can override just this route without touching the module-level default.
- * Falls back to APP_URL / X-Forwarded-Host.
- */
-function getCallbackBaseUrl(req: Request): string {
-  const explicit = (process.env.APP_URL || "").trim();
-  if (explicit) return explicit.replace(/\/$/, "");
-  const proto = (req.headers["x-forwarded-proto"] as string) || "https";
-  const host = (req.headers["x-forwarded-host"] as string) || req.headers.host;
-  return `${proto}://${host}`;
-}
+ * Same idea 

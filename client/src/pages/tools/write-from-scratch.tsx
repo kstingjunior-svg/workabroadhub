@@ -99,6 +99,9 @@ export default function WriteFromScratchPage() {
   const [docType, setDocType] = useState<DocType | null>(null);
   const [form, setForm] = useState<Record<string, string>>({});
   const [phone, setPhone] = useState("");
+  // Set when the server responds { needsPhone: true } — flips the form into
+  // "please give us a phone" mode so the user has something actionable to do.
+  const [needsPhone, setNeedsPhone] = useState(false);
   const [draftId, setDraftId] = useState<string | null>(null);
   const [body, setBody] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -164,11 +167,26 @@ export default function WriteFromScratchPage() {
       const res = await apiRequest("POST", "/api/write-from-scratch/init", {
         docType,
         input: buildInput(docType, form),
+        // Only send an explicit phone if the user typed one in the fallback
+        // input (guest users, or logged-in users overriding). If empty, the
+        // server auto-uses their registered phone from users.phone.
         phone: phone.trim() || undefined,
       });
       const j = await res.json();
 
       if (!res.ok) {
+        // If the server told us it needs a phone (no phone on file, guest
+        // user, whatever) — flip the UI into "collect phone" mode instead of
+        // just toasting an error the user can't act on.
+        if (j.needsPhone) {
+          setNeedsPhone(true);
+          toast({
+            title: "Please enter your M-Pesa phone",
+            description: "We couldn't find a phone on file — add one below and try again.",
+            variant: "destructive",
+          });
+          return;
+        }
         toast({
           title: "Could not start",
           description: j.error ?? "Please try again.",
@@ -179,12 +197,8 @@ export default function WriteFromScratchPage() {
 
       setDraftId(j.draftId);
 
-      if (j.isPro) {
-        // Pro user — skip payment, go straight to generation
-        setState("generating");
-        await runGeneration(j.draftId);
-      } else {
-        // Free user — waiting for M-Pesa
+      {
+        // Payment mode — everyone pays KES 300. STK prompt is on the way.
         setState("paying");
         toast({
           title: "Check your phone",
@@ -283,7 +297,8 @@ export default function WriteFromScratchPage() {
             setForm={setForm}
             phone={phone}
             setPhone={setPhone}
-            isPro={Boolean((user as any)?.plan && (user as any).plan !== "free")}
+            registeredPhone={(user as any)?.phone ?? null}
+            needsPhone={needsPhone}
             onSubmit={startPaymentOrGeneration}
             onBack={() => setState("pick")}
           />
@@ -338,7 +353,8 @@ function PickView({ onPick }: { onPick: (t: DocType) => void }) {
           <h2 className="font-semibold text-lg mb-1">Start from zero — no upload required</h2>
           <p className="text-sm text-muted-foreground">
             Tell us who you are and what you need. We'll write it. Download as Word or PDF.
-            Costs <strong>KES {PRICE_KES}</strong> per document — free for Pro subscribers.
+            <strong>KES {PRICE_KES}</strong> per document, paid via M-Pesa STK prompt to your
+            registered phone.
           </p>
         </CardContent>
       </Card>
@@ -378,7 +394,8 @@ function FillView({
   setForm,
   phone,
   setPhone,
-  isPro,
+  registeredPhone,
+  needsPhone,
   onSubmit,
   onBack,
 }: {
@@ -387,7 +404,8 @@ function FillView({
   setForm: (next: Record<string, string>) => void;
   phone: string;
   setPhone: (p: string) => void;
-  isPro: boolean;
+  registeredPhone: string | null;
+  needsPhone: boolean;
   onSubmit: () => void;
   onBack: () => void;
 }) {
@@ -444,16 +462,27 @@ function FillView({
         </CardContent>
       </Card>
 
-      {!isPro && (
-        <Card>
-          <CardContent className="p-6 space-y-3">
-            <div>
-              <h3 className="font-semibold text-sm">Payment</h3>
-              <p className="text-xs text-muted-foreground">
-                One-off <strong>KES {PRICE_KES}</strong> via M-Pesa. You'll get an STK prompt
-                on this phone number.
-              </p>
+      {/* Payment card — everyone pays KES 300. If we have a phone on file
+          from signup we just tell the user which phone we'll charge; otherwise
+          collect one inline. */}
+      <Card>
+        <CardContent className="p-6 space-y-3">
+          <div>
+            <h3 className="font-semibold text-sm">Payment</h3>
+            <p className="text-xs text-muted-foreground">
+              One-off <strong>KES {PRICE_KES}</strong> via M-Pesa. You'll get an STK
+              prompt on your phone — enter your PIN to authorise.
+            </p>
+          </div>
+
+          {registeredPhone && !needsPhone ? (
+            <div className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2 text-sm" data-testid="registered-phone">
+              <CheckCircle2 className="h-4 w-4 text-emerald-600 flex-shrink-0" />
+              <span>
+                Charging your registered M-Pesa: <strong>{maskPhone(registeredPhone)}</strong>
+              </span>
             </div>
+          ) : (
             <div>
               <Label htmlFor="field-phone">M-Pesa phone number</Label>
               <Input
@@ -466,19 +495,15 @@ function FillView({
                 className="mt-1"
                 data-testid="input-phone"
               />
+              {needsPhone && (
+                <p className="text-xs text-red-600 mt-1">
+                  We couldn't find a phone on file for your account. Please enter one.
+                </p>
+              )}
             </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {isPro && (
-        <Card className="bg-emerald-50 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-900">
-          <CardContent className="p-4 text-sm text-emerald-800 dark:text-emerald-200 flex items-center gap-2">
-            <CheckCircle2 className="h-5 w-5" />
-            Included with your Pro plan — no payment required.
-          </CardContent>
-        </Card>
-      )}
+          )}
+        </CardContent>
+      </Card>
 
       <div className="flex gap-2">
         <Button variant="outline" onClick={onBack} data-testid="button-back">
@@ -500,13 +525,24 @@ function FillView({
           {submitting ? (
             <Loader2 className="h-4 w-4 animate-spin mr-2" />
           ) : null}
-          {isPro
-            ? "Generate now"
-            : `Pay KES ${PRICE_KES} via M-Pesa`}
+          Pay KES {PRICE_KES} via M-Pesa
         </Button>
       </div>
     </div>
   );
+}
+
+/**
+ * Mask a phone so we show enough for the user to recognise their own number
+ * without leaking it in screenshots or shoulder-surfing. "254712345678"
+ * becomes "0712 *** 678"; short/odd formats fall back to the raw string.
+ */
+function maskPhone(raw: string): string {
+  const digits = raw.replace(/\D/g, "");
+  let normalised = digits;
+  if (normalised.startsWith("254")) normalised = "0" + normalised.slice(3);
+  if (normalised.length !== 10) return raw;
+  return `${normalised.slice(0, 4)} *** ${normalised.slice(7)}`;
 }
 
 // ─── Wait view — used for both paying + generating ──────────────────────────
