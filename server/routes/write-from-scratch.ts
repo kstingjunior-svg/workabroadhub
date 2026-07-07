@@ -54,9 +54,22 @@ const VALID_DOC_TYPES: WriteFromScratchDocType[] = [
   "reference_letter",
 ];
 
+/**
+ * Match the frontend's definition of "paying customer" — any plan that isn't
+ * "free" or null. The strict list (pro / pro_referral / yearly) missed users
+ * on legacy plan strings ("basic", "standard", grandfathered tiers) who see
+ * the "Included with your Pro plan" banner but then hit an M-Pesa phone
+ * demand because the server disagreed with the UI.
+ *
+ * Anyone with an active non-free plan gets the tool free — same policy Tony
+ * announced ("free for Pro subscribers"), just aligned to the actual plan
+ * strings in storage.getUserPlan.
+ */
 function isProTier(plan: string | null | undefined): boolean {
   if (!plan) return false;
-  return plan === "pro" || plan === "pro_referral" || plan === "yearly";
+  const p = String(plan).trim().toLowerCase();
+  if (!p) return false;
+  return p !== "free";
 }
 
 /**
@@ -92,14 +105,18 @@ export function registerWriteFromScratchRoutes(app: Express): void {
 
       // Pro users skip payment entirely.
       let isPro = false;
+      let observedPlan: string | null = null;
       if (userId) {
         try {
-          const plan = await storage.getUserPlan(userId);
-          isPro = isProTier(plan);
+          observedPlan = await storage.getUserPlan(userId);
+          isPro = isProTier(observedPlan);
         } catch (err: any) {
           console.warn("[write-from-scratch] Could not read plan:", err?.message);
         }
       }
+      console.log(
+        `[write-from-scratch/init] userId=${userId ?? "guest"} plan=${observedPlan ?? "n/a"} isPro=${isPro}`,
+      );
 
       // ── Create draft row ─────────────────────────────────────────────
       const { rows: created } = await pool.query(
