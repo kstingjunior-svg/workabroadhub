@@ -22187,4 +22187,20 @@ If your instinct says "3,500", STOP and re-read the SERVICES block above.`;
     res.send(twiml.toString());
   });
 
-  // ── Client-side event tracker ────────
+  // ── Client-side event tracker ────────────────────────────────────────────────
+  app.post("/api/track-event", async (req: any, res) => {
+    const { userId, event, page, metadata = {} } = req.body;
+
+    if (!event) return res.sendStatus(200);
+
+    await pool.query(
+      `INSERT INTO funnel_events (user_id, event, page, metadata)
+       VALUES ($1, $2, $3, $4)`,
+      [userId ?? req.user?.id ?? null, event, page ?? null, metadata]
+    );
+
+    res.sendStatus(200);
+  });
+
+  return httpServer;
+}

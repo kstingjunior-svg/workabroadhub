@@ -426,4 +426,25 @@ export default function ToolsHub() {
                 </a>
                 <a href="/" className="flex-1">
                   <Button
-                    va
+                    variant="outline"
+                    size="sm"
+                    className="w-full h-9 text-xs gap-1"
+                    data-testid="button-referral-login"
+                  >
+                    Log In
+                  </Button>
+                </a>
+              </div>
+              <p className="text-[10px] text-muted-foreground text-center mt-3">
+                Free to join · No monthly fees · KES 450 per referral · M-Pesa payout
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Bottom spacing */}
+      <div className="h-8" />
+    </div>
+  );
+}

@@ -868,4 +868,16 @@ function App() {
               </main>
               <UpgradeModal />
               <LiveActivityFeed />
-              
+              <LazyNanjilaChatWidget />
+              <InstallAppPrompt />
+              <GlobalBackButton />
+              <GlobalPlanListener />
+            </AgeVerificationGate>
+          </UpgradeModalProvider>
+        </TooltipProvider>
+      </AccessibilityProvider>
+    </QueryClientProvider>
+  );
+}
+
+export default App;

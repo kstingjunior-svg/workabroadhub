@@ -188,4 +188,27 @@ export function DashboardServicesGrid() {
               </div>
               {/* Price anchor — tangible Kenyan reframe of cost
                   ("≈ 1 mandazi" / "Career coach: KES 5,000+ · You save…").
-                  Killed sticker-shock + reinforces va
+                  Killed sticker-shock + reinforces value vs alternatives. */}
+              {s.priceAnchor && (
+                <p className="text-[10px] text-emerald-700 dark:text-emerald-400 mt-1 font-semibold leading-tight">
+                  {s.priceAnchor}
+                </p>
+              )}
+              {s.socialProof && (
+                <p className="text-[10px] text-muted-foreground mt-1 italic">{s.socialProof}</p>
+              )}
+            </Link>
+          );
+        })}
+      </div>
+
+      <p className="text-[11px] text-center text-muted-foreground mt-3 flex items-center justify-center gap-1.5 flex-wrap">
+        <span>💳 M-Pesa Paybill 4153025</span>
+        <span>•</span>
+        <span>⚡ In your inbox in minutes</span>
+        <span>•</span>
+        <span>📥 Word & PDF download</span>
+      </p>
+    </section>
+  );
+}
