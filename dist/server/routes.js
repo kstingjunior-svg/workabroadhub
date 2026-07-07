@@ -1286,6 +1286,13 @@ async function registerRoutes(httpServer, app) {
     // is a no-op — routes return 404. See docs/kazi-karibu/STRATEGY.md.
     const { registerKaziKaribuRoutes } = await Promise.resolve().then(() => __importStar(require("./routes/kazi-karibu")));
     registerKaziKaribuRoutes(app, auth_1.isAuthenticated, isAdmin);
+    // ── Write-from-Scratch — AI document generator (paid tool) ──────────────
+    // Users generate a CV / cover letter / recruitment CV / reference letter
+    // from a short form (no upload required). KES 300 per doc via M-Pesa;
+    // Pro subscribers free. Isolated from the main payment pipeline — its
+    // own M-Pesa callback lives at /api/write-from-scratch/mpesa-callback.
+    const { registerWriteFromScratchRoutes } = await Promise.resolve().then(() => __importStar(require("./routes/write-from-scratch")));
+    registerWriteFromScratchRoutes(app);
     // Track active sessions for the admin dashboard real-time counter.
     // Must run after setupAuth so req.session is populated.
     app.use(active_users_1.trackActiveUser);
