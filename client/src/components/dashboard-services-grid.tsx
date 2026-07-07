@@ -61,6 +61,18 @@ const SERVICES: ServiceCard[] = [
     priceAnchor: "≈ 2 mandazi · Writer: KES 2,000",
   },
   {
+    slug: "write_from_scratch",
+    emoji: "📝",
+    name: "Write from Scratch",
+    desc: "No CV to upload? Just tell us who you are — we write it. CV, cover letter, recruitment CV, or reference letter.",
+    price: 300,
+    badge: "New",
+    bgColor: "bg-rose-50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-800",
+    textColor: "text-rose-700 dark:text-rose-300",
+    socialProof: "Pro subscribers: free",
+    priceAnchor: "Writer: KES 3,000+ · You save KES 2,700",
+  },
+  {
     slug: "ats_cv_optimization",
     emoji: "🎯",
     name: "Recruiter-Friendly CV",
@@ -141,9 +153,14 @@ export function DashboardServicesGrid() {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {SERVICES.map((s) => {
-          // Free service routes to its tool page; paid services go to the order flow
+          // Free service routes to its tool page; paid services go to the order flow.
+          // write_from_scratch has its own isolated payment + generation flow at
+          // /tools/write-from-scratch (docs/write-from-scratch.md) so it bypasses
+          // the standard services/order pipeline.
           const target =
-            s.slug === "cv_check" ? "/tools/ats-cv-checker" : `/services/order/${s.slug}`;
+            s.slug === "cv_check"           ? "/tools/ats-cv-checker" :
+            s.slug === "write_from_scratch" ? "/tools/write-from-scratch" :
+            `/services/order/${s.slug}`;
           return (
             <Link
               key={s.slug}
@@ -171,27 +188,4 @@ export function DashboardServicesGrid() {
               </div>
               {/* Price anchor — tangible Kenyan reframe of cost
                   ("≈ 1 mandazi" / "Career coach: KES 5,000+ · You save…").
-                  Killed sticker-shock + reinforces value vs alternatives. */}
-              {s.priceAnchor && (
-                <p className="text-[10px] text-emerald-700 dark:text-emerald-400 mt-1 font-semibold leading-tight">
-                  {s.priceAnchor}
-                </p>
-              )}
-              {s.socialProof && (
-                <p className="text-[10px] text-muted-foreground mt-1 italic">{s.socialProof}</p>
-              )}
-            </Link>
-          );
-        })}
-      </div>
-
-      <p className="text-[11px] text-center text-muted-foreground mt-3 flex items-center justify-center gap-1.5 flex-wrap">
-        <span>💳 M-Pesa Paybill 4153025</span>
-        <span>•</span>
-        <span>⚡ In your inbox in minutes</span>
-        <span>•</span>
-        <span>📥 Word & PDF download</span>
-      </p>
-    </section>
-  );
-}
+                  Killed sticker-shock + reinforces va
