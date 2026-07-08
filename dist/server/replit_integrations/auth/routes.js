@@ -508,32 +508,99 @@ function registerAuthRoutes(app) {
         }
     });
     // Forgot password — always returns 200 to prevent email enumeration.
+    //
+    // 2026-07: Fixes for the "6+ users can't recover their accounts" report:
+    //   1. AWAIT the send (was fire-and-forget) so we can log the outcome.
+    //   2. ALSO send via WhatsApp when phone on file — Kenya users notice it
+    //      far faster than email, and Africa's Talking is reliable in-country.
+    //   3. Persist every attempt to password_reset_attempts (migration 0017)
+    //      so support has a durable record across deploys, not just an
+    //      in-memory ring buffer.
+    //
+    // The user-facing response is still uniform — nothing about the delivery
+    // outcome leaks to protect against enumeration.
     app.post("/api/auth/forgot-password", async (req, res) => {
+        const rawEmail = String(req.body?.email ?? "").trim().toLowerCase();
+        if (!rawEmail || !EMAIL_RE.test(rawEmail)) {
+            return res.status(400).json({ message: "Please enter a valid email address." });
+        }
+        const ip = String(req.ip || req.headers["x-forwarded-for"] || "").split(",")[0].trim().slice(0, 60) || null;
+        const ua = String(req.headers["user-agent"] || "").slice(0, 400) || null;
+        let userId = null;
+        let tokenId = null;
+        let emailStatus = "skipped";
+        let emailProvider = null;
+        let emailMessageId = null;
+        let emailError = null;
+        let whatsappStatus = "skipped";
+        let whatsappError = null;
         try {
-            const rawEmail = String(req.body?.email ?? "").trim().toLowerCase();
-            if (!rawEmail || !EMAIL_RE.test(rawEmail)) {
-                return res.status(400).json({ message: "Please enter a valid email address." });
-            }
             const [user] = await db_1.db.select().from(auth_1.users).where((0, drizzle_orm_1.eq)(auth_1.users.email, rawEmail)).limit(1);
             if (user) {
+                userId = user.id;
                 const token = crypto_1.default.randomBytes(48).toString("hex");
                 const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MS);
-                // Invalidate prior unused tokens, then insert new one.
                 await db_1.pool.query(`UPDATE password_reset_tokens SET used_at = NOW() WHERE user_id = $1 AND used_at IS NULL`, [user.id]);
-                await db_1.pool.query(`INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)`, [user.id, token, expiresAt]);
+                const inserted = await db_1.pool.query(`INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES ($1, $2, $3) RETURNING id`, [user.id, token, expiresAt]);
+                tokenId = inserted.rows[0]?.id ?? null;
                 const resetUrl = `${appBaseUrl()}/reset-password?token=${token}`;
                 const name = (user.firstName || "there").toString();
                 const html = `<div style="font-family:-apple-system,Segoe UI,sans-serif;max-width:520px;margin:auto;padding:24px;color:#1a2530;"><h2 style="margin:0 0 12px;">Reset your WorkAbroad Hub password</h2><p>Hi ${name},</p><p>We received a request to reset the password for the account tied to <strong>${rawEmail}</strong>. Click the button below to set a new password. The link expires in 1 hour.</p><p style="margin:24px 0;"><a href="${resetUrl}" style="display:inline-block;background:#0f766e;color:#fff;font-weight:600;font-size:14px;padding:12px 28px;border-radius:8px;text-decoration:none;">Reset password</a></p><p style="font-size:13px;color:#475569;">If the button does not work, copy this link into your browser:<br><a href="${resetUrl}" style="color:#1d4ed8;word-break:break-all;">${resetUrl}</a></p><p style="font-size:13px;color:#475569;">Did not ask for this? You can safely ignore this email — your password will not change unless you click the link above.</p><p style="margin-top:32px;font-size:13px;color:#475569;">— The WorkAbroad Hub team</p></div>`;
                 const text = `Hi ${name},\n\nReset link (expires in 1 hour): ${resetUrl}\n\nDid not ask for this? Ignore this email.\n\n— WorkAbroad Hub`;
-                (0, email_1.sendEmail)({ to: rawEmail, subject: "Reset your WorkAbroad Hub password", html, text })
-                    .catch((e) => console.error("[Auth][forgot-password] sendEmail failed:", e?.message));
+                try {
+                    const emailResult = await (0, email_1.sendEmail)({ to: rawEmail, subject: "Reset your WorkAbroad Hub password", html, text });
+                    if (emailResult.success) {
+                        emailStatus = "sent";
+                        emailMessageId = emailResult.messageId ?? null;
+                        emailProvider = "smtp";
+                    }
+                    else {
+                        emailStatus = "failed";
+                        emailError = (emailResult.error ?? "unknown").slice(0, 500);
+                        console.error(`[forgot-password] email failed for ${rawEmail}: ${emailError}`);
+                    }
+                }
+                catch (e) {
+                    emailStatus = "failed";
+                    emailError = String(e?.message ?? "email send threw").slice(0, 500);
+                    console.error(`[forgot-password] email threw for ${rawEmail}:`, e);
+                }
+                const phone = (user.phone || "").trim();
+                if (phone) {
+                    try {
+                        const { sendWhatsApp } = await Promise.resolve().then(() => __importStar(require("../../services/whatsapp")));
+                        const waMsg = `WorkAbroad Hub password reset\n\n` +
+                            `Hi ${name}, tap this link to set a new password. It works for 1 hour:\n${resetUrl}\n\n` +
+                            `Didn't request this? Ignore — your password won't change.`;
+                        await sendWhatsApp(phone, waMsg);
+                        whatsappStatus = "sent";
+                    }
+                    catch (e) {
+                        whatsappStatus = "failed";
+                        whatsappError = String(e?.message ?? "whatsapp send threw").slice(0, 500);
+                        console.error(`[forgot-password] whatsapp failed for ${phone}:`, e?.message);
+                    }
+                }
             }
-            res.json({ ok: true, message: "If an account exists for that email, a reset link has been sent." });
         }
         catch (err) {
             console.error("[Auth][forgot-password] error:", err?.message);
-            res.json({ ok: true, message: "If an account exists for that email, a reset link has been sent." });
         }
+        try {
+            await db_1.pool.query(`INSERT INTO password_reset_attempts
+           (user_id, email, token_id,
+            email_status, email_provider, email_message_id, email_error,
+            whatsapp_status, whatsapp_error,
+            ip_address, user_agent)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`, [userId, rawEmail, tokenId,
+                emailStatus, emailProvider, emailMessageId, emailError,
+                whatsappStatus, whatsappError,
+                ip, ua]);
+        }
+        catch (logErr) {
+            console.error("[forgot-password] could not log attempt:", logErr?.message);
+        }
+        res.json({ ok: true, message: "If an account exists for that email, a reset link has been sent." });
     });
     app.post("/api/auth/reset-password", async (req, res) => {
         try {
