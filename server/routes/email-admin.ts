@@ -208,5 +208,146 @@ export function registerEmailAdminRoutes(
     }
   });
 
-  console.log("[email-admin] Routes registered: /api/admin/email/{diagnostics,test,resend-code/:userId,force-verify/:userId}");
+  // ─── 5. Manual password-reset link (admin escape hatch) ─────────────────
+  //
+  // Use case: user is locked out and forgot-password emails aren't reaching
+  // them. Admin looks up the user by email; this endpoint issues a fresh
+  // reset token, sends the reset link via BOTH email and WhatsApp, and
+  // RETURNS the raw URL to the admin so they can copy-paste it directly
+  // (WhatsApp DM, phone call, whatever works). Gated behind admin auth.
+  app.post(
+    "/api/admin/auth/manual-reset-link",
+    isAuthenticated, isAdmin,
+    async (req: any, res: Response) => {
+      const email = String(req.body?.email ?? "").trim().toLowerCase();
+      if (!email) return res.status(400).json({ message: "email is required" });
+      const adminId = req.user?.claims?.sub ?? req.user?.id ?? "unknown";
+
+      try {
+        const { rows } = await pool.query<{ id: string; first_name: string | null; phone: string | null }>(
+          `SELECT id, first_name, phone FROM users WHERE email = $1 LIMIT 1`,
+          [email],
+        );
+        const user = rows[0];
+        if (!user) return res.status(404).json({ message: `No user found with email ${email}` });
+
+        const token = crypto.randomBytes(48).toString("hex");
+        const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+
+        await pool.query(
+          `UPDATE password_reset_tokens SET used_at = NOW() WHERE user_id = $1 AND used_at IS NULL`,
+          [user.id],
+        );
+        const inserted = await pool.query<{ id: string }>(
+          `INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES ($1, $2, $3) RETURNING id`,
+          [user.id, token, expiresAt],
+        );
+        const tokenId = inserted.rows[0]?.id ?? null;
+
+        const appUrl = (process.env.APP_URL || "https://workabroadhub.tech").replace(/\/+$/, "");
+        const resetUrl = `${appUrl}/reset-password?token=${token}`;
+        const name = (user.first_name || "there").toString();
+
+        let emailStatus: "sent" | "failed" = "failed";
+        let emailProvider: string | null = null;
+        let emailMessageId: string | null = null;
+        let emailError: string | null = null;
+        try {
+          const html = `<div style="font-family:-apple-system,Segoe UI,sans-serif;max-width:520px;margin:auto;padding:24px;color:#1a2530;"><h2>Reset your WorkAbroad Hub password</h2><p>Hi ${name},</p><p>Support has generated this password-reset link for you. It works for 1 hour.</p><p style="margin:24px 0;"><a href="${resetUrl}" style="display:inline-block;background:#0f766e;color:#fff;font-weight:600;padding:12px 28px;border-radius:8px;text-decoration:none;">Reset password</a></p><p style="font-size:13px;color:#475569;">Or copy this link: <a href="${resetUrl}">${resetUrl}</a></p></div>`;
+          const text = `Hi ${name},\n\nSupport-issued password reset link (1 hour): ${resetUrl}\n\n— WorkAbroad Hub`;
+          const r = await sendEmail({ to: email, subject: "Your WorkAbroad Hub password reset link", html, text });
+          if (r.success) {
+            emailStatus = "sent";
+            emailMessageId = r.messageId ?? null;
+            emailProvider = "smtp";
+          } else {
+            emailError = (r.error ?? "unknown").slice(0, 500);
+          }
+        } catch (e: any) {
+          emailError = String(e?.message ?? "email threw").slice(0, 500);
+        }
+
+        let whatsappStatus: "sent" | "failed" | "skipped" = "skipped";
+        let whatsappError: string | null = null;
+        if (user.phone) {
+          try {
+            const { sendWhatsApp } = await import("../services/whatsapp");
+            const waMsg = `WorkAbroad Hub password reset\n\nHi ${name}, tap this link to set a new password. It works for 1 hour:\n${resetUrl}\n\nIssued by support at your request.`;
+            await sendWhatsApp(user.phone, waMsg);
+            whatsappStatus = "sent";
+          } catch (e: any) {
+            whatsappStatus = "failed";
+            whatsappError = String(e?.message ?? "whatsapp threw").slice(0, 500);
+          }
+        }
+
+        try {
+          await pool.query(
+            `INSERT INTO password_reset_attempts
+               (user_id, email, token_id,
+                email_status, email_provider, email_message_id, email_error,
+                whatsapp_status, whatsapp_error,
+                ip_address, user_agent)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+            [user.id, email, tokenId,
+             emailStatus, emailProvider, emailMessageId, emailError,
+             whatsappStatus, whatsappError,
+             `admin:${adminId}`, "manual-reset-link"],
+          );
+        } catch (logErr: any) {
+          console.error("[manual-reset-link] could not log attempt:", logErr?.message);
+        }
+
+        console.log(`[manual-reset-link] admin=${adminId} target=${email} email=${emailStatus} whatsapp=${whatsappStatus}`);
+
+        return res.json({
+          ok: true,
+          email,
+          userId: user.id,
+          resetUrl,
+          expiresAt: expiresAt.toISOString(),
+          delivery: {
+            email:    { status: emailStatus,    error: emailError },
+            whatsapp: { status: whatsappStatus, error: whatsappError },
+          },
+        });
+      } catch (err: any) {
+        console.error("[manual-reset-link] error:", err);
+        return res.status(500).json({ message: "Could not generate reset link", error: err?.message });
+      }
+    },
+  );
+
+  // ─── 6. Recent password-reset attempts (durable log) ────────────────────
+  app.get(
+    "/api/admin/auth/reset-attempts",
+    isAuthenticated, isAdmin,
+    async (req, res: Response) => {
+      const email = String((req.query.email as string | undefined) ?? "").trim().toLowerCase();
+      const limit = Math.min(Math.max(Number(req.query.limit ?? 50), 1), 500);
+      try {
+        const params: any[] = [];
+        let where = "";
+        if (email) { params.push(email); where = `WHERE LOWER(email) = $1`; }
+        params.push(limit);
+        const { rows } = await pool.query(
+          `SELECT id, user_id, email, token_id,
+                  email_status, email_provider, email_message_id, email_error,
+                  whatsapp_status, whatsapp_error,
+                  ip_address, user_agent, requested_at
+             FROM password_reset_attempts
+             ${where}
+             ORDER BY requested_at DESC
+             LIMIT $${params.length}`,
+          params,
+        );
+        return res.json({ attempts: rows, count: rows.length });
+      } catch (err: any) {
+        console.error("[reset-attempts] error:", err?.message);
+        return res.status(500).json({ message: "Could not load attempts" });
+      }
+    },
+  );
+
+  console.log("[email-admin] Routes registered: /api/admin/email/{diagnostics,test,resend-code/:userId,force-verify/:userId}, /api/admin/auth/{manual-reset-link,reset-attempts}");
 }
