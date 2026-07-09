@@ -73,12 +73,24 @@ function isProTier(plan: string | null | undefined): boolean {
 }
 
 /**
- * Sniff the current user id from the standard auth shape used everywhere else
- * in this codebase. Returns null for unauthenticated requests (which are
- * allowed — guests can pay via M-Pesa without an account).
+ * Sniff the current user id from every auth shape used in this codebase.
+ * Returns null for unauthenticated requests (which are allowed — guests can
+ * pay via M-Pesa without an account).
+ *
+ * 2026-07 FIX: previously only checked req.user (populated by Replit OAuth /
+ * isAuthenticated middleware). Regular email+password users land here without
+ * req.user set because this route isn't gated by isAuthenticated. Their id
+ * lives at req.session.customUserId (see server/replit_integrations/auth
+ * /routes.ts /api/auth/user handler). Without this fallback, logged-in users
+ * saw "we need an M-Pesa phone number" even though we had one on file.
  */
 function currentUserId(req: any): string | null {
-  return req.user?.claims?.sub ?? req.user?.id ?? null;
+  return (
+    req.user?.claims?.sub ??
+    req.user?.id ??
+    req.session?.customUserId ??
+    null
+  );
 }
 
 export function registerWriteFromScratchRoutes(app: Express): void {
@@ -463,14 +475,4 @@ function validateInputForType(docType: WriteFromScratchDocType, input: any): str
 }
 
 /**
- * Same idea as server/mpesa.ts getCallbackBaseUrl but scoped locally so we
- * can override just this route without touching the module-level default.
- * Falls back to APP_URL / X-Forwarded-Host.
- */
-function getCallbackBaseUrl(req: Request): string {
-  const explicit = (process.env.APP_URL || "").trim();
-  if (explicit) return explicit.replace(/\/$/, "");
-  const proto = (req.headers["x-forwarded-proto"] as string) || "https";
-  const host = (req.headers["x-forwarded-host"] as string) || req.headers.host;
-  return `${proto}://${host}`;
-}
+ * Same idea as server/mpesa.ts getCallbackBaseUrl but sc
