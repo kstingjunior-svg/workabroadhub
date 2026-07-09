@@ -11,37 +11,36 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Phone, ShieldCheck, AlertCircle, LogOut } from "lucide-react";
 
-// Kenya E.164 without "+": exactly 12 digits starting with 254
+// E.164 without "+", per country
 const KENYA_RE = /^254\d{9}$/;
+const SA_RE    = /^27\d{9}$/;
+
+// 2026-07: South Africa (+27) added alongside Kenya so SA users can complete
+// signup. Each country carries the flag, prefix, subscriber-length and the
+// regex the submit handler validates against.
+type CountryKey = "KE" | "ZA";
+const COUNTRIES: Record<CountryKey, {
+  flag: string;
+  prefix: string;
+  name: string;
+  subscriberLength: number;
+  regex: RegExp;
+  placeholder: string;
+}> = {
+  KE: { flag: "🇰🇪", prefix: "254", name: "Kenya",        subscriberLength: 9, regex: KENYA_RE, placeholder: "712 345 678" },
+  ZA: { flag: "🇿🇦", prefix: "27",  name: "South Africa", subscriberLength: 9, regex: SA_RE,    placeholder: "82 123 4567" },
+};
 
 // Only suppress on the admin panel; /profile stays blocked (user can update there)
 const SUPPRESSED_PATHS = ["/admin"];
 
-/** Strip non-digits, convert leading 0 or +254 to 254, cap at 12 digits */
-function normalizeKenya(raw: string): string {
-  let v = raw.replace(/[^\d]/g, "");
-  if (v.startsWith("0"))   v = "254" + v.slice(1);
-  if (v.startsWith("254")) v = v.slice(0, 12);  // cap full number
-  else                      v = v.slice(0, 9);   // cap subscriber part only
-  return v;
-}
-
-/** Given raw input return the formatted display value and the stored E.164 value */
-function parseInput(raw: string): { display: string; stored: string } {
-  const v = normalizeKenya(raw);
-  // If they typed the full number including 254
-  if (v.startsWith("254")) {
-    const subscriber = v.slice(3); // up to 9 digits
-    return { display: subscriber, stored: v };
-  }
-  return { display: v, stored: v.length === 9 ? "254" + v : "" };
-}
-
 export function PhoneCompletionModal() {
   const { user, isLoading: authLoading, logout } = useAuth();
   const [location] = useLocation();
-  const [subscriber, setSubscriber] = useState(""); // the 9 digits after +254
+  const [country, setCountry] = useState<CountryKey>("KE");
+  const [subscriber, setSubscriber] = useState(""); // digits after the country prefix
   const [error, setError] = useState("");
+  const c = COUNTRIES[country];
 
   const { data: profile, isLoading: profileLoading } = useQuery<{ phone?: string | null }>({
     queryKey: ["/api/profile"],
@@ -85,26 +84,35 @@ export function PhoneCompletionModal() {
   if (profile?.phone) return null;
   if (isSuppressed) return null;
 
-  /** digits after stripping +254 / 254 / 0 prefix */
+  /** digits after stripping the country prefix / leading 0 */
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     setError("");
-    const raw = e.target.value.replace(/[^\d]/g, "").slice(0, 9);
+    const raw = e.target.value.replace(/[^\d]/g, "").slice(0, c.subscriberLength);
     setSubscriber(raw);
+  }
+
+  function handleCountryChange(next: CountryKey) {
+    setError("");
+    setCountry(next);
+    setSubscriber("");
   }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
 
-    const stored = "254" + subscriber;
-    if (!KENYA_RE.test(stored)) {
-      setError("Enter a valid Kenyan number: 9 digits after +254 (e.g. 712 345 678)");
+    const stored = c.prefix + subscriber;
+    if (!c.regex.test(stored)) {
+      setError(
+        `Enter a valid ${c.name} number: ${c.subscriberLength} digits after +${c.prefix} ` +
+        `(e.g. ${c.placeholder})`,
+      );
       return;
     }
     saveMutation.mutate(stored);
   }
 
-  const isFull = subscriber.length === 9;
+  const isFull = subscriber.length === c.subscriberLength;
 
   return (
     <Dialog open={true} onOpenChange={() => {}}>
@@ -121,14 +129,46 @@ export function PhoneCompletionModal() {
             <DialogTitle className="text-lg font-bold">Enter WhatsApp Number to Continue</DialogTitle>
           </div>
           <DialogDescription className="text-sm text-muted-foreground">
-            A Kenya (+254) WhatsApp number is required to access services. This is used for
-            M-Pesa payment prompts and service delivery.
+            A WhatsApp number is required to access services. This is used for
+            payment prompts, service delivery and account recovery.
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 mt-2">
+          {/* Country picker — Kenya default, South Africa also supported */}
           <div className="space-y-1.5">
-            <Label htmlFor="phone-input" className="font-semibold">WhatsApp Number (Kenya)</Label>
+            <Label className="font-semibold">Country</Label>
+            <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Country">
+              {(Object.keys(COUNTRIES) as CountryKey[]).map((k) => {
+                const opt = COUNTRIES[k];
+                const active = country === k;
+                return (
+                  <button
+                    key={k}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() => handleCountryChange(k)}
+                    className={`flex items-center justify-center gap-2 rounded-md border py-2 text-sm font-semibold transition-colors ${
+                      active
+                        ? "border-green-500 bg-green-50 dark:bg-green-950/30 text-green-800 dark:text-green-200"
+                        : "border-input bg-background hover:bg-muted/60"
+                    }`}
+                    data-testid={`country-${k.toLowerCase()}`}
+                  >
+                    <span aria-hidden="true">{opt.flag}</span>
+                    <span>{opt.name}</span>
+                    <span className="font-mono text-xs text-muted-foreground">+{opt.prefix}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="phone-input" className="font-semibold">
+              WhatsApp Number ({c.name})
+            </Label>
 
             {/* Prefix + input side-by-side */}
             <div className="flex items-stretch rounded-md border border-input overflow-hidden focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2">
@@ -136,26 +176,26 @@ export function PhoneCompletionModal() {
                 className="flex items-center px-3 bg-muted text-muted-foreground text-sm font-mono font-semibold border-r border-input select-none shrink-0"
                 aria-hidden="true"
               >
-                🇰🇪 +254
+                {c.flag} +{c.prefix}
               </span>
               <Input
                 id="phone-input"
                 data-testid="input-phone-completion"
                 type="tel"
                 inputMode="numeric"
-                placeholder="712 345 678"
+                placeholder={c.placeholder}
                 value={subscriber}
                 onChange={handleChange}
                 disabled={saveMutation.isPending}
                 autoFocus
                 className="border-0 rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 font-mono text-base tracking-wider"
-                maxLength={9}
+                maxLength={c.subscriberLength}
               />
             </div>
 
             {/* Progress dots */}
             <div className="flex gap-1 mt-1">
-              {Array.from({ length: 9 }).map((_, i) => (
+              {Array.from({ length: c.subscriberLength }).map((_, i) => (
                 <div
                   key={i}
                   className={`h-1 flex-1 rounded-full transition-colors ${
@@ -173,7 +213,10 @@ export function PhoneCompletionModal() {
             )}
 
             <p className="text-xs text-muted-foreground">
-              Kenya numbers only — e.g. <span className="font-mono">+254 712 345 678</span>
+              e.g. <span className="font-mono">+{c.prefix} {c.placeholder}</span>
+              {country === "ZA" && (
+                <> — payments go through Kenyan M-Pesa; a family or friend's number works.</>
+              )}
             </p>
           </div>
 

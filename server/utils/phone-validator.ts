@@ -29,17 +29,30 @@ interface CarrierCacheRow {
 }
 
 /**
- * Normalize Kenyan phones to E.164 (+254...). Accepts:
- *   0712345678   → +254712345678
- *   254712345678 → +254712345678
- *   +254712345678 → +254712345678
- * For non-Kenyan numbers, expects the user to supply a + prefix.
+ * Normalize a phone to E.164 (+254... or +27...). Accepts:
+ *   0712345678       → +254712345678   (Kenya default)
+ *   254712345678     → +254712345678
+ *   +254712345678    → +254712345678
+ *   0821234567 (ZA)  → +27821234567
+ *   27821234567      → +27821234567
+ *   +27821234567     → +27821234567
+ *
+ * 2026-07: added South Africa. Country hint defaults to KE so all pre-existing
+ * call sites keep their current behaviour. Pass "ZA" when the signup country
+ * pick tells us the user is South African.
  */
-export function normalizeKenyaPhone(raw: string): string {
+export function normalizeKenyaPhone(raw: string, country: "KE" | "ZA" = "KE"): string {
   const digits = (raw || "").replace(/\D/g, "");
   if (digits.startsWith("254")) return "+" + digits;
-  if (digits.startsWith("0") && digits.length === 10) return "+254" + digits.slice(1);
-  if (digits.length === 9) return "+254" + digits; // user typed without leading 0
+  if (digits.startsWith("27"))  return "+" + digits;
+  if (digits.startsWith("0") && digits.length === 10) {
+    const prefix = country === "ZA" ? "27" : "254";
+    return "+" + prefix + digits.slice(1);
+  }
+  if (digits.length === 9) {
+    const prefix = country === "ZA" ? "27" : "254";
+    return "+" + prefix + digits;
+  }
   if (digits.startsWith("+")) return raw;
   return raw.startsWith("+") ? raw : "+" + digits;
 }
