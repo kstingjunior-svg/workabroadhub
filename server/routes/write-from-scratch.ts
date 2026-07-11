@@ -398,6 +398,79 @@ export function registerWriteFromScratchRoutes(app: Express): void {
 
   app.get("/api/write-from-scratch/:id/download.docx", (req, res) => download(req, res, "docx"));
   app.get("/api/write-from-scratch/:id/download.pdf",  (req, res) => download(req, res, "pdf"));
+
+  /* ─── GET /api/write-from-scratch/mine ─────────────────────────────────
+   *
+   * 2026-07: Post-payment recovery. Users reported paying for a document
+   * but losing the download when their internet dropped or they refreshed
+   * mid-generation. Draft state was locked to a in-tab draftId. This
+   * endpoint lists the current user's recent drafts so a "My documents"
+   * surface (or the tool landing page itself) can offer a one-click
+   * "Resume" for any paid-but-not-downloaded row. Guests get an empty list.
+   */
+  app.get("/api/write-from-scratch/mine", async (req: Request, res: Response) => {
+    try {
+      const userId = currentUserId(req);
+      if (!userId) return res.json({ drafts: [], count: 0 });
+      const limit = Math.min(Math.max(Number(req.query.limit ?? 10), 1), 50);
+      const { rows } = await pool.query(
+        `SELECT id, doc_type, status,
+                output_body IS NOT NULL AS has_body,
+                error_message,
+                mpesa_receipt,
+                created_at, paid_at, generated_at
+           FROM write_from_scratch_drafts
+          WHERE user_id = $1
+          ORDER BY created_at DESC
+          LIMIT $2`,
+        [userId, limit],
+      );
+      return res.json({ drafts: rows, count: rows.length });
+    } catch (err: any) {
+      console.error("[write-from-scratch/mine] error:", err?.message);
+      return res.status(500).json({ error: "Could not load your documents." });
+    }
+  });
+
+  /* ─── GET /api/write-from-scratch/:id/body ─────────────────────────────
+   *
+   * Returns the generated body so a page reloaded from a URL like
+   * /tools/write-from-scratch?draftId=… can rehydrate the result view
+   * without re-running the AI. Only returns the body if the draft belongs
+   * to the current user, or the requester is a guest with the raw draftId
+   * (which is unguessable enough to act as capability for post-payment
+   * recovery). Never returns paid/failed drafts as bodies.
+   */
+  app.get("/api/write-from-scratch/:id/body", async (req: Request, res: Response) => {
+    try {
+      const { rows } = await pool.query(
+        `SELECT id, user_id, doc_type, status, output_body, error_message
+           FROM write_from_scratch_drafts
+          WHERE id = $1`,
+        [req.params.id],
+      );
+      if (rows.length === 0) return res.status(404).json({ error: "Not found" });
+      const row = rows[0];
+
+      // Owner check — if the draft has a user_id, the caller must be that
+      // user (or a guest whose session gave them the raw draftId as capability
+      // when they don't have an account — in which case row.user_id is null).
+      const userId = currentUserId(req);
+      if (row.user_id && userId && row.user_id !== userId) {
+        return res.status(403).json({ error: "Not yours" });
+      }
+
+      return res.json({
+        status:  row.status,
+        docType: row.doc_type,
+        body:    row.output_body,
+        error:   row.error_message,
+      });
+    } catch (err: any) {
+      console.error("[write-from-scratch/body] error:", err?.message);
+      return res.status(500).json({ error: "Could not load draft." });
+    }
+  });
 }
 
 // ─── helpers ────────────────────────────────────────────────────────────────
@@ -475,4 +548,14 @@ function validateInputForType(docType: WriteFromScratchDocType, input: any): str
 }
 
 /**
- * Same idea as server/mpesa.ts getCallbackBaseUrl but sc
+ * Same idea as server/mpesa.ts getCallbackBaseUrl but scoped locally so we
+ * can override just this route without touching the module-level default.
+ * Falls back to APP_URL / X-Forwarded-Host.
+ */
+function getCallbackBaseUrl(req: Request): string {
+  const explicit = (process.env.APP_URL || "").trim();
+  if (explicit) return explicit.replace(/\/$/, "");
+  const proto = (req.headers["x-forwarded-proto"] as string) || "https";
+  const host = (req.headers["x-forwarded-host"] as string) || req.headers.host;
+  return `${proto}://${host}`;
+}

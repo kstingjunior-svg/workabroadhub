@@ -19,7 +19,7 @@
  */
 
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -94,6 +94,7 @@ const PRICE_KES = 300;
 export default function WriteFromScratchPage() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const [, navigate] = useLocation();
 
   const [state, setState] = useState<UiState>("pick");
   const [docType, setDocType] = useState<DocType | null>(null);
@@ -106,6 +107,66 @@ export default function WriteFromScratchPage() {
   const [body, setBody] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // 2026-07 recovery: on page mount, if the URL carries ?draftId=… restore
+  // whatever the server has for that draft — the user's internet dropped
+  // mid-generation, or they refreshed, or they came back later. Nobody
+  // loses their paid document again.
+  //
+  // Resume rules:
+  //   status = generated → jump straight to result state, load body
+  //   status = paid       → fire runGeneration so they get their doc now
+  //   status = pending_payment → show the payment-waiting screen again;
+  //     the existing 4-second poll picks up when M-Pesa confirms
+  //   status = failed     → put them into the error state with a retry
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const id = url.searchParams.get("draftId");
+    if (!id) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/write-from-scratch/${id}/body`);
+        if (!res.ok) return;
+        const j = await res.json();
+        if (cancelled) return;
+
+        // Restore the doctype so the header + result-view meta look right.
+        if (j.docType && DOC_TYPES.some((d) => d.key === j.docType)) {
+          setDocType(j.docType);
+        }
+        setDraftId(id);
+
+        if (j.status === "generated" && j.body) {
+          setBody(j.body);
+          setState("result");
+        } else if (j.status === "paid") {
+          setState("generating");
+          runGeneration(id);
+        } else if (j.status === "pending_payment") {
+          setState("paying");
+        } else if (j.status === "failed") {
+          setErrorMsg(j.error ?? "Generation didn't complete last time. Try again.");
+          setState("error");
+        }
+      } catch {
+        // Silent — the user can pick a new doc if the resume fetch fails
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Keep the URL in sync with the current draftId so a refresh keeps working.
+  useEffect(() => {
+    if (!draftId) return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("draftId") === draftId) return;
+    url.searchParams.set("draftId", draftId);
+    // Replace (not push) so the back button skips through the state changes.
+    window.history.replaceState({}, "", url.toString());
+  }, [draftId]);
 
   const meta = useMemo(() => DOC_TYPES.find((d) => d.key === docType) ?? null, [docType]);
 
@@ -252,6 +313,15 @@ export default function WriteFromScratchPage() {
     setDraftId(null);
     setBody(null);
     setErrorMsg(null);
+    // Clear ?draftId=… so the resume useEffect doesn't ghost-load the
+    // previous draft on the next refresh.
+    try {
+      const url = new URL(window.location.href);
+      if (url.searchParams.has("draftId")) {
+        url.searchParams.delete("draftId");
+        window.history.replaceState({}, "", url.toString());
+      }
+    } catch { /* ignore */ }
   };
 
   // ─── Render helpers ──────────────────────────────────────────────────────
