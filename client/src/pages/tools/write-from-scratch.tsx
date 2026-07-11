@@ -19,6 +19,7 @@
  */
 
 import { useState, useEffect, useMemo, useRef } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -107,6 +108,28 @@ export default function WriteFromScratchPage() {
   const [body, setBody] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // 2026-07 recovery bonus: fetch the user's recent drafts so the pick view
+  // can offer a one-tap "Resume" for anything paid-but-not-downloaded. Only
+  // runs for logged-in users; guests get an empty list from the server.
+  const { data: myDraftsData } = useQuery<{
+    drafts: Array<{
+      id: string;
+      doc_type: DocType;
+      status: "pending_payment" | "paid" | "generated" | "failed" | "refunded";
+      has_body: boolean;
+      error_message: string | null;
+      created_at: string;
+      generated_at: string | null;
+    }>;
+    count: number;
+  }>({
+    queryKey: ["/api/write-from-scratch/mine"],
+    enabled: !!user,
+    // Fresh enough to catch a just-finished generation from another tab, cheap
+    // enough not to hammer the server on every focus.
+    staleTime: 30_000,
+  });
 
   // 2026-07 recovery: on page mount, if the URL carries ?draftId=… restore
   // whatever the server has for that draft — the user's internet dropped
@@ -358,7 +381,12 @@ export default function WriteFromScratchPage() {
       </header>
 
       <main className="max-w-4xl mx-auto px-4 py-6 space-y-6">
-        {state === "pick" && <PickView onPick={pickDoc} />}
+        {state === "pick" && (
+          <PickView
+            onPick={pickDoc}
+            recentDrafts={myDraftsData?.drafts ?? []}
+          />
+        )}
 
         {state === "fill" && meta && (
           <FillView
@@ -415,7 +443,31 @@ export default function WriteFromScratchPage() {
 
 // ─── Pick view — 4 doc-type tiles ───────────────────────────────────────────
 
-function PickView({ onPick }: { onPick: (t: DocType) => void }) {
+interface RecentDraft {
+  id: string;
+  doc_type: DocType;
+  status: "pending_payment" | "paid" | "generated" | "failed" | "refunded";
+  has_body: boolean;
+  error_message: string | null;
+  created_at: string;
+  generated_at: string | null;
+}
+
+function PickView({
+  onPick,
+  recentDrafts,
+}: {
+  onPick: (t: DocType) => void;
+  recentDrafts: RecentDraft[];
+}) {
+  // Show the 5 most recent drafts. Filter out non-actionable ones (refunded).
+  // Everything else — generated, paid mid-generation, pending payment,
+  // even failed — is worth surfacing because the user might want to resume,
+  // retry, or just re-download.
+  const visible = (recentDrafts ?? [])
+    .filter((d) => d.status !== "refunded")
+    .slice(0, 5);
+
   return (
     <div className="space-y-4">
       <Card>
@@ -428,6 +480,8 @@ function PickView({ onPick }: { onPick: (t: DocType) => void }) {
           </p>
         </CardContent>
       </Card>
+
+      {visible.length > 0 && <RecentDraftsCard drafts={visible} />}
 
       <div className="grid gap-4 md:grid-cols-2">
         {DOC_TYPES.map((d) => {
@@ -453,6 +507,84 @@ function PickView({ onPick }: { onPick: (t: DocType) => void }) {
         })}
       </div>
     </div>
+  );
+}
+
+/**
+ * Recent-drafts widget — shown on the pick view when the user has previous
+ * drafts. Each row is a one-tap resume: pushing ?draftId=… to the URL triggers
+ * the resume useEffect at the top of the page (line ~112 of this file), which
+ * loads the doc's current state and jumps to the right UI (result / generating
+ * / paying / error).
+ */
+function RecentDraftsCard({ drafts }: { drafts: RecentDraft[] }) {
+  const statusPill = (d: RecentDraft) => {
+    if (d.status === "generated" && d.has_body) {
+      return { label: "Ready to download",  color: "text-emerald-700 dark:text-emerald-300", bg: "bg-emerald-50 dark:bg-emerald-950/30" };
+    }
+    if (d.status === "paid") {
+      return { label: "Paid — resume to finish", color: "text-blue-700 dark:text-blue-300", bg: "bg-blue-50 dark:bg-blue-950/30" };
+    }
+    if (d.status === "pending_payment") {
+      return { label: "Waiting on payment", color: "text-amber-700 dark:text-amber-300", bg: "bg-amber-50 dark:bg-amber-950/30" };
+    }
+    if (d.status === "failed") {
+      return { label: "Failed — retry", color: "text-red-700 dark:text-red-300", bg: "bg-red-50 dark:bg-red-950/30" };
+    }
+    return { label: d.status, color: "text-muted-foreground", bg: "bg-muted" };
+  };
+
+  const resumeHref = (id: string) => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("draftId", id);
+    return url.pathname + url.search;
+  };
+
+  return (
+    <Card>
+      <CardContent className="p-6 space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold text-sm">Your recent documents</h3>
+          <span className="text-[11px] text-muted-foreground">
+            Resume any document that didn't finish
+          </span>
+        </div>
+        <ul className="divide-y divide-border rounded-lg border">
+          {drafts.map((d) => {
+            const meta = DOC_TYPES.find((t) => t.key === d.doc_type);
+            const Icon = meta?.icon ?? FileText;
+            const pill = statusPill(d);
+            const created = new Date(d.created_at);
+            const when = isNaN(created.getTime())
+              ? ""
+              : created.toLocaleString("en-KE", {
+                  day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
+                });
+            return (
+              <li key={d.id} className="p-3 flex items-center gap-3" data-testid={`recent-draft-${d.id}`}>
+                <div className="h-9 w-9 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+                  <Icon className={`h-4 w-4 ${meta?.color ?? "text-muted-foreground"}`} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{meta?.title ?? d.doc_type}</p>
+                  <p className="text-[11px] text-muted-foreground truncate">{when}</p>
+                </div>
+                <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${pill.bg} ${pill.color}`}>
+                  {pill.label}
+                </span>
+                <a
+                  href={resumeHref(d.id)}
+                  className="text-xs font-semibold text-primary hover:underline"
+                  data-testid={`resume-${d.id}`}
+                >
+                  Resume →
+                </a>
+              </li>
+            );
+          })}
+        </ul>
+      </CardContent>
+    </Card>
   );
 }
 
