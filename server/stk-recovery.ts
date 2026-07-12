@@ -27,11 +27,23 @@ import { payments } from "@shared/schema";
 import { eq, and, lt, isNull, sql } from "drizzle-orm";
 import { planExpiry } from "./utils/plans";
 
-const POLL_INTERVAL_MS    = 30_000;   // run every 30 seconds
-const MIN_AGE_SECONDS     = 60;       // start querying after 60s (STK PIN window)
-const AUTO_TIMEOUT_MINUTES = 5;       // auto-timeout awaiting_payment after 5 min
-const MAX_AGE_MINUTES     = 12;       // hard stop querying at 12 min (STK fully expired)
-const MAX_QUERY_ATTEMPTS  = 10;       // max STK Query API calls per payment
+const POLL_INTERVAL_MS    = 15_000;   // 2026-07: halved from 30s so paying users
+                                       // see activation within ~15-45s.
+const MIN_AGE_SECONDS     = 20;       // 2026-07: was 60s. Catches STKs the moment
+                                       // Safaricom's window opens.
+const AUTO_TIMEOUT_MINUTES = 5;       // auto-timeout after 5 min
+const MAX_AGE_MINUTES     = 60;       // 2026-07: was 12. Backlog of "failed" 4500
+                                       // rows is mostly 12-60 min old stragglers
+                                       // we can still recover.
+const MAX_QUERY_ATTEMPTS  = 40;       // 2026-07: was 10. Cover the wider window.
+
+// 2026-07 BUGFIX (Tony's manual-grant burden): the STK push handler for plan
+// payments creates rows with status="pending" but this poller was only asking
+// storage.getPaymentsByStatus("awaiting_payment"). Result: the poller literally
+// never saw plan payments and every KES 4,500 user needed manual activation.
+// This set covers every "we're still waiting on Safaricom" status the codebase
+// produces so recovery finally kicks in for plan payments too.
+const RECOVERABLE_STATUSES = ["pending", "awaiting_payment", "processing"] as const;
 
 const inFlight = new Set<string>();   // paymentIds currently being processed
 
@@ -212,7 +224,7 @@ async function autoTimeoutAwaiting(): Promise<void> {
       .from(payments)
       .where(
         and(
-          sql`${payments.status} = 'awaiting_payment'`,
+          sql`${payments.status} IN ('pending', 'awaiting_payment', 'processing')`,
           sql`${payments.method} = 'mpesa'`,
           sql`${payments.createdAt} < ${cutoff}`,
           sql`${payments.callbackReceivedAt} IS NULL`
@@ -227,7 +239,7 @@ async function autoTimeoutAwaiting(): Promise<void> {
       .from(payments)
       .where(
         and(
-          sql`status = 'awaiting_payment'`,
+          sql`status IN ('pending', 'awaiting_payment', 'processing')`,
           sql`method = 'mpesa'`,
           sql`created_at < ${cutoff}`
         )
@@ -289,8 +301,13 @@ async function runStkRecovery(): Promise<void> {
     const minAge = new Date(now - MIN_AGE_SECONDS * 1000);
     const maxAge = new Date(now - MAX_AGE_MINUTES * 60 * 1000);
 
-    // 2. Query Safaricom for payments in the active query window (60s – 12min)
-    const pending = await storage.getPaymentsByStatus("awaiting_payment");
+    // 2. Query Safaricom for payments in the active query window
+    // 2026-07: pull every "waiting" status the codebase produces so the poller
+    // finally covers plan payments (which use "pending"). Silent bug for months.
+    const results = await Promise.all(
+      RECOVERABLE_STATUSES.map((s) => storage.getPaymentsByStatus(s).catch(() => [])),
+    );
+    const pending = results.flat();
 
     const candidates = pending.filter((p: any) => {
       if (!p.transactionRef?.startsWith("ws_CO_")) return false;
