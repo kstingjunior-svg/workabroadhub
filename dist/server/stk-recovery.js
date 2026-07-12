@@ -53,11 +53,22 @@ const db_1 = require("./db");
 const schema_1 = require("@shared/schema");
 const drizzle_orm_1 = require("drizzle-orm");
 const plans_1 = require("./utils/plans");
-const POLL_INTERVAL_MS = 30000; // run every 30 seconds
-const MIN_AGE_SECONDS = 60; // start querying after 60s (STK PIN window)
-const AUTO_TIMEOUT_MINUTES = 5; // auto-timeout awaiting_payment after 5 min
-const MAX_AGE_MINUTES = 12; // hard stop querying at 12 min (STK fully expired)
-const MAX_QUERY_ATTEMPTS = 10; // max STK Query API calls per payment
+const POLL_INTERVAL_MS = 15000; // 2026-07: halved from 30s so paying users
+// see activation within ~15-45s.
+const MIN_AGE_SECONDS = 20; // 2026-07: was 60s. Catches STKs the moment
+// Safaricom's window opens.
+const AUTO_TIMEOUT_MINUTES = 5; // auto-timeout after 5 min
+const MAX_AGE_MINUTES = 60; // 2026-07: was 12. Backlog of "failed" 4500
+// rows is mostly 12-60 min old stragglers
+// we can still recover.
+const MAX_QUERY_ATTEMPTS = 40; // 2026-07: was 10. Cover the wider window.
+// 2026-07 BUGFIX (Tony's manual-grant burden): the STK push handler for plan
+// payments creates rows with status="pending" but this poller was only asking
+// storage.getPaymentsByStatus("awaiting_payment"). Result: the poller literally
+// never saw plan payments and every KES 4,500 user needed manual activation.
+// This set covers every "we're still waiting on Safaricom" status the codebase
+// produces so recovery finally kicks in for plan payments too.
+const RECOVERABLE_STATUSES = ["pending", "awaiting_payment", "processing"];
 const inFlight = new Set(); // paymentIds currently being processed
 // ResultCodes that mean the payment definitively failed
 const FAIL_CODES = new Set([1032, 1037, 2001, 17, 1]);
@@ -214,7 +225,7 @@ async function autoTimeoutAwaiting() {
         timedOut = await db_1.db
             .select()
             .from(schema_1.payments)
-            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.sql) `${schema_1.payments.status} = 'awaiting_payment'`, (0, drizzle_orm_1.sql) `${schema_1.payments.method} = 'mpesa'`, (0, drizzle_orm_1.sql) `${schema_1.payments.createdAt} < ${cutoff}`, (0, drizzle_orm_1.sql) `${schema_1.payments.callbackReceivedAt} IS NULL`))
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.sql) `${schema_1.payments.status} IN ('pending', 'awaiting_payment', 'processing')`, (0, drizzle_orm_1.sql) `${schema_1.payments.method} = 'mpesa'`, (0, drizzle_orm_1.sql) `${schema_1.payments.createdAt} < ${cutoff}`, (0, drizzle_orm_1.sql) `${schema_1.payments.callbackReceivedAt} IS NULL`))
             .limit(50);
     }
     catch (colErr) {
@@ -223,7 +234,7 @@ async function autoTimeoutAwaiting() {
         timedOut = await db_1.db
             .select()
             .from(schema_1.payments)
-            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.sql) `status = 'awaiting_payment'`, (0, drizzle_orm_1.sql) `method = 'mpesa'`, (0, drizzle_orm_1.sql) `created_at < ${cutoff}`))
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.sql) `status IN ('pending', 'awaiting_payment', 'processing')`, (0, drizzle_orm_1.sql) `method = 'mpesa'`, (0, drizzle_orm_1.sql) `created_at < ${cutoff}`))
             .limit(50);
     }
     for (const payment of timedOut) {
@@ -276,8 +287,11 @@ async function runStkRecovery() {
         const now = Date.now();
         const minAge = new Date(now - MIN_AGE_SECONDS * 1000);
         const maxAge = new Date(now - MAX_AGE_MINUTES * 60 * 1000);
-        // 2. Query Safaricom for payments in the active query window (60s – 12min)
-        const pending = await storage_1.storage.getPaymentsByStatus("awaiting_payment");
+        // 2. Query Safaricom for payments in the active query window
+        // 2026-07: pull every "waiting" status the codebase produces so the poller
+        // finally covers plan payments (which use "pending"). Silent bug for months.
+        const results = await Promise.all(RECOVERABLE_STATUSES.map((s) => storage_1.storage.getPaymentsByStatus(s).catch(() => [])));
+        const pending = results.flat();
         const candidates = pending.filter((p) => {
             if (!p.transactionRef?.startsWith("ws_CO_"))
                 return false;
