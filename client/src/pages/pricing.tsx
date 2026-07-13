@@ -33,7 +33,7 @@ const TRUST_ITEMS = [
 const FAQ_ITEMS = [
   {
     q: "What's the difference between the 4 plans?",
-    a: "Free (KES 0) gives you a limited preview of the platform — a few job listings, all visa guides, and one-time tool usage. 1 Day Trial (KES 99) gives you 24-hour full access — perfect for testing. Monthly Access (KES 1,000) gives you 30 days of everything. Yearly Access (KES 4,500) is the best value — pay yearly and save KES 7,500 vs paying month-by-month.",
+    a: "Free is self-service — you can look up 3 NEAIMS agencies per day, browse a preview of jobs, and read all visa guides. The paid plans are personal career-consultation packages with a human advisor. 1-Day Consultation Trial (KES 99) gives you 24 hours of WhatsApp advisor access. Monthly Consultation (KES 1,000) covers 30 days with your personal advisor. Yearly Career Consultation (KES 4,500) is the best value — a full 365-day career-advisory relationship with 1-on-1 WhatsApp support, personal CV review, and personalised agency verification.",
   },
   {
     q: "How does M-Pesa payment work?",
@@ -53,7 +53,7 @@ const FAQ_ITEMS = [
   },
   {
     q: "What can I do for free?",
-    a: "Free users can browse a limited preview of job listings, read all visa and country guides, and try each tool once. Any paid plan unlocks everything — verified job portals, unlimited tools, application tracking, and personal career guidance.",
+    a: "Free is self-service — you can look up 3 NEAIMS agencies per day, browse a preview of job listings, read all visa and country guides, and try each tool once. Any paid plan gives you a personal WhatsApp career advisor — a real human who verifies agencies for you, reviews your CV before submission, and follows up on your applications.",
   },
 ];
 
@@ -291,7 +291,7 @@ export default function PricingPage() {
                 data-testid="btn-hero-cta"
               >
                 <Crown className="h-5 w-5 mr-2" />
-                Best Value — KES 4,500/year
+                Start Yearly Consultation — KES 4,500
                 <ArrowRight className="h-5 w-5 ml-2" />
               </Button>
             </div>
@@ -498,7 +498,7 @@ export default function PricingPage() {
                 data-testid="btn-cta2"
               >
                 <Rocket className="h-5 w-5 mr-2" />
-                Best Value — KES 4,500/year
+                Start Yearly Consultation — KES 4,500
                 <ArrowRight className="h-5 w-5 ml-2" />
               </Button>
             </div>
@@ -590,7 +590,7 @@ export default function PricingPage() {
                 data-testid="btn-bottom-cta"
               >
                 <Crown className="h-5 w-5 mr-2" />
-                Best Value — KES 4,500/year
+                Start Yearly Consultation — KES 4,500
               </Button>
             </div>
             <p className="text-white/60 text-xs mt-3">

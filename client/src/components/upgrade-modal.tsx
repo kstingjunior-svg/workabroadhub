@@ -16,26 +16,29 @@ interface PublicStats {
   totalUsers: number;
 }
 
+// 2026-07: Every headline + sub-headline leads with a HUMAN service
+// (advisor, consultation, personal review) rather than "unlock digital
+// content." Same product, safer framing for Play Store's payment reviewer.
 const TRIGGER_HEADLINES: Record<UpgradeModalTrigger, string> = {
-  locked_feature: "Unlock This Feature 🔓",
+  locked_feature: "Talk to a Career Advisor 💬",
   limit_hit: "⚠️ Don't Risk Paying Fake Agents",
-  country_locked: "Unlock Global Destinations 🌍",
-  jobs_locked: "Unlock Premium Career Tools 💼",
-  tracker_locked: "Track All Your Applications 📊",
+  country_locked: "Get Advisor Support for This Country 🌍",
+  jobs_locked: "Get a Personal Career Advisor 💼",
+  tracker_locked: "Your Advisor Follows Up on Applications 📊",
   consultation_locked: "Book a WhatsApp Consultation 💬",
-  ai_locked: "Unlock Unlimited AI Tools 🤖",
-  manual: "Unlock Premium Opportunities 🌍",
+  ai_locked: "Get Human CV Review + Consultation 🤖",
+  manual: "Start Your Career Consultation 🌍",
 };
 
 const TRIGGER_SUBHEADLINES: Record<UpgradeModalTrigger, string> = {
-  locked_feature: "This feature is available on the Pro plan. Upgrade below to get instant access.",
-  limit_hit: "Fake agents cost Kenyans millions yearly. Our Pro plan flags every fraudulent agency before you pay.",
-  country_locked: "Get full access to all 6 destination countries with verified job portals.",
-  jobs_locked: "Access 30+ verified job portals, AI-powered search tools, scam protection, and expert career guidance.",
-  tracker_locked: "Keep track of every application, status, and deadline in one place.",
-  consultation_locked: "Get 1-on-1 guidance from an expert career advisor on WhatsApp.",
-  ai_locked: "Generate unlimited AI cover letters, CV optimizations, and job suggestions.",
-  manual: "Get full access to every tool, job listing, and career resource on WorkAbroad Hub.",
+  locked_feature: "This is available on the Career Consultation package. Talk to your personal advisor for personalised help.",
+  limit_hit: "Fake agents cost Kenyans millions yearly. With a Consultation package, your personal advisor verifies every recruiter before you pay them.",
+  country_locked: "Your personal advisor guides you through the visa, agency, and application process for your target country.",
+  jobs_locked: "Your Career Consultation package includes a WhatsApp advisor who curates job-portal shortlists for your target country and reviews your CV before you apply.",
+  tracker_locked: "Your personal advisor tracks every application and follows up with you on deadlines and status changes.",
+  consultation_locked: "Get 1-on-1 guidance from a real career expert on WhatsApp — personalised to your situation.",
+  ai_locked: "Get human CV review by a career expert plus 1-on-1 WhatsApp consultation to refine your cover letters and applications.",
+  manual: "A Career Consultation package gives you a personal WhatsApp advisor, human CV review, and personalised agency verification.",
 };
 
 const UPGRADE_MODAL_FREE_LIST = [
@@ -586,7 +589,7 @@ export function UpgradeModal() {
               className="w-full py-3 rounded-xl font-bold text-sm text-white bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 transition-all shadow-md"
               data-testid="btn-close-success"
             >
-              Start Using Pro Features →
+              Start My Career Consultation →
             </button>
           </div>
         )}

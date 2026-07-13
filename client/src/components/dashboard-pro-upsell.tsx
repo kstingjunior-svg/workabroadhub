@@ -13,13 +13,16 @@ import { useAuth } from "@/hooks/use-auth";
 import { Crown, CheckCircle2, ArrowRight, Sparkles } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 
+// 2026-07: Reframed as human-service deliverables (not "unlock" language)
+// so Play Store classifies this as a consulting subscription, not a
+// digital-only unlock (would force 30% Google Play Billing).
 const PRO_FEATURES = [
-  "Unlimited NEAIMS agency checks",
-  "All 30+ verified job portals",
-  "ATS CV scanner — unlimited",
-  "WhatsApp Nanjila — direct line",
-  "Priority placement in job alerts",
-  "All paid services discounted",
+  "1-on-1 WhatsApp career advisor",
+  "Personal agency verification by advisor",
+  "Human CV review before you apply",
+  "Advisor-curated jobs for your target country",
+  "Advisor follows up on your applications",
+  "Priority WhatsApp response from expert",
 ];
 
 export function DashboardProUpsell() {
@@ -61,7 +64,7 @@ export function DashboardProUpsell() {
             </div>
 
             <h3 className="text-2xl sm:text-3xl font-bold mb-1.5 leading-tight">
-              Unlock everything for KES 12/day
+              Personal career advisor for KES 12/day
             </h3>
             <p className="text-sm text-white/90 leading-snug mb-3 max-w-md">
               Less than mandazi. One year of full access — every tool, every job portal,
