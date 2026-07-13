@@ -9,23 +9,37 @@ import { initClientSentry } from "@/lib/sentry";
 // VITE_SENTRY_DSN isn't set (local dev / preview / DSN missing).
 initClientSentry();
 
-// ─── Service Worker Cleanup ───────────────────────────────────────────────────
-// This app does not use a service worker. Any previously registered SW (from an
-// earlier version or a third-party script) would intercept network requests and
-// serve stale assets, breaking cache-busting. Unregister all and clear caches.
-if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.getRegistrations().then((registrations) => {
-    for (const registration of registrations) {
-      registration.unregister();
-      console.info("[WAH] Service worker unregistered:", registration.scope);
-    }
-  });
-
-  caches.keys().then((cacheNames) => {
-    cacheNames.forEach((cacheName) => {
-      caches.delete(cacheName);
-      console.info("[WAH] Cache cleared:", cacheName);
-    });
+// ─── Service Worker Registration ──────────────────────────────────────────────
+// 2026-07: Registering /sw.js so Play Store's TWA reviewer and PWABuilder can
+// detect the SW (both require it for "installable" status). Previously this
+// block was ACTIVELY UNREGISTERING any SW to avoid stale-cache issues from an
+// old SW version — but the current sw.js in client/public is well-designed:
+// it version-tags its caches ("v5") and its activate handler deletes any
+// cache whose name doesn't match the current version, so a deploy can't get
+// stuck on stale assets.
+//
+// Kept the "network-first for /api/" pattern (implemented inside sw.js) so
+// data reads always hit the server. Static shell (index.html, /logo.png,
+// /site.webmanifest) is precached for offline-open, which is what Play Store
+// wants to see for a TWA install prompt.
+if ("serviceWorker" in navigator && import.meta.env.PROD) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker
+      .register("/sw.js", { scope: "/" })
+      .then((reg) => {
+        console.info("[WAH] Service worker registered:", reg.scope);
+        // Auto-reload once a new SW takes control. Prevents users being stuck
+        // on the pre-update shell after we ship a new build.
+        let refreshing = false;
+        navigator.serviceWorker.addEventListener("controllerchange", () => {
+          if (refreshing) return;
+          refreshing = true;
+          window.location.reload();
+        });
+      })
+      .catch((err) => {
+        console.warn("[WAH] Service worker registration failed:", err?.message);
+      });
   });
 }
 // ─────────────────────────────────────────────────────────────────────────────
