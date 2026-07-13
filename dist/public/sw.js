@@ -156,4 +156,22 @@ self.addEventListener("pushsubscriptionchange", (event) => {
 self.addEventListener("sync", (event) => {
   if (event.tag === "sync-analytics") {
     event.waitUntil(
-      fetch("/api/analytics/sync", { 
+      fetch("/api/analytics/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        // The queued events live in IndexedDB; if we don't have any, the
+        // server just gets an empty ping which it treats as a heartbeat.
+        body: JSON.stringify({ syncedAt: Date.now() }),
+      }).catch(() => {
+        // Silent — the browser will retry when connectivity returns.
+      })
+    );
+  }
+});
+
+// ── Message channel — lets the page trigger skipWaiting for instant updates
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
+});
