@@ -276,7 +276,7 @@ export default function MyOverview() {
     {
       label: "Active Services",
       value: activeCount != null ? String(activeCount) : "—",
-      sub: "Unlocked services",
+      sub: "Your active services",
       icon: <Zap className="h-5 w-5 text-purple-600 dark:text-purple-400" />,
       bg: "bg-purple-50 dark:bg-purple-900/20",
       href: "/my-documents",

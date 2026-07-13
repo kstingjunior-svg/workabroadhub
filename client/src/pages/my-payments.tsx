@@ -266,7 +266,7 @@ export default function MyPayments() {
                 <p className="font-medium">No payments yet</p>
                 <p className="text-sm mt-1">Purchase a plan or service to see your history here.</p>
                 <Link href="/payment">
-                  <Button size="sm" className="mt-4" data-testid="button-go-to-payment">Upgrade to Pro</Button>
+                  <Button size="sm" className="mt-4" data-testid="button-go-to-payment">Start Consultation</Button>
                 </Link>
               </div>
             ) : (

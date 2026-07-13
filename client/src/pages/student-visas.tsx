@@ -668,7 +668,7 @@ function StudentVisaPaywall() {
               </div>
               <Link href="/pricing">
                 <Button className="w-full bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white font-bold" size="lg" data-testid="button-upgrade-pro">
-                  Unlock student visas → see plans
+                  Get advisor guidance → see plans
                 </Button>
               </Link>
               <p className="text-[11px] text-muted-foreground text-center">

@@ -193,7 +193,7 @@ function BirthCertificatePaywall() {
           data-testid="bc-paywall-upgrade"
         >
           <Crown className="h-5 w-5" />
-          Unlock birth certificate guide — see plans
+          Get personal advisor guidance — see plans
           <ArrowRight className="h-4 w-4" />
         </Link>
 

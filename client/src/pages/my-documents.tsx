@@ -483,7 +483,7 @@ export default function MyDocuments() {
               <div className="text-center py-14 text-[#7A8A9A]" data-testid="empty-subscriptions">
                 <div className="text-5xl mb-3">⭐</div>
                 <h3 className="font-semibold text-[#1A2530] mb-1">No active subscriptions</h3>
-                <p className="text-sm mb-4">Upgrade to Pro Plan for unlimited access!</p>
+                <p className="text-sm mb-4">Start career consultation for full advisor support!</p>
                 <Link href="/pricing">
                   <span className="inline-block bg-[#1A2530] text-white text-sm font-medium px-5 py-2.5 rounded-full cursor-pointer">
                     View Plans →

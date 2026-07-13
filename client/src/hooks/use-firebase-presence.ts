@@ -50,7 +50,13 @@ function friendlyPage(path: string): string {
 
 async function fetchGeo(): Promise<GeoData> {
   try {
-    const res = await fetch("https://ipapi.co/json/", { signal: AbortSignal.timeout(4000) });
+    // 2026-07: removed https://ipapi.co/json/ geolocation lookup so we
+    // never collect user IP / location. Cleaner Data Safety story for
+    // Play Store review — no "Location" category needs declaring.
+    // Falling back to null returns country=null everywhere the caller uses it.
+    return null as any;
+    // @ts-ignore — deadcode after the early return above, kept for reference.
+    const res = await fetch("about:blank", { signal: AbortSignal.timeout(1) });
     const data = await res.json();
     return {
       country: data.country_name || "Kenya",

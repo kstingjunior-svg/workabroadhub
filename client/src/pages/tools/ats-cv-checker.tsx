@@ -484,7 +484,7 @@ export default function ATSCVChecker() {
                           </Badge>
                         </div>
                         <h3 className="text-lg font-bold leading-tight">
-                          Unlock your full report — and fix what we found
+                          Get a human review — advisor fixes what we found
                         </h3>
                         <p className="text-sm text-muted-foreground leading-relaxed mt-1">
                           Your CV scored {result.score}/100. CV Fix Lite gives you the full report PLUS rewrites the
@@ -614,9 +614,9 @@ export default function ATSCVChecker() {
                   </>
                 ) : (
                   <FreemiumGate
-                    title="Unlock Full CV Analysis"
+                    title="Human Review of Your Full CV"
                     description={`Your CV has ${result.weaknesses?.length || 0} weaknesses and ${result.missingKeywords?.length || 0} missing keywords. Upgrade to see every issue and how to fix it.`}
-                    ctaText="Unlock Full Report"
+                    ctaText="Get Human Review"
                     blurHeight={160}
                   >
                     <div className="space-y-3">

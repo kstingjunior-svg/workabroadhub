@@ -744,7 +744,7 @@ export default function VisaSponsorshipJobs() {
               onClick={handleUpgradeRequired}
               data-testid="button-upgrade-jobs"
             >
-              Unlock Apply Access ✨
+              Get Advisor Apply Support ✨
             </Button>
           </div>
         )}

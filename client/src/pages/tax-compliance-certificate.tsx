@@ -139,7 +139,7 @@ function TaxComplianceCertificatePaywall() {
           data-testid="tcc-paywall-upgrade"
         >
           <Crown className="h-5 w-5" />
-          Unlock guide — see plans
+          Get personal advisor guidance — see plans
           <ArrowRight className="h-4 w-4" />
         </Link>
 

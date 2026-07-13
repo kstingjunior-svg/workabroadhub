@@ -189,7 +189,7 @@ function PlanStatusCard({ planId, subscription, isLoadingSub }: {
           <Link href="/pricing">
             <Button size="sm" className="gap-1.5 mt-1" data-testid="button-upgrade-plan">
               <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
-              {expired ? "Renew Plan" : effectivePlan === "basic" ? "Upgrade to Pro" : "Get a Plan"}
+              {expired ? "Renew Plan" : effectivePlan === "basic" ? "Upgrade Consultation" : "Get a Plan"}
             </Button>
           </Link>
         )}

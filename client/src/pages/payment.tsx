@@ -1320,7 +1320,7 @@ export default function Payment() {
                         data-testid="button-verify-receipt"
                       >
                         {verifyReceiptMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
-                        Verify & Unlock Access
+                        Verify & Start Consultation
                       </button>
                     </div>
                   )}

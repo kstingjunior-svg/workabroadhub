@@ -210,7 +210,7 @@ const conversionServices = [
   },
   {
     title: "Pro Plan — Unlimited Access",
-    description: "Unlock all tools, AI job matching, WhatsApp consultations and priority support.",
+    description: "Personal WhatsApp career advisor, human CV review, personalised agency verification and priority support.",
     href: "/pricing",
     badge: "KES 4,500",
     badgeColor: "bg-purple-100 text-purple-700",

@@ -242,7 +242,7 @@ export default function Community() {
         const rawMsg = typeof data?.message === "string" ? data.message : "";
         const friendly =
           rawMsg === "rate_limited" ? "Wait a few seconds between messages." :
-          rawMsg === "no_quota" ? "You're out of free posts today. Go Pro or refer a friend." :
+          rawMsg === "no_quota" ? "You've reached today's free posts. Start a career consultation package or refer a friend for more." :
           rawMsg === "not_signed_in" ? "Sign in to post." :
           rawMsg === "invalid_room" ? "That room no longer exists." :
           rawMsg === "empty_message" ? "Type at least 2 characters." :
@@ -451,7 +451,7 @@ export default function Community() {
                       <Link href="/pricing">
                         <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white text-xs" data-testid="cta-upgrade">
                           <Crown className="h-3 w-3 mr-1" />
-                          Go Pro · KES 1,000/mo
+                          Start Consultation · KES 1,000/mo
                         </Button>
                       </Link>
                       <Link href="/referrals">

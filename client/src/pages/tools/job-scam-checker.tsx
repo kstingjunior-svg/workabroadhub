@@ -564,9 +564,9 @@ export default function JobScamChecker() {
               </>
             ) : (
               <FreemiumGate
-                title="Unlock Full Scam Analysis"
+                title="Human Analysis of Full Report"
                 description={`${result.warningSignals.length} warning signals detected. Upgrade to see every red flag and get personalised safety recommendations.`}
-                ctaText="Unlock Full Report"
+                ctaText="Get Advisor Review"
                 blurHeight={140}
               >
                 <Card>

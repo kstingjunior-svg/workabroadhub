@@ -92,7 +92,7 @@ interface JobAlert {
  */
 function getRecommendation(profile: { jobInterest: number; upgradeInterest: number }) {
   if (profile.upgradeInterest > 2) {
-    return { type: "upgrade", message: "🔥 You're close! Unlock PRO to apply instantly" };
+    return { type: "upgrade", message: "🔥 You're close! Start your career consultation to apply instantly" };
   }
   if (profile.jobInterest > 3) {
     return { type: "jobs", message: "🔥 New visa-sponsored jobs available for you" };
@@ -2128,7 +2128,7 @@ export default function Dashboard() {
             <div className="flex items-center gap-3">
               <span className="text-2xl flex-shrink-0" aria-hidden="true">🚀</span>
               <div className="flex-1 min-w-0">
-                <p className="font-bold text-white text-sm leading-tight">Unlock Premium Opportunities</p>
+                <p className="font-bold text-white text-sm leading-tight">Get advisor guidance for these opportunities</p>
                 <p className="text-white/80 text-xs mt-0.5">1,000+ users upgraded this month · Full access for 365 days</p>
               </div>
               <div className="flex-shrink-0 bg-white text-orange-600 text-xs font-bold px-3 py-1.5 rounded-full shadow-sm">Upgrade ✨</div>
@@ -2156,7 +2156,7 @@ export default function Dashboard() {
               Exclusive Verified Jobs
             </h3>
             <LockedContentPreview
-              title="🔒 Unlock Verified Jobs"
+              title="🔒 Advisor-vetted verified jobs"
               description="47 exclusive high-demand overseas jobs are hidden from free accounts. Upgrade to see and apply."
               plan="pro"
               jobCount={4}
