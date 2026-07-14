@@ -448,13 +448,16 @@ export function UpgradeModal() {
         )}
 
         {/* ── STEP: pay ─────────────────────────────────────────────────────── */}
+        {/* 2026-07: PayPal elevated to co-equal button (was a small grey link).
+            Users outside Kenya can't receive STK Push (no Safaricom line, or
+            regions Safaricom doesn't operate in) and were dropping off. */}
         {step === "pay" && (
           <div className="p-6 space-y-5">
             <div className="text-center">
-              <div className="text-3xl mb-1">📱</div>
-              <h3 className="text-lg font-bold text-foreground">Pay via M-Pesa</h3>
+              <div className="text-3xl mb-1">💳</div>
+              <h3 className="text-lg font-bold text-foreground">Choose your payment method</h3>
               <p className="text-sm text-muted-foreground mt-1">
-                Enter your Safaricom number and we'll send an STK push to your phone instantly.
+                M-Pesa for Kenya · PayPal works worldwide (card, PayPal balance, Google Pay)
               </p>
             </div>
 
@@ -464,6 +467,21 @@ export function UpgradeModal() {
                 {proFinalPrice ? `KES ${proFinalPrice.toLocaleString("en-KE")}` : "—"}
               </div>
               <div className="text-xs text-amber-600/70 dark:text-amber-500 mt-0.5">360 days Pro access</div>
+            </div>
+
+            {/* PAYPAL — first for non-KE users, always visible */}
+            <button
+              onClick={() => { handleClose(); window.location.href = "/payment?plan=pro"; }}
+              className="w-full py-3.5 rounded-xl font-bold text-sm text-white bg-gradient-to-r from-[#0070ba] to-[#003087] hover:from-[#005a99] hover:to-[#00246b] transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] shadow-md shadow-blue-200 dark:shadow-blue-900/30 flex items-center justify-center gap-2"
+              data-testid="btn-pay-paypal"
+            >
+              🌍 Pay with PayPal (any country, any card)
+            </button>
+
+            <div className="flex items-center gap-3">
+              <div className="flex-1 h-px bg-border" />
+              <span className="text-xs text-muted-foreground">or M-Pesa (Kenya only)</span>
+              <div className="flex-1 h-px bg-border" />
             </div>
 
             <div className="space-y-2">
@@ -483,9 +501,8 @@ export function UpgradeModal() {
                   onKeyDown={(e) => { if (e.key === "Enter") handleSendPrompt(); }}
                 />
               </div>
-              <p className="text-xs text-muted-foreground">You'll receive a PIN prompt on this number</p>
+              <p className="text-xs text-muted-foreground">You'll receive a PIN prompt on this Safaricom number</p>
             </div>
-
 
             <button
               onClick={handleSendPrompt}
@@ -498,20 +515,6 @@ export function UpgradeModal() {
               ) : (
                 <>📲 Send M-Pesa Prompt</>
               )}
-            </button>
-
-            <div className="flex items-center gap-3">
-              <div className="flex-1 h-px bg-border" />
-              <span className="text-xs text-muted-foreground">or</span>
-              <div className="flex-1 h-px bg-border" />
-            </div>
-
-            <button
-              onClick={() => { handleClose(); window.location.href = "/payment?plan=pro"; }}
-              className="w-full py-2.5 rounded-xl font-medium text-sm border border-border text-muted-foreground hover:bg-muted transition-colors"
-              data-testid="btn-pay-other-methods"
-            >
-              Pay with PayPal or other methods →
             </button>
 
             <button

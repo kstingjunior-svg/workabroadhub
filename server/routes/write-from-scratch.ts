@@ -38,6 +38,7 @@ import type { Express, Request, Response } from "express";
 import { pool } from "../db";
 import { storage } from "../storage";
 import { stkPush, isMpesaAvailable } from "../mpesa";
+import { createPayPalOrder, capturePayPalOrder, isPayPalConfigured } from "../paypal";
 import { renderDocx, renderPdf } from "../services/document-renderer";
 import {
   generateDocument,
@@ -257,6 +258,176 @@ export function registerWriteFromScratchRoutes(app: Express): void {
     } catch (err: any) {
       console.error("[write-from-scratch] callback error:", err?.message);
       return res.json({ ResultCode: 0, ResultDesc: "handled" });
+    }
+  });
+
+  /* ─── POST /api/write-from-scratch/paypal-init ──────────────────────────
+   *
+   * 2026-07: PayPal path so users outside Kenya (no Safaricom line, or
+   * regions Safaricom doesn't operate in) can buy Write-from-Scratch documents.
+   * Mirrors /init but skips STK push — creates the PayPal order and returns
+   * the approval URL so the client can redirect the user to pay.
+   *
+   * Body: { docType, input }
+   * Returns: { draftId, paypalOrderId, approvalUrl }
+   */
+  app.post("/api/write-from-scratch/paypal-init", async (req: Request, res: Response) => {
+    try {
+      const { docType, input } = req.body ?? {};
+
+      if (!docType || !VALID_DOC_TYPES.includes(docType as WriteFromScratchDocType)) {
+        return res.status(400).json({ error: "Invalid docType" });
+      }
+      if (!input || typeof input !== "object") {
+        return res.status(400).json({ error: "input required" });
+      }
+
+      if (!isPayPalConfigured()) {
+        return res.status(503).json({
+          error: "PayPal is temporarily unavailable. Please try M-Pesa or contact support.",
+        });
+      }
+
+      const userId = currentUserId(req);
+
+      // Pro users get the tool for free — reuse the same fast path as /init.
+      if (userId) {
+        const plan = await storage.getUserPlan(userId);
+        if (isProTier(plan)) {
+          const { rows } = await pool.query(
+            `INSERT INTO write_from_scratch_drafts
+               (user_id, doc_type, input_json, status)
+             VALUES ($1, $2, $3, 'paid')
+             RETURNING id`,
+            [userId, docType, JSON.stringify(input)],
+          );
+          return res.json({
+            draftId: rows[0].id,
+            status: "paid",
+            paypalOrderId: null,
+            approvalUrl: null,
+            message: "Included with your Pro plan — no payment needed.",
+          });
+        }
+      }
+
+      // Create draft in pending_payment; PayPal order ID stored in mpesa_checkout_id
+      // (repurposed as generic payment_ref — schema keeps the column name for now).
+      const { rows: created } = await pool.query(
+        `INSERT INTO write_from_scratch_drafts
+           (user_id, doc_type, input_json, status, mpesa_amount)
+         VALUES ($1, $2, $3, 'pending_payment', $4)
+         RETURNING id`,
+        [userId, docType, JSON.stringify(input), PRICE_KES],
+      );
+      const draftId = created[0].id as string;
+
+      let order;
+      try {
+        order = await createPayPalOrder(
+          PRICE_KES,
+          `WorkAbroad Hub — ${docTypeLabel(docType as WriteFromScratchDocType)}`,
+          `WAH-WFS-${draftId.slice(0, 8)}`,
+        );
+      } catch (err: any) {
+        console.error("[write-from-scratch] PayPal order creation failed:", err?.message);
+        await pool.query(`DELETE FROM write_from_scratch_drafts WHERE id = $1`, [draftId]);
+        return res.status(502).json({
+          error: "Could not start the PayPal payment. Please try again.",
+        });
+      }
+
+      await pool.query(
+        `UPDATE write_from_scratch_drafts
+            SET mpesa_checkout_id = $1
+          WHERE id = $2`,
+        [order.id, draftId],
+      );
+
+      return res.json({
+        draftId,
+        status: "pending_payment",
+        paypalOrderId: order.id,
+        approvalUrl: order.approvalUrl,
+      });
+    } catch (err: any) {
+      console.error("[write-from-scratch/paypal-init] error:", err);
+      return res.status(500).json({ error: "Could not start the PayPal payment." });
+    }
+  });
+
+  /* ─── POST /api/write-from-scratch/:id/paypal-capture ────────────────────
+   *
+   * After the user approves on PayPal's site and returns to our app, the
+   * client calls this to capture the funds and mark the draft as paid.
+   *
+   * Body: { paypalOrderId }
+   * Returns: { status: "paid", transactionId }
+   */
+  app.post("/api/write-from-scratch/:id/paypal-capture", async (req: Request, res: Response) => {
+    try {
+      const { paypalOrderId } = req.body ?? {};
+      if (!paypalOrderId || typeof paypalOrderId !== "string") {
+        return res.status(400).json({ error: "paypalOrderId required" });
+      }
+
+      const { rows } = await pool.query(
+        `SELECT id, status, mpesa_checkout_id, user_id
+           FROM write_from_scratch_drafts
+          WHERE id = $1`,
+        [req.params.id],
+      );
+      if (rows.length === 0) return res.status(404).json({ error: "Draft not found" });
+      const draft = rows[0];
+
+      // Idempotent — if already paid, don't re-capture (PayPal would 422).
+      if (draft.status === "paid" || draft.status === "generated") {
+        return res.json({ status: draft.status, transactionId: null });
+      }
+
+      if (draft.mpesa_checkout_id && draft.mpesa_checkout_id !== paypalOrderId) {
+        return res.status(400).json({
+          error: "PayPal order mismatch — this draft was created with a different order.",
+        });
+      }
+
+      let capture;
+      try {
+        capture = await capturePayPalOrder(paypalOrderId);
+      } catch (err: any) {
+        console.error("[write-from-scratch] PayPal capture failed:", err?.message);
+        return res.status(502).json({
+          error: "PayPal payment could not be captured. Please try again.",
+        });
+      }
+
+      if (capture.status !== "COMPLETED") {
+        return res.status(400).json({
+          error: `PayPal payment status is ${capture.status}, not COMPLETED.`,
+        });
+      }
+
+      await pool.query(
+        `UPDATE write_from_scratch_drafts
+            SET status        = 'paid',
+                mpesa_receipt = $1,
+                paid_at       = NOW()
+          WHERE id = $2
+            AND status = 'pending_payment'`,
+        [`PP-${capture.transactionId}`, draft.id],
+      );
+
+      console.log(
+        `[write-from-scratch] PayPal captured: draftId=${draft.id} txn=${capture.transactionId} $${capture.amountUSD}`,
+      );
+
+      return res.json({
+        status: "paid",
+        transactionId: capture.transactionId,
+      });
+    } catch (err: any) {
+      console.error("[write-from-scratch/paypal-capture] error:", err);
+      return res.status(500).json({ error: "Could not capture the PayPal payment." });
     }
   });
 

@@ -1135,7 +1135,7 @@ export default function Landing() {
                       </a>
                     </Button>
                     <p className="text-center text-sm text-muted-foreground mt-4">
-                      Secure payment via M-Pesa
+                      Secure payment via M-Pesa (Kenya) or PayPal (worldwide)
                     </p>
                   </div>
                 </div>
@@ -1475,7 +1475,7 @@ export default function Landing() {
                   Is my payment secure? What payment methods do you accept?
                 </AccordionTrigger>
                 <AccordionContent className="text-muted-foreground pb-5 leading-relaxed">
-                  Yes, all payments are processed securely. We accept M-Pesa (Kenya's most trusted mobile money platform) and card payments. Your payment information is encrypted and never stored on our servers. After successful payment, you receive instant access to all resources and can schedule your WhatsApp consultation.
+                  Yes, all payments are processed securely. We accept <strong>M-Pesa</strong> for Kenyan users (Kenya's most trusted mobile money platform) and <strong>PayPal</strong> for users worldwide (works with any Visa, Mastercard, or PayPal balance — no Safaricom line required). Your payment information is encrypted and never stored on our servers. After successful payment, you receive instant access to all resources and can schedule your WhatsApp consultation.
                 </AccordionContent>
               </AccordionItem>
             </Accordion>

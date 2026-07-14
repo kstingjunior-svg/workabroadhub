@@ -140,7 +140,7 @@ export function DashboardServicesGrid() {
             <Sparkles className="h-5 w-5 text-amber-500" /> Career Services
           </h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Pay by M-Pesa. Delivered in minutes. Download as Word or PDF.
+            Pay by M-Pesa (Kenya) or PayPal (worldwide). Delivered in minutes. Download as Word or PDF.
           </p>
         </div>
         <Link
@@ -203,7 +203,7 @@ export function DashboardServicesGrid() {
       </div>
 
       <p className="text-[11px] text-center text-muted-foreground mt-3 flex items-center justify-center gap-1.5 flex-wrap">
-        <span>💳 M-Pesa Paybill 4153025</span>
+        <span>💳 M-Pesa (Paybill 4153025) or 🌍 PayPal</span>
         <span>•</span>
         <span>⚡ In your inbox in minutes</span>
         <span>•</span>

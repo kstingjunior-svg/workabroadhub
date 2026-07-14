@@ -68,7 +68,7 @@ export function DashboardProUpsell() {
             </h3>
             <p className="text-sm text-white/90 leading-snug mb-3 max-w-md">
               Less than mandazi. One year of full access — every tool, every job portal,
-              every service unlocked. Pay once via M-Pesa.
+              every service unlocked. Pay via M-Pesa (Kenya) or PayPal (worldwide).
             </p>
 
             {/* Feature list */}
@@ -89,7 +89,7 @@ export function DashboardProUpsell() {
               </span>
             </div>
             <p className="text-xs text-white/70">
-              Works out to KES 375/month or about KES 12/day. One-time M-Pesa payment.
+              Works out to KES 375/month or about KES 12/day. Pay by M-Pesa or PayPal.
             </p>
           </div>
 
@@ -103,7 +103,7 @@ export function DashboardProUpsell() {
               <Sparkles className="h-4 w-4" /> Upgrade to Pro <ArrowRight className="h-4 w-4" />
             </Link>
             <p className="text-[11px] text-center text-white/80">
-              💳 M-Pesa Paybill 4153025 · activates instantly
+              💳 M-Pesa (Paybill 4153025) or 🌍 PayPal · activates instantly
             </p>
           </div>
         </div>
