@@ -37,7 +37,9 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.registerWriteFromScratchRoutes = registerWriteFromScratchRoutes;
 const db_1 = require("../db");
+const storage_1 = require("../storage");
 const mpesa_1 = require("../mpesa");
+const paypal_1 = require("../paypal");
 const document_renderer_1 = require("../services/document-renderer");
 const generator_1 = require("../services/writeFromScratch/generator");
 const PRICE_KES = 300;
@@ -222,6 +224,142 @@ function registerWriteFromScratchRoutes(app) {
             return res.json({ ResultCode: 0, ResultDesc: "handled" });
         }
     });
+    /* ─── POST /api/write-from-scratch/paypal-init ──────────────────────────
+     *
+     * 2026-07: PayPal path so users outside Kenya (no Safaricom line, or
+     * regions Safaricom doesn't operate in) can buy Write-from-Scratch documents.
+     * Mirrors /init but skips STK push — creates the PayPal order and returns
+     * the approval URL so the client can redirect the user to pay.
+     *
+     * Body: { docType, input }
+     * Returns: { draftId, paypalOrderId, approvalUrl }
+     */
+    app.post("/api/write-from-scratch/paypal-init", async (req, res) => {
+        try {
+            const { docType, input } = req.body ?? {};
+            if (!docType || !VALID_DOC_TYPES.includes(docType)) {
+                return res.status(400).json({ error: "Invalid docType" });
+            }
+            if (!input || typeof input !== "object") {
+                return res.status(400).json({ error: "input required" });
+            }
+            if (!(0, paypal_1.isPayPalConfigured)()) {
+                return res.status(503).json({
+                    error: "PayPal is temporarily unavailable. Please try M-Pesa or contact support.",
+                });
+            }
+            const userId = currentUserId(req);
+            // Pro users get the tool for free — reuse the same fast path as /init.
+            if (userId) {
+                const plan = await storage_1.storage.getUserPlan(userId);
+                if (isProTier(plan)) {
+                    const { rows } = await db_1.pool.query(`INSERT INTO write_from_scratch_drafts
+               (user_id, doc_type, input_json, status)
+             VALUES ($1, $2, $3, 'paid')
+             RETURNING id`, [userId, docType, JSON.stringify(input)]);
+                    return res.json({
+                        draftId: rows[0].id,
+                        status: "paid",
+                        paypalOrderId: null,
+                        approvalUrl: null,
+                        message: "Included with your Pro plan — no payment needed.",
+                    });
+                }
+            }
+            // Create draft in pending_payment; PayPal order ID stored in mpesa_checkout_id
+            // (repurposed as generic payment_ref — schema keeps the column name for now).
+            const { rows: created } = await db_1.pool.query(`INSERT INTO write_from_scratch_drafts
+           (user_id, doc_type, input_json, status, mpesa_amount)
+         VALUES ($1, $2, $3, 'pending_payment', $4)
+         RETURNING id`, [userId, docType, JSON.stringify(input), PRICE_KES]);
+            const draftId = created[0].id;
+            let order;
+            try {
+                order = await (0, paypal_1.createPayPalOrder)(PRICE_KES, `WorkAbroad Hub — ${docTypeLabel(docType)}`, `WAH-WFS-${draftId.slice(0, 8)}`);
+            }
+            catch (err) {
+                console.error("[write-from-scratch] PayPal order creation failed:", err?.message);
+                await db_1.pool.query(`DELETE FROM write_from_scratch_drafts WHERE id = $1`, [draftId]);
+                return res.status(502).json({
+                    error: "Could not start the PayPal payment. Please try again.",
+                });
+            }
+            await db_1.pool.query(`UPDATE write_from_scratch_drafts
+            SET mpesa_checkout_id = $1
+          WHERE id = $2`, [order.id, draftId]);
+            return res.json({
+                draftId,
+                status: "pending_payment",
+                paypalOrderId: order.id,
+                approvalUrl: order.approvalUrl,
+            });
+        }
+        catch (err) {
+            console.error("[write-from-scratch/paypal-init] error:", err);
+            return res.status(500).json({ error: "Could not start the PayPal payment." });
+        }
+    });
+    /* ─── POST /api/write-from-scratch/:id/paypal-capture ────────────────────
+     *
+     * After the user approves on PayPal's site and returns to our app, the
+     * client calls this to capture the funds and mark the draft as paid.
+     *
+     * Body: { paypalOrderId }
+     * Returns: { status: "paid", transactionId }
+     */
+    app.post("/api/write-from-scratch/:id/paypal-capture", async (req, res) => {
+        try {
+            const { paypalOrderId } = req.body ?? {};
+            if (!paypalOrderId || typeof paypalOrderId !== "string") {
+                return res.status(400).json({ error: "paypalOrderId required" });
+            }
+            const { rows } = await db_1.pool.query(`SELECT id, status, mpesa_checkout_id, user_id
+           FROM write_from_scratch_drafts
+          WHERE id = $1`, [req.params.id]);
+            if (rows.length === 0)
+                return res.status(404).json({ error: "Draft not found" });
+            const draft = rows[0];
+            // Idempotent — if already paid, don't re-capture (PayPal would 422).
+            if (draft.status === "paid" || draft.status === "generated") {
+                return res.json({ status: draft.status, transactionId: null });
+            }
+            if (draft.mpesa_checkout_id && draft.mpesa_checkout_id !== paypalOrderId) {
+                return res.status(400).json({
+                    error: "PayPal order mismatch — this draft was created with a different order.",
+                });
+            }
+            let capture;
+            try {
+                capture = await (0, paypal_1.capturePayPalOrder)(paypalOrderId);
+            }
+            catch (err) {
+                console.error("[write-from-scratch] PayPal capture failed:", err?.message);
+                return res.status(502).json({
+                    error: "PayPal payment could not be captured. Please try again.",
+                });
+            }
+            if (capture.status !== "COMPLETED") {
+                return res.status(400).json({
+                    error: `PayPal payment status is ${capture.status}, not COMPLETED.`,
+                });
+            }
+            await db_1.pool.query(`UPDATE write_from_scratch_drafts
+            SET status        = 'paid',
+                mpesa_receipt = $1,
+                paid_at       = NOW()
+          WHERE id = $2
+            AND status = 'pending_payment'`, [`PP-${capture.transactionId}`, draft.id]);
+            console.log(`[write-from-scratch] PayPal captured: draftId=${draft.id} txn=${capture.transactionId} $${capture.amountUSD}`);
+            return res.json({
+                status: "paid",
+                transactionId: capture.transactionId,
+            });
+        }
+        catch (err) {
+            console.error("[write-from-scratch/paypal-capture] error:", err);
+            return res.status(500).json({ error: "Could not capture the PayPal payment." });
+        }
+    });
     /* ─── GET /api/write-from-scratch/:id/status ────────────────────────── */
     app.get("/api/write-from-scratch/:id/status", async (req, res) => {
         try {
@@ -380,11 +518,17 @@ function registerWriteFromScratchRoutes(app) {
             if (rows.length === 0)
                 return res.status(404).json({ error: "Not found" });
             const row = rows[0];
-            // Owner check — if the draft has a user_id, the caller must be that
-            // user (or a guest whose session gave them the raw draftId as capability
-            // when they don't have an account — in which case row.user_id is null).
+            // Owner check — if the draft has a user_id, the caller MUST be that
+            // signed-in user. Guest drafts (row.user_id IS NULL) remain capability-only:
+            // knowing the unguessable UUID is proof of ownership.
+            //
+            // 2026-07 LEAK FIX: previous condition required both row.user_id AND
+            // userId to be truthy, meaning an UNAUTH request (userId=null) with a
+            // leaked draftId would bypass the check and read the paid document body.
+            // Now: signed-in drafts are strictly owner-only; unauth callers can only
+            // read guest drafts.
             const userId = currentUserId(req);
-            if (row.user_id && userId && row.user_id !== userId) {
+            if (row.user_id && row.user_id !== userId) {
                 return res.status(403).json({ error: "Not yours" });
             }
             return res.json({

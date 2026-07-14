@@ -705,7 +705,14 @@ Return ONLY the JSON object, no markdown, no extra text.`;
                 });
             }
             const usageCount = await storage_1.storage.getUserToolUsageCount(userId, "job_assistant");
-            const isPremium = await storage_1.storage.userHasSuccessfulPayment(userId);
+            // 2026-07 LEAK FIX: userHasSuccessfulPayment returned true for ANY
+            // historical successful payment. So a user who paid KES 99 for a 1-day
+            // trial six months ago (or KES 300 for a single Write-from-Scratch doc)
+            // was getting unlimited AI generations forever. Now uses the same
+            // fresh, expiry-aware plan check as requireAnyPaidPlan.
+            const currentPlan = await storage_1.storage.getUserPlan(userId);
+            const PAID_PLANS = new Set(["trial", "monthly", "pro", "pro_referral", "basic", "yearly"]);
+            const isPremium = PAID_PLANS.has(currentPlan);
             if (usageCount >= 1 && !isPremium) {
                 return res.status(402).json({
                     locked: true,
