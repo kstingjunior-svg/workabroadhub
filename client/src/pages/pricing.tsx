@@ -313,6 +313,33 @@ export default function PricingPage() {
           <LiveActivityFeed inline />
         </div>
 
+        {/* ── PAYMENT METHODS BANNER — 2026-07 ──────────────────────────────
+            Non-Kenyan users were dropping off because PayPal was buried in
+            tiny grey text under each card. Big banner surfaces both options
+            at eye level so international visitors know they're welcome. */}
+        <div className="mb-5 rounded-2xl border-2 border-dashed border-emerald-300 dark:border-emerald-800 bg-emerald-50/60 dark:bg-emerald-950/20 px-4 py-3.5" data-testid="payment-methods-banner">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-6 text-sm">
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">🇰🇪</span>
+              <div>
+                <div className="font-bold text-foreground leading-tight">M-Pesa</div>
+                <div className="text-xs text-muted-foreground leading-tight">for Kenya · Paybill 4153025</div>
+              </div>
+            </div>
+            <div className="hidden sm:block h-8 w-px bg-emerald-300 dark:bg-emerald-800" />
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">🌍</span>
+              <div>
+                <div className="font-bold text-foreground leading-tight">PayPal</div>
+                <div className="text-xs text-muted-foreground leading-tight">worldwide · Visa, Mastercard, PayPal balance</div>
+              </div>
+            </div>
+          </div>
+          <p className="text-center text-[11px] text-muted-foreground mt-2">
+            No Safaricom line required — international users pay via PayPal in USD.
+          </p>
+        </div>
+
         {/* ── 3-TIER PLAN CARDS ── */}
         {plansLoading && (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 items-start mb-4">
@@ -399,8 +426,12 @@ export default function PricingPage() {
                       {plan.id === "monthly" && <><Calendar className="h-4 w-4 mr-2" />Get Monthly — KES {fmt(plan.price)}</>}
                       {plan.id === "pro"     && <><Crown   className="h-4 w-4 mr-2" />Get Yearly — KES {fmt(plan.price)}</>}
                     </Button>
-                    <p className="text-center text-[10px] text-muted-foreground mt-2">
-                      M-Pesa STK Push or PayPal · Instant activation
+                    <p className="text-center text-xs text-muted-foreground mt-2 flex items-center justify-center gap-1.5 flex-wrap">
+                      <span>🇰🇪 M-Pesa</span>
+                      <span className="text-muted-foreground/60">or</span>
+                      <span>🌍 PayPal</span>
+                      <span className="text-muted-foreground/60">·</span>
+                      <span>Instant activation</span>
                     </p>
                   </>
                 )}
