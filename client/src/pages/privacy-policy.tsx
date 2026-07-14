@@ -131,7 +131,6 @@ export default function PrivacyPolicy() {
                 <li><strong>Supabase</strong> — A secondary database mirror used for real-time analytics and data synchronisation. Data is encrypted at rest and in transit.</li>
                 <li><strong>Google Firebase (Realtime Database)</strong> — Used for real-time notification delivery and live dashboard updates. Only anonymised user IDs and notification payloads are stored.</li>
                 <li><strong>Replit Infrastructure</strong> — Primary encrypted database and server hosting. All data is stored within Replit's secure cloud infrastructure.</li>
-                <li><strong>ipapi.co</strong> — Your IP address is used for country detection to comply with content and payment regulations. No personal data is stored by this service.</li>
                 <li><strong>Law enforcement or regulators</strong> — Data is disclosed only when legally required under Kenyan law or a valid court order.</li>
               </ul>
               <p>All third-party services are bound by their own privacy policies and data protection obligations. We do not share your data with employers or recruitment agencies without your explicit action.</p>

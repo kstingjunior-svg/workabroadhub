@@ -10,6 +10,7 @@ import { storage } from "./storage";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import { csrfTokenEndpoint, validateCsrf } from "./middleware/csrf";
 import { requireAnyPaidPlan, requireProPlan, requireSupabasePro, getAccessViolations } from "./middleware/requirePlan";
+import { checkNeaLookupCap, recordNeaLookup } from "./nea/lookupCounter";
 import { requireAuth } from "./middleware/requireAuth";
 import { requireVerifiedForPayment } from "./services/identityVerification";
 import { z } from "zod";
@@ -11875,12 +11876,28 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
   });
 
   // POST /api/agencies/bulk-verify — look up multiple license numbers in one shot
-  app.post("/api/agencies/bulk-verify", async (req, res) => {
+  app.post("/api/agencies/bulk-verify", async (req: any, res) => {
     try {
       const { licenseNumbers } = req.body as { licenseNumbers: string[] };
       if (!Array.isArray(licenseNumbers) || licenseNumbers.length === 0) {
         return res.status(400).json({ message: "licenseNumbers array required" });
       }
+
+      // 2026-07 LEAK FIX: enforce the free-tier "3 NEAIMS lookups per day"
+      // promise from plan-features.ts. Signed-in free users get 3 per rolling
+      // 24h window; paid users unlimited; anonymous browsers untracked.
+      const userId: string | null = req.user?.claims?.sub ?? null;
+      const cap = await checkNeaLookupCap(userId);
+      if (!cap.allowed) {
+        return res.status(429).json({
+          message: `You've used all ${cap.limit} free NEAIMS lookups today. Upgrade for unlimited agency verification.`,
+          upgradeRequired: true,
+          used: cap.used,
+          limit: cap.limit,
+          upgradeUrl: "/pricing",
+        });
+      }
+
       const capped = licenseNumbers.slice(0, 100).map(l => l.trim().toUpperCase());
       const rows = await db
         .select({
@@ -11911,6 +11928,9 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
           validUntil: row.expiryDate ? new Date(row.expiryDate).toLocaleDateString("en-KE") : "N/A",
         };
       });
+
+      // Record the lookup for the daily counter (best-effort, non-blocking).
+      recordNeaLookup(userId, "bulk-verify").catch(() => { /* logged in helper */ });
 
       res.json({ results });
     } catch (err) {
@@ -12208,8 +12228,22 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
     }
   });
 
-  app.get("/api/nea-agencies/:id", async (req, res) => {
+  app.get("/api/nea-agencies/:id", async (req: any, res) => {
     try {
+      // 2026-07 LEAK FIX: same free-tier daily cap as bulk-verify.
+      // Viewing an agency's full details counts as one "lookup".
+      const userId: string | null = req.user?.claims?.sub ?? null;
+      const cap = await checkNeaLookupCap(userId);
+      if (!cap.allowed) {
+        return res.status(429).json({
+          message: `You've used all ${cap.limit} free NEAIMS lookups today. Upgrade for unlimited agency verification.`,
+          upgradeRequired: true,
+          used: cap.used,
+          limit: cap.limit,
+          upgradeUrl: "/pricing",
+        });
+      }
+
       const agency = await storage.getNeaAgencyById(req.params.id);
       if (!agency) {
         return res.status(404).json({ message: "Agency not found" });
@@ -12218,6 +12252,9 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
       if (isBlacklisted) {
         return res.status(403).json({ message: "This agency is currently restricted" });
       }
+
+      recordNeaLookup(userId, "detail").catch(() => { /* logged in helper */ });
+
       res.json(agency);
     } catch (error) {
       console.error("Error fetching agency:", error);

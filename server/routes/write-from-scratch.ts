@@ -452,11 +452,17 @@ export function registerWriteFromScratchRoutes(app: Express): void {
       if (rows.length === 0) return res.status(404).json({ error: "Not found" });
       const row = rows[0];
 
-      // Owner check — if the draft has a user_id, the caller must be that
-      // user (or a guest whose session gave them the raw draftId as capability
-      // when they don't have an account — in which case row.user_id is null).
+      // Owner check — if the draft has a user_id, the caller MUST be that
+      // signed-in user. Guest drafts (row.user_id IS NULL) remain capability-only:
+      // knowing the unguessable UUID is proof of ownership.
+      //
+      // 2026-07 LEAK FIX: previous condition required both row.user_id AND
+      // userId to be truthy, meaning an UNAUTH request (userId=null) with a
+      // leaked draftId would bypass the check and read the paid document body.
+      // Now: signed-in drafts are strictly owner-only; unauth callers can only
+      // read guest drafts.
       const userId = currentUserId(req);
-      if (row.user_id && userId && row.user_id !== userId) {
+      if (row.user_id && row.user_id !== userId) {
         return res.status(403).json({ error: "Not yours" });
       }
 

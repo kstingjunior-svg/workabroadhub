@@ -119,7 +119,6 @@ export default function DataSafetyPage() {
             { name: "Supabase", data: "Anonymised user records and analytics events", purpose: "Secondary database mirror for real-time analytics and redundancy" },
             { name: "Google Firebase (Realtime Database)", data: "Anonymised user ID and notification payloads", purpose: "Real-time notification delivery and live dashboard updates" },
             { name: "Replit Infrastructure", data: "Encrypted primary database and session storage", purpose: "App hosting and primary data storage" },
-            { name: "ipapi.co", data: "IP address (not stored)", purpose: "Country detection for compliance with local payment and content regulations" },
           ].map(({ name, data, purpose }) => (
             <div key={name} className="py-2 border-b last:border-0">
               <p className="text-sm font-semibold">{name}</p>
