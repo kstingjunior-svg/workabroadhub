@@ -183,17 +183,20 @@ export default function PricingPage() {
   const currentPlanId = userPlan?.planId ?? "free";
   const fmt = (n: number) => n.toLocaleString("en-KE");
 
-  function goToPayment(planId: string) {
-    trackEvent(`click_upgrade_${planId}`);
+  function goToPayment(planId: string, method?: "mpesa" | "paypal") {
+    trackEvent(`click_upgrade_${planId}${method ? "_" + method : ""}`);
     if (!user) {
       // Send users to the landing page with a redirect param so the
       // login modal auto-opens and brings them back here after sign-in.
       // (Replaces the broken "/api/login" — a Replit-OIDC leftover that
       // doesn't exist as a route in the current Render/Supabase build.)
-      window.location.href = "/?redirect=" + encodeURIComponent("/pricing");
+      const back = "/pricing" + (method ? "?method=" + method : "");
+      window.location.href = "/?redirect=" + encodeURIComponent(back);
       return;
     }
-    navigate(`/payment?plan=${planId}`);
+    const qs = new URLSearchParams({ plan: planId });
+    if (method) qs.set("method", method);
+    navigate(`/payment?${qs.toString()}`);
   }
 
   const heroRef = useRef<HTMLDivElement>(null);
@@ -416,22 +419,40 @@ export default function PricingPage() {
                   </div>
                 ) : (
                   <>
-                    <Button
-                      size="lg"
-                      className={`w-full h-12 text-sm font-bold ${plan.btnClass}`}
-                      onClick={() => goToPayment(plan.id)}
-                      data-testid={`btn-${plan.id}-cta`}
-                    >
-                      {plan.id === "trial"   && <><Clock  className="h-4 w-4 mr-2" />Try 1 Day — KES {fmt(plan.price)}</>}
-                      {plan.id === "monthly" && <><Calendar className="h-4 w-4 mr-2" />Get Monthly — KES {fmt(plan.price)}</>}
-                      {plan.id === "pro"     && <><Crown   className="h-4 w-4 mr-2" />Get Yearly — KES {fmt(plan.price)}</>}
-                    </Button>
-                    <p className="text-center text-xs text-muted-foreground mt-2 flex items-center justify-center gap-1.5 flex-wrap">
-                      <span>🇰🇪 M-Pesa</span>
-                      <span className="text-muted-foreground/60">or</span>
-                      <span>🌍 PayPal</span>
-                      <span className="text-muted-foreground/60">·</span>
-                      <span>Instant activation</span>
+                    {/* 2026-07: Split single CTA into two branded buttons.
+                        Users outside Kenya were dropping off because M-Pesa was
+                        the only obvious option. Now green M-Pesa + blue PayPal
+                        sit side-by-side with brand colors + explicit country
+                        hints. Each routes to /payment with method preselected. */}
+                    <div className="text-center text-[11px] font-semibold text-muted-foreground mb-2 uppercase tracking-wider">
+                      Choose how to pay — KES {fmt(plan.price)}
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => goToPayment(plan.id, "mpesa")}
+                        className="h-14 rounded-xl bg-[#00b74a] hover:bg-[#009c3d] active:bg-[#008533] text-white font-bold text-sm shadow-md shadow-emerald-200 dark:shadow-emerald-900/30 transition-all hover:scale-[1.02] active:scale-[0.98] flex flex-col items-center justify-center leading-tight"
+                        data-testid={`btn-${plan.id}-mpesa`}
+                        aria-label={`Pay ${plan.name} with M-Pesa`}
+                      >
+                        <span className="text-base font-black tracking-wide">M-PESA</span>
+                        <span className="text-[10px] font-medium opacity-90">🇰🇪 Kenya</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => goToPayment(plan.id, "paypal")}
+                        className="h-14 rounded-xl bg-gradient-to-b from-[#0070ba] to-[#003087] hover:from-[#005a99] hover:to-[#00246b] text-white font-bold text-sm shadow-md shadow-blue-200 dark:shadow-blue-900/30 transition-all hover:scale-[1.02] active:scale-[0.98] flex flex-col items-center justify-center leading-tight"
+                        data-testid={`btn-${plan.id}-paypal`}
+                        aria-label={`Pay ${plan.name} with PayPal`}
+                      >
+                        <span className="text-base font-black tracking-wide">
+                          <span className="italic text-[#009cde]">Pay</span>Pal
+                        </span>
+                        <span className="text-[10px] font-medium opacity-90">🌍 Worldwide</span>
+                      </button>
+                    </div>
+                    <p className="text-center text-[10px] text-muted-foreground mt-2">
+                      Instant activation · No hidden fees · Cancel any time
                     </p>
                   </>
                 )}

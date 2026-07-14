@@ -111,6 +111,8 @@ export default function Payment() {
   const [referralError, setReferralError] = useState<string | null>(null);
 
   const urlPlanId = new URLSearchParams(window.location.search).get("plan");
+  // 2026-07: honor ?method=mpesa|paypal from /pricing branded buttons
+  const urlMethod = new URLSearchParams(window.location.search).get("method");
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -282,12 +284,18 @@ export default function Payment() {
 
   // (paymentOptions query moved to top of component to avoid TDZ — see above)
 
-  // Set selectedMethod to recommended once options load
+  // Set selectedMethod: URL-param wins, then paymentOptions recommendation.
+  // /pricing's branded M-Pesa/PayPal buttons pass ?method=... — respect that
+  // choice instead of overwriting with the IP-based auto-recommendation.
   useEffect(() => {
+    if (!selectedMethod && (urlMethod === "mpesa" || urlMethod === "paypal")) {
+      setSelectedMethod(urlMethod as PayMethod);
+      return;
+    }
     if (paymentOptions?.recommended && !selectedMethod) {
       setSelectedMethod(paymentOptions.recommended);
     }
-  }, [paymentOptions, selectedMethod]);
+  }, [paymentOptions, selectedMethod, urlMethod]);
 
   const { data: subscription } = useQuery<UserSubscription | null>({
     queryKey: ["/api/subscription"],
