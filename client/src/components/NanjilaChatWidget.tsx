@@ -3,7 +3,8 @@ import { useLocation } from "wouter";
 import nanjilaAvatarUrl from "@assets/generated_images/nanjila_avatar.png";
 import { fetchCsrfToken } from "@/lib/queryClient";
 
-const WHATSAPP_NUMBER = "14155238886";
+const WHATSAPP_NUMBER = "254742619777"; // WorkAbroad Hub support WhatsApp
+// (was Twilio sandbox "14155238886" — real users tapping the link had no way through)
 const WAVE_HEIGHTS = [14, 24, 18, 28, 16, 22, 12];
 
 type ChatMessage = {
