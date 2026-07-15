@@ -111,10 +111,6 @@ function HeroSection({ country }: { country: typeof countryData[0] }) {
   
   return (
     <div className={`relative overflow-hidden rounded-xl bg-gradient-to-r ${country.color} p-6 md:p-8 text-white mb-8`} data-testid={`hero-section-${country.code}`}>
-              {/* 2026-07: Play Store compliance — visa info is educational, not authoritative. */}
-        <div className="mb-4 rounded-xl border border-blue-300 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30 px-4 py-3 text-sm text-blue-900 dark:text-blue-100">
-          <strong>Educational Guide:</strong> This guide is for educational purposes only. Visa requirements may change. Always confirm the latest requirements with the relevant embassy or immigration authority.
-        </div>
 <div className="absolute inset-0 bg-black/20" />
       <div className="absolute top-0 right-0 opacity-10 text-[200px] leading-none -mr-10 -mt-10">
         {country.flagEmoji}

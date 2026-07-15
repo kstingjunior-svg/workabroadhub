@@ -363,10 +363,6 @@ export default function VisaCountryPage() {
   if (!country) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-4 p-8 text-center">
-                {/* 2026-07: Play Store compliance — visa info is educational, not authoritative. */}
-        <div className="mb-4 rounded-xl border border-blue-300 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30 px-4 py-3 text-sm text-blue-900 dark:text-blue-100">
-          <strong>Educational Guide:</strong> This guide is for educational purposes only. Visa requirements may change. Always confirm the latest requirements with the relevant embassy or immigration authority.
-        </div>
 <Globe className="h-12 w-12 text-gray-400" />
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Country Not Found</h1>
         <p className="text-gray-500">We don't have a visa guide for that country yet.</p>
