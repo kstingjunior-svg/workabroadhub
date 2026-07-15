@@ -27,7 +27,7 @@ const categories = [
       },
       {
         q: "Are you registered / legally operating in Kenya?",
-        a: "Yes. We operate in Nairobi, Kenya, and comply with the Kenya Data Protection Act 2019, the National Employment Authority Integrated Management Systems (NEAIMS) guidelines, and applicable labour laws. We are a consultation service, not a recruitment agency, so NEAIMS agency licensing requirements do not apply to us — but we actively promote the use of NEAIMS-licensed agencies and provide a verified agency database."
+        a: "Yes. We operate in Nairobi, Kenya, and comply with the Kenya Data Protection Act 2019, the National Employment Authority Integrated Management Systems (NEAIMS) guidelines, and applicable labour laws. We are a consultation service, not a recruitment agency, so recruitment agency licensing requirements do not apply to us — but we actively promote the use of licensed recruitment agencies and provide a verified agency database."
       },
       {
         q: "What countries do you cover?",
@@ -103,7 +103,7 @@ const categories = [
         a: "In most cases, no. Legitimate recruitment agencies are paid by the employer, not the worker. Charging workers upfront fees for visa processing, training, or registration is illegal under Kenyan law. The only legitimate fees are passport costs and medical examination fees, which you pay to the relevant government offices directly — not to the agency. If an agency asks for money, verify their NEAIMS license first, and if in doubt, contact us before paying anything."
       },
       {
-        q: "A company says they are NEAIMS-licensed but I can't find them in your database. What should I do?",
+        q: "A company says they are licensed but I can't find them in your database. What should I do?",
         a: "Our database is updated regularly but may have a short lag. First, try searching by different spellings of the name. If you still can't find them, contact us via WhatsApp and we'll check directly with the NEAIMS registry. Do not proceed with any agency until their license is confirmed."
       },
       {

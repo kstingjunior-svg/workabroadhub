@@ -62,7 +62,7 @@ export default function TermsOfService() {
                 <li><strong>Personalized country and job recommendations</strong> based on your profile</li>
                 <li>Curated links to official, third-party job portals</li>
                 <li>Career guidance resources and educational content</li>
-                <li>NEAIMS Licensed Agency verification information</li>
+                <li>Licensed recruitment agency verification information</li>
                 <li>Optional premium career services (CV writing, interview coaching, etc.)</li>
               </ul>
               <p>
@@ -177,7 +177,7 @@ export default function TermsOfService() {
 
               <h2>7. NEAIMS Agency Information</h2>
               <p>
-                We provide information about NEAIMS-licensed employment agencies for verification purposes only. 
+                We provide information about licensed recruitment agencies for verification purposes only. 
                 Users should independently verify agency credentials with the National Employment Authority Integrated Management Systems 
                 before engaging their services.
               </p>
@@ -255,7 +255,7 @@ export default function TermsOfService() {
               <ul>
                 <li>All job portal links are curated and regularly reviewed by our team for accuracy and legitimacy</li>
                 <li>User-submitted reports of fraudulent agencies or job listings are investigated promptly</li>
-                <li>NEAIMS agency data is verified against official records and updated periodically</li>
+                <li>recruitment agency data is verified against official records and updated periodically</li>
                 <li>Career service deliverables undergo quality review before final delivery</li>
                 <li>We remove or flag content that is misleading, harmful, or violates our policies</li>
               </ul>

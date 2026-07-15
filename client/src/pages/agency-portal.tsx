@@ -526,7 +526,7 @@ export default function AgencyPortal() {
               <div className="space-y-2">
                 <h1 className="text-2xl font-bold">Agency Portal</h1>
                 <p className="text-muted-foreground max-w-md mx-auto">
-                  Sign in to claim your NEAIMS-licensed agency and purchase visibility packages to reach more job seekers.
+                  Sign in to claim your licensed recruitment agency and purchase visibility packages to reach more job seekers.
                 </p>
               </div>
               <div className="space-y-4 pt-4">
@@ -741,7 +741,7 @@ export default function AgencyPortal() {
             <CardHeader>
               <CardTitle>Claim Your Agency</CardTitle>
               <CardDescription>
-                Search for your NEAIMS-licensed agency to claim and manage your listing
+                Search for your licensed recruitment agency to claim and manage your listing
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -777,7 +777,7 @@ export default function AgencyPortal() {
                     ))
                   ) : (
                     <p className="text-muted-foreground text-center py-4">
-                      No agencies found. Make sure your agency is NEAIMS-licensed.
+                      No agencies found. Make sure your agency is licensed.
                     </p>
                   )}
                 </div>

@@ -46,10 +46,10 @@ const CREDENTIALS: Credential[] = [
   },
   {
     icon: Shield,
-    label: "NEAIMS Licensed",
+    label: "Licensed Recruiter",
     value: import.meta.env.VITE_NEA_LICENSE_NUMBER || "RA/2024/01/123",
     verifyUrl: "https://nea.go.ke/licensed-agencies",
-    description: "Our partner agencies appear on the National Employment Authority Integrated Management Systems's official licensed list. Every recruiter we link to must be NEAIMS-verified.",
+    description: "Our partner agencies appear on Kenya's public licence register maintained by the National Employment Authority. Every recruiter we link to must be on that public register.",
     color: "blue",
   },
   {

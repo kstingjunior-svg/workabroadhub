@@ -466,12 +466,12 @@ export const GUIDES: Record<string, CountryGuide> = {
     primaryKeyword: "saudi work permit for kenyans",
     searchVolume: "~3,100/mo",
     heroHeadline: "How a Kenyan gets a Saudi work permit + Iqama in 2026 — Block Visa to Iqama",
-    heroSubhead: "Saudi work routes go through a NEAIMS-licensed Kenyan agency in 90% of cases. Here is the full Block Visa → Work Visa → Iqama path, what each step costs, and how to avoid the agencies that steal money.",
+    heroSubhead: "Saudi work routes go through a licensed Kenyan recruitment agency in 90% of cases. Here is the full Block Visa → Work Visa → Iqama path, what each step costs, and how to avoid the agencies that steal money.",
     costEstimate: "KES 18,000 – 40,000 from your side (most fees are employer-paid; agency fees ABOVE KES 35,000 are illegal in Kenya)",
     timeframe: "6–14 weeks end-to-end (Block Visa allocation is the slowest step)",
     topRoles: ["Domestic Worker / Housekeeper", "Driver (Personal / Heavy)", "Nurse (KSA Ministry of Health)", "Hospitality (Hotel, Catering)", "Construction & Skilled Trades"],
     steps: [
-      { title: "1. Go through a NEAIMS-licensed Kenyan agency (mandatory)", body: "By Kenyan law, you can only travel to Saudi Arabia for work via a NEAIMS-licensed agency. Verify any agency at the National Employment Authority Integrated Management Systems registry (workabroadhub.tech has our free agency checker). If they ask for more than KES 35,000 in total agency fees, walk away — that's the legal cap." },
+      { title: "1. Go through a licensed Kenyan recruitment agency (mandatory)", body: "By Kenyan law, you can only travel to Saudi Arabia for work via a licensed recruitment agency listed in Kenya's public licence register. Verify any agency using WorkAbroadHub's free agency checker. If they ask for more than KES 35,000 in total agency fees, walk away — that's the legal cap." },
       { title: "2. Saudi employer obtains a Block Visa from KSA Ministry of Labour", body: "Your prospective Saudi employer applies for a Block Visa (a quota allocation) from MoL Riyadh. This is invisible to you — your agency tells you when the Block Visa lands. Typical wait: 3–8 weeks." },
       { title: "3. Wakalah (Power of Attorney) drafted in KSA + attested at MoFA", body: "The Saudi employer drafts a Wakalah/Power of Attorney authorising you specifically. This document goes through MoFA Saudi → Saudi Embassy in Nairobi → MFA Kenya. Your agency handles the Nairobi side." },
       { title: "4. Apply for the Work Visa via Enjazit", body: "With the Wakalah, your agency submits your Work Visa application via Enjazit (the Saudi e-government visa system). You submit: passport (12+ months left), academic cert + Good Conduct (both MoFA-attested), KES medical fitness from a Saudi-approved centre (Gulf Approved Medical Centres — list on agency's wall), and 4 photos. Visa fee paid via Enjazit." },
@@ -479,7 +479,7 @@ export const GUIDES: Record<string, CountryGuide> = {
       { title: "6. Iqama renewal + repatriation rights", body: "Iqama is typically 1 year, renewed annually by your sponsor (kafala system). You have legal rights: wages paid via WPS (Wages Protection System), end-of-service benefits, and the right to repatriate flight on contract end. Kenyan embassy in Riyadh (+966 11 488 2484) handles emergencies." },
     ],
     faqs: [
-      { q: "Why must I go through a NEAIMS-licensed Kenyan agency?", a: "Kenyan law (Labour Institutions Act) requires this for all Gulf placements. Going via informal channels is illegal AND removes your repatriation + dispute rights. The fee cap is KES 35,000 — agencies charging more are breaking Kenyan law." },
+      { q: "Why must I go through a licensed Kenyan recruitment agency?", a: "Kenyan law (Labour Institutions Act) requires this for all Gulf placements. Going via informal channels is illegal AND removes your repatriation + dispute rights. The fee cap is KES 35,000 — agencies charging more are breaking Kenyan law." },
       { q: "How do I verify the Saudi employer is real?", a: "Ask the agency for the employer's Saudi commercial registration number (CR / 'Sijill Tijari') and check it at moic.gov.sa. Also confirm the job offer letter has Wage Protection System (WPS) commitments. WorkAbroad Hub's Employer Verification service does this for KES 99." },
       { q: "What does the Iqama actually let me do?", a: "The Iqama is your Saudi resident ID + work permit. It lets you legally work for your sponsor only, open a bank account, register a SIM, and use government services. It does NOT let you change employers freely — that needs your sponsor's approval ('Naqal Kafala' transfer), though 2021+ reforms made transfers easier." },
       { q: "Can I bring my family?", a: "Yes if you earn SAR 5,000+/month and your role is eligible (most professional roles are; many domestic worker roles are not). You sponsor them on Family Iqamas." },
@@ -487,7 +487,7 @@ export const GUIDES: Record<string, CountryGuide> = {
     ],
     recommendedServices: [
       { slug: "work_permit_saudi_pro", reason: "Our team liaises with your Saudi employer / agency and handles MoFA attestation — high-touch for the highest-stakes route" },
-      { slug: "work_permit_saudi_mid", reason: "Light guide + Enjazit form pre-fill + NEAIMS-licensed agency vetting checklist" },
+      { slug: "work_permit_saudi_mid", reason: "Light guide + Enjazit form pre-fill + licensed recruitment agency vetting checklist" },
       { slug: "work_permit_saudi_light", reason: "KES 249 entry — Block Visa to Iqama timeline + Wakalah + agency-scam watchlist" },
     ],
   },

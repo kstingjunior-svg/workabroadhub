@@ -18,7 +18,7 @@ const topics = [
   "Country & Job Recommendations",
   "CV / Resume Preparation",
   "Overseas Job Application Help",
-  "NEAIMS Agency Verification",
+  "Recruitment Agency Verification",
   "Student Visa Guidance",
   "Work Permit / Visa Process",
   "Salary Negotiation",

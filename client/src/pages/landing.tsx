@@ -776,7 +776,7 @@ export default function Landing() {
 
                 <p className="text-lg text-blue-100/80 leading-relaxed max-w-xl">
                   Stand out from <strong className="text-white">798 expired-license agencies</strong>. Get a verified badge, priority placement in 1,293 listings, and direct contact from
-                  thousands of monthly job-seekers. Built specifically for NEAIMS-licensed recruiters serving Kenyans abroad.
+                  thousands of monthly job-seekers. Built specifically for licensed recruiters serving Kenyans abroad.
                 </p>
 
                 <p className="text-sm text-emerald-200/90 font-semibold">
@@ -1412,7 +1412,7 @@ export default function Landing() {
                   What exactly am I paying for with the KES 4,500 fee?
                 </AccordionTrigger>
                 <AccordionContent className="text-muted-foreground pb-5 leading-relaxed">
-                  The KES 4,500 is a one-time career consultation fee that includes: (1) A personalized 1-on-1 WhatsApp consultation with our career advisors who will assess your skills, experience, and goals to recommend the best countries and job types for you, (2) Access to our curated database of 30+ verified job portals across 6 countries (USA, Canada, UK, Australia, UAE, and Europe) for as long as the service remains available, (3) Country-specific CV templates and application guidance, (4) Access to our NEAIMS agency verification database to protect you from scams, and (5) Regular updates as we add new resources and job portals. Access to online resources continues for as long as the service is operational.
+                  The KES 4,500 is a one-time career consultation fee that includes: (1) A personalized 1-on-1 WhatsApp consultation with our career advisors who will assess your skills, experience, and goals to recommend the best countries and job types for you, (2) Access to our curated database of 30+ verified job portals across 6 countries (USA, Canada, UK, Australia, UAE, and Europe) for as long as the service remains available, (3) Country-specific CV templates and application guidance, (4) Access to our recruitment agency verification database to protect you from scams, and (5) Regular updates as we add new resources and job portals. Access to online resources continues for as long as the service is operational.
                 </AccordionContent>
               </AccordionItem>
               
@@ -1454,7 +1454,7 @@ export default function Landing() {
               
               <AccordionItem value="item-6" className="bg-card border rounded-xl px-6">
                 <AccordionTrigger className="text-left font-semibold hover:no-underline py-5">
-                  What is the NEAIMS agency verification feature?
+                  What is the recruitment agency verification feature?
                 </AccordionTrigger>
                 <AccordionContent className="text-muted-foreground pb-5 leading-relaxed">
                   The National Employment Authority Integrated Management Systems (NEAIMS) of Kenya licenses private employment agencies that recruit Kenyans for overseas jobs. We maintain a database of {agencyTotal}+ NEAIMS-registered agencies showing their license status (valid or expired). Before you pay any recruitment agency, you can check our database to verify they have a valid NEAIMS license. This protects you from unlicensed operators and scams.
@@ -1523,7 +1523,7 @@ export default function Landing() {
             <div className="space-y-4">
               <h4 className="font-semibold text-white">Resources</h4>
               <ul className="space-y-2 text-sm">
-                <li><a href="/nea-agencies" className="text-slate-400 hover:text-white transition-colors" data-testid="link-footer-nea">NEAIMS Agency Verification</a></li>
+                <li><a href="/nea-agencies" className="text-slate-400 hover:text-white transition-colors" data-testid="link-footer-nea">Recruitment Agency Verification</a></li>
                 <li><a href="/student-visas" className="text-slate-400 hover:text-white transition-colors" data-testid="link-footer-student-visas">Student Educational Guide</a></li>
                 <li><a href="/visa-assistant" className="text-slate-400 hover:text-white transition-colors" data-testid="link-footer-visa-assistant">✨ AI Visa Assistant</a></li>
                 <li><a href="/visa-guides" className="text-slate-400 hover:text-white transition-colors" data-testid="link-footer-visa-guides">Visa &amp; Immigration Guides</a></li>
