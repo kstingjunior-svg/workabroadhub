@@ -291,7 +291,7 @@ export default function ServiceOrderFlow() {
       toast({
         title: isNetwork ? "Couldn't reach our server" : "Order couldn't be created",
         description: isNetwork
-          ? "Your internet dropped or our server was warming up. Check your connection and tap Continue again. If it keeps failing, WhatsApp us +254700 000 000 or email support@workabroadhub.tech."
+          ? "Your internet dropped or our server was warming up. Check your connection and tap Continue again. If it keeps failing, WhatsApp us +254 742 619 777 or email support@workabroadhub.tech."
           : (err?.message || "Something went wrong. Please try again."),
         variant: "destructive",
         duration: 10_000,

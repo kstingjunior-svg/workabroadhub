@@ -364,7 +364,7 @@ export default function KenyaCareersEmployers() {
                   </a>
                 </Button>
                 <Button asChild variant="outline">
-                  <a href="https://wa.me/254700000000?text=I'm%20an%20employer%20interested%20in%20Kenya%20Careers" target="_blank" rel="noopener noreferrer">
+                  <a href="https://wa.me/254742619777?text=I'm%20an%20employer%20interested%20in%20Kenya%20Careers" target="_blank" rel="noopener noreferrer">
                     <Phone className="h-4 w-4 mr-1.5" /> WhatsApp us
                   </a>
                 </Button>
