@@ -186,6 +186,11 @@ export default function VisaGuidesPage() {
 
         <div className="max-w-5xl mx-auto px-4 py-12 space-y-14">
 
+        {/* 2026-07: Play Store compliance — visa info is educational, not authoritative. */}
+        <div className="mb-4 rounded-xl border border-blue-300 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30 px-4 py-3 text-sm text-blue-900 dark:text-blue-100">
+          <strong>Educational Guide:</strong> This guide is for educational purposes only. Visa requirements may change. Always confirm the latest requirements with the relevant embassy or immigration authority.
+        </div>
+
           {/* ── Country Cards ─────────────────────────────────── */}
           <section aria-labelledby="countries-heading">
             <h2 id="countries-heading" className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
@@ -320,8 +325,8 @@ export default function VisaGuidesPage() {
             <div className="grid gap-3 sm:grid-cols-2">
               {[
                 { href: "/green-card", label: "🇺🇸 USA Green Card (DV Lottery) Guide", sub: "55,000 permanent residency visas yearly" },
-                { href: "/student-visas", label: "🎓 Student Visa Guide", sub: "Study at top universities in 6 countries" },
-                { href: "/nea-agencies", label: "🔍 NEAIMS Licensed Agencies", sub: "Verify your recruitment agency before you travel" },
+                { href: "/student-visas", label: "🎓 Student Visa — Educational Guide", sub: "Study at top universities in 6 countries" },
+                { href: "/nea-agencies", label: "🔍 Licensed Recruitment Agencies", sub: "Verify your recruitment agency before you travel" },
                 { href: "/tools/job-scam-checker", label: "🛡️ Job Scam Checker", sub: "Detect fraudulent overseas job offers" },
               ].map((link) => (
                 <Link key={link.href} href={link.href}>

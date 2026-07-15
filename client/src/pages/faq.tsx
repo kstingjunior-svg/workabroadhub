@@ -46,7 +46,7 @@ const categories = [
       },
       {
         q: "What is the difference between the Free and Pro plans?",
-        a: "The Free plan gives you access to our tools (ATS CV Checker, Job Scam Checker) with partial results, and allows you to browse country guides and the NEAIMS agency database. The Pro plan (KES 4,500 / 365 days) unlocks everything — full verified job listings, unlimited AI tools, 1-on-1 WhatsApp consultation, priority listings, ATS CV Checker, application tracker, and all service discounts. You can upgrade at any time."
+        a: "The Free plan gives you access to our tools (ATS CV Checker, Job Scam Checker) with partial results, and allows you to browse country guides and the licensed recruitment agency database. The Pro plan (KES 4,500 / 365 days) unlocks everything — full verified job listings, unlimited AI tools, 1-on-1 WhatsApp consultation, priority listings, ATS CV Checker, application tracker, and all service discounts. You can upgrade at any time."
       },
       {
         q: "Do I pay before or after the consultation?",
@@ -96,7 +96,7 @@ const categories = [
     faqs: [
       {
         q: "How do I verify if a recruitment agency is licensed?",
-        a: "Go to our NEAIMS Agencies page and search by agency name or license number. Our database contains 1,295 agencies registered with the National Employment Authority Integrated Management Systems (NEAIMS). A valid license shows a current expiry date. If an agency is not in our database or has an expired license, be very cautious — they are operating illegally."
+        a: "Go to our Recruitment Agencies page and search by agency name or license number. Our database contains 1,295 agencies registered with the National Employment Authority Integrated Management Systems (NEAIMS). A valid license shows a current expiry date. If an agency is not in our database or has an expired license, be very cautious — they are operating illegally."
       },
       {
         q: "An agency asked me to pay a fee to get a job abroad. Is this legal?",

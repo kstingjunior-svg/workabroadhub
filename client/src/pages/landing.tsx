@@ -980,7 +980,7 @@ export default function Landing() {
           </div>
         </section>
 
-        {/* NEAIMS Licensed Agencies Section */}
+        {/* Licensed Recruitment Agencies Section */}
         <section className="py-24 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
           {/* Background gradient */}
           <div className="absolute inset-0 bg-gradient-to-br from-amber-50 via-orange-50/50 to-amber-50 dark:from-amber-950/20 dark:via-orange-950/10 dark:to-amber-950/20" />
@@ -995,7 +995,7 @@ export default function Landing() {
                 </div>
                 
                 <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight">
-                  Verify NEAIMS Licensed{' '}
+                  Verify Licensed Recruitment{' '}
                   <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-500 to-orange-600">
                     Employment Agencies
                   </span>
@@ -1377,7 +1377,7 @@ export default function Landing() {
               {[
                 { value: "30+", label: "Verified Job Portals", sublabel: "Curated & updated regularly", id: "portals" },
                 { value: "6", label: "Countries Covered", sublabel: "USA, Canada, UK, UAE, Australia, Europe", id: "countries" },
-                { value: agencyTotal, label: "NEAIMS Agencies Verified", sublabel: "Check before you pay", id: "agencies" },
+                { value: agencyTotal, label: "Licensed Recruitment Agencies", sublabel: "Check before you pay", id: "agencies" },
                 { value: "24/7", label: "WhatsApp Support", sublabel: "Career guidance when you need it", id: "support" }
               ].map((stat, index) => (
                 <div key={index} className="text-center p-6 bg-white/5 rounded-2xl border border-white/10 backdrop-blur-sm" data-testid={`stat-${stat.id}`}>
@@ -1605,7 +1605,7 @@ export default function Landing() {
               </div>
               <div className="flex items-center gap-1.5 text-slate-400">
                 <Shield className="h-3.5 w-3.5 text-blue-400" />
-                <span>NEAIMS Registered Platform <span className="font-mono text-slate-300">{import.meta.env.VITE_NEA_LICENSE_NUMBER || "RA/2024/01/123"}</span></span>
+                <span>Agency information sourced from public records.</span>
               </div>
               <div className="flex items-center gap-1.5 text-slate-400">
                 <FileCheck className="h-3.5 w-3.5 text-purple-400" />

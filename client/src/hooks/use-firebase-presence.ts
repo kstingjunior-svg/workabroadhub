@@ -31,7 +31,7 @@ interface GeoData {
 
 const PAGE_NAMES: Record<string, string> = {
   "/": "Home",
-  "/nea-agencies": "NEAIMS Agencies",
+  "/nea-agencies": "Recruitment Agencies",
   "/jobs": "Job Listings",
   "/visa-guides": "Visa Guides",
   "/pricing": "Pricing",

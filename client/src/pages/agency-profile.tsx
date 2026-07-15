@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Building2, MapPin, Globe, Mail, Phone, Shield, Star, Plane,
+  Building2, MapPin, Globe, Mail, Phone, Shield, Star, Plane, Info,
   DollarSign, ArrowLeft, Briefcase, ExternalLink, Calendar, Eye, Flag, AlertTriangle,
 } from "lucide-react";
 import { ReportAgencyModal } from "@/components/report-agency-modal";
@@ -120,6 +120,20 @@ export default function AgencyProfile() {
           </a>
         </Link>
 
+        {/* 2026-07: Play Store compliance — explicit source disclosure. */}
+        <Card className="bg-slate-50 dark:bg-slate-900/50 border-slate-300 dark:border-slate-700 mb-6" data-testid="source-info-box">
+          <CardContent className="p-4">
+            <div className="flex items-start gap-3">
+              <Info className="h-5 w-5 text-slate-600 dark:text-slate-400 mt-0.5 shrink-0" />
+              <div className="text-sm text-slate-800 dark:text-slate-200 space-y-2">
+                <p className="font-semibold">Source Information</p>
+                <p>Agency licence information displayed in WorkAbroad Hub is obtained from publicly available records maintained by the National Employment Authority (Kenya).</p>
+                <p>WorkAbroad Hub is an independent private career advisory service and is not affiliated with the National Employment Authority or the Government of Kenya.</p>
+                <p>Always verify agency information using the official National Employment Authority website before making decisions.</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
         {/* Header Card */}
         <Card className="mb-6">
           <CardContent className="p-6">
@@ -143,7 +157,7 @@ export default function AgencyProfile() {
                   </h1>
                   {isLicenseValid ? (
                     <Badge className="bg-green-500 text-white text-xs">
-                      <Shield className="h-3 w-3 mr-1" /> NEAIMS Licensed
+                      <Shield className="h-3 w-3 mr-1" /> Licensed Recruitment Agency
                     </Badge>
                   ) : (
                     <Badge variant="destructive" className="text-xs">License Expired</Badge>
@@ -386,7 +400,7 @@ export default function AgencyProfile() {
             <span className="font-mono text-xs bg-background px-1 py-0.5 rounded">{agency.licenseNumber}</span>{" "}
             on the{" "}
             <Link href="/nea-agencies">
-              <a className="text-primary underline">NEAIMS Agency Registry</a>
+              <a className="text-primary underline">Public Recruitment Agency Licence Register</a>
             </Link>
             {" "}or at{" "}
             <a

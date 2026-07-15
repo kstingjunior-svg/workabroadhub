@@ -928,7 +928,7 @@ export default function VisaSponsorshipJobs() {
             <span className="text-xs text-muted-foreground">·</span>
             <Link href="/tools/ats-cv-checker"><span className="text-xs text-blue-600 dark:text-blue-400 underline underline-offset-2">ATS CV Checker</span></Link>
             <span className="text-xs text-muted-foreground">·</span>
-            <Link href="/agencies"><span className="text-xs text-blue-600 dark:text-blue-400 underline underline-offset-2">Verify NEAIMS Agencies</span></Link>
+            <Link href="/agencies"><span className="text-xs text-blue-600 dark:text-blue-400 underline underline-offset-2">Verify Recruitment Agencies</span></Link>
             <span className="text-xs text-muted-foreground">·</span>
             <Link href="/services"><span className="text-xs text-blue-600 dark:text-blue-400 underline underline-offset-2">Career Consultation</span></Link>
             <span className="text-xs text-muted-foreground">·</span>

@@ -112,7 +112,7 @@ function HelbClearancePaywall() {
       <div className="rounded-3xl bg-gradient-to-br from-amber-700 via-orange-600 to-red-600 p-6 sm:p-8 text-white shadow-xl">
         <div className="text-5xl mb-3">🎓</div>
         <h1 className="text-2xl sm:text-3xl font-extrabold mb-2">
-          HELB Compliance Certificate
+          HELB Clearance Guide
         </h1>
         <p className="text-sm sm:text-base text-white/90 leading-snug mb-5">
           Required for every Kenyan civil-service application — and for many
@@ -188,13 +188,18 @@ export default function HelbClearance() {
 
   return (
     <main className="max-w-4xl mx-auto px-4 py-6 sm:py-10">
+        {/* 2026-07: Play Store compliance — clarify we're not a government
+            portal, and the actual application goes through the official one. */}
+        <div className="mb-4 rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 text-sm text-amber-900 dark:text-amber-100">
+          <strong>Note:</strong> Applications are completed through the official government portals. WorkAbroad Hub provides step-by-step guidance only — we do not process, submit, or approve any government application.
+        </div>
       {/* Hero */}
       <div className="rounded-3xl bg-gradient-to-br from-amber-700 via-orange-600 to-red-600 p-6 sm:p-8 text-white shadow-xl mb-6">
         <div className="flex items-start gap-4">
           <div className="text-5xl shrink-0">🎓</div>
           <div className="min-w-0">
             <h1 className="text-2xl sm:text-3xl font-extrabold mb-1 leading-tight">
-              HELB Compliance Certificate
+              HELB Clearance Guide
             </h1>
             <p className="text-sm sm:text-base text-white/90 leading-snug">
               Apply via the HELB portal in 10 clear steps. Most Kenyans who

@@ -547,12 +547,12 @@ export default function JobScamChecker() {
                   </CardContent>
                 </Card>
 
-                {/* CTA: Verify agency via NEAIMS */}
+                {/* CTA: Verify agency via public licence register */}
                 <Card className="border-blue-200 bg-blue-50 dark:bg-blue-900/10 dark:border-blue-800">
                   <CardContent className="p-4 flex items-center justify-between gap-3">
                     <div>
                       <p className="text-sm font-semibold">Verify the Agency</p>
-                      <p className="text-xs text-muted-foreground">Check if this recruiter is NEAIMS-licensed</p>
+                      <p className="text-xs text-muted-foreground">Check if this recruiter appears in Kenya's public licence register</p>
                     </div>
                     <Link href="/nea-agencies">
                       <Button size="sm" variant="outline" data-testid="button-verify-agency">

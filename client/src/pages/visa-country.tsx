@@ -363,12 +363,16 @@ export default function VisaCountryPage() {
   if (!country) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-4 p-8 text-center">
-        <Globe className="h-12 w-12 text-gray-400" />
+                {/* 2026-07: Play Store compliance — visa info is educational, not authoritative. */}
+        <div className="mb-4 rounded-xl border border-blue-300 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30 px-4 py-3 text-sm text-blue-900 dark:text-blue-100">
+          <strong>Educational Guide:</strong> This guide is for educational purposes only. Visa requirements may change. Always confirm the latest requirements with the relevant embassy or immigration authority.
+        </div>
+<Globe className="h-12 w-12 text-gray-400" />
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Country Not Found</h1>
         <p className="text-gray-500">We don't have a visa guide for that country yet.</p>
         <Link href="/visa-guides">
           <Button className="bg-blue-600 text-white hover:bg-blue-700">
-            Browse All Visa Guides <ArrowRight className="ml-2 h-4 w-4" />
+            Browse All Educational Guides <ArrowRight className="ml-2 h-4 w-4" />
           </Button>
         </Link>
       </div>
@@ -399,7 +403,7 @@ export default function VisaCountryPage() {
               </Link>
               <ChevronRight className="h-3 w-3" />
               <Link href="/visa-guides">
-                <span className="hover:text-white transition-colors cursor-pointer">Visa Guides</span>
+                <span className="hover:text-white transition-colors cursor-pointer">Educational Guides</span>
               </Link>
               <ChevronRight className="h-3 w-3" />
               <span className="text-white font-medium">{country.name}</span>
@@ -413,7 +417,7 @@ export default function VisaCountryPage() {
             </div>
 
             <h1 className="text-3xl md:text-5xl font-bold leading-tight mb-3">
-              {country.name} Visa Guide
+              {country.name} — Educational Guide
             </h1>
             <p className="text-2xl font-medium opacity-80 mb-4">{country.visaTypes[0].name}</p>
             <p className="text-white/80 text-lg max-w-2xl leading-relaxed mb-8">{country.heroText}</p>
@@ -559,7 +563,7 @@ export default function VisaCountryPage() {
           <section aria-labelledby="official-links-heading">
             <h2 id="official-links-heading" className="text-2xl font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
               <Landmark className="h-6 w-6 text-teal-600" />
-              Official Government Links
+              Government Portal Links
             </h2>
             <div className="space-y-3">
               {country.officialLinks.map((link) => (

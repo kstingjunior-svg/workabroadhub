@@ -83,7 +83,7 @@ const navItems = [
   { href: "/admin/service-orders", label: "Service Orders", icon: Package },
   { href: "/admin/job-applications", label: "Job Applications", icon: Briefcase },
   { href: "/admin/alerts", label: "Scam Alerts", icon: AlertTriangle },
-  { href: "/admin/agencies", label: "NEAIMS Agencies", icon: Building2 },
+  { href: "/admin/agencies", label: "Recruitment Agencies", icon: Building2 },
   { href: "/admin/agency-claims", label: "Agency Claims", icon: ShieldCheck },
   { href: "/admin/agency-addons", label: "Agency Add-Ons", icon: Star },
   { href: "/admin/license-expiry", label: "License Expiry", icon: ClipboardCheck },

@@ -704,7 +704,7 @@ function BottomServicesGrid() {
 /* ── Quick Access Row ── */
 const QUICK_ACCESS = [
   { icon: "🟢", title: "Green Card Guide",  desc: "DV Lottery • FREE eligibility check", href: "/country/usa" },
-  { icon: "🛡️", title: "NEAIMS Agencies",      desc: "1,200+ verified recruiters",          href: "/nea-agencies" },
+  { icon: "🛡️", title: "Recruitment Agencies", desc: "1,200+ licensed recruiters",          href: "/nea-agencies" },
   { icon: "📄", title: "CV Services",        desc: "ATS optimization • Country-specific", href: "/services" },
   { icon: "🤝", title: "Interview Prep",    desc: "Mock interviews • STAR method",       href: "/services" },
 ];
@@ -796,10 +796,10 @@ function TrustBanner() {
     >
       <div>
         <h3 className="font-semibold text-gray-900 dark:text-white text-base mb-0.5">
-          🛡️ Government-Verified Agencies Only
+          🛡️ Licensed Recruitment Agencies
         </h3>
         <p className="text-xs text-gray-500 dark:text-gray-400">
-          Every recruiter is checked against the official NEAIMS database
+          Search recruitment agencies listed in Kenya's public licence register.
         </p>
       </div>
 
@@ -1661,7 +1661,7 @@ export default function Dashboard() {
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                 <h2 className="text-2xl font-extrabold leading-tight">
-                  Certificate of Good Conduct
+                  Certificate of Good Conduct Guide
                 </h2>
                 <span className="inline-flex items-center gap-1 bg-white/20 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full backdrop-blur-sm">
                   ⚡ 10 steps · 2 weeks
@@ -1709,7 +1709,7 @@ export default function Dashboard() {
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                 <h2 className="text-2xl font-extrabold leading-tight">
-                  KRA Tax Compliance Certificate
+                  Tax Compliance Certificate Guide
                 </h2>
                 <span className="inline-flex items-center gap-1 bg-yellow-300 text-emerald-900 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full">
                   ⚡ KES 0 — actually free
@@ -1757,7 +1757,7 @@ export default function Dashboard() {
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                 <h2 className="text-2xl font-extrabold leading-tight">
-                  HELB Clearance Certificate
+                  HELB Clearance Guide
                 </h2>
                 <span className="inline-flex items-center gap-1 bg-white/20 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full backdrop-blur-sm">
                   ⚡ Even if no loan
@@ -2274,7 +2274,7 @@ export default function Dashboard() {
               </div>
               <div className="flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-bold text-green-800 dark:text-green-200">NEAIMS Licensed Agencies</span>
+                  <span className="font-bold text-green-800 dark:text-green-200">Licensed Recruitment Agencies</span>
                   <span className="px-2 py-0.5 bg-green-600 text-white text-[10px] font-bold rounded-full">1,200+</span>
                 </div>
                 <p className="text-sm text-green-700 dark:text-green-400">Government-verified recruitment agencies</p>

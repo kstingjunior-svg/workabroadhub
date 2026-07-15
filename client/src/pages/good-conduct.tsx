@@ -117,7 +117,7 @@ function GoodConductPaywall() {
       <div className="rounded-3xl bg-gradient-to-br from-slate-800 via-slate-700 to-blue-700 p-6 sm:p-8 text-white shadow-xl">
         <div className="text-5xl mb-3">🛡️</div>
         <h1 className="text-2xl sm:text-3xl font-extrabold mb-2">
-          Certificate of Good Conduct
+          Certificate of Good Conduct Guide
         </h1>
         <p className="text-sm sm:text-base text-white/90 leading-snug mb-5">
           Apply for your DCI Police Clearance Certificate via eCitizen — the
@@ -191,13 +191,18 @@ export default function GoodConduct() {
 
   return (
     <main className="max-w-4xl mx-auto px-4 py-6 sm:py-10">
+        {/* 2026-07: Play Store compliance — clarify we're not a government
+            portal, and the actual application goes through the official one. */}
+        <div className="mb-4 rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 text-sm text-amber-900 dark:text-amber-100">
+          <strong>Note:</strong> Applications are completed through the official government portals. WorkAbroad Hub provides step-by-step guidance only — we do not process, submit, or approve any government application.
+        </div>
       {/* Hero */}
       <div className="rounded-3xl bg-gradient-to-br from-slate-800 via-slate-700 to-blue-700 p-6 sm:p-8 text-white shadow-xl mb-6">
         <div className="flex items-start gap-4">
           <div className="text-5xl shrink-0">🛡️</div>
           <div className="min-w-0">
             <h1 className="text-2xl sm:text-3xl font-extrabold mb-1 leading-tight">
-              Certificate of Good Conduct (DCI Police Clearance)
+              Certificate of Good Conduct Guide (DCI Police Clearance)
             </h1>
             <p className="text-sm sm:text-base text-white/90 leading-snug">
               Follow these 10 steps exactly. Most Kenyans complete the online

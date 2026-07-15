@@ -75,9 +75,9 @@ export function DashboardHeroCTA() {
             </div>
             <span className="text-[10px] font-bold bg-white/20 px-2 py-1 rounded-full">FREE</span>
           </div>
-          <h3 className="text-lg sm:text-xl font-bold mb-1">🛡️ Is this agency legit?</h3>
+          <h3 className="text-lg sm:text-xl font-bold mb-1">🛡️ Verify a Recruitment Agency</h3>
           <p className="text-sm text-white/90 mb-3 leading-snug">
-            Check any recruiter against 1,200+ NEAIMS-verified agencies before paying.
+            Check whether a recruitment agency appears in Kenya's public licence register.
           </p>
           <div className="inline-flex items-center gap-1 text-sm font-semibold opacity-90 group-hover:opacity-100">
             Verify now <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
