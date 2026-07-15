@@ -5336,21 +5336,47 @@ Crawl-delay: 1`);
             }
           }
 
-          // Use the full pricing engine (not the thin wrapper) so userId is available
-          // for future per-user pricing and promoCode discounts encoded in planId work correctly.
-          const resolvedCb1 = await resolvePrice({ planId: payment.planId, userId: payment.userId });
+          // 2026-07 CRITICAL FIX (Tony's report: paying users not getting access):
+          // The STK-push handler stores payment.planId = "pro" for pro_referral
+          // payments (see /api/subscriptions/upgrade), but keeps the discriminator
+          // in serviceId as "plan_pro_referral". The callback used to re-resolve
+          // canonical price from payment.planId alone, so pro_referral users
+          // charged KES 3,600 were compared to canonical KES 4,500 → gate marked
+          // them as fraud → status=failed → stk-recovery never touched them.
+          //
+          // Fix: derive the ORIGINAL planId from serviceId (which preserves the
+          // discriminator) and thread any promoCode from metadata. This makes
+          // resolvePrice return the same finalPrice the user was actually charged.
+          const serviceIdForResolve = String((payment as any).serviceId ?? "");
+          const originalPlanIdForResolve =
+            serviceIdForResolve.startsWith("plan_")
+              ? serviceIdForResolve.replace("plan_", "")
+              : payment.planId;
+          let originalPromoCode: string | undefined;
+          try {
+            const meta = JSON.parse((payment as any).metadata ?? "{}");
+            originalPromoCode = meta.appliedPromo ?? meta.promoCode ?? undefined;
+          } catch { /* metadata may be non-JSON */ }
+
+          // Use the full pricing engine so promoCode / referral discounts collapse
+          // to the same finalPrice that was calculated at STK-push time.
+          const resolvedCb1 = await resolvePrice({
+            planId:    originalPlanIdForResolve,
+            userId:    payment.userId,
+            promoCode: originalPromoCode,
+          });
           if (!resolvedCb1) {
-            console.error(`[MPESA/PAYMENTS CALLBACK][Security] Plan "${payment.planId}" not found in DB — rejecting`);
+            console.error(`[MPESA/PAYMENTS CALLBACK][Security] Plan "${originalPlanIdForResolve}" not found in DB — rejecting`);
             await storage.updatePayment(payment.id, {
               status: "failed", isSuspicious: true,
-              fraudReason: `plan_not_found:planId=${payment.planId}`,
+              fraudReason: `plan_not_found:planId=${originalPlanIdForResolve}`,
             } as any);
             await createSecurityAlert({
               alertType: "payment_fraud", severity: "high",
               title: "M-Pesa Callback — Unknown Plan",
-              description: `Payment ${payment.id} references plan "${payment.planId}" which has no price in the database.`,
+              description: `Payment ${payment.id} references plan "${originalPlanIdForResolve}" which has no price in the database.`,
               userId: payment.userId,
-              metadata: { paymentId: payment.id, planId: payment.planId, amountPaid, CheckoutRequestID },
+              metadata: { paymentId: payment.id, planId: originalPlanIdForResolve, storedPlanId: payment.planId, amountPaid, CheckoutRequestID },
             });
             return;
           }
@@ -5359,17 +5385,17 @@ Crawl-delay: 1`);
           // Any discrepancy between what Safaricom collected and what the pricing engine
           // expects means either price tampering or an unrecognised discount. Reject both.
           if (Math.round(amountPaid) !== canonical) {
-            console.error(`[MPESA/PAYMENTS CALLBACK][Security] Amount mismatch on payment ${payment.id}: Safaricom reported KES ${amountPaid} but canonical plan price is KES ${canonical} (base=${canonicalBase}, discount=${canonicalDiscount ?? "none"}) — blocked`);
+            console.error(`[MPESA/PAYMENTS CALLBACK][Security] Amount mismatch on payment ${payment.id}: Safaricom reported KES ${amountPaid} but canonical price for "${originalPlanIdForResolve}" is KES ${canonical} (base=${canonicalBase}, discount=${canonicalDiscount ?? "none"}, promo=${originalPromoCode ?? "none"}) — blocked`);
             await storage.updatePayment(payment.id, {
               status: "failed", isSuspicious: true,
-              fraudReason: `plan_price_mismatch:canonical=${canonical},paid=${amountPaid}`,
+              fraudReason: `plan_price_mismatch:tier=${originalPlanIdForResolve},canonical=${canonical},paid=${amountPaid},promo=${originalPromoCode ?? "none"}`,
             } as any);
             await createSecurityAlert({
               alertType: "payment_fraud", severity: "high",
               title: "M-Pesa Plan Amount Mismatch",
-              description: `Payment ${payment.id} for plan "${payment.planId}": Safaricom reported KES ${amountPaid} but canonical price is KES ${canonical} (base=${canonicalBase}, discount=${canonicalDiscount ?? "none"}). Service NOT activated.`,
+              description: `Payment ${payment.id} for tier "${originalPlanIdForResolve}" (stored planId="${payment.planId}", promo="${originalPromoCode ?? "none"}"): Safaricom reported KES ${amountPaid} but canonical price is KES ${canonical} (base=${canonicalBase}, discount=${canonicalDiscount ?? "none"}). Service NOT activated.`,
               userId: payment.userId,
-              metadata: { paymentId: payment.id, planId: payment.planId, canonical, canonicalBase, canonicalDiscount, amountPaid, CheckoutRequestID },
+              metadata: { paymentId: payment.id, resolvedTier: originalPlanIdForResolve, storedPlanId: payment.planId, promoCode: originalPromoCode, canonical, canonicalBase, canonicalDiscount, amountPaid, CheckoutRequestID },
             });
             return;
           }
