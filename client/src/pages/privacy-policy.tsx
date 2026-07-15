@@ -127,7 +127,7 @@ export default function PrivacyPolicy() {
                 <li><strong>Safaricom M-Pesa</strong> — Your phone number is shared to initiate M-Pesa STK Push payment requests. No PIN or banking credentials are shared.</li>
                 <li><strong>PayPal</strong> — When you choose PayPal as a payment method, payment processing is handled directly by PayPal. We do not store your PayPal credentials or card details. PayPal's privacy policy applies to that transaction.</li>
                 <li><strong>Twilio</strong> — Your phone number is shared to send payment confirmation messages via SMS or WhatsApp.</li>
-                <li><strong>OpenAI (GPT-4o-mini)</strong> — CV text and job preferences are sent (without your name or contact details) for AI-powered career matching and cover letter generation. No personally identifiable information is included in AI requests.</li>
+                <li><strong>OpenAI (ChatGPT / GPT-4o-mini)</strong> — Our AI Career Advisor and every AI-powered tool (ATS CV Checker, Cover Letter Generator, CV Optimiser, Application Answer Helper, Job Scam Checker, Offer Letter Checker, Visa Document Checker, Interview Practice, Career Match, Write-from-Scratch, Nanjila chat) sends anonymised inputs (CV text, job descriptions, questions) to OpenAI's API for automated generation. Names and direct contact details are stripped before the request. OpenAI processes the request under their <a href="https://openai.com/policies/api-data-usage-policies" target="_blank" rel="noopener noreferrer" className="underline">API Data Usage Policy</a>: your data is <strong>not used to train OpenAI's models</strong>, and OpenAI retains request/response data for up to 30 days for abuse monitoring, then deletes it.</li>
                 <li><strong>Supabase</strong> — A secondary database mirror used for real-time analytics and data synchronisation. Data is encrypted at rest and in transit.</li>
                 <li><strong>Google Firebase (Realtime Database)</strong> — Used for real-time notification delivery and live dashboard updates. Only anonymised user IDs and notification payloads are stored.</li>
                 <li><strong>Replit Infrastructure</strong> — Primary encrypted database and server hosting. All data is stored within Replit's secure cloud infrastructure.</li>
@@ -135,7 +135,20 @@ export default function PrivacyPolicy() {
               </ul>
               <p>All third-party services are bound by their own privacy policies and data protection obligations. We do not share your data with employers or recruitment agencies without your explicit action.</p>
 
-              <h2>6. Data Retention</h2>
+              <h2>6. AI Processing &amp; Automated Content Generation</h2>
+              <p>WorkAbroadHub uses artificial intelligence (OpenAI ChatGPT / GPT-4o-mini) to power the AI Career Advisor and every AI-driven tool in the app. Because AI is a core part of the service you're using, we want you to know exactly how it works.</p>
+              <ul>
+                <li><strong>What triggers an AI request?</strong> Any time you use the ATS CV Checker, Cover Letter Generator, CV Optimiser, Application Answer Helper, Job Scam Checker, Offer Letter Checker, Visa Document Checker, Interview Practice, Career Match, Write-from-Scratch, or the Nanjila chat widget, the input you enter is sent to OpenAI's API for automated processing.</li>
+                <li><strong>What we send:</strong> The text you enter (CV content, job descriptions, questions, uploaded document text). We <strong>strip your name, phone number, and email</strong> from the request before it leaves our server.</li>
+                <li><strong>Who processes it:</strong> OpenAI, LLC (based in the United States). Governed by their <a href="https://openai.com/policies/api-data-usage-policies" target="_blank" rel="noopener noreferrer" className="underline">API Data Usage Policy</a>.</li>
+                <li><strong>Training:</strong> Under OpenAI's API terms, <strong>your data is not used to train their models</strong>. This is different from the consumer chatgpt.com website, which may use conversations for training.</li>
+                <li><strong>Retention at OpenAI:</strong> Requests and responses are held by OpenAI for up to 30 days for abuse detection, then permanently deleted.</li>
+                <li><strong>Accuracy &amp; limitations:</strong> AI responses are generated automatically and can be incorrect, out of date, or incomplete. They must not be treated as legal, immigration, or government advice. Always verify important information with the relevant authority (embassy, employer, licensed lawyer, National Employment Authority, etc.) before acting on it.</li>
+                <li><strong>Your rights:</strong> You can opt out of AI processing by not using the AI tools. Non-AI features (browsing job listings, agency licence lookup, guides, direct WhatsApp support) work without any AI request. If you'd like your historical AI request data investigated or deleted, email <a href="mailto:support@workabroadhub.tech" className="underline">support@workabroadhub.tech</a> and we'll coordinate with OpenAI on your behalf.</li>
+                <li><strong>No fully-automated decisions:</strong> AI outputs are suggestions only. No hiring, visa, financial, or legal decision affecting you is made solely by AI on our platform.</li>
+              </ul>
+
+              <h2>7. Data Retention</h2>
               <p>We retain personal data:</p>
               <ul>
                 <li>Only for as long as necessary to fulfill the purposes stated</li>
@@ -143,7 +156,7 @@ export default function PrivacyPolicy() {
               </ul>
               <p>When data is no longer required, it is securely deleted or anonymized.</p>
 
-              <h2>7. Data Security Measures</h2>
+              <h2>8. Data Security Measures</h2>
               <p>We implement reasonable technical and organizational safeguards, including:</p>
               <ul>
                 <li>Secure servers and encryption</li>
@@ -187,7 +200,7 @@ export default function PrivacyPolicy() {
                 <li>We will report to the Office of the Data Protection Commissioner (ODPC) where required</li>
               </ul>
 
-              <h2>10. Children's Data</h2>
+              <h2>11. Children's Data</h2>
               <p>
                 This platform is not intended for persons under 18 years.
                 We do not knowingly collect data from minors.
@@ -200,7 +213,7 @@ export default function PrivacyPolicy() {
                 <li>Processing will comply with Kenyan law</li>
               </ul>
 
-              <h2>12. Cookies & Tracking</h2>
+              <h2>13. Cookies & Tracking</h2>
               <p>The platform may use cookies or similar technologies to:</p>
               <ul>
                 <li>Improve performance</li>

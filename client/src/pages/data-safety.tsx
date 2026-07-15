@@ -1,4 +1,4 @@
-import { Shield, CheckCircle2, XCircle, Lock, Trash2, Eye, Database, Globe, Bell } from "lucide-react";
+import { Shield, CheckCircle2, XCircle, Lock, Trash2, Eye, Database, Globe, Bell, Sparkles } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "wouter";
@@ -115,7 +115,7 @@ export default function DataSafetyPage() {
             { name: "Safaricom M-Pesa", data: "Phone number (for STK Push only)", purpose: "Mobile payment processing — no PIN or banking credentials collected" },
             { name: "PayPal", data: "Payment is handled directly on PayPal's platform", purpose: "Online card / PayPal wallet payments — we do not store card numbers or PayPal credentials" },
             { name: "Twilio", data: "Phone number (for SMS / WhatsApp)", purpose: "Payment confirmation and service update notifications" },
-            { name: "OpenAI (GPT-4o-mini)", data: "CV text and job preferences (anonymised — name & contact removed)", purpose: "AI career matching, CV improvement, cover letter generation" },
+            { name: "OpenAI (ChatGPT / GPT-4o-mini)", data: "Anonymised CV text, job descriptions, questions typed into any AI tool (name/phone/email stripped)", purpose: "AI Career Advisor + all AI tools (CV checker, cover letter generator, scam checker, offer check, visa check, interview practice, career match, write-from-scratch, Nanjila chat). Not used to train OpenAI models. Retained by OpenAI 30 days for abuse monitoring then deleted." },
             { name: "Supabase", data: "Anonymised user records and analytics events", purpose: "Secondary database mirror for real-time analytics and redundancy" },
             { name: "Google Firebase (Realtime Database)", data: "Anonymised user ID and notification payloads", purpose: "Real-time notification delivery and live dashboard updates" },
             { name: "Replit Infrastructure", data: "Encrypted primary database and session storage", purpose: "App hosting and primary data storage" },
@@ -126,6 +126,23 @@ export default function DataSafetyPage() {
               <p className="text-xs text-muted-foreground"><span className="font-medium">Purpose:</span> {purpose}</p>
             </div>
           ))}
+        </Section>
+
+        {/* ── AI Processing Disclosure — required by Google Play ─────────── */}
+        <Section icon={Sparkles} title="AI Processing Disclosure">
+          <div className="text-sm space-y-3">
+            <p><strong>WorkAbroadHub uses artificial intelligence</strong> (OpenAI ChatGPT / GPT-4o-mini) to power the AI Career Advisor and every AI-driven tool: ATS CV Checker, Cover Letter Generator, CV Optimiser, Application Answer Helper, Job Scam Checker, Offer Letter Checker, Visa Document Checker, Interview Practice, Career Match, Write-from-Scratch, and the Nanjila chat widget.</p>
+            <Row label="AI provider" value={<span className="font-mono text-xs">OpenAI, LLC (United States)</span>} />
+            <Row label="Model" value={<span className="font-mono text-xs">GPT-4o-mini</span>} />
+            <Row label="What we send" value={<>Anonymised inputs only &mdash; name, phone, and email are stripped before the request leaves our server</>} />
+            <Row label="Used to train OpenAI models?" value={<NO />} note="Governed by OpenAI's API Data Usage Policy — API traffic is not used for model training" />
+            <Row label="OpenAI retention" value={<>Up to 30 days for abuse monitoring, then permanently deleted</>} />
+            <Row label="Fully-automated decisions?" value={<NO />} note="AI outputs are suggestions only. No hiring, visa, financial, or legal decision affecting the user is made solely by AI." />
+            <Row label="Can users opt out?" value={<YES />} note="Non-AI features (browse jobs, agency licence lookup, country guides, WhatsApp support) work without any AI request" />
+            <div className="mt-3 rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-xs text-amber-900 dark:text-amber-100">
+              <strong>AI-generated content:</strong> AI responses are generated automatically and should not be considered legal, immigration or government advice. Users should verify important information with the relevant authorities.
+            </div>
+          </div>
         </Section>
 
         <Section icon={Eye} title="Data Safety Form Answers (Google Play)">
