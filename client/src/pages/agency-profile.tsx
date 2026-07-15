@@ -127,7 +127,7 @@ export default function AgencyProfile() {
               <Info className="h-5 w-5 text-slate-600 dark:text-slate-400 mt-0.5 shrink-0" />
               <div className="text-sm text-slate-800 dark:text-slate-200 space-y-2">
                 <p className="font-semibold">Source Information</p>
-                <p>Agency licence information displayed in WorkAbroad Hub is obtained from publicly available records maintained by the National Employment Authority (Kenya).</p>
+                <p>Agency licence information displayed in WorkAbroadHub is sourced from the publicly available National Employment Authority (NEA) licence register.</p>
                 <p>WorkAbroad Hub is an independent private career advisory service and is not affiliated with the National Employment Authority or the Government of Kenya.</p>
                 <p>Always verify agency information using the official National Employment Authority website before making decisions.</p>
               </div>
