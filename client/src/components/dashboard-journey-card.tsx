@@ -72,7 +72,7 @@ export function DashboardJourneyCard() {
             <div className="flex-1 min-w-0">
               <div className="font-bold text-sm">Not sure where to start? That's normal.</div>
               <div className="text-xs text-muted-foreground line-clamp-2">
-                Pick a country and we'll walk it with you — passport, NEAIMS vetting, contracts, visa, flight. Same order we figured it out for ourselves.
+                Pick a country and we'll walk it with you — passport, agency vetting, contracts, visa, flight. Same order we figured it out for ourselves.
               </div>
             </div>
             <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />

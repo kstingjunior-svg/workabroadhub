@@ -403,7 +403,7 @@ export default function Landing() {
                   <strong className="block mb-2 text-xs uppercase tracking-wider" style={{ color: '#1A2530' }}>
                     Official Disclaimer — Please Read
                   </strong>
-                  WorkAbroad Hub is NOT a recruitment agency. We do not charge for job placements, visas, or interviews. Your KES 4,500 consultation fee covers personalized guidance, access to our verified portal database, and NEAIMS verification tools. All job applications are made directly by you on official employer websites.
+                  WorkAbroad Hub is NOT a recruitment agency. We do not charge for job placements, visas, or interviews. Your KES 4,500 consultation fee covers personalized guidance, access to our verified portal database, and recruitment agency licence checker. All job applications are made directly by you on official employer websites.
                 </div>
 
                 {/* Consultation includes */}
@@ -413,7 +413,7 @@ export default function Landing() {
                     {[
                       '1-on-1 WhatsApp session with advisor',
                       'Access to 30+ verified job portals',
-                      'NEAIMS license verification database',
+                      'Recruitment agency licence database',
                       'CV templates for 6 countries',
                     ].map((item) => (
                       <li key={item} className="flex items-start gap-2">
@@ -475,7 +475,7 @@ export default function Landing() {
                 </div>
               </div>
 
-              {/* RIGHT: NEAIMS database — `nea-verify` anchor used by the
+              {/* RIGHT: agency licence database — `nea-verify` anchor used by the
                   hero CTA to smooth-scroll on click. */}
               <div id="nea-verify" className="p-7 sm:p-9 scroll-mt-24">
                 <h2
@@ -489,13 +489,13 @@ export default function Landing() {
                     marginBottom: '1.25rem',
                   }}
                 >
-                  NEAIMS License Verification
+                  Recruitment Agency Verification
                 </h2>
                 <p className="text-sm mb-5" style={{ color: '#5C6A7A' }}>
-                  Official database of registered employment agencies. Updated daily.
+                  Licensed recruitment agencies from Kenya's public licence register. Updated regularly.
                 </p>
 
-                {/* ── INTERACTIVE NEAIMS AGENCY VERIFICATION (Phase 1 redesign) ───
+                {/* ── INTERACTIVE AGENCY LICENCE VERIFICATION (Phase 1 redesign) ───
                     Replaces the static "ABC Recruitment Ltd." sample card with
                     a live, server-backed search box. User types an agency name,
                     hits Verify, gets a real result from the 1,293-agency table
@@ -836,7 +836,7 @@ export default function Landing() {
                       <div className="space-y-3 text-sm">
                         <div className="flex items-center gap-3 py-2 border-b border-white/10">
                           <BadgeCheck className="h-4 w-4 text-emerald-400 flex-shrink-0" />
-                          <span className="text-blue-100/80">NEAIMS license verified &amp; publicly displayed</span>
+                          <span className="text-blue-100/80">Licence verified in Kenya's public register</span>
                         </div>
                         <div className="flex items-center gap-3 py-2 border-b border-white/10">
                           <TrendingUp className="h-4 w-4 text-cyan-400 flex-shrink-0" />
@@ -1003,7 +1003,7 @@ export default function Landing() {
                 
                 <p className="text-lg text-muted-foreground leading-relaxed">
                   Before you pay any agency, verify their license status with our comprehensive database 
-                  of <strong>{agencyTotal} NEAIMS-registered agencies</strong>. Know who's legitimate and who's expired.
+                  of <strong>{agencyTotal} licensed recruitment agencies</strong>. Know who's legitimate and who's expired.
                 </p>
                 
                 <div className="grid sm:grid-cols-2 gap-4">
@@ -1077,7 +1077,7 @@ export default function Landing() {
                       <CheckCircle className="h-5 w-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5" />
                       <div>
                         <div className="font-semibold text-emerald-700 dark:text-emerald-300">Safe to Work With</div>
-                        <div className="text-sm text-emerald-600 dark:text-emerald-400">This agency has a valid NEAIMS license</div>
+                        <div className="text-sm text-emerald-600 dark:text-emerald-400">This agency has a valid licence on record</div>
                       </div>
                     </div>
                   </div>
@@ -1457,7 +1457,7 @@ export default function Landing() {
                   What is the recruitment agency verification feature?
                 </AccordionTrigger>
                 <AccordionContent className="text-muted-foreground pb-5 leading-relaxed">
-                  The National Employment Authority Integrated Management Systems (NEAIMS) of Kenya licenses private employment agencies that recruit Kenyans for overseas jobs. We maintain a database of {agencyTotal}+ NEAIMS-registered agencies showing their license status (valid or expired). Before you pay any recruitment agency, you can check our database to verify they have a valid NEAIMS license. This protects you from unlicensed operators and scams.
+                  The National Employment Authority (NEA) of Kenya licenses private recruitment agencies that recruit Kenyans for overseas jobs. We maintain a database of {agencyTotal}+ licensed recruitment agencies sourced from Kenya's public licence register, showing whether each licence is valid or expired. Before you pay any recruitment agency, you can check our database to verify they have a valid licence. This protects you from unlicensed operators and scams.
                 </AccordionContent>
               </AccordionItem>
               

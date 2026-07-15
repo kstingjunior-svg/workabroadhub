@@ -97,7 +97,7 @@ export const GUIDES: Record<string, CountryGuide> = {
       },
       {
         q: "Are unlicensed Kenyan recruitment agencies a problem?",
-        a: "Yes — every year hundreds of Kenyan nurses are scammed by agencies that take KES 100,000+ for fake 'NHS placement' that doesn't exist. Verify any agency on the NEAIMS licensed list before paying anything. NHS trusts never use intermediary agencies for direct hire — apply on jobs.nhs.uk yourself.",
+        a: "Yes — every year hundreds of Kenyan nurses are scammed by agencies that take KES 100,000+ for fake 'NHS placement' that doesn't exist. Verify any agency on the licensed list before paying anything. NHS trusts never use intermediary agencies for direct hire — apply on jobs.nhs.uk yourself.",
       },
     ],
     recommendedServices: [

@@ -42,13 +42,13 @@ const TRIGGER_SUBHEADLINES: Record<UpgradeModalTrigger, string> = {
 };
 
 const UPGRADE_MODAL_FREE_LIST = [
-  "NEAIMS checks (3 per day)",
+  "agency licence checks (3 per day)",
   "5 verified portals",
   "Basic CV template",
 ];
 
 const UPGRADE_MODAL_PRO_LIST = [
-  "Unlimited NEAIMS checks",
+  "Unlimited agency licence checks",
   "All 30+ portals",
   "ATS CV scanner",
   "WhatsApp consultation",

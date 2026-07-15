@@ -182,7 +182,7 @@ export default function ScamLookupPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-sm text-muted-foreground">
-            <p>1. Always verify an agency's NEAIMS license on the official government portal before engaging.</p>
+            <p>1. Always verify an agency's recruitment agency licence on the official government portal before engaging.</p>
             <p>2. Never pay recruitment fees directly to an agent's personal account — use official channels only.</p>
             <p>3. Be suspicious of unrealistic job offers or guaranteed visa promises.</p>
             <p>4. Keep records of all communications, receipts, and agreements.</p>

@@ -869,7 +869,7 @@ export default function AgencyPortal() {
             <div>
               <p className="font-semibold text-orange-800 dark:text-orange-200 text-sm">Government Verification System Offline</p>
               <p className="text-sm text-orange-700 dark:text-orange-300 mt-0.5">
-                The NEAIMS government licensing system is temporarily unavailable. Your license status below reflects the last known or manually verified state. Automatic re-verification will occur once the system is restored.
+                The public licence register is temporarily unavailable. Your license status below reflects the last known or manually verified state. Automatic re-verification will occur once the system is restored.
               </p>
             </div>
           </div>
@@ -1048,7 +1048,7 @@ export default function AgencyPortal() {
                   Renew Your License
                 </CardTitle>
                 <CardDescription>
-                  Extend your NEAIMS license validity via M-PESA payment
+                  Extend your recruitment agency licence validity via M-PESA payment
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">

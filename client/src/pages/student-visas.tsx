@@ -672,7 +672,7 @@ function StudentVisaPaywall() {
                 </Button>
               </Link>
               <p className="text-[11px] text-muted-foreground text-center">
-                Pro also includes job alerts, CV tools, NEAIMS agency verification, and WhatsApp support.
+                Pro also includes job alerts, CV tools, recruitment agency verification, and WhatsApp support.
               </p>
             </div>
           </CardContent>

@@ -556,7 +556,7 @@ export default function JobScamChecker() {
                     </div>
                     <Link href="/nea-agencies">
                       <Button size="sm" variant="outline" data-testid="button-verify-agency">
-                        NEAIMS Check <ChevronRight className="h-4 w-4 ml-1" />
+                        Licence Check <ChevronRight className="h-4 w-4 ml-1" />
                       </Button>
                     </Link>
                   </CardContent>

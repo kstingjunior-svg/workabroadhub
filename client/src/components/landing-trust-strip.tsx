@@ -60,7 +60,7 @@ export function LandingTrustStrip() {
   });
 
   // "Scam alerts" combines two real signals: community-reported scams in
-  // the last 30 days + NEAIMS agencies whose license has expired (which means
+  // the last 30 days + recruitment agencies whose licence has expired (which means
   // they're operating illegally if they're still placing workers).
   const scamCount =
     (stats?.scamReportsThisMonth ?? 0) + (stats?.expiredAgencies ?? 0);
@@ -76,7 +76,7 @@ export function LandingTrustStrip() {
     {
       icon: BadgeCheck,
       value: fmt(stats?.totalAgencies),
-      label: "NEAIMS agencies tracked",
+      label: "Licensed agencies tracked",
       sublabel: "verify any in 30 seconds",
       tone: "blue",
     },

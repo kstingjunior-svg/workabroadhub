@@ -98,7 +98,7 @@ const TOOLS = [
     iconBg: "bg-teal-100 dark:bg-teal-900/30",
     iconColor: "text-teal-600 dark:text-teal-400",
     label: "Bulk Agency Verifier",
-    badge: "NEAIMS Database",
+    badge: "Licence Database",
     badgeColor: "bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300",
     description: "Paste a list of recruitment agency licence numbers (RA/YYYY/MM/N) and verify all of them in one shot. See live status — Valid, Expired, Blacklisted, or Not Found — with CSV export.",
     cta: "Verify Agencies",

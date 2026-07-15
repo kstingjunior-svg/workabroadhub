@@ -172,7 +172,7 @@ const SERVICE_CONTENT: Record<string, ServiceContent> = {
     headline: "Verify Before You Fly — Is Your Employer Legitimate?",
     subheadline: "Hundreds of Kenyans are defrauded by fake overseas employers every year. Don't be next.",
     before: { example: "Job offer on WhatsApp, employer asks for money upfront", tags: ["unverified", "risky", "unknown"], painPoints: ["⚠️ No verifiable company registration", "⚠️ Asked to pay recruitment fees"] },
-    after:  { example: "Full verification report: registry check, online presence, legitimacy score, red flags", tags: ["Registry verified", "Online presence", "Legitimacy scored", "NEAIMS checked"], wins: ["✅ Know if employer is real before you invest anything", "✅ Armed with questions to expose scams"] },
+    after:  { example: "Full verification report: registry check, online presence, legitimacy score, red flags", tags: ["Registry verified", "Online presence", "Legitimacy scored", "Licence checked"], wins: ["✅ Know if employer is real before you invest anything", "✅ Armed with questions to expose scams"] },
     benefits: [
       { icon: "🏛️", title: "Government Registry Check Guide", desc: "Exact steps to verify company registration in the target country — with official website links." },
       { icon: "🌐", title: "Online Presence Analysis", desc: "How to check the company's website, LinkedIn, Glassdoor reviews and social media for red flags." },

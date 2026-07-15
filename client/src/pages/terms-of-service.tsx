@@ -175,7 +175,7 @@ export default function TermsOfService() {
                 <li>Any transactions or agreements made on external platforms</li>
               </ul>
 
-              <h2>7. NEAIMS Agency Information</h2>
+              <h2>7. Recruitment Agency Information</h2>
               <p>
                 We provide information about licensed recruitment agencies for verification purposes only. 
                 Users should independently verify agency credentials with the National Employment Authority Integrated Management Systems 

@@ -379,7 +379,7 @@ function AgencyDetailView({ agencyId, onBack }: { agencyId: string; onBack: () =
             <div>
               <h4 className="font-semibold text-orange-800 dark:text-orange-200">Government System Unavailable</h4>
               <p className="text-sm text-orange-700 dark:text-orange-300">
-                The NEAIMS government verification system is temporarily unavailable. License status may not reflect real-time data. Please check back later or contact support for manual verification.
+                The public licence register verification system is temporarily unavailable. License status may not reflect real-time data. Please check back later or contact support for manual verification.
               </p>
             </div>
           </CardContent>
@@ -545,7 +545,7 @@ function AgencyDetailView({ agencyId, onBack }: { agencyId: string; onBack: () =
                 This verification portal provides information based on records maintained by WorkAbroad Hub.
                 Always verify agency credentials independently through the{" "}
                 <a href="https://neaims.go.ke" target="_blank" rel="noopener noreferrer" className="underline font-medium">
-                  National Employment Authority Integrated Management Systems (NEAIMS)
+                  National Employment Authority (NEA)
                 </a>{" "}
                 official website. WorkAbroad Hub does not guarantee employment outcomes or agency performance.
               </p>
@@ -666,7 +666,7 @@ export default function VerifyPage() {
                 <Card className="text-center p-6">
                   <ShieldCheck className="h-8 w-8 mx-auto mb-2 text-green-600" />
                   <h3 className="font-medium text-sm mb-1">License Status</h3>
-                  <p className="text-xs text-muted-foreground">Check if an agency holds a valid NEAIMS license</p>
+                  <p className="text-xs text-muted-foreground">Check if an agency holds a valid recruitment agency licence</p>
                 </Card>
                 <Card className="text-center p-6">
                   <TrendingUp className="h-8 w-8 mx-auto mb-2 text-blue-600" />
@@ -686,7 +686,7 @@ export default function VerifyPage() {
             <div className="text-center text-xs text-muted-foreground space-y-1">
               <p>Data sourced from WorkAbroad Hub agency registry.</p>
               <p>
-                For official NEAIMS verification, visit{" "}
+                For official recruitment agency verification, visit{" "}
                 <a href="https://neaims.go.ke" target="_blank" rel="noopener noreferrer" className="underline">neaims.go.ke</a>
               </p>
             </div>

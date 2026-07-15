@@ -19,7 +19,7 @@ const FEE_SERVICES = [
     textColor: "text-blue-700 dark:text-blue-400",
   },
   {
-    name: "NEAIMS Verification Tool",
+    name: "Recruitment Agency Verification Tool",
     description: "Real-time agency license checking before you pay anyone",
     value: 800,
     color: "bg-violet-500",

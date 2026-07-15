@@ -19,7 +19,7 @@ const CITIES = [
 
 const OUTCOMES = [
   "their passport sorted at eCitizen",
-  "their NEAIMS agency check done",
+  "their agency licence check done",
   "a job offer in Dubai",
   "their KCSE attested",
   "their CV recruiter-ready",

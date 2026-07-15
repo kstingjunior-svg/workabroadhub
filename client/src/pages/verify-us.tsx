@@ -106,7 +106,7 @@ export default function VerifyUsPage() {
           <p className="text-base sm:text-lg text-muted-foreground leading-relaxed">
             Kenyans have been burned by overseas-jobs scams for too long. Here's
             everything you need to verify that WorkAbroad Hub is a real,
-            tax-compliant, NEAIMS-registered business — checkable on official
+            tax-compliant, licensed business — checkable on official
             government registries.
           </p>
         </section>

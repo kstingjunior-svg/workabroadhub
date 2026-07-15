@@ -18,7 +18,7 @@
  */
 
 export const FREE_FEATURES = [
-  "3 NEAIMS agency lookups per day (self-service)",
+  "3 agency lookups per day (self-service)",
   "Browse 5 verified job portals",
   "Basic CV template download",
 ] as const;
@@ -34,7 +34,7 @@ export const PRO_FEATURES = [
 
 /** Rows for side-by-side comparison tables */
 export const PLAN_COMPARISON = [
-  { label: "NEAIMS agency check",       free: "3 per day (self-service)",   pro: "Personal advisor verifies any agency" },
+  { label: "agency licence check",       free: "3 per day (self-service)",   pro: "Personal advisor verifies any agency" },
   { label: "Verified job portals",      free: "5 portals to browse",        pro: "Advisor curates shortlist for your target country" },
   { label: "CV help",                   free: "Basic template",             pro: "Human review by career advisor" },
   { label: "WhatsApp consultation",     free: false,                        pro: "1-on-1 with career expert"        },
@@ -44,7 +44,7 @@ export const PLAN_COMPARISON = [
 
 /** Upgrade modal PLANS — free column */
 export const UPGRADE_MODAL_FREE = [
-  { label: "3 NEAIMS lookups per day (self-service)", included: true  },
+  { label: "3 agency lookups per day (self-service)", included: true  },
   { label: "5 verified portals to browse",            included: true  },
   { label: "Basic CV template",                       included: true  },
   { label: "Human CV review by career advisor",       included: false },

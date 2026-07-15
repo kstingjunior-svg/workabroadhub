@@ -249,7 +249,7 @@ export default function AdminAgencies() {
             <div className="text-sm text-amber-800 dark:text-amber-200">
               <p className="font-medium">Legal Disclaimer</p>
               <p className="text-amber-700 dark:text-amber-300">
-                Agency status information is provided for public awareness only. This platform is not affiliated with or endorsed by the National Employment Authority Integrated Management Systems. Status may change. Always confirm directly with NEAIMS.
+                Agency status information is provided for public awareness only. This platform is not affiliated with or endorsed by the National Employment Authority. Status may change. Always confirm directly with the National Employment Authority.
               </p>
             </div>
           </div>

@@ -778,7 +778,7 @@ function ReferralBannerSection({ refCode }: { refCode?: string }) {
   );
 }
 
-/* ── NEAIMS Trust Banner ── */
+/* ── Trust Banner ── */
 function TrustBanner() {
   const { data: stats } = useQuery<{ expiredAgencies: number; totalAgencies: number }>({
     queryKey: ["/api/public/stats"],
@@ -2265,7 +2265,7 @@ export default function Dashboard() {
           </div>
         </Link>
 
-        {/* NEAIMS AGENCIES */}
+        {/* AGENCIES */}
         <Link href="/nea-agencies">
           <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-2 border-green-500 dark:border-green-700 rounded-2xl p-4 cursor-pointer hover:shadow-md hover:scale-[1.01] active:scale-[0.99] transition-all duration-200" data-testid="link-nea-agencies">
             <div className="flex items-center gap-3">
@@ -2366,7 +2366,7 @@ export default function Dashboard() {
         {/* ── QUICK ACCESS ROW ─────────────────────────────────────────── */}
         <QuickAccessRow />
 
-        {/* ── NEAIMS TRUST BANNER ─────────────────────────────────────────── */}
+        {/* ── TRUST BANNER ─────────────────────────────────────────── */}
         <TrustBanner />
 
         {/* GUIDANCE TIPS */}

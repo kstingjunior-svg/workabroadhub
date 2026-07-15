@@ -38,7 +38,7 @@ function getHeatColor(expiredCount: number, expiringCount: number, total: number
 
 function generateWhatsAppMessage(agencies: NeaAgency[], type: "expired" | "expiring" | "all"): string {
   const today = new Date();
-  let message = `*NEAIMS Agency Expiry Alert*\n_Generated: ${today.toLocaleDateString("en-GB")}_\n\n`;
+  let message = `*Agency Licence Expiry Alert*\n_Generated: ${today.toLocaleDateString("en-GB")}_\n\n`;
   
   const filtered = agencies.filter(agency => {
     const expiryDate = new Date(agency.expiryDate);

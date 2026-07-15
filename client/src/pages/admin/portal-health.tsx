@@ -131,7 +131,7 @@ function VerifiedPortalsTab() {
             <div className="space-y-4 pt-2">
               <div className="space-y-1.5">
                 <Label>Portal Name <span className="text-red-500">*</span></Label>
-                <Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="e.g. NEAIMS Kenya Official Portal" data-testid="input-portal-name" />
+                <Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="e.g. Public Licence Register Portal" data-testid="input-portal-name" />
               </div>
               <div className="space-y-1.5">
                 <Label>URL <span className="text-red-500">*</span></Label>

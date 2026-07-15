@@ -143,7 +143,7 @@ export function LandingNeaSearch() {
           <h3 className="font-bold text-lg text-emerald-900 dark:text-emerald-100">Verify any agency before you pay</h3>
         </div>
         <p className="text-xs text-emerald-800/80 dark:text-emerald-200/80 mt-1">
-          Live NEAIMS-registry check · Updated daily
+          Live licence-register check · Updated daily
         </p>
       </div>
 
@@ -161,7 +161,7 @@ export function LandingNeaSearch() {
             placeholder="e.g. ABC Recruitment Ltd. or RA/2024/01/123"
             className="flex-1 px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-700 focus:border-emerald-500 dark:focus:border-emerald-400 focus:outline-none transition-colors text-sm bg-white dark:bg-gray-800"
             data-testid="input-nea-search"
-            aria-label="Search NEAIMS-registered agencies"
+            aria-label="Search licensed recruitment agencies"
           />
           <button
             onClick={runVerify}
@@ -180,7 +180,7 @@ export function LandingNeaSearch() {
             {searching ? (
               <div className="text-center py-6 text-gray-500 text-sm">
                 <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" />
-                Checking the NEAIMS registry…
+                Checking the public licence register…
               </div>
             ) : isError ? (
               <div className="rounded-xl p-4 bg-rose-50 dark:bg-rose-950/30 border-2 border-rose-200 dark:border-rose-800">
@@ -194,7 +194,7 @@ export function LandingNeaSearch() {
                   <XCircle className="h-5 w-5 text-rose-600 mt-0.5 shrink-0" />
                   <div>
                     <p className="text-sm font-bold text-rose-900 dark:text-rose-100">
-                      Not found in NEAIMS active database
+                      Not found in the public licence register
                     </p>
                     <p className="text-xs text-rose-700 dark:text-rose-300 mt-1">
                       "{activeQuery}" doesn't match any licensed agency. <strong>Don't pay them.</strong> Many fake recruiters use names similar to real ones — verify by exact license number before sending money.
@@ -256,7 +256,7 @@ export function LandingNeaSearch() {
                 )}
                 {badge?.kind === "ok" && (
                   <p className="text-xs text-emerald-800 dark:text-emerald-200 mt-3 pt-3 border-t border-emerald-200 dark:border-emerald-800 font-semibold">
-                    ✅ Safe to engage with — license is current as of latest NEAIMS sync.
+                    ✅ Safe to engage with — licence is current as of the latest sync from the public register.
                   </p>
                 )}
 

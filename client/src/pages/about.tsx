@@ -88,7 +88,7 @@ export default function AboutPage() {
         <div className="max-w-4xl mx-auto flex items-start gap-3">
           <Shield className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
           <p className="text-sm text-amber-800">
-            <strong>Important:</strong> WorkAbroad Hub is a <strong>career consultation service</strong>, not a recruitment agency. We do not place workers, charge placement/visa fees, or guarantee employment outcomes. We are not affiliated with any specific employer or foreign government. Always verify any agency through the official <a href="/nea-agencies" className="underline font-medium">NEAIMS register</a>.
+            <strong>Important:</strong> WorkAbroad Hub is a <strong>career consultation service</strong>, not a recruitment agency. We do not place workers, charge placement/visa fees, or guarantee employment outcomes. We are not affiliated with any specific employer or foreign government. Always verify any agency through the official <a href="/nea-agencies" className="underline font-medium">public licence register</a>.
           </p>
         </div>
       </section>

@@ -119,7 +119,7 @@ export default function NeaAgenciesPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   // Cap how many rows render at once. Each card mounts <AgencyRatingDisplay>,
   // which opens a Firebase Realtime DB listener via useAgencyRatingSummary.
-  // Post-NEAIMS-sync we have 2,600+ agencies — opening that many concurrent
+  // Post-registry-sync we have 2,600+ agencies — opening that many concurrent
   // RTDB subscriptions blows past Firebase's client-side listener cap and
   // crashes the render (surfaces as "Just a small detour"). We cap the
   // initial page to VISIBLE_PAGE_SIZE and let the user click "Show more".
@@ -363,7 +363,7 @@ export default function NeaAgenciesPage() {
               <div className="text-sm">
                 <p className="font-medium text-amber-800 dark:text-amber-200">Important Notice</p>
                 <p className="text-amber-700 dark:text-amber-300">
-                  This list is for reference only. We are not affiliated with NEAIMS. Always verify license status directly with the National Employment Authority Integrated Management Systems before making any payment.
+                  This list is for reference only. We are not affiliated with the National Employment Authority (NEA). Always verify licence status directly with the NEA before making any payment.
                 </p>
               </div>
             </div>
@@ -376,7 +376,7 @@ export default function NeaAgenciesPage() {
               <Info className="h-5 w-5 text-blue-600 mt-0.5 shrink-0" />
               <div className="text-sm text-blue-800 dark:text-blue-200">
                 <p className="font-medium">Protect Yourself from Job Scams</p>
-                <p className="mt-1">Before paying any recruitment fee, search for the agency below to check if they hold a valid NEAIMS license. Unlicensed agents are illegal.</p>
+                <p className="mt-1">Before paying any recruitment fee, search for the agency below to check if they hold a valid recruitment agency licence. Unlicensed agents are illegal.</p>
               </div>
             </div>
           </CardContent>
@@ -481,7 +481,7 @@ export default function NeaAgenciesPage() {
               ))}
             </div>
             <p className="text-xs text-muted-foreground">
-              Sponsored listings are paid advertisements. We are not affiliated with NEAIMS. Always verify agency licenses directly.
+              Sponsored listings are paid advertisements. We are not affiliated with the National Employment Authority (NEA). Always verify agency licences directly.
             </p>
           </div>
         )}
@@ -720,7 +720,7 @@ export default function NeaAgenciesPage() {
                           <p className="text-red-700 dark:text-red-300 leading-relaxed">
                             Before expiry, this agency was authorized to recruit workers for overseas jobs.
                             After expiry, they are no longer licensed. Paying them is risky and may be illegal.
-                            Verify current status with NEAIMS before any transaction.
+                            Verify current status directly with the National Employment Authority before any transaction.
                           </p>
                         </div>
                       )}
@@ -732,7 +732,7 @@ export default function NeaAgenciesPage() {
                             ⏰ Expiring Soon — Verify Renewal Status
                           </p>
                           <p className="text-amber-700 dark:text-amber-300 leading-relaxed">
-                            This license expires in {daysLeft} day{daysLeft !== 1 ? "s" : ""}. Confirm renewal status with NEAIMS before proceeding with any payment or agreement.
+                            This license expires in {daysLeft} day{daysLeft !== 1 ? "s" : ""}. Confirm renewal status directly with the National Employment Authority before proceeding with any payment or agreement.
                           </p>
                         </div>
                       )}
@@ -744,7 +744,7 @@ export default function NeaAgenciesPage() {
                             ⚠️ LICENSE SUSPENDED
                           </p>
                           <p className="text-amber-700 dark:text-amber-300 leading-relaxed">
-                            This agency's license has been suspended by NEAIMS, possibly due to complaints or violations.
+                            This agency's license has been suspended by the National Employment Authority, possibly due to complaints or violations.
                             Do NOT engage until you verify their status is restored.
                           </p>
                         </div>
@@ -768,7 +768,7 @@ export default function NeaAgenciesPage() {
                             ? <><strong>Not safe to work with</strong> — This agency's license has been suspended.</>
                             : isExpiringSoon
                             ? <><strong>Proceed with caution</strong> — Verify license renewal before committing.</>
-                            : <><strong>Safe to proceed</strong> — This agency holds a valid NEAIMS license.</>
+                            : <><strong>Safe to proceed</strong> — This agency holds a valid recruitment agency licence.</>
                           }
                         </span>
                       </div>
@@ -941,8 +941,8 @@ export default function NeaAgenciesPage() {
           <p className="font-medium">Disclaimer</p>
           <p>This list is provided for public awareness only and may not reflect real-time data.</p>
           <p>Agency information is periodically updated and may be outdated.</p>
-          <p>Not affiliated with the National Employment Authority Integrated Management Systems (NEAIMS).</p>
-          <p>Always confirm agency status directly with NEAIMS before engaging any agency.</p>
+          <p>Not affiliated with the National Employment Authority (NEA).</p>
+          <p>Always confirm agency status directly with the National Employment Authority (NEA) before engaging any agency.</p>
         </div>
 
         <Dialog open={isEducationOpen} onOpenChange={setIsEducationOpen}>
@@ -991,7 +991,7 @@ export default function NeaAgenciesPage() {
                     <div className="space-y-2 text-sm">
                       <div className="flex items-start gap-2">
                         <AlertTriangle className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
-                        <p><strong>License Suspended:</strong> NEAIMS has suspended this agency's license, possibly due to complaints or violations.</p>
+                        <p><strong>License Suspended:</strong> The National Employment Authority has suspended this agency's licence, possibly due to complaints or violations.</p>
                       </div>
                       <div className="flex items-start gap-2">
                         <XCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
@@ -999,7 +999,7 @@ export default function NeaAgenciesPage() {
                       </div>
                       <div className="flex items-start gap-2">
                         <AlertCircle className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
-                        <p><strong>Suspension Reason:</strong> Could be due to fraud allegations, labor violations, or failure to meet NEAIMS requirements.</p>
+                        <p><strong>Suspension Reason:</strong> Could be due to fraud allegations, labor violations, or failure to meet licensing requirements.</p>
                       </div>
                     </div>
                   )}
@@ -1009,7 +1009,7 @@ export default function NeaAgenciesPage() {
                   <h4 className="font-semibold text-blue-700 dark:text-blue-300 mb-2">What You Should Do</h4>
                   <ol className="list-decimal list-inside text-sm space-y-1 text-blue-800 dark:text-blue-200">
                     <li>Do NOT pay any money to this agency</li>
-                    <li>Verify their status directly with NEAIMS (National Employment Authority Integrated Management Systems)</li>
+                    <li>Verify their status directly with the National Employment Authority (NEA)</li>
                     <li>Look for agencies with valid, active licenses</li>
                     <li>Report suspicious activity using our Report button</li>
                   </ol>
@@ -1149,7 +1149,7 @@ export default function NeaAgenciesPage() {
                   <div className="space-y-3" data-testid="claim-step-2">
                     <div className="p-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg text-sm text-blue-800 dark:text-blue-200">
                       <p className="font-semibold">Required: License Proof</p>
-                      <p className="text-xs mt-0.5 text-blue-700 dark:text-blue-300">Upload your NEAIMS license certificate, business registration certificate, or official government document proving ownership. Accepted: JPG, PNG, PDF (max 10MB each, up to 3 files).</p>
+                      <p className="text-xs mt-0.5 text-blue-700 dark:text-blue-300">Upload your recruitment agency licence certificate, business registration certificate, or official government document proving ownership. Accepted: JPG, PNG, PDF (max 10MB each, up to 3 files).</p>
                     </div>
 
                     <div
@@ -1159,7 +1159,7 @@ export default function NeaAgenciesPage() {
                     >
                       <Upload className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
                       <p className="text-sm font-medium">Click to upload documents</p>
-                      <p className="text-xs text-muted-foreground mt-1">NEAIMS license, business reg, or ID card</p>
+                      <p className="text-xs text-muted-foreground mt-1">recruitment agency licence, business reg, or ID card</p>
                       <input
                         ref={fileInputRef}
                         type="file"
@@ -1188,7 +1188,7 @@ export default function NeaAgenciesPage() {
                       <Textarea
                         value={claimForm.proofDescription}
                         onChange={e => setClaimForm(f => ({ ...f, proofDescription: e.target.value }))}
-                        placeholder="e.g. 'Attached is our NEAIMS license for 2025–2026. Our director is John Mwangi.'"
+                        placeholder="e.g. 'Attached is our recruitment agency licence for 2025–2026. Our director is John Mwangi.'"
                         rows={2}
                         className="text-sm"
                         data-testid="textarea-claim-notes"

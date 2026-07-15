@@ -1261,7 +1261,7 @@ function ManualOverridesTab() {
                   {integrations.map(i => (
                     <SelectItem key={i.code} value={i.code}>{i.name}</SelectItem>
                   ))}
-                  {integrations.length === 0 && <SelectItem value="nea-kenya">NEAIMS Kenya</SelectItem>}
+                  {integrations.length === 0 && <SelectItem value="nea-kenya">NEA Kenya</SelectItem>}
                 </SelectContent>
               </Select>
             </div>
