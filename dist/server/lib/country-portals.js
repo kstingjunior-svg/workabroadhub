@@ -34,7 +34,7 @@ exports.COUNTRY_PORTALS = {
         { name: "TipTopJob (Visa)", url: "https://www.tiptopjob.com/search/jobs.asp?keywords=visa+sponsor&location=United+Kingdom", description: "Pre-filtered to visa-sponsoring UK roles", order: 8 },
     ],
     canada: [
-        { name: "Job Bank Canada", url: "https://www.jobbank.gc.ca", description: "Official Government of Canada job board, supports LMIA", order: 1 },
+        { name: "Job Bank Canada", url: "https://www.jobbank.gc.ca", description: "Government Portal of Canada job board, supports LMIA", order: 1 },
         { name: "Indeed Canada", url: "https://ca.indeed.com", description: "Indeed CA — broad coverage, visa-friendly filters", order: 2 },
         { name: "LinkedIn Jobs Canada", url: "https://www.linkedin.com/jobs/?location=Canada", description: "Largest professional job network", order: 3 },
         { name: "Adzuna Canada", url: "https://www.adzuna.ca", description: "Aggregator covering Canadian listings", order: 4 },

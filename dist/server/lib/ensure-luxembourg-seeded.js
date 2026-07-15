@@ -37,7 +37,7 @@ const LUX_FLAG = "🇱🇺";
 // (5,000+ live jobs); Jobs in Luxembourg is the English-speakers-only board.
 const LUX_PORTALS = [
     {
-        name: "ADEM (Official Government Portal)",
+        name: "ADEM (Government Portal Portal)",
         url: "https://adem.public.lu/en/mobilite-internationale/wil.html",
         description: "Luxembourg's government employment agency. Every legal hire goes through ADEM's labour market test.",
         order: 1,
