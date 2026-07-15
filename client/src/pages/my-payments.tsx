@@ -79,7 +79,7 @@ function inferLabel(p: Payment): string {
   if (p.serviceId) {
     if (p.serviceId.toLowerCase().includes("cv"))          return "CV Service";
     if (p.serviceId.toLowerCase().includes("consult"))     return "Consultation";
-    if (p.serviceId.toLowerCase().includes("visa"))        return "Visa Guide";
+    if (p.serviceId.toLowerCase().includes("visa"))        return "Educational Guide";
     if (p.serviceId.toLowerCase().includes("job"))         return "Job Posting";
     return "Service";
   }

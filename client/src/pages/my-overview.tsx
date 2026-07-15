@@ -56,7 +56,7 @@ function serviceLabel(serviceId: string | null | undefined, serviceMap: Map<stri
   if (slug.includes("cv") || slug.includes("ats"))          return "CV Rewrite";
   if (slug.includes("cover"))                               return "Cover Letter";
   if (slug.includes("consult"))                             return "Consultation";
-  if (slug.includes("visa"))                                return "Visa Guide";
+  if (slug.includes("visa"))                                return "Educational Guide";
   if (slug.includes("interview"))                           return "Interview Coaching";
   if (slug.includes("linkedin"))                            return "LinkedIn Optimisation";
   if (slug.includes("job") || slug.includes("apply"))       return "Job Application";

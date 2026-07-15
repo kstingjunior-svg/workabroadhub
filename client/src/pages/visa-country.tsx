@@ -375,7 +375,7 @@ export default function VisaCountryPage() {
     );
   }
 
-  const seoTitle = `${country.name} Work Visa Guide 2025 | WorkAbroad Hub`;
+  const seoTitle = `${country.name} Educational Guide 2025 | WorkAbroad Hub`;
   const seoDesc = `Complete ${country.name} work visa guide: eligibility, application steps, processing times, costs, and official embassy links. Free resource for Kenyan applicants.`;
 
   return (
@@ -412,7 +412,10 @@ export default function VisaCountryPage() {
               </Badge>
             </div>
 
-            <h1 className="text-3xl md:text-5xl font-bold leading-tight mb-3">
+            <div className="mb-4 rounded-xl border border-blue-300 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30 px-4 py-3 text-sm text-blue-900 dark:text-blue-100">
+              <strong>Educational Guide:</strong> This guide is for educational purposes only. Visa requirements may change. Always confirm the latest requirements with the relevant embassy or immigration authority.
+            </div>
+                        <h1 className="text-3xl md:text-5xl font-bold leading-tight mb-3">
               {country.name} — Educational Guide
             </h1>
             <p className="text-2xl font-medium opacity-80 mb-4">{country.visaTypes[0].name}</p>

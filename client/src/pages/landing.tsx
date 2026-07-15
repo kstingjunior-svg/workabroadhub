@@ -246,7 +246,7 @@ export default function Landing() {
               <a href="/faq" className="text-sm text-muted-foreground hover:text-foreground transition-colors font-medium touch-target-min flex items-center" data-testid="link-faq" role="menuitem">FAQ</a>
               <a href="/about" className="text-sm text-muted-foreground hover:text-foreground transition-colors font-medium touch-target-min flex items-center" data-testid="link-about" role="menuitem">About</a>
               <a href="/contact" className="text-sm text-muted-foreground hover:text-foreground transition-colors font-medium touch-target-min flex items-center" data-testid="link-contact-nav" role="menuitem">Contact</a>
-              <a href="/visa-guides" className="text-sm text-muted-foreground hover:text-foreground transition-colors font-medium touch-target-min flex items-center" data-testid="link-visa-guides-nav" role="menuitem">Visa Guides</a>
+              <a href="/visa-guides" className="text-sm text-muted-foreground hover:text-foreground transition-colors font-medium touch-target-min flex items-center" data-testid="link-visa-guides-nav" role="menuitem">Educational Guides</a>
               <a href="/visa-assistant" className="text-sm font-semibold text-blue-600 hover:text-blue-700 transition-colors touch-target-min flex items-center gap-1" data-testid="link-visa-assistant-nav" role="menuitem">✨ AI Assistant</a>
               <a href="/green-card" className="text-sm text-muted-foreground hover:text-foreground transition-colors font-medium touch-target-min flex items-center" data-testid="link-green-card-nav" role="menuitem">🇺🇸 Green Card</a>
             </div>
@@ -1524,7 +1524,7 @@ export default function Landing() {
               <h4 className="font-semibold text-white">Resources</h4>
               <ul className="space-y-2 text-sm">
                 <li><a href="/nea-agencies" className="text-slate-400 hover:text-white transition-colors" data-testid="link-footer-nea">NEAIMS Agency Verification</a></li>
-                <li><a href="/student-visas" className="text-slate-400 hover:text-white transition-colors" data-testid="link-footer-student-visas">Student Visa Guide</a></li>
+                <li><a href="/student-visas" className="text-slate-400 hover:text-white transition-colors" data-testid="link-footer-student-visas">Student Educational Guide</a></li>
                 <li><a href="/visa-assistant" className="text-slate-400 hover:text-white transition-colors" data-testid="link-footer-visa-assistant">✨ AI Visa Assistant</a></li>
                 <li><a href="/visa-guides" className="text-slate-400 hover:text-white transition-colors" data-testid="link-footer-visa-guides">Visa &amp; Immigration Guides</a></li>
                 <li><a href="/green-card" className="text-slate-400 hover:text-white transition-colors" data-testid="link-footer-green-card">🇺🇸 Green Card (DV Lottery) Guide</a></li>

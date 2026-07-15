@@ -719,7 +719,10 @@ export default function StudentVisas() {
                   <GraduationCap className="h-5 w-5 text-primary" />
                 </div>
                 <div>
-                  <h1 className="text-lg font-bold">Student Visa — Educational Guide</h1>
+                  <div className="mb-4 rounded-xl border border-blue-300 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30 px-4 py-3 text-sm text-blue-900 dark:text-blue-100">
+                    <strong>Educational Guide:</strong> This guide is for educational purposes only. Visa requirements may change. Always confirm the latest requirements with the relevant embassy or immigration authority.
+                  </div>
+                                    <h1 className="text-lg font-bold">Student Visa — Educational Guide</h1>
                   <p className="text-xs text-muted-foreground hidden sm:block">Complete study abroad information</p>
                 </div>
               </div>

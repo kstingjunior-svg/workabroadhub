@@ -632,7 +632,7 @@ export default function JobScamChecker() {
         <div className="pb-2">
           <p className="text-xs text-muted-foreground font-semibold mb-2">Related tools & services</p>
           <div className="flex flex-wrap gap-2">
-            <Link href="/agencies"><span className="text-xs text-blue-600 dark:text-blue-400 underline underline-offset-2">Verify NEAIMS Agencies</span></Link>
+            <Link href="/agencies"><span className="text-xs text-blue-600 dark:text-blue-400 underline underline-offset-2">Verify Recruitment Agencies</span></Link>
             <span className="text-xs text-muted-foreground">·</span>
             <Link href="/tools/visa-sponsorship-jobs"><span className="text-xs text-blue-600 dark:text-blue-400 underline underline-offset-2">Visa Sponsorship Jobs</span></Link>
             <span className="text-xs text-muted-foreground">·</span>
