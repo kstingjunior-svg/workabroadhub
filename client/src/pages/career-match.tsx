@@ -14,6 +14,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
 import { isPaidUser } from "@/lib/plan";
+import { AiDisclaimer } from "@/components/ai-disclaimer";
 
 interface UserCareerProfile {
   id: string;
@@ -143,6 +144,7 @@ export default function CareerMatch() {
     return (
       <div className="min-h-screen bg-gradient-to-b from-blue-50/50 via-background to-purple-50/50 dark:from-blue-950/20 dark:via-background dark:to-purple-950/20 p-4 md:p-8">
         <div className="max-w-xl mx-auto space-y-6">
+          <AiDisclaimer className="mb-4" />
           <div className="text-center space-y-4 pt-8">
             <div className="h-16 w-16 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto">
               <Lock className="h-8 w-8 text-blue-600 dark:text-blue-400" />

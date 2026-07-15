@@ -34,6 +34,7 @@ import {
   type WrongDocumentPayload,
 } from "@/components/wrong-document-card";
 import { AskNanjilaButton } from "@/components/ask-nanjila-button";
+import { AiDisclaimer } from "@/components/ai-disclaimer";
 
 const ATS_FAQS = [
   { q: "What is an ATS and why does it matter for overseas jobs?", a: "ATS (Applicant Tracking System) is software used by 99% of large employers in the UK, Canada, UAE, and Australia to filter CVs before a human reads them. A CV that fails ATS parsing is rejected automatically, even if you are qualified. Our checker analyses your CV against ATS criteria so you can fix issues before applying." },
@@ -251,6 +252,7 @@ export default function ATSCVChecker() {
       </div>
 
       <div className="max-w-xl mx-auto px-4 mt-4 space-y-4">
+        <AiDisclaimer className="mb-4" />
         {/* Intro / Guide */}
         <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-xl p-4 space-y-2">
           <p className="text-sm font-semibold text-blue-900 dark:text-blue-200">Why ATS matters for overseas job applications</p>

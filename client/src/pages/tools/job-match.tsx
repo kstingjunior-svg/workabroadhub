@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { fetchCsrfToken } from "@/lib/queryClient";
+import { AiDisclaimer } from "@/components/ai-disclaimer";
 import {
   Sparkles, ArrowLeft, ArrowRight, Loader2, MapPin, Briefcase,
   Star, ExternalLink, Lock,
@@ -97,6 +98,7 @@ export default function JobMatchPage() {
       </header>
 
       <main className="max-w-3xl mx-auto px-4 sm:px-6 py-8 sm:py-12 space-y-6">
+        <AiDisclaimer className="mb-4" />
         {/* ── Intro ─────────────────────────────────────────────────────── */}
         <div className="text-center">
           <Badge className="bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 mb-3">

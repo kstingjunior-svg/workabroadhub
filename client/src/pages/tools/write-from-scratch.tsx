@@ -30,6 +30,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest } from "@/lib/queryClient";
 import { SeoHead } from "@/components/seo-head";
+import { AiDisclaimer } from "@/components/ai-disclaimer";
 import {
   ArrowLeft,
   FileText,
@@ -381,6 +382,7 @@ export default function WriteFromScratchPage() {
       </header>
 
       <main className="max-w-4xl mx-auto px-4 py-6 space-y-6">
+        <AiDisclaimer className="mb-4" />
         {state === "pick" && (
           <PickView
             onPick={pickDoc}

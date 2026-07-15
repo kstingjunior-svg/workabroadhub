@@ -29,6 +29,7 @@ import {
   Sparkles, Award, ArrowLeft, Volume2, VolumeX,
 } from "lucide-react";
 import { Link } from "wouter";
+import { AiDisclaimer } from "@/components/ai-disclaimer";
 
 interface QATurn {
   q: string;
@@ -261,6 +262,7 @@ export default function InterviewPracticePage() {
       <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white dark:from-slate-950 dark:to-slate-900">
         <header className="sticky top-0 z-30 bg-white/85 dark:bg-slate-950/85 backdrop-blur-md border-b">
           <div className="max-w-3xl mx-auto px-4 sm:px-6 py-3">
+            <AiDisclaimer className="mb-4" />
             <Link href="/tools">
               <Button variant="ghost" size="sm">
                 <ArrowLeft className="h-4 w-4 mr-2" /> Tools

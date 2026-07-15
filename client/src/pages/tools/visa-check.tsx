@@ -25,6 +25,7 @@ import {
   type WrongDocumentPayload,
 } from "@/components/wrong-document-card";
 import { AskNanjilaButton } from "@/components/ask-nanjila-button";
+import { AiDisclaimer } from "@/components/ai-disclaimer";
 import {
   ShieldCheck,
   ShieldAlert,
@@ -267,6 +268,7 @@ export default function VisaCheckPage() {
       />
 
       <div className="mx-auto max-w-4xl px-4 py-10">
+        <AiDisclaimer className="mb-4" />
         <Link href="/tools">
           <Button variant="ghost" size="sm" className="mb-4">
             <ArrowLeft className="h-4 w-4 mr-2" /> Back to Tools

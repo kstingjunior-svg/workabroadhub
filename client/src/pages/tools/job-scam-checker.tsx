@@ -33,6 +33,7 @@ import {
   type WrongDocumentPayload,
 } from "@/components/wrong-document-card";
 import { AskNanjilaButton } from "@/components/ask-nanjila-button";
+import { AiDisclaimer } from "@/components/ai-disclaimer";
 
 const SCAM_FAQS = [
   { q: "How common are overseas job scams targeting Kenyans?", a: "Job scams targeting Kenyans seeking overseas employment are extremely common. Fraudsters impersonate legitimate employers in the UK, UAE, Saudi Arabia, and Canada, charging fake processing fees, visa fees, or training fees. Thousands of Kenyans lose money every year. Our free checker helps you detect red flags before engaging with any employer." },
@@ -278,6 +279,7 @@ export default function JobScamChecker() {
       </div>
 
       <div className="max-w-xl mx-auto px-4 mt-4 space-y-4">
+        <AiDisclaimer className="mb-4" />
         {/* Intro / Guide */}
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-xl p-4 space-y-2">
           <p className="text-sm font-semibold text-red-900 dark:text-red-200">How to spot a fake overseas job advert</p>

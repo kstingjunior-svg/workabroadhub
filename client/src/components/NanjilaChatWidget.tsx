@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
 import nanjilaAvatarUrl from "@assets/generated_images/nanjila_avatar.png";
 import { fetchCsrfToken } from "@/lib/queryClient";
+import { AiDisclaimer } from "@/components/ai-disclaimer";
 
 const WHATSAPP_NUMBER = "254742619777"; // WorkAbroad Hub support WhatsApp
 // (was Twilio sandbox "14155238886" — real users tapping the link had no way through)
@@ -217,6 +218,7 @@ function MessageBubble({
                   <div className="text-gray-500">{j.company} · {j.country}</div>
                   <div className="flex items-center gap-1 mt-1">
                     <div className="h-1.5 rounded-full flex-1 bg-gray-200 overflow-hidden">
+              <AiDisclaimer variant="inline" className="mb-3 px-2" />
                       <div
                         className="h-full rounded-full"
                         style={{ width: `${s}%`, background: barColor, transition: "width 0.5s ease" }}
