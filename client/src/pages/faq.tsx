@@ -91,7 +91,7 @@ const categories = [
   },
   {
     id: "agencies",
-    label: "Agency Verification",
+    label: "Agency Licence Checker",
     icon: Shield,
     faqs: [
       {

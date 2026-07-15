@@ -571,7 +571,7 @@ export default function PricingPage() {
                 icon: <Shield className="h-6 w-6 text-emerald-600" />,
                 bg: "bg-emerald-50 dark:bg-emerald-950/30",
                 border: "border-emerald-200 dark:border-emerald-800",
-                title: "Recruitment Agency Verification",
+                title: "Agency Licence Checker",
                 body: "Check any recruitment agency's license status before paying them a single shilling. Our database covers all licensed recruitment agencies in Kenya.",
               },
               {

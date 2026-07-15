@@ -75,7 +75,7 @@ export function DashboardHeroCTA() {
             </div>
             <span className="text-[10px] font-bold bg-white/20 px-2 py-1 rounded-full">FREE</span>
           </div>
-          <h3 className="text-lg sm:text-xl font-bold mb-1">🛡️ Verify a Recruitment Agency</h3>
+          <h3 className="text-lg sm:text-xl font-bold mb-1">🛡️ Agency Licence Checker</h3>
           <p className="text-sm text-white/90 mb-3 leading-snug">
             Check whether a recruitment agency appears in Kenya's public licence register.
           </p>

@@ -818,7 +818,7 @@ function TrustBanner() {
 
       <Link href="/nea-agencies">
         <span className="bg-[#1A2530] dark:bg-gray-700 text-white text-sm font-medium px-4 py-2 rounded-lg hover:opacity-90 transition-opacity cursor-pointer">
-          Verify Agency →
+          Check Agency Licence →
         </span>
       </Link>
     </div>

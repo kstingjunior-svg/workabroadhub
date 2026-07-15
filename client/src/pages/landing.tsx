@@ -426,7 +426,7 @@ export default function Landing() {
 
                 {/* ── HERO CTA REFRAME (Phase 2 — verify-first conversion) ─────
                     Primary CTA changed from generic "Get Started Free" to
-                    'Verify an Agency Free' — the same action the right-side
+                    'Check an Agency Free' — the same action the right-side
                     widget performs, giving visitors a clear, low-commitment
                     first step that maps to the platform's strongest hook.
                     Recruiter CTA demoted from competing yellow/outlined button
@@ -438,7 +438,7 @@ export default function Landing() {
                     className="w-full sm:w-auto inline-block px-8 py-4 font-bold text-base text-center bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-lg shadow-emerald-600/30 transition-colors"
                     data-testid="button-hero-cta-verify"
                   >
-                    🛡️ Verify an Agency Free
+                    🛡️ Check an Agency Free
                   </a>
 
                   <p className="text-xs leading-relaxed" style={{ color: '#5C6A7A' }}>
@@ -489,7 +489,7 @@ export default function Landing() {
                     marginBottom: '1.25rem',
                   }}
                 >
-                  Recruitment Agency Verification
+                  Agency Licence Checker
                 </h2>
                 <p className="text-sm mb-5" style={{ color: '#5C6A7A' }}>
                   Licensed recruitment agencies from Kenya's public licence register. Updated regularly.
@@ -1523,7 +1523,7 @@ export default function Landing() {
             <div className="space-y-4">
               <h4 className="font-semibold text-white">Resources</h4>
               <ul className="space-y-2 text-sm">
-                <li><a href="/nea-agencies" className="text-slate-400 hover:text-white transition-colors" data-testid="link-footer-nea">Recruitment Agency Verification</a></li>
+                <li><a href="/nea-agencies" className="text-slate-400 hover:text-white transition-colors" data-testid="link-footer-nea">Agency Licence Checker</a></li>
                 <li><a href="/student-visas" className="text-slate-400 hover:text-white transition-colors" data-testid="link-footer-student-visas">Student Educational Guide</a></li>
                 <li><a href="/visa-assistant" className="text-slate-400 hover:text-white transition-colors" data-testid="link-footer-visa-assistant">✨ AI Visa Assistant</a></li>
                 <li><a href="/visa-guides" className="text-slate-400 hover:text-white transition-colors" data-testid="link-footer-visa-guides">Visa &amp; Immigration Guides</a></li>

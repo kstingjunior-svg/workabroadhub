@@ -316,6 +316,7 @@ export default function NeaAgenciesPage() {
             <div>
               <h1 className="font-bold text-lg">Verify Agency License</h1>
               <p className="text-xs text-muted-foreground">Licensed Recruitment Agencies</p>
+              <p className="text-[11px] text-muted-foreground/80 italic mt-0.5">Information is obtained from publicly available government records where available.</p>
             </div>
           </div>
           <Shield className="h-6 w-6 text-primary" />

@@ -38,7 +38,7 @@ const formSchema = z.object({
 type FormValues = z.infer<typeof formSchema>;
 
 const topics = [
-  { value: "verification",  label: "Recruitment Agency Verification" },
+  { value: "verification",  label: "Agency Licence Checker" },
   { value: "payment",       label: "Payment / M-Pesa Issue" },
   { value: "service",       label: "CV / Document Services" },
   { value: "technical",     label: "Technical Support" },
@@ -49,7 +49,7 @@ const topics = [
 
 const quickHelp = [
   { emoji: "❓", label: "FAQs",             href: "/faq" },
-  { emoji: "🔐", label: "Verify an Agency", href: "/nea-agencies" },
+  { emoji: "🔐", label: "Agency Licence Checker", href: "/nea-agencies" },
   { emoji: "🚨", label: "Report a Scam",    href: "/report-fraud" },
   { emoji: "💰", label: "Pricing & Plans",  href: "/pricing" },
 ];

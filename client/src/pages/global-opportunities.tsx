@@ -717,7 +717,7 @@ export default function GlobalOpportunitiesPage() {
             <div className="flex flex-wrap gap-6 mt-4">
               {[
                 { icon: "💬", label: "1-on-1 WhatsApp" },
-                { icon: "🛡️", label: "Agency Verification" },
+                { icon: "🛡️", label: "Agency Licence Checker" },
                 { icon: "📄", label: "CV Templates" },
                 { icon: "🔄", label: "360 Day Access" },
               ].map(f => (
