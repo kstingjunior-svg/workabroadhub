@@ -19617,6 +19617,16 @@ Tone examples:
                 msgLower === "script error." ||
                 msgLower === "script error";
             if (!isNoise) {
+                // 2026-07: emit loud server-side log so we can grep Render logs
+                // for client crashes without needing Firebase console access.
+                // Line prefix makes it easy to search: grep "[CLIENT-ERROR]"
+                const ref = rest?.ref ?? "no-ref";
+                const errUrl = url ?? filename ?? "unknown";
+                const userId = req.user?.id?.toString() ?? "anonymous";
+                console.error(`[CLIENT-ERROR] ref=${ref} user=${userId} url=${errUrl} msg=${message?.slice(0, 200) ?? ""}`);
+                if (stack) {
+                    console.error(`[CLIENT-ERROR] stack: ${String(stack).slice(0, 2000)}`);
+                }
                 const { logErrorToFirebase } = await Promise.resolve().then(() => __importStar(require("./services/firebaseRtdb")));
                 await logErrorToFirebase({
                     type,
@@ -19627,7 +19637,7 @@ Tone examples:
                     lineno,
                     colno,
                     userAgent,
-                    user: req.user?.id?.toString() ?? "anonymous",
+                    user: userId,
                     timestamp: timestamp ?? new Date().toISOString(),
                     ...rest,
                 }, "frontend");
