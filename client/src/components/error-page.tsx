@@ -69,7 +69,11 @@ function buildRef(code: string | number) {
     String(now.getDate()).padStart(2, "0") +
     String(now.getHours()).padStart(2, "0") +
     String(now.getMinutes()).padStart(2, "0");
-  return `WAH-${code}-${ts}`;
+  // 2026-07: 4-char random suffix so two users hitting different errors
+  // at the same minute don't share the same ref. Enables us to search
+  // support DMs for a specific incident.
+  const rand = Math.random().toString(36).slice(2, 6);
+  return `WAH-${code}-${ts}-${rand}`;
 }
 
 // Surface the underlying error to the browser console *and* (when
@@ -108,6 +112,28 @@ export default function ErrorPage({
         "\n  status:", (error as any).status,
         "\n  stack:", error.stack,
       );
+      // 2026-07: also POST server-side so we can see aggregate crash
+      // patterns in Render logs. Fire-and-forget — failures ignored so
+      // we don't compound the error.
+      try {
+        fetch("/api/log/client-error", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            ref:       errorRef,
+            type:      resolvedType,
+            code:      resolvedCode,
+            name:      error.name,
+            message:   error.message,
+            status:    (error as any).status,
+            stack:     error.stack?.slice(0, 4000),
+            url:       window.location.href,
+            userAgent: navigator.userAgent,
+            timestamp: new Date().toISOString(),
+          }),
+        }).catch(() => {});
+      } catch {}
     }
   }, [error, resolvedType, resolvedCode, errorRef]);
 
