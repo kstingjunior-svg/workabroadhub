@@ -704,7 +704,7 @@ function BottomServicesGrid() {
 /* ── Quick Access Row ── */
 const QUICK_ACCESS = [
   { icon: "🟢", title: "Green Card Guide",  desc: "DV Lottery • FREE eligibility check", href: "/country/usa" },
-  { icon: "🛡️", title: "Recruitment Agencies", desc: "1,200+ licensed recruiters",          href: "/nea-agencies" },
+  { icon: "🛡️", title: "Agency Licence Checker", desc: "Check 1,200+ licensed recruiters", href: "/nea-agencies" },
   { icon: "📄", title: "CV Services",        desc: "ATS optimization • Country-specific", href: "/services" },
   { icon: "🤝", title: "Interview Prep",    desc: "Mock interviews • STAR method",       href: "/services" },
 ];
@@ -1214,8 +1214,13 @@ export default function Dashboard() {
 
   const isAdmin = adminCheckSuccess && !adminError && typeof adminStats?.totalUsers === "number";
   const currentPlanId = userPlan?.planId || "free";
-  const isPro = currentPlanId === "pro";
+  // 2026-07 FIX: was `const isPro = currentPlanId === "pro"` — landmine
+  // that silently downgraded trial (KES 99) and monthly (KES 1,000)
+  // users if any new JSX grabbed `isPro` from scope. Now aliased to
+  // isPaid so every paying tier is treated equally, matching how the
+  // pricing/features engine issues plan IDs.
   const isPaid = isPaidUser(currentPlanId);
+  const isPro = isPaid;
   const { openUpgradeModal } = useUpgradeModal();
 
   const orders = ordersData || [];

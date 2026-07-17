@@ -456,7 +456,7 @@ export default function ToolReport() {
             <span className="text-xs text-muted-foreground">·</span>
             <Link href="/tools/visa-sponsorship-jobs"><span className="text-xs text-blue-600 dark:text-blue-400 underline underline-offset-2">Visa Jobs</span></Link>
             <span className="text-xs text-muted-foreground">·</span>
-            <Link href="/nea-agencies"><span className="text-xs text-blue-600 dark:text-blue-400 underline underline-offset-2 flex items-center gap-1"><ExternalLink className="h-3 w-3" /> Verify Agency</span></Link>
+            <Link href="/nea-agencies"><span className="text-xs text-blue-600 dark:text-blue-400 underline underline-offset-2 flex items-center gap-1"><ExternalLink className="h-3 w-3" /> Check Agency Licence</span></Link>
           </div>
         </div>
       </div>
