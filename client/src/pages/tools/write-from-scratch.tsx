@@ -299,6 +299,100 @@ export default function WriteFromScratchPage() {
     }
   };
 
+  // ── PAYPAL FLOW (any country) ────────────────────────────────────────────
+  // Users outside Kenya (Zim, Tanzania, SA, Egypt, etc.) don't have M-Pesa.
+  // This calls the backend paypal-init endpoint, redirects to PayPal, and
+  // captures on return. Matches the M-Pesa flow's UX.
+  const startPayPalPayment = async () => {
+    const missing = requiredFor(docType).find((k) => !form[k]?.trim());
+    if (missing) {
+      toast({
+        title: "Please fill this in",
+        description: `"${labelFor(missing)}" is required.`,
+        variant: "destructive",
+      });
+      return;
+    }
+    setErrorMsg(null);
+    try {
+      const res = await apiRequest("POST", "/api/write-from-scratch/paypal-init", {
+        docType,
+        input: buildInput(docType, form),
+      });
+      const j = await res.json();
+      if (!res.ok) {
+        toast({
+          title: "Could not start PayPal payment",
+          description: j?.error ?? "Please try again or use M-Pesa.",
+          variant: "destructive",
+        });
+        return;
+      }
+      // Pro user got the doc free — no payment needed
+      if (j.status === "paid" && !j.approvalUrl) {
+        setDraftId(j.draftId);
+        toast({ title: "Included with your Pro plan", description: "Starting generation…" });
+        runGeneration(j.draftId);
+        return;
+      }
+      // Otherwise: redirect to PayPal
+      if (!j.approvalUrl) {
+        toast({
+          title: "PayPal did not return an approval URL",
+          description: "Please try again or use M-Pesa.",
+          variant: "destructive",
+        });
+        return;
+      }
+      // Persist the draftId so the return handler can capture + generate
+      try { sessionStorage.setItem("wfs:paypalDraftId", j.draftId); } catch {}
+      window.location.href = j.approvalUrl;
+    } catch (err: any) {
+      toast({
+        title: "Something went wrong",
+        description: err?.message ?? "Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // On mount: handle return from PayPal — capture + start generation.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("paypalReturn") !== "1") return;
+    const paypalOrderId = params.get("token") || params.get("paymentId");
+    if (!paypalOrderId) return;
+    let draftFromSession: string | null = null;
+    try { draftFromSession = sessionStorage.getItem("wfs:paypalDraftId"); } catch {}
+    if (!draftFromSession) return;
+
+    (async () => {
+      try {
+        const res = await apiRequest("POST", `/api/write-from-scratch/${draftFromSession}/paypal-capture`, {
+          paypalOrderId,
+        });
+        const j = await res.json();
+        if (!res.ok) throw new Error(j?.error || "PayPal capture failed");
+        setDraftId(draftFromSession);
+        toast({
+          title: "PayPal payment received",
+          description: "Starting generation now…",
+        });
+        try { sessionStorage.removeItem("wfs:paypalDraftId"); } catch {}
+        // Clean URL
+        window.history.replaceState({}, "", window.location.pathname);
+        runGeneration(draftFromSession);
+      } catch (err: any) {
+        toast({
+          title: "PayPal capture failed",
+          description: err?.message ?? "Please try again.",
+          variant: "destructive",
+        });
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const runGeneration = async (id: string) => {
     setState("generating");
     try {
@@ -400,6 +494,7 @@ export default function WriteFromScratchPage() {
             registeredPhone={(user as any)?.phone ?? null}
             needsPhone={needsPhone}
             onSubmit={startPaymentOrGeneration}
+            onSubmitPayPal={startPayPalPayment}
             onBack={() => setState("pick")}
           />
         )}
@@ -601,6 +696,7 @@ function FillView({
   registeredPhone,
   needsPhone,
   onSubmit,
+  onSubmitPayPal,
   onBack,
 }: {
   meta: DocTypeMeta;
@@ -611,6 +707,7 @@ function FillView({
   registeredPhone: string | null;
   needsPhone: boolean;
   onSubmit: () => void;
+  onSubmitPayPal: () => void;
   onBack: () => void;
 }) {
   const [submitting, setSubmitting] = useState(false);
@@ -709,28 +806,55 @@ function FillView({
         </CardContent>
       </Card>
 
-      <div className="flex gap-2">
-        <Button variant="outline" onClick={onBack} data-testid="button-back">
-          Back
-        </Button>
+      <div className="space-y-3">
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={onBack} data-testid="button-back">
+            Back
+          </Button>
+          <Button
+            className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+            onClick={async () => {
+              setSubmitting(true);
+              try {
+                await onSubmit();
+              } finally {
+                setSubmitting(false);
+              }
+            }}
+            disabled={submitting}
+            data-testid="button-submit"
+          >
+            {submitting ? (
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            ) : null}
+            🇰🇪 Pay KES {PRICE_KES} via M-Pesa
+          </Button>
+        </div>
+
+        <div className="flex items-center gap-3 pt-1">
+          <div className="flex-1 h-px bg-border" />
+          <span className="text-[11px] text-muted-foreground">or, not in Kenya?</span>
+          <div className="flex-1 h-px bg-border" />
+        </div>
+
         <Button
-          className="flex-1"
+          className="w-full bg-gradient-to-r from-[#0070ba] to-[#003087] hover:from-[#005a99] hover:to-[#00246b] text-white font-bold"
           onClick={async () => {
             setSubmitting(true);
             try {
-              await onSubmit();
+              await onSubmitPayPal();
             } finally {
               setSubmitting(false);
             }
           }}
           disabled={submitting}
-          data-testid="button-submit"
+          data-testid="button-submit-paypal"
         >
-          {submitting ? (
-            <Loader2 className="h-4 w-4 animate-spin mr-2" />
-          ) : null}
-          Pay KES {PRICE_KES} via M-Pesa
+          🌍 Pay with PayPal (any country)
         </Button>
+        <p className="text-[11px] text-center text-muted-foreground -mt-1">
+          Works with any Visa, Mastercard, or PayPal balance — no Safaricom line required.
+        </p>
       </div>
     </div>
   );

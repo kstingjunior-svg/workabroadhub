@@ -256,10 +256,31 @@ export function CvFixLiteInstantPayModal({ open, onOpenChange, cvFile, score }: 
               data-testid="button-send-stk"
             >
               <Zap className="h-4 w-4 mr-2" />
-              Send M-Pesa prompt
+              🇰🇪 Send M-Pesa prompt
             </Button>
+
+            {/* 2026-07: PayPal handoff for non-Kenya users (Zim, Tanzania, SA,
+                Egypt, etc.). Direct M-Pesa dialog stays fast for Kenyans;
+                everyone else routes to the full service-order flow which has
+                PayPal wired in. */}
+            <div className="flex items-center gap-3 pt-1">
+              <div className="flex-1 h-px bg-border" />
+              <span className="text-[11px] text-muted-foreground">or, not in Kenya?</span>
+              <div className="flex-1 h-px bg-border" />
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                onOpenChange(false);
+                navigate("/services/order/cv_fix_lite");
+              }}
+              className="w-full py-2.5 rounded-md bg-gradient-to-r from-[#0070ba] to-[#003087] hover:from-[#005a99] hover:to-[#00246b] text-white font-bold text-sm transition-all"
+              data-testid="button-cv-fix-lite-paypal"
+            >
+              🌍 Pay with PayPal (any country)
+            </button>
             <p className="text-[10px] text-center text-muted-foreground">
-              By tapping above you agree to our terms. No subscription — one-off.
+              M-Pesa: Kenya only. PayPal: works with any Visa/Mastercard/PayPal balance worldwide.
             </p>
           </div>
         )}

@@ -381,6 +381,86 @@ export default function ServiceOrderFlow() {
     }
   }
 
+  // ── PAYPAL FLOW (any country) ────────────────────────────────────────────
+  // For users outside Kenya (Zimbabwe, Tanzania, South Africa, Egypt, etc.)
+  // where M-Pesa isn't available. Creates a PayPal order, redirects the
+  // user to PayPal's approval page, then processes the return via
+  // /api/service-orders/:id/paypal-complete.
+  async function payWithPayPal() {
+    if (!orderId) return;
+    setPayingNow(true);
+    try {
+      const csrf = await fetchCsrfToken();
+      const res = await fetch("/api/paypal/create-order", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
+        body: JSON.stringify({
+          amount:     amount,
+          serviceId:  slug,
+          serviceOrderId: orderId,
+          description: serviceName || meta.name,
+          returnUrl: window.location.origin + window.location.pathname + `?paypalReturn=1&orderId=${orderId}`,
+          cancelUrl: window.location.origin + window.location.pathname,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.message || "Could not start PayPal payment. Please try again or use M-Pesa.");
+      }
+      if (!data?.approvalUrl) {
+        throw new Error("PayPal did not return an approval URL. Please try again.");
+      }
+      // Redirect the whole tab to PayPal — user will complete payment there,
+      // then PayPal redirects them back to the returnUrl above.
+      window.location.href = data.approvalUrl;
+    } catch (err: any) {
+      toast({ title: "PayPal error", description: err.message, variant: "destructive" });
+      setPayingNow(false);
+    }
+  }
+
+  // On mount: if we're returning from PayPal (?paypalReturn=1), capture the payment.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("paypalReturn") !== "1") return;
+    const returnOrderId = params.get("orderId");
+    const paypalOrderId = params.get("token") || params.get("paymentId");
+    if (!returnOrderId || !paypalOrderId) return;
+
+    (async () => {
+      try {
+        const csrf = await fetchCsrfToken();
+        const captureRes = await fetch(`/api/paypal/capture-order`, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
+          body: JSON.stringify({ paypalOrderId }),
+        });
+        const cap = await captureRes.json();
+        if (!captureRes.ok) throw new Error(cap?.message || "PayPal capture failed");
+        // Then confirm at the service-order level
+        await fetch(`/api/service-orders/${returnOrderId}/paypal-complete`, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
+          body: JSON.stringify({ transactionId: cap?.transactionId ?? paypalOrderId }),
+        });
+        toast({
+          title: "PayPal payment received",
+          description: "Your document is being generated now — this page will update in a few seconds.",
+        });
+        setStage("processing");
+        startPolling(returnOrderId);
+        // Clean the URL so a refresh doesn't re-capture
+        window.history.replaceState({}, "", window.location.pathname);
+      } catch (err: any) {
+        toast({ title: "PayPal capture failed", description: err.message, variant: "destructive" });
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <div className="min-h-screen bg-background py-8 px-4">
       <div className="max-w-2xl mx-auto">
@@ -522,6 +602,10 @@ export default function ServiceOrderFlow() {
                 </p>
               </div>
 
+              <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/40 px-3 py-2 text-[11px] text-slate-600 dark:text-slate-400 flex items-center gap-2">
+                <span>🇰🇪 M-Pesa (Safaricom lines only)</span>
+              </div>
+
               <Button
                 onClick={payForService}
                 disabled={payingNow || stkSent || !mpesaPhone}
@@ -539,6 +623,31 @@ export default function ServiceOrderFlow() {
               <p className="text-[11px] text-center text-muted-foreground">
                 You'll receive an STK push on your phone. Enter your M-Pesa PIN to confirm.
                 You stay on this page — the document downloads here once it's ready.
+              </p>
+
+              {/* ─── PayPal (any country) ─────────────────────────────────── */}
+              <div className="flex items-center gap-3 pt-2">
+                <div className="flex-1 h-px bg-border" />
+                <span className="text-xs text-muted-foreground">or, not in Kenya?</span>
+                <div className="flex-1 h-px bg-border" />
+              </div>
+
+              <div className="rounded-xl border border-blue-300 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30 px-3 py-2 text-[11px] text-blue-800 dark:text-blue-200 flex items-center gap-2">
+                <span>🌍 Not in Kenya? Use PayPal — works with any card (Visa, Mastercard, PayPal balance)</span>
+              </div>
+
+              <Button
+                onClick={payWithPayPal}
+                disabled={payingNow}
+                size="lg"
+                className="w-full bg-gradient-to-r from-[#0070ba] to-[#003087] hover:from-[#005a99] hover:to-[#00246b] text-white font-bold"
+                data-testid="button-pay-paypal"
+              >
+                {payingNow ? "Opening PayPal…" : "🌍 Pay with PayPal (any country)"}
+              </Button>
+
+              <p className="text-[11px] text-center text-muted-foreground">
+                You'll be redirected to PayPal to complete payment, then brought back here automatically.
               </p>
             </CardContent>
           )}
