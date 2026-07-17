@@ -19430,7 +19430,8 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
         });
       }
 
-      const serviceId = rawServiceId || "main_subscription";
+      const { serviceOrderId } = req.body || {};
+      let serviceId = rawServiceId || "main_subscription";
 
       // ── Amount + service name resolution ─────────────────────────────────────
       // The backend is always the single source of truth — client-supplied amounts
@@ -19439,7 +19440,34 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
       let resolvedPaypal: ResolvedPrice | null = null;
       let paypalServiceName: string | null = null; // human-readable label for the payment record
 
-      if (serviceId.startsWith("plan_")) {
+      // 2026-07 FIX (Tony's screenshot: "PayPal error — Service not found"):
+      // When the client sends a serviceOrderId (from service-order-flow.tsx,
+      // cv-fix-lite, etc.), resolve amount + service identity from the
+      // service_orders row directly. This makes the endpoint work for any
+      // paid Career Service without needing a matching row in the "services"
+      // table (which used a UUID id that the client didn't have).
+      if (typeof serviceOrderId === "string" && serviceOrderId.length > 0) {
+        const serviceOrder = await storage.getServiceOrderById(serviceOrderId);
+        if (!serviceOrder) {
+          console.error(`[PayPal][Security] serviceOrderId="${serviceOrderId}" not found — rejecting create-order`);
+          return res.status(404).json({ message: "Order not found. Please refresh and try again." });
+        }
+        if (serviceOrder.userId !== userId) {
+          console.error(`[PayPal][Security] serviceOrderId="${serviceOrderId}" belongs to user ${serviceOrder.userId}, not ${userId} — rejecting`);
+          return res.status(403).json({ message: "This order does not belong to you." });
+        }
+        verifiedAmount = serviceOrder.amount;
+        // Keep the original service slug so downstream logic (order lookup, delivery, etc.) works.
+        serviceId = serviceOrder.serviceId;
+        paypalServiceName = serviceOrder.serviceName ?? serviceId;
+
+        // Cross-check the client amount to warn about stale price displays.
+        if (typeof clientAmount === "number" && Math.round(clientAmount) !== verifiedAmount) {
+          console.warn(`[PayPal][Security] Amount mismatch on serviceOrder ${serviceOrderId}: db=${verifiedAmount} client=${clientAmount} — using db value`);
+        }
+
+        // Skip the plan_* and services-table branches below.
+      } else if (serviceId.startsWith("plan_")) {
         // PLAN UPGRADE: resolve via the pricing engine.
         // Passing userId and promoCode enables per-user discounts and active promo codes.
         const planId = serviceId.replace("plan_", "");
