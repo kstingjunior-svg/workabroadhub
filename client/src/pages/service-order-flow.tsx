@@ -245,20 +245,29 @@ export default function ServiceOrderFlow() {
         });
       }
 
-      let res: Response;
-      try {
-        res = await postOnce();
-      } catch (netErr: any) {
-        // TypeError "Failed to fetch" — wait briefly and retry once. This
-        // gives Render's cold-start warmup time and lets mobile reconnect.
-        if (netErr?.name === "TypeError" || /failed to fetch|networkerror/i.test(netErr?.message ?? "")) {
-          console.warn("[service-order] first attempt failed with network error — retrying in 2.5s");
-          await new Promise((r) => setTimeout(r, 2500));
+      // 2026-07: 3 attempts with exponential backoff (1s, 4s, 8s) so cold
+      // starts (Render can take 20-40s) no longer surface as user errors.
+      let res: Response | null = null;
+      const backoffs = [0, 1000, 4000, 8000];
+      let lastNetErr: any = null;
+      for (let attempt = 0; attempt < backoffs.length; attempt++) {
+        if (backoffs[attempt] > 0) {
+          console.warn(`[service-order] attempt ${attempt + 1}: waiting ${backoffs[attempt]}ms before retry (last error: ${lastNetErr?.message ?? "unknown"})`);
+          await new Promise((r) => setTimeout(r, backoffs[attempt]));
+        }
+        try {
           res = await postOnce();
-        } else {
-          throw netErr;
+          break; // success — got a Response (even 4xx/5xx is a Response, not a network error)
+        } catch (netErr: any) {
+          lastNetErr = netErr;
+          const isNet = netErr?.name === "TypeError" || /failed to fetch|networkerror|network request failed/i.test(netErr?.message ?? "");
+          if (!isNet || attempt === backoffs.length - 1) {
+            throw netErr;
+          }
+          // else: fall through and retry
         }
       }
+      if (!res) throw lastNetErr ?? new Error("Failed to reach server after multiple attempts");
       const data = await res.json();
       if (!res.ok) {
         if (res.status === 403 && /verify/i.test(data?.message ?? "")) {
@@ -289,12 +298,12 @@ export default function ServiceOrderFlow() {
         err?.name === "TypeError" ||
         /failed to fetch|networkerror|network request failed/i.test(err?.message ?? "");
       toast({
-        title: isNetwork ? "Couldn't reach our server" : "Order couldn't be created",
+        title: isNetwork ? "Couldn't reach our server after 3 attempts" : "Order couldn't be created",
         description: isNetwork
-          ? "Your internet dropped or our server was warming up. Check your connection and tap Continue again. If it keeps failing, WhatsApp us +254 742 619 777 or email support@workabroadhub.tech."
+          ? "Your connection may be unstable or our server is warming up. Please wait 30 seconds and try again. If it still fails, WhatsApp us on +254 742 619 777 or email support@workabroadhub.tech and we'll fix it immediately."
           : (err?.message || "Something went wrong. Please try again."),
         variant: "destructive",
-        duration: 10_000,
+        duration: 12_000,
       });
     } finally {
       setSubmitting(false);

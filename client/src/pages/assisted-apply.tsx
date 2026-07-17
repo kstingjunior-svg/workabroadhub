@@ -957,7 +957,7 @@ export default function AssistedApply() {
                   )}
                   
                   <Button 
-                    className="w-full" 
+                    className="w-full bg-green-600 hover:bg-green-700" 
                     size="lg"
                     onClick={handlePurchase}
                     disabled={purchaseMutation.isPending || phoneNumber.length < 9}
@@ -966,9 +966,29 @@ export default function AssistedApply() {
                     {purchaseMutation.isPending ? (
                       <><Loader2 className="h-4 w-4 animate-spin mr-2" />Processing…</>
                     ) : (
-                      <>Pay {formatPrice(selectedPack.price)} via M-Pesa <ArrowRight className="h-4 w-4 ml-2" /></>
+                      <>🇰🇪 Pay {formatPrice(selectedPack.price)} via M-Pesa <ArrowRight className="h-4 w-4 ml-2" /></>
                     )}
                   </Button>
+
+                  {/* 2026-07: PayPal handoff for non-Kenya users. Routes to /payment
+                      where the application-pack purchase can be completed via PayPal. */}
+                  <div className="flex items-center gap-3 pt-1">
+                    <div className="flex-1 h-px bg-border" />
+                    <span className="text-[11px] text-muted-foreground">or, not in Kenya?</span>
+                    <div className="flex-1 h-px bg-border" />
+                  </div>
+                  <Button
+                    variant="default"
+                    size="lg"
+                    className="w-full bg-gradient-to-r from-[#0070ba] to-[#003087] hover:from-[#005a99] hover:to-[#00246b] text-white font-bold"
+                    onClick={() => navigate(`/payment?serviceId=assisted_apply_${selectedPack.id}&amount=${selectedPack.price}&name=${encodeURIComponent(selectedPack.name)}&method=paypal`)}
+                    data-testid="button-purchase-paypal"
+                  >
+                    🌍 Pay with PayPal (any country)
+                  </Button>
+                  <p className="text-[11px] text-center text-muted-foreground">
+                    M-Pesa: Kenya only. PayPal: any Visa, Mastercard, or PayPal balance — worldwide.
+                  </p>
                 </div>
               )}
               {paymentStep === "select" && (

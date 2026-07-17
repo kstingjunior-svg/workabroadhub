@@ -917,7 +917,11 @@ export default function ServiceOrderPage() {
 
 
   if (step === "paypal") {
-    const usdAmount = service ? Math.max(1, Math.round(service.price / 130 * 100) / 100).toFixed(2) : "0.00";
+    // 2026-07 FIX: was hardcoded /130 (stale, live rate ~155). Use the live
+    // rate returned by the PayPal config endpoint so display matches what
+    // the server will charge — otherwise the fraud gate rejects the payment.
+    const paypalRate = (paypalConfig as any)?.kesToUsdRate ?? 130;
+    const usdAmount = service ? Math.max(1, Math.round(service.price / paypalRate * 100) / 100).toFixed(2) : "0.00";
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <Card className="max-w-md w-full">

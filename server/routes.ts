@@ -3836,10 +3836,17 @@ Crawl-delay: 1`);
 
       res.json({
         alternative,
-        message: "M-Pesa is our only supported payment method. Please try again.",
+        message: alternative === "paypal"
+          ? "Try PayPal — works with any Visa, Mastercard, or PayPal balance worldwide."
+          : "Try M-Pesa (STK Push) — Safaricom lines only.",
       });
     } catch {
-      res.json({ alternative: "mpesa", message: "Please pay securely via M-Pesa." });
+      // If the recommender module can't be loaded, still offer both options
+      // (never claim we only support one method — we support both).
+      res.json({
+        alternative: "paypal",
+        message: "Try either M-Pesa (Kenya) or PayPal (worldwide) — both are supported.",
+      });
     }
   });
 
@@ -19386,10 +19393,15 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
     if (!isPayPalConfigured()) {
       return res.json({ enabled: false, clientId: null, mode: null });
     }
+    // 2026-07: expose the KES→USD rate the server actually uses, so the
+    // client can display the exact USD amount PayPal will charge. Otherwise
+    // the client and server disagree and the fraud gate rejects the payment.
+    const kesToUsdRate = Number(process.env.PAYPAL_KES_RATE) || 130;
     res.json({
       enabled: true,
       clientId: paypalClientId(),
       mode: paypalMode(),
+      kesToUsdRate,
     });
   });
 
