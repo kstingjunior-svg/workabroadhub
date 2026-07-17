@@ -245,14 +245,26 @@ export default function ServiceOrderFlow() {
         });
       }
 
-      // 2026-07: 3 attempts with exponential backoff (1s, 4s, 8s) so cold
-      // starts (Render can take 20-40s) no longer surface as user errors.
+      // 2026-07: 6 attempts with exponential backoff (0/1/4/8/15/25s
+      // = 53s total window). Silently retries so Render cold starts
+      // (20-40s) never surface as user-facing errors. A subtle
+      // "warming up" toast appears from attempt 2+ so the user knows
+      // we haven't hung — but it's never framed as a failure.
       let res: Response | null = null;
-      const backoffs = [0, 1000, 4000, 8000];
+      const backoffs = [0, 1000, 4000, 8000, 15000, 25000];
       let lastNetErr: any = null;
+      let warmingToastShown = false;
       for (let attempt = 0; attempt < backoffs.length; attempt++) {
         if (backoffs[attempt] > 0) {
           console.warn(`[service-order] attempt ${attempt + 1}: waiting ${backoffs[attempt]}ms before retry (last error: ${lastNetErr?.message ?? "unknown"})`);
+          if (!warmingToastShown && attempt >= 1) {
+            toast({
+              title: "Warming up…",
+              description: "Our server is just waking up — this can take up to a minute. We are retrying automatically, please don't refresh.",
+              duration: 45000,
+            });
+            warmingToastShown = true;
+          }
           await new Promise((r) => setTimeout(r, backoffs[attempt]));
         }
         try {
@@ -297,13 +309,19 @@ export default function ServiceOrderFlow() {
       const isNetwork =
         err?.name === "TypeError" ||
         /failed to fetch|networkerror|network request failed/i.test(err?.message ?? "");
+      // 2026-07: reframed error UX. If the network truly could not be
+      // reached after 6 attempts (53s), we show a soft "connection issue"
+      // banner (not destructive red) with a Retry button implied via
+      // the button they can tap again. The scary "Couldn't reach our
+      // server" title is gone — Tony's screenshot showed users freaking
+      // out because it looked like the app was broken.
       toast({
-        title: isNetwork ? "Couldn't reach our server after 3 attempts" : "Order couldn't be created",
+        title: isNetwork ? "Connection issue — please try again" : "Order couldn't be created",
         description: isNetwork
-          ? "Your connection may be unstable or our server is warming up. Please wait 30 seconds and try again. If it still fails, WhatsApp us on +254 742 619 777 or email support@workabroadhub.tech and we'll fix it immediately."
+          ? "Something interrupted the request. Tap Continue to Payment again — it usually works on the second try. If it keeps happening, WhatsApp +254 742 619 777."
           : (err?.message || "Something went wrong. Please try again."),
-        variant: "destructive",
-        duration: 12_000,
+        variant: isNetwork ? "default" : "destructive",
+        duration: 10_000,
       });
     } finally {
       setSubmitting(false);
@@ -428,6 +446,22 @@ export default function ServiceOrderFlow() {
       setPayingNow(false);
     }
   }
+
+  // 2026-07: silent pre-warm on mount. GET /api/health/live wakes the
+  // Render container so by the time the user submits the CV, the server
+  // is already warm. Fire-and-forget — errors are ignored.
+  useEffect(() => {
+    (async () => {
+      try {
+        // 15s timeout so we don't hang if the container is really cold.
+        const ctl = new AbortController();
+        const to  = setTimeout(() => ctl.abort(), 15_000);
+        await fetch("/api/health/live", { signal: ctl.signal }).catch(() => {});
+        clearTimeout(to);
+      } catch {}
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // On mount: if we're returning from PayPal (?paypalReturn=1), capture the payment.
   useEffect(() => {
