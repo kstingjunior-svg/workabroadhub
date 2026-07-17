@@ -648,7 +648,7 @@ function registerAuthRoutes(app) {
                 console.warn("[Auth][reset-password] Could not clear lockout:", clearErr?.message);
             }
             console.log(`[Auth][reset-password] Password updated for userId=${row.user_id}`);
-            res.json({ ok: true, message: "Password updated. You're signed in. Use the new password to log in." });
+            res.json({ ok: true, message: "Password updated. Please log in with your new password." });
         }
         catch (err) {
             console.error("[Auth][reset-password] error:", err?.message);

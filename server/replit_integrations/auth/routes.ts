@@ -711,7 +711,7 @@ export function registerAuthRoutes(app: Express) {
       }
 
       console.log(`[Auth][reset-password] Password updated for userId=${row.user_id}`);
-      res.json({ ok: true, message: "Password updated. You're signed in. Use the new password to log in." });
+      res.json({ ok: true, message: "Password updated. Please log in with your new password." });
     } catch (err: any) {
       console.error("[Auth][reset-password] error:", err?.message);
       res.status(500).json({ message: "Failed to reset password. Please try again." });

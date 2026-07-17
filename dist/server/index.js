@@ -406,8 +406,17 @@ app.use("/api/login", authLimiter);
 app.use("/api/auth/login", authLimiter);
 app.use("/api/auth/register", authLimiter);
 app.use("/api/auth/signup", authLimiter);
-app.use("/api/forgot-password", authLimiter);
-app.use("/api/reset-password", authLimiter);
+// 2026-07 FIX: was "/api/forgot-password" and "/api/reset-password" —
+// wrong prefix. The actual endpoints live under /api/auth/*. Result was
+// that both endpoints only fell under the general apiLimiter (2000/15min)
+// which lets attackers spam thousands of reset emails per session. Now
+// correctly limited. Also added dedicated limits for the SMS/email
+// code-send endpoints so a burst of send-*-code requests can't blow up
+// the Twilio bill.
+app.use("/api/auth/forgot-password", authLimiter);
+app.use("/api/auth/reset-password", authLimiter);
+app.use("/api/auth/send-email-code", authLimiter);
+app.use("/api/auth/send-phone-code", authLimiter);
 app.use("/api/mpesa/callback", mpesaCallbackLimiter);
 app.use("/api/payments/mpesa/callback", mpesaCallbackLimiter);
 // Payment-initiate endpoints — block STK-push harassment / brute force
