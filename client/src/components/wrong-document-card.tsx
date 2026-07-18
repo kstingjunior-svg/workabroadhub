@@ -38,11 +38,16 @@ export interface WrongDocumentPayload {
 interface Props {
   payload: WrongDocumentPayload;
   onTryAnother?: () => void;
+  /** 2026-07: user overrides the wrong-doc gate and forces a full analysis.
+   *  Wired up on the caller side so the caller can re-submit with
+   *  { forceAnalyze: true }. */
+  onAnalyzeAnyway?: () => void;
 }
 
-export function WrongDocumentCard({ payload, onTryAnother }: Props) {
+export function WrongDocumentCard({ payload, onTryAnother, onAnalyzeAnyway }: Props) {
   const isUnknown = payload.detected === "unknown";
   const showRedirect = !isUnknown && payload.suggestedTool.path !== "";
+  const showOverride = isUnknown && !!onAnalyzeAnyway;
 
   return (
     <Card className="border-2 border-amber-200 dark:border-amber-800">
@@ -102,6 +107,18 @@ export function WrongDocumentCard({ payload, onTryAnother }: Props) {
           </details>
         )}
 
+        {/* 2026-07: escape hatch for false-negatives. If the classifier
+            couldn't identify the doc but the user knows it IS the right
+            type, they can force-continue and we'll run the full analysis. */}
+        {showOverride && (
+          <Button
+            onClick={onAnalyzeAnyway}
+            className="w-full bg-amber-600 hover:bg-amber-700 text-white"
+            data-testid="button-analyze-anyway"
+          >
+            Analyze anyway — it IS a {humanType(payload.expected)}
+          </Button>
+        )}
         {onTryAnother && (
           <Button variant="outline" onClick={onTryAnother} className="w-full">
             Upload a different document

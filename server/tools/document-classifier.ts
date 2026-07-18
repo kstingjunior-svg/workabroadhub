@@ -157,8 +157,13 @@ const VISA_SIGNALS: Signal[] = [
 // classifyDocument — the main entry point
 // ─────────────────────────────────────────────────────────────────────────────
 
-const CONFIDENCE_FLOOR   = 25;   // Minimum score for a category to be considered
-const LEADER_MARGIN      = 15;   // Winner must beat runner-up by this margin
+// 2026-07 SOFTER (Tony's report: real offer letters at 30% confidence
+// getting rejected). LEADER_MARGIN was 15 which meant an offer letter
+// scoring 27 vs a job_advert runner-up at 22 got classified as "unknown"
+// (margin=5). Loosened to 5 so borderline docs make it through. Also
+// dropped floor from 25 to 15 for the same reason.
+const CONFIDENCE_FLOOR   = 15;   // Minimum score for a category to be considered
+const LEADER_MARGIN      = 5;    // Winner must beat runner-up by this margin
 const VISION_TRUST_FLOOR = 70;   // Vision override kicks in above this confidence
 
 export function classifyDocument(opts: ClassifyOpts): DocumentClassification {

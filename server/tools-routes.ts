@@ -377,7 +377,11 @@ export function registerToolsRoutes(
         if (cvText.trim().length >= 200) {
           const classification = classifyDocument({ text: cvText });
           const wrongDoc = checkDocumentType(classification, "cv");
-          if (wrongDoc) {
+          // 2026-07: forceAnalyze bypass — user can proceed past wrong-doc
+          // detection if they're confident this IS the right document type.
+          const forceAnalyzeRaw = (req.body as any)?.forceAnalyze ?? (req.query as any)?.forceAnalyze;
+          const forceAnalyze = forceAnalyzeRaw === true || forceAnalyzeRaw === "true" || forceAnalyzeRaw === "1";
+          if (wrongDoc && !forceAnalyze) {
             console.log(`[ATS Check] Rejected: detected=${classification.type} conf=${classification.confidence} for "${req.file.originalname}"`);
             return res.status(422).json(wrongDoc);
           }
@@ -709,7 +713,10 @@ Return ONLY the JSON object, no markdown, no extra text.`;
         if (extractedText.trim().length >= 150) {
           const classification = classifyDocument({ text: extractedText });
           const wrongDoc = checkDocumentType(classification, "job_advert");
-          if (wrongDoc) {
+          // 2026-07: forceAnalyze bypass
+          const forceAnalyzeJARaw = (req.body as any)?.forceAnalyze ?? (req.query as any)?.forceAnalyze;
+          const forceAnalyzeJA = forceAnalyzeJARaw === true || forceAnalyzeJARaw === "true" || forceAnalyzeJARaw === "1";
+          if (wrongDoc && !forceAnalyzeJA) {
             console.log(`[ScamFileCheck] Rejected: detected=${classification.type} conf=${classification.confidence}`);
             return res.status(422).json(wrongDoc);
           }
