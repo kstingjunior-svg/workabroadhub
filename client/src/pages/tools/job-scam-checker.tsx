@@ -153,9 +153,12 @@ export default function JobScamChecker() {
   });
 
   const { mutate: checkScamFile, isPending: isFilePending } = useMutation({
-    mutationFn: async (file: File) => {
+    mutationFn: async (arg: File | { file: File; forceAnalyze?: boolean }) => {
+      const file = arg instanceof File ? arg : arg.file;
+      const forceAnalyze = arg instanceof File ? false : !!arg.forceAnalyze;
       const formData = new FormData();
       formData.append("file", file);
+      if (forceAnalyze) formData.append("forceAnalyze", "true");
       const csrfToken = await fetchCsrfToken();
       const res = await fetch("/api/tools/scam-check-file", {
         method: "POST",
@@ -408,6 +411,7 @@ export default function JobScamChecker() {
             <WrongDocumentCard
               payload={wrongDoc}
               onTryAnother={() => { setWrongDoc(null); setUploadedFile(null); }}
+              onAnalyzeAnyway={uploadedFile ? () => checkScamFile({ file: uploadedFile, forceAnalyze: true }) : undefined}
             />
           </div>
         )}

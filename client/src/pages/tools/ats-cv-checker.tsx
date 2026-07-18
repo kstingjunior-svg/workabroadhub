@@ -139,9 +139,12 @@ export default function ATSCVChecker() {
   });
 
   const { mutate: checkCV, isPending } = useMutation({
-    mutationFn: async (file: File) => {
+    mutationFn: async (arg: File | { file: File; forceAnalyze?: boolean }) => {
+      const file = arg instanceof File ? arg : arg.file;
+      const forceAnalyze = arg instanceof File ? false : !!arg.forceAnalyze;
       const form = new FormData();
       form.append("cv", file);
+      if (forceAnalyze) form.append("forceAnalyze", "true");
       const csrfToken = await fetchCsrfToken();
       const res = await fetch("/api/tools/ats-check", {
         method: "POST",
@@ -339,6 +342,7 @@ export default function ATSCVChecker() {
             <WrongDocumentCard
               payload={wrongDoc}
               onTryAnother={() => { setWrongDoc(null); setFile(null); }}
+              onAnalyzeAnyway={file ? () => mutation.mutate({ file, forceAnalyze: true }) : undefined}
             />
           </div>
         )}

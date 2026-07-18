@@ -161,9 +161,12 @@ export default function VisaCheckPage() {
 
   // ── Upload mutation ───────────────────────────────────────────────────
   const mutation = useMutation({
-    mutationFn: async (f: File) => {
+    mutationFn: async (arg: File | { file: File; forceAnalyze?: boolean }) => {
+      const f = arg instanceof File ? arg : arg.file;
       const form = new FormData();
       form.append("file", f);
+      const forceAnalyze = arg instanceof File ? false : !!arg.forceAnalyze;
+      if (forceAnalyze) form.append("forceAnalyze", "true");
       const csrfToken = await fetchCsrfToken();
       const res = await fetch("/api/tools/visa-check", {
         method:      "POST",
@@ -294,7 +297,7 @@ export default function VisaCheckPage() {
         {/* Wrong-document redirect card */}
         {wrongDoc && (
           <div className="space-y-4">
-            <WrongDocumentCard payload={wrongDoc} onTryAnother={reset} />
+            <WrongDocumentCard payload={wrongDoc} onTryAnother={reset} onAnalyzeAnyway={file ? () => mutation.mutate({ file, forceAnalyze: true }) : undefined} />
           </div>
         )}
 

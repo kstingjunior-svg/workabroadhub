@@ -170,9 +170,12 @@ export default function OfferCheckPage() {
   trackPageView?.("offer-check");
 
   const mutation = useMutation({
-    mutationFn: async (f: File) => {
+    mutationFn: async (arg: File | { file: File; forceAnalyze?: boolean }) => {
+      const f = arg instanceof File ? arg : arg.file;
+      const forceAnalyze = arg instanceof File ? false : !!arg.forceAnalyze;
       const form = new FormData();
       form.append("file", f);
+      if (forceAnalyze) form.append("forceAnalyze", "true");
       const csrfToken = await fetchCsrfToken();
       const res = await fetch("/api/tools/offer-check", {
         method:      "POST",
@@ -300,7 +303,7 @@ export default function OfferCheckPage() {
 
         {wrongDoc && (
           <div className="space-y-4">
-            <WrongDocumentCard payload={wrongDoc} onTryAnother={reset} />
+            <WrongDocumentCard payload={wrongDoc} onTryAnother={reset} onAnalyzeAnyway={file ? () => mutation.mutate({ file, forceAnalyze: true }) : undefined} />
           </div>
         )}
 
