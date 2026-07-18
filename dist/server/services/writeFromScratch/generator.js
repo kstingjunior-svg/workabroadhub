@@ -18,6 +18,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.WriteFromScratchGenerationError = void 0;
 exports.generateDocument = generateDocument;
 const openai_1 = require("../../lib/openai");
+const human_voice_1 = require("../../ai/human-voice");
 const prompts_1 = require("./prompts");
 class WriteFromScratchGenerationError extends Error {
     constructor(message, code) {
@@ -31,7 +32,11 @@ async function generateDocument(request) {
     const prompt = buildPromptFor(request);
     let body;
     try {
-        body = (await (0, openai_1.askGPT)(prompt)).trim();
+        // 2026-07: stripAiTells scrubs em-dashes, "delve into", "leverage",
+        // "Furthermore", and the marketing filler GPT still slips in even
+        // when told not to. Post-processor is deliberately lightweight so
+        // it can't damage user-supplied specifics.
+        body = (0, human_voice_1.stripAiTells)((await (0, openai_1.askGPT)(prompt)).trim());
     }
     catch (err) {
         // OpenAI errors have distinctive shapes; boil them down to friendly codes.
