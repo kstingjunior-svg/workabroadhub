@@ -11,6 +11,7 @@
  */
 
 import { openai } from "../lib/openai";
+import { HUMAN_VOICE_RULES, roleVerticalContext, stripAiTells } from "../ai/human-voice";
 import type { User } from "@shared/models/auth";
 
 export interface CareerProfile {
@@ -81,35 +82,40 @@ export async function generateCV(
     "",
     profile,
     "",
+    roleVerticalContext(jobTitle),
+    "",
     "Instructions:",
     `1. Target hiring standards for: ${targetMarkets}.`,
-    "2. Sections required: Professional Summary · Key Skills · Work Experience · Education · Certifications (if any) · Languages (if any).",
-    "3. Write 2–3 specific, action-oriented bullet points per experience block even if experience is inferred from the job title and years stated.",
-    "4. Do NOT use generic filler like 'hardworking', 'team player', or 'results-driven' — be specific.",
-    "5. Include ATS keywords relevant to the target markets and role.",
-    "6. Keep the total under 650 words — concise, scannable, no fluff.",
-    "7. Do NOT include any placeholder text in square brackets.",
-    "8. Output plain text only — no markdown headers, no asterisks.",
+    "2. Sections required: Professional Summary, Key Skills, Work Experience, Education, Certifications (if any), Languages (if any).",
+    "3. Every experience bullet uses the achievement shape: {verb} + {number or specific} + {what} + {timeframe or scale}. NO responsibility-list bullets.",
+    "4. Professional Summary must open with a concrete, honest fact that a hiring manager will remember. Not 'Dedicated professional with X years of experience'.",
+    "5. Include ATS keywords relevant to the target markets and role, but weave them into real sentences, not a keyword-stuffed list.",
+    "6. Keep the total under 650 words. Concise, scannable, no fluff.",
+    "7. Do NOT include any placeholder text in square brackets in the final CV.",
+    "8. Output plain text only. No markdown headers, no asterisks.",
   ].join("\n");
 
   const response = await openai.chat.completions.create({
     model:       "gpt-4o",
-    temperature: 0.35,
+    temperature: 0.55,
     max_tokens:  1200,
     messages: [
       {
         role: "system",
         content:
-          "You are a professional CV writer specialising in ATS-optimised CVs for East African " +
-          "professionals targeting overseas employment in the UK, Canada, UAE, Qatar, and Saudi Arabia. " +
-          "Write real, specific content. If a field is missing, infer credible achievements from the " +
-          "job title and years of experience provided. Never use placeholder text.",
+          "You are a hiring-manager-turned-CV-writer who has read 10,000 CVs from East African " +
+          "professionals applying overseas. You know the difference between a CV that gets a call " +
+          "and a CV that gets ignored: warmth, specificity, and one memorable line the reader will " +
+          "quote back in the interview. You write real, specific content. If a field is missing, " +
+          "infer credible achievements from the job title and years of experience, but keep them " +
+          "plausible for a real Kenyan candidate. Never use placeholder text. Never use em-dashes.\n\n" +
+          HUMAN_VOICE_RULES,
       },
       { role: "user", content: userPrompt },
     ],
   });
 
-  const cv = response.choices[0].message.content ?? "";
+  const cv = stripAiTells(response.choices[0].message.content ?? "");
   console.log(`[aiCv] Generated ${cv.length} chars for "${fullName}" → ${jobTitle} | target=${targetMarkets}`);
   return cv;
 }

@@ -19,6 +19,7 @@ import { userCareerProfiles } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { sendPushNotification } from "./push-notifications";
 import { trackTokenUsage } from "../lib/aiStats";
+import { HUMAN_VOICE_RULES, roleVerticalContext, stripAiTells } from "../ai/human-voice";
 import type { User } from "@shared/models/auth";
 
 export interface JobAnalysis {
@@ -64,26 +65,32 @@ export async function generateJobTailoredCV(
     job.description ? `Job Description:\n${job.description.slice(0, 800)}` : "",
     storedCv ? `\nCandidate's actual CV text (use this as the primary source of truth for their background):\n${storedCv.slice(0, 3_000)}` : "",
     "",
+    roleVerticalContext(job.title || jobTitle),
+    "",
     "Instructions:",
-    "1. Tailor the Professional Summary directly to this specific job and company.",
-    "2. Highlight skills from the candidate's profile that match the job description keywords.",
-    "3. Sections: Professional Summary · Key Skills · Work Experience · Education · Certifications · Languages.",
+    `1. Tailor the Professional Summary directly to ${job.company} and this ${job.title} role. Open with a concrete, warm hook. NOT "Dedicated professional with X years".`,
+    "2. Highlight skills from the candidate's profile that match the job description keywords. Use the actual language the job posting uses.",
+    "3. Sections: Professional Summary, Key Skills, Work Experience, Education, Certifications, Languages.",
+    "4. Every experience bullet uses the achievement shape: {verb} + {number} + {what} + {timeframe}. No responsibility-list bullets.",
     isPremium
-      ? "4. Premium format: include quantified achievements, leadership examples, and a strong personal brand statement."
-      : "4. Standard format: concise, ATS-friendly, plain text.",
-    "5. Under 650 words. No placeholders. No markdown. No asterisks.",
+      ? "5. Premium: include quantified achievements, one memorable line the interviewer will quote back, and a personal brand statement anchored in a real fact from the candidate's life."
+      : "5. Standard: concise, ATS-friendly, plain text, still human.",
+    "6. Under 650 words. No placeholders. No markdown. No asterisks. No em-dashes.",
   ].join("\n");
 
   const response = await openai.chat.completions.create({
     model: "gpt-4o",
-    temperature: 0.3,
+    temperature: 0.5,
     max_tokens: 1200,
     messages: [
       {
         role: "system",
         content:
-          "You are an expert CV writer for East African professionals targeting overseas employment. " +
-          "Write specific, tailored, ATS-optimised content. Never use placeholder text.",
+          "You are a hiring-manager-turned-CV-writer specialising in East African professionals " +
+          "applying overseas. You write CVs that sound like the person actually did the work, not " +
+          "like ChatGPT wrote a template. Tailor every sentence to the specific job and company. " +
+          "Never use placeholder text. Never use em-dashes.\n\n" +
+          HUMAN_VOICE_RULES,
       },
       { role: "user", content: prompt },
     ],
@@ -94,7 +101,7 @@ export async function generateJobTailoredCV(
     trackTokenUsage(response.usage.prompt_tokens, response.usage.completion_tokens).catch(() => {});
   }
 
-  return response.choices[0].message.content ?? "";
+  return stripAiTells(response.choices[0].message.content ?? "");
 }
 
 export async function generateCoverLetter(
@@ -110,31 +117,36 @@ export async function generateCoverLetter(
   const storedCv  = (careerProfile as any)?.parsedCvText as string | null | undefined;
 
   const prompt = [
-    `Write a compelling cover letter for ${fullName} applying for: ${job.title} at ${job.company} (${job.country}).`,
+    `Write a warm, specific cover letter for ${fullName} applying for: ${job.title} at ${job.company} (${job.country}).`,
     "",
     `Candidate background: ${summary}`,
     job.description ? `Key job requirements: ${job.description.slice(0, 500)}` : "",
-    storedCv ? `\nCandidate's actual CV (use for specific details — achievements, employer names, dates):\n${storedCv.slice(0, 2_000)}` : "",
+    storedCv ? `\nCandidate's actual CV (use for specific details, achievements, employer names, dates):\n${storedCv.slice(0, 2_000)}` : "",
+    "",
+    roleVerticalContext(job.title || jobTitle),
     "",
     "Requirements:",
-    "- 3–4 paragraphs, professional tone, enthusiastic but not generic.",
-    "- Opening: express specific interest in this company and role.",
-    "- Body: connect the candidate's experience directly to the job requirements.",
-    "- Closing: clear call to action (request interview).",
-    "- Sign off with the candidate's full name.",
-    "- Plain text only. Under 350 words.",
+    "- 4 short paragraphs. Warm, human, specific to this job at this company.",
+    "- Para 1: open with a concrete, personal hook from the candidate's life that maps to this role. NOT 'I am writing to express my interest'.",
+    "- Para 2: connect the candidate's real experience (from their CV) directly to what the job needs. Use numbers.",
+    "- Para 3: one honest sentence about why THIS company, not any company.",
+    "- Para 4: polite call to action, one sentence, then sign off with the candidate's full name.",
+    "- Plain text only. Under 350 words. No em-dashes.",
   ].join("\n");
 
   const response = await openai.chat.completions.create({
     model: "gpt-4o",
-    temperature: 0.4,
+    temperature: 0.6,
     max_tokens: 700,
     messages: [
       {
         role: "system",
         content:
-          "You are a professional cover letter writer. Write personalized, specific, persuasive letters. " +
-          "Never use generic filler. Always connect the candidate directly to the company.",
+          "You write cover letters that hiring managers actually finish reading. Warm, specific, " +
+          "the opposite of a template. You always open with something the reader will remember, and " +
+          "you connect the candidate to the specific company, not the industry in general. Never " +
+          "use em-dashes. Never open with 'I am writing to express my interest'.\n\n" +
+          HUMAN_VOICE_RULES,
       },
       { role: "user", content: prompt },
     ],
@@ -145,7 +157,7 @@ export async function generateCoverLetter(
     trackTokenUsage(response.usage.prompt_tokens, response.usage.completion_tokens).catch(() => {});
   }
 
-  return response.choices[0].message.content ?? "";
+  return stripAiTells(response.choices[0].message.content ?? "");
 }
 
 /**

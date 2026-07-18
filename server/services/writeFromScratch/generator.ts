@@ -15,6 +15,7 @@
  */
 
 import { askGPT } from "../../lib/openai";
+import { stripAiTells } from "../../ai/human-voice";
 import {
   buildCvPrompt,
   buildCoverLetterPrompt,
@@ -58,7 +59,11 @@ export async function generateDocument(
 
   let body: string;
   try {
-    body = (await askGPT(prompt)).trim();
+    // 2026-07: stripAiTells scrubs em-dashes, "delve into", "leverage",
+    // "Furthermore", and the marketing filler GPT still slips in even
+    // when told not to. Post-processor is deliberately lightweight so
+    // it can't damage user-supplied specifics.
+    body = stripAiTells((await askGPT(prompt)).trim());
   } catch (err: any) {
     // OpenAI errors have distinctive shapes; boil them down to friendly codes.
     const msg = String(err?.message ?? err ?? "");

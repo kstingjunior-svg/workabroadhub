@@ -7,6 +7,7 @@
 
 import OpenAI from "openai";
 import { generateWithRetry } from "../utils/retry";
+import { HUMAN_VOICE_RULES, roleVerticalContext, stripAiTells } from "../ai/human-voice";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -30,9 +31,12 @@ export async function generateJobApplication(
         {
           role: "system",
           content:
-            "You are an expert job application writer helping a Kenyan professional apply for overseas employment. " +
-            "Generate a professional cover letter and 3 tailored interview answers specific to the role. " +
-            "The applicant is targeting overseas employment with visa sponsorship.",
+            "You write cover letters and interview answers that sound like the candidate actually " +
+            "wrote them, warm and specific, not templated. The applicant is a Kenyan professional " +
+            "targeting overseas employment with visa sponsorship. Every sentence should be tailored " +
+            "to THIS job at THIS company, not generic. Never open with 'I am writing to express my " +
+            "interest'. Never use em-dashes. Return valid JSON only.\n\n" +
+            HUMAN_VOICE_RULES,
         },
         {
           role: "user",
@@ -41,21 +45,30 @@ export async function generateJobApplication(
             `Description: ${jobDescription.slice(0, 800)}\n` +
             `${additionalRequirements ? `Additional Requirements: ${additionalRequirements.slice(0, 300)}\n` : ""}` +
             `CV: ${userCV.slice(0, 3000)}\n\n` +
-            `Return JSON: { "coverLetter": "3-paragraph letter", "tailoredAnswers": [{"question":"...","answer":"..."}], "cvSuggestions": ["..."] }`,
+            `${roleVerticalContext(jobTitle)}\n\n` +
+            `Return JSON with exactly these fields:\n` +
+            `{\n` +
+            `  "coverLetter": "4 short paragraphs. Para 1: warm hook from the candidate's real life that maps to this job. Para 2: two concrete matches to the job needs, with numbers. Para 3: one honest sentence about why THIS company. Para 4: interview request + sign-off.",\n` +
+            `  "tailoredAnswers": [ 3 objects with 'question' and 'answer', each answer must reference a specific detail from the candidate's CV, not a generic response ],\n` +
+            `  "cvSuggestions": [ 3 specific ways this candidate's CV could be strengthened for this role ]\n` +
+            `}`,
         },
       ],
       response_format: { type: "json_object" },
       max_tokens: 1200,
-      temperature: 0.7,
+      temperature: 0.65,
     });
 
     const raw = response.choices[0]?.message?.content ?? "{}";
     const parsed = JSON.parse(raw);
 
     return {
-      coverLetter:     parsed.coverLetter     ?? "Cover letter generation failed. Please try again.",
-      tailoredAnswers: parsed.tailoredAnswers ?? [],
-      cvSuggestions:   parsed.cvSuggestions   ?? ["Add more quantifiable achievements"],
+      coverLetter:     stripAiTells(parsed.coverLetter ?? "Cover letter generation failed. Please try again."),
+      tailoredAnswers: (parsed.tailoredAnswers ?? []).map((a: any) => ({
+        question: a?.question ?? "",
+        answer:   stripAiTells(a?.answer ?? ""),
+      })),
+      cvSuggestions:   (parsed.cvSuggestions ?? ["Add more quantifiable achievements"]).map((s: string) => stripAiTells(s)),
     };
   });
 }
