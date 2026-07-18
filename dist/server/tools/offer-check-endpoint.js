@@ -259,7 +259,14 @@ function registerOfferCheckRoute(app) {
                     : null,
             });
             const wrongDoc = (0, document_classifier_1.checkDocumentType)(classification, "offer_letter");
-            if (wrongDoc) {
+            // 2026-07: user can force-continue past the wrong-doc gate. Real
+            // offer letters (esp. short, non-English, or informal) sometimes
+            // score below the classifier's confidence floor. The user sees the
+            // warning card first; if they tap "Analyze anyway", the client
+            // re-submits with forceAnalyze=true and we run the full screen.
+            const forceAnalyzeRaw = req.body?.forceAnalyze ?? req.query?.forceAnalyze;
+            const forceAnalyze = forceAnalyzeRaw === true || forceAnalyzeRaw === "true" || forceAnalyzeRaw === "1";
+            if (wrongDoc && !forceAnalyze) {
                 console.log(`[OfferCheck] Rejected: detected=${classification.type} conf=${classification.confidence} ` +
                     `for upload="${req.file.originalname}"`);
                 return res.status(422).json(wrongDoc);
