@@ -3739,6 +3739,32 @@ Crawl-delay: 1`);
                 ip: clientIp,
                 metadata: { phone: normalizedPhone, amount: mpesaAmount, serviceId, planId: subscriptionPlanId, derivedSlug: derivedPlanId },
             }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+            // 2026-07 SAFETY NET: this endpoint only CREATES the row. The caller
+            // must follow up with /api/mpesa/stk within a few seconds or the
+            // user's phone never rings. We saw silent regressions on CV Fix Lite
+            // and the /payment page — no error surfaced anywhere. Log a loud
+            // warning if the follow-up call never arrives so Render logs surface
+            // any future code path that forgets the second step.
+            if (method === "mpesa") {
+                const pendingId = String(pendingPayment.id);
+                setTimeout(async () => {
+                    try {
+                        const row = await storage_1.storage.getPaymentById(pendingId);
+                        if (!row)
+                            return;
+                        const status = String(row.status ?? "");
+                        const checkoutSet = !!row.checkoutRequestId &&
+                            String(row.checkoutRequestId) !== pendingId;
+                        // If still "pending" and Safaricom CheckoutRequestID never
+                        // stamped on, the caller skipped /api/mpesa/stk — silent failure.
+                        if (status === "pending" && !checkoutSet) {
+                            console.error(`[PAYMENT-SILENT-BUG] payment ${pendingId} still 'pending' 8s after /api/payments/initiate — caller forgot to POST /api/mpesa/stk. ` +
+                                `serviceId=${serviceId} userId=${userId} ip=${clientIp}. User's phone never received the STK prompt. Fix the client code that hit /api/payments/initiate for this serviceId.`);
+                        }
+                    }
+                    catch { /* best-effort log */ }
+                }, 8000).unref?.();
+            }
             return res.json({
                 success: true,
                 paymentId: pendingPayment.id,
