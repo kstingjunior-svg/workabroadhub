@@ -158,8 +158,10 @@ export function DashboardServicesGrid() {
           // /tools/write-from-scratch (docs/write-from-scratch.md) so it bypasses
           // the standard services/order pipeline.
           const target =
-            s.slug === "cv_check"           ? "/tools/ats-cv-checker" :
-            s.slug === "write_from_scratch" ? "/tools/write-from-scratch" :
+            s.slug === "cv_check"              ? "/tools/ats-cv-checker" :
+            s.slug === "write_from_scratch"    ? "/tools/write-from-scratch" :
+            // 2026-07: LinkedIn Optimization is now a live Pro-tier AI workspace.
+            s.slug === "linkedin_optimization" ? "/tools/linkedin-optimize" :
             `/services/order/${s.slug}`;
           return (
             <Link

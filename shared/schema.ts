@@ -2447,3 +2447,29 @@ export const insertScoutJobSchema = createInsertSchema(scoutJobs).omit({
 });
 export type InsertScoutJob = z.infer<typeof insertScoutJobSchema>;
 export type ScoutJob = typeof scoutJobs.$inferSelect;
+
+// ============================================
+// LINKEDIN OPTIMIZATIONS — 2026-07 (Pro tool)
+// ============================================
+//
+// Live AI workspace that rewrites the user's LinkedIn profile section by
+// section. State is stored so users can resume, refine via chat, or
+// restore earlier versions. See server/routes/linkedin-optimize.ts.
+export const linkedinOptimizations = pgTable("linkedin_optimizations", {
+  id:             varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId:         varchar("user_id").notNull(),
+  inputJson:      jsonb("input_json").notNull().default(sql`'{}'::jsonb`),
+  targetRole:     varchar("target_role", { length: 200 }),
+  targetCountry:  varchar("target_country", { length: 100 }),
+  scoresJson:     jsonb("scores_json").default(sql`'{}'::jsonb`),
+  outputJson:     jsonb("output_json").default(sql`'{}'::jsonb`),
+  versionsJson:   jsonb("versions_json").default(sql`'[]'::jsonb`),
+  status:         varchar("status", { length: 30 }).notNull().default("draft"),
+  lastError:      text("last_error"),
+  createdAt:      timestamp("created_at").defaultNow(),
+  updatedAt:      timestamp("updated_at").defaultNow(),
+}, (t) => ({
+  byUser:   index("linkedin_optimizations_user_idx").on(t.userId),
+  byStatus: index("linkedin_optimizations_status_idx").on(t.status),
+}));
+export type LinkedinOptimization = typeof linkedinOptimizations.$inferSelect;

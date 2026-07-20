@@ -155,6 +155,15 @@ export default function Services() {
 
     // Route AI-delivered services through the new unified order flow
     const slug = (service.code ?? service.slug ?? service.id ?? "").toLowerCase();
+
+    // 2026-07: LinkedIn Optimization is now a premium Pro-tier LIVE workspace,
+    // not a one-shot order. The workspace itself handles the Pro gate (or
+    // redirects Free users to /pricing), so we can drop them straight in.
+    if (slug === "linkedin_optimization") {
+      navigate("/tools/linkedin-optimize");
+      return;
+    }
+
     if (AI_DELIVERY_SLUGS.has(slug)) {
       navigate(`/services/order/${slug}`);
       return;

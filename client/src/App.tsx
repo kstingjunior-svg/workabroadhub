@@ -69,6 +69,8 @@ const AgenciesMarketplace = lazyWithRetry(() => import("@/pages/agencies"));
 const ScoutJobsIndex  = lazyWithRetry(() => import("@/pages/scout-jobs/index"));
 const ScoutJobDetail  = lazyWithRetry(() => import("@/pages/scout-jobs/detail"));
 const ScoutJobPost    = lazyWithRetry(() => import("@/pages/scout-jobs/post"));
+// 2026-07: LinkedIn Profile Optimizer — Pro-tier premium AI workspace.
+const LinkedinOptimize = lazyWithRetry(() => import("@/pages/tools/linkedin-optimize"));
 const AgencyProfilePage = lazyWithRetry(() => import("@/pages/agency-profile"));
 const Profile = lazyWithRetry(() => import("@/pages/profile"));
 const AgencyPortal = lazyWithRetry(() => import("@/pages/agency-portal"));
@@ -346,6 +348,7 @@ const LazyAgencyProfilePage = withSuspense(AgencyProfilePage);
 const LazyScoutJobsIndex    = withSuspense(ScoutJobsIndex);
 const LazyScoutJobDetail    = withSuspense(ScoutJobDetail);
 const LazyScoutJobPost      = withSuspense(ScoutJobPost);
+const LazyLinkedinOptimize  = withSuspense(LinkedinOptimize);
 const LazyProfile = withSuspense(Profile);
 const LazyAgencyPortal = withSuspense(AgencyPortal);
 const LazyServiceOrderPage = withSuspense(ServiceOrderPage);
@@ -533,6 +536,8 @@ function AuthenticatedRoutes() {
       <Route path="/scout-jobs/post" component={LazyScoutJobPost} />
       <Route path="/scout-jobs/:id" component={LazyScoutJobDetail} />
       <Route path="/scout-jobs" component={LazyScoutJobsIndex} />
+      {/* LinkedIn AI Optimizer — Pro tool, workspace at /tools/linkedin-optimize */}
+      <Route path="/tools/linkedin-optimize" component={LazyLinkedinOptimize} />
       <Route path="/student-visas" component={LazyStudentVisas} />
       <Route path="/passport-application" component={LazyPassportApplication} />
       <Route path="/good-conduct" component={LazyGoodConduct} />
