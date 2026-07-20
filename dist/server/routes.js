@@ -1298,6 +1298,11 @@ async function registerRoutes(httpServer, app) {
     // direct job lead; seekers browse + contact via /scout-jobs.
     const { registerScoutJobsRoutes } = await Promise.resolve().then(() => __importStar(require("./routes/scout-jobs")));
     registerScoutJobsRoutes(app);
+    // LinkedIn Profile Optimizer — 2026-07 (Pro premium tool). Live AI
+    // workspace that streams progress, scores, and rewrites. SSE endpoint
+    // at /api/linkedin-optimize/:id/stream.
+    const { registerLinkedinOptimizeRoutes } = await Promise.resolve().then(() => __importStar(require("./routes/linkedin-optimize")));
+    registerLinkedinOptimizeRoutes(app);
     // Track active sessions for the admin dashboard real-time counter.
     // Must run after setupAuth so req.session is populated.
     app.use(active_users_1.trackActiveUser);
