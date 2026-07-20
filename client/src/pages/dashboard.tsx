@@ -1436,6 +1436,29 @@ export default function Dashboard() {
                 <p className="relative text-[11px] text-gray-600 dark:text-gray-400 leading-tight truncate">{c.desc}</p>
               </Link>
             ))}
+
+            {/* ── 2026-07 (Tony's sketch): JOB SCOUT tile ─────────────────
+                Visually distinct from the country tiles so users notice it.
+                Scouts (individuals already in destination countries) pay
+                KES 200 to list direct job openings. Not registered agents;
+                real people who know of real jobs.  */}
+            <Link
+              href="/scout-jobs"
+              data-testid="dest-scout-jobs"
+              className="group relative flex flex-col gap-1 bg-gradient-to-br from-teal-500 to-cyan-600 border-2 border-teal-400 dark:border-teal-500 rounded-2xl p-3 shadow-md hover:shadow-xl hover:scale-[1.03] active:scale-[0.98] transition-all duration-200 overflow-hidden"
+            >
+              <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent pointer-events-none" />
+              <div className="relative flex items-center gap-2">
+                <span className="text-2xl leading-none">🎯</span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[10px] font-mono text-white/70 leading-none">NEW</div>
+                  <div className="text-sm font-bold text-white leading-tight truncate">Job Scout</div>
+                </div>
+              </div>
+              <p className="relative text-[11px] text-white/90 leading-tight truncate">
+                Direct jobs from scouts abroad
+              </p>
+            </Link>
           </div>
         </div>
 

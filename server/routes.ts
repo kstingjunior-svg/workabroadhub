@@ -1475,6 +1475,11 @@ export async function registerRoutes(
   const { registerWriteFromScratchRoutes } = await import("./routes/write-from-scratch");
   registerWriteFromScratchRoutes(app);
 
+  // Scout Jobs — 2026-07 (Job Scout feature). Scouts pay KES 200 to list a
+  // direct job lead; seekers browse + contact via /scout-jobs.
+  const { registerScoutJobsRoutes } = await import("./routes/scout-jobs");
+  registerScoutJobsRoutes(app);
+
   // Track active sessions for the admin dashboard real-time counter.
   // Must run after setupAuth so req.session is populated.
   app.use(trackActiveUser);

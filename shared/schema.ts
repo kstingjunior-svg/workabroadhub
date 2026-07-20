@@ -2372,3 +2372,78 @@ export const deliveries = pgTable("deliveries", {
 export const insertDeliverySchema = createInsertSchema(deliveries).omit({ id: true, createdAt: true });
 export type InsertDelivery = z.infer<typeof insertDeliverySchema>;
 export type Delivery = typeof deliveries.$inferSelect;
+
+// ============================================
+// SCOUT JOBS — 2026-07 (Tony's Job Scout feature)
+// ============================================
+//
+// Individuals already living in a destination country (UK, UAE, Canada, Gulf,
+// Germany, etc) who know of direct job openings can post them here for KES 200.
+// They are NOT registered recruitment agents — hence "scout", not "agent".
+//
+// Flow:
+//   1. Scout signs in, fills the post-a-job form on /scout-jobs/post
+//   2. POST /api/scout-jobs/init creates a row with status='pending_payment'
+//      and STK-pushes KES 200 via M-Pesa (or PayPal for outside Kenya)
+//   3. Payment callback flips status → 'pending_review' — admin moderates
+//      to filter fraud/duplicates
+//   4. Admin approve → status='active' and the post appears on /scout-jobs
+//   5. After 60 days a scheduled job flips 'active' → 'expired'
+//
+// Contact fields are visible to any authenticated user (to grow demand fast);
+// gate behind Pro later if abuse becomes a problem.
+export const scoutJobs = pgTable("scout_jobs", {
+  id:                varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+
+  // ── Who posted (the scout) ─────────────────────────────────────────────
+  postedByUserId:    varchar("posted_by_user_id").notNull(),  // FK → users.id
+  scoutName:         varchar("scout_name", { length: 150 }).notNull(),
+  scoutCountry:      varchar("scout_country", { length: 100 }).notNull(),
+  scoutWhatsapp:     varchar("scout_whatsapp", { length: 30 }).notNull(),  // E.164
+  scoutEmail:        varchar("scout_email", { length: 200 }),
+
+  // ── What the job is ────────────────────────────────────────────────────
+  jobTitle:          varchar("job_title", { length: 200 }).notNull(),
+  jobCountry:        varchar("job_country", { length: 100 }).notNull(),
+  jobCity:           varchar("job_city", { length: 100 }),
+  jobIndustry:       varchar("job_industry", { length: 100 }).notNull(),   // hospitality, farming, care, driver, construction, etc.
+  jobDescription:    text("job_description").notNull(),
+  salaryText:        varchar("salary_text", { length: 120 }),              // freeform: "USD 2,500/mo + accommodation"
+  howToApply:        text("how_to_apply"),                                  // freeform instructions
+
+  // ── Payment tie-in ─────────────────────────────────────────────────────
+  paymentId:         varchar("payment_id"),  // FK → payments.id (KES 200 slot fee)
+  amountPaid:        integer("amount_paid").notNull().default(200),
+  currency:          varchar("currency", { length: 8 }).notNull().default("KES"),
+
+  // ── Moderation lifecycle ───────────────────────────────────────────────
+  //   pending_payment → user submitted form, payment in flight
+  //   pending_review  → payment confirmed, waiting for admin
+  //   active          → visible to seekers
+  //   flagged         → admin rejected or user reported abuse
+  //   expired         → automatic 60-day rollover
+  //   closed          → scout marked "position filled"
+  status:            varchar("status", { length: 30 }).notNull().default("pending_payment"),
+  moderationNotes:   text("moderation_notes"),
+
+  // ── Views / interest metrics for the scout's peace of mind ─────────────
+  viewCount:         integer("view_count").notNull().default(0),
+  contactCount:      integer("contact_count").notNull().default(0),
+
+  expiresAt:         timestamp("expires_at"),   // set on approval, +60 days
+  approvedAt:        timestamp("approved_at"),
+  createdAt:         timestamp("created_at").defaultNow(),
+  updatedAt:         timestamp("updated_at").defaultNow(),
+}, (t) => ({
+  byStatus:   index("scout_jobs_status_idx").on(t.status),
+  byCountry:  index("scout_jobs_country_idx").on(t.jobCountry),
+  byIndustry: index("scout_jobs_industry_idx").on(t.jobIndustry),
+  byPoster:   index("scout_jobs_poster_idx").on(t.postedByUserId),
+}));
+
+export const insertScoutJobSchema = createInsertSchema(scoutJobs).omit({
+  id: true, createdAt: true, updatedAt: true, viewCount: true, contactCount: true,
+  approvedAt: true, expiresAt: true, paymentId: true, status: true,
+});
+export type InsertScoutJob = z.infer<typeof insertScoutJobSchema>;
+export type ScoutJob = typeof scoutJobs.$inferSelect;

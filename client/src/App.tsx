@@ -65,6 +65,10 @@ const GlobalOpportunities = lazyWithRetry(() => import("@/pages/global-opportuni
 const Services = lazyWithRetry(() => import("@/pages/services"));
 const NeaAgencies = lazyWithRetry(() => import("@/pages/nea-agencies"));
 const AgenciesMarketplace = lazyWithRetry(() => import("@/pages/agencies"));
+// 2026-07: Job Scout feature — scouts pay KES 200 to list direct job leads.
+const ScoutJobsIndex  = lazyWithRetry(() => import("@/pages/scout-jobs/index"));
+const ScoutJobDetail  = lazyWithRetry(() => import("@/pages/scout-jobs/detail"));
+const ScoutJobPost    = lazyWithRetry(() => import("@/pages/scout-jobs/post"));
 const AgencyProfilePage = lazyWithRetry(() => import("@/pages/agency-profile"));
 const Profile = lazyWithRetry(() => import("@/pages/profile"));
 const AgencyPortal = lazyWithRetry(() => import("@/pages/agency-portal"));
@@ -339,6 +343,9 @@ const LazyServices = withSuspense(Services);
 const LazyNeaAgencies = withSuspense(NeaAgencies);
 const LazyAgenciesMarketplace = withSuspense(AgenciesMarketplace);
 const LazyAgencyProfilePage = withSuspense(AgencyProfilePage);
+const LazyScoutJobsIndex    = withSuspense(ScoutJobsIndex);
+const LazyScoutJobDetail    = withSuspense(ScoutJobDetail);
+const LazyScoutJobPost      = withSuspense(ScoutJobPost);
 const LazyProfile = withSuspense(Profile);
 const LazyAgencyPortal = withSuspense(AgencyPortal);
 const LazyServiceOrderPage = withSuspense(ServiceOrderPage);
@@ -522,6 +529,10 @@ function AuthenticatedRoutes() {
       <Route path="/nea-agencies" component={LazyNeaAgencies} />
       <Route path="/agencies" component={LazyAgenciesMarketplace} />
       <Route path="/agencies/:agencyId" component={LazyAgencyProfilePage} />
+      {/* Scout Jobs — order matters: /post must be before /:id */}
+      <Route path="/scout-jobs/post" component={LazyScoutJobPost} />
+      <Route path="/scout-jobs/:id" component={LazyScoutJobDetail} />
+      <Route path="/scout-jobs" component={LazyScoutJobsIndex} />
       <Route path="/student-visas" component={LazyStudentVisas} />
       <Route path="/passport-application" component={LazyPassportApplication} />
       <Route path="/good-conduct" component={LazyGoodConduct} />
@@ -759,6 +770,10 @@ function Router() {
         <Route path="/nea-agencies" component={LazyNeaAgencies} />
         <Route path="/agencies" component={LazyAgenciesMarketplace} />
         <Route path="/agencies/:agencyId" component={LazyAgencyProfilePage} />
+        {/* Scout Jobs — public list + detail. /post gate is server-side (auth required). */}
+        <Route path="/scout-jobs/post" component={LazyScoutJobPost} />
+        <Route path="/scout-jobs/:id" component={LazyScoutJobDetail} />
+        <Route path="/scout-jobs" component={LazyScoutJobsIndex} />
         <Route path="/student-visas" component={LazyStudentVisas} />
         <Route path="/passport-application" component={LazyPassportApplication} />
       <Route path="/good-conduct" component={LazyGoodConduct} />
