@@ -159,6 +159,38 @@ export function CvFixLiteInstantPayModal({ open, onOpenChange, cvFile, score }: 
       return;
     }
 
+    // ── Step 2b: actually push the STK to Safaricom ───────────────────────
+    // 2026-07 CRITICAL BUGFIX: the row-first refactor split /api/payments/initiate
+    // (row-creation only) from /api/mpesa/stk (the actual push). Without this
+    // second call the user's phone never rings and the poll below waits forever.
+    // Confirmed root cause of "Waiting for confirmation…" that clients reported.
+    try {
+      const csrf = await fetchCsrfToken();
+      const stkRes = await fetch("/api/mpesa/stk", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
+        body: JSON.stringify({ checkoutRequestId: checkoutId }),
+      });
+      const stkData = await stkRes.json().catch(() => ({}));
+      if (!stkRes.ok) {
+        setErrMsg(stkData?.message ?? stkData?.error ?? "Could not send M-Pesa prompt. Please try again.");
+        setStage("error");
+        return;
+      }
+      // The real Safaricom CheckoutRequestID may replace the payment.id we sent.
+      // Update our poll target so /api/mpesa/status looks up the right row.
+      const safaricomId = stkData?.checkoutRequestId ?? stkData?.CheckoutRequestID;
+      if (safaricomId && typeof safaricomId === "string" && safaricomId !== checkoutId) {
+        checkoutId = safaricomId;
+        setCheckoutRequestId(safaricomId);
+      }
+    } catch (err: any) {
+      setErrMsg(err?.message ?? "Could not send M-Pesa prompt");
+      setStage("error");
+      return;
+    }
+
     // ── Step 3: poll for payment success ──────────────────────────────────
     setStage("waiting-pin");
     let polls = 0;

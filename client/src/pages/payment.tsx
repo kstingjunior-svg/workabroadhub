@@ -592,6 +592,29 @@ export default function Payment() {
         return response;
       }
       const response = await apiRequest("POST", "/api/payments/initiate", data);
+
+      // 2026-07 CRITICAL BUGFIX: the row-first refactor split /api/payments/initiate
+      // (creates the pending row) from /api/mpesa/stk (actually pushes the prompt to
+      // Safaricom). Without this second call the user's phone never rings and the
+      // status poll below waits forever. Confirmed root cause of "Waiting for
+      // confirmation…" reported by clients on CV Fix Lite and the main /payment page.
+      if (data?.method === "mpesa" || data?.method === undefined) {
+        const paymentId = (response as any)?.paymentId ?? (response as any)?.checkoutRequestId;
+        if (paymentId) {
+          try {
+            const stkRes = await apiRequest("POST", "/api/mpesa/stk", { checkoutRequestId: paymentId });
+            const stkData: any = stkRes;
+            const safaricomId = stkData?.checkoutRequestId ?? stkData?.CheckoutRequestID;
+            if (safaricomId && safaricomId !== paymentId) {
+              (response as any).checkoutRequestId = safaricomId;
+            }
+          } catch (stkErr) {
+            // Bubble up so the error card renders — pending row is already there
+            // but no STK reached the user, so we must not silently start polling.
+            throw stkErr;
+          }
+        }
+      }
       return response;
     },
     onSuccess: (data: any) => {
