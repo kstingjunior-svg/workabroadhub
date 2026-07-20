@@ -1294,6 +1294,10 @@ async function registerRoutes(httpServer, app) {
     // own M-Pesa callback lives at /api/write-from-scratch/mpesa-callback.
     const { registerWriteFromScratchRoutes } = await Promise.resolve().then(() => __importStar(require("./routes/write-from-scratch")));
     registerWriteFromScratchRoutes(app);
+    // Scout Jobs — 2026-07 (Job Scout feature). Scouts pay KES 200 to list a
+    // direct job lead; seekers browse + contact via /scout-jobs.
+    const { registerScoutJobsRoutes } = await Promise.resolve().then(() => __importStar(require("./routes/scout-jobs")));
+    registerScoutJobsRoutes(app);
     // Track active sessions for the admin dashboard real-time counter.
     // Must run after setupAuth so req.session is populated.
     app.use(active_users_1.trackActiveUser);
