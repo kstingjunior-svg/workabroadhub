@@ -42,7 +42,7 @@ const CATEGORIES = [
 
 const COUNTRIES = [
   "All Countries", "Saudi Arabia", "United Arab Emirates", "Qatar", "Kuwait",
-  "Bahrain", "Oman", "Malaysia", "Singapore", "Canada", "Germany", "UK",
+  "Bahrain", "Oman", "Malaysia", "Singapore", "Canada", "Germany", "UK", "Turkey",
   "Australia", "Japan", "South Korea",
 ];
 

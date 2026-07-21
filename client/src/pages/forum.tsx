@@ -52,6 +52,7 @@ import {
 const COUNTRY_META: Record<string, { name: string; flag: string }> = {
   usa:       { name: "USA",              flag: "🇺🇸" },
   canada:    { name: "Canada",           flag: "🇨🇦" },
+  turkey:    { name: "Turkey",           flag: "🇹🇷" },
   uae:       { name: "UAE / Arab Countries", flag: "🇦🇪" },
   uk:        { name: "United Kingdom",   flag: "🇬🇧" },
   australia: { name: "Australia",        flag: "🇦🇺" },

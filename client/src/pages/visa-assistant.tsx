@@ -53,7 +53,7 @@ const QUICK_PROMPTS = [
 ];
 
 // ─── PRO eligibility checker form ─────────────────────────────────────────────
-const COUNTRIES_LIST = ["Canada", "UK", "USA", "Germany", "UAE", "Australia", "Netherlands", "Ireland"];
+const COUNTRIES_LIST = ["Canada", "UK", "USA", "Germany", "UAE", "Australia", "Netherlands", "Ireland", "Turkey"];
 
 function EligibilityChecker({ onSubmit, isLoading }: { onSubmit: (q: string) => void; isLoading: boolean }) {
   const [age, setAge] = useState("");

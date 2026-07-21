@@ -45,6 +45,7 @@ export const SYSTEM_CATALOGUE: CatalogueGroup[] = [
       { label: "Australia",            path: "/country/australia", purpose: "Subclass 482 / 186 / 189 skilled migration. 14 verified portals including NHS-style state health systems",       audience: "paid" },
       { label: "USA",                  path: "/country/usa",       purpose: "H-1B sponsorship, EB-3 unskilled-worker route, Green Card DV Lottery",                                            audience: "paid" },
       { label: "Europe",               path: "/country/europe",    purpose: "EU Blue Card, Germany / Ireland / Netherlands / France / Nordic countries",                                       audience: "paid" },
+      { label: "Turkey",               path: "/country/turkey",    purpose: "Turkish work visa + permit. Hospitality, factory, textile, agriculture, care, IT. Kariyer.net + İŞKUR portals",  audience: "paid" },
     ],
   },
   {

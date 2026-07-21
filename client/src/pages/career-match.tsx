@@ -47,7 +47,7 @@ const EDUCATION_LEVELS = [
   { value: "phd", label: "PhD/Doctorate" },
 ];
 
-const COUNTRIES = ["USA", "Canada", "UK", "UAE", "Australia", "Europe"];
+const COUNTRIES = ["USA", "Canada", "UK", "UAE", "Australia", "Europe", "Turkey"];
 const INDUSTRIES = ["Healthcare", "Technology", "Engineering", "Construction", "Hospitality", "Finance", "Education", "Manufacturing"];
 
 const COMMON_SKILLS = [

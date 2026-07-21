@@ -30,7 +30,7 @@ import { useToast } from "@/hooks/use-toast";
 const COUNTRIES = [
   "UK", "UAE", "Canada", "Australia", "Saudi Arabia", "Qatar", "Bahrain",
   "Germany", "USA", "Luxembourg", "Kuwait", "Oman", "Ireland", "Netherlands",
-  "Other",
+  "Turkey", "Other",
 ];
 const INDUSTRIES = [
   "hospitality", "care", "nursing", "farming", "driving", "construction",

@@ -95,7 +95,7 @@ const PORTAL_CATEGORIES = [
 
 const COUNTRIES = [
   "Kenya", "Uganda", "Tanzania", "Ethiopia", "Nigeria",
-  "USA", "Canada", "UAE", "UK", "Australia", "Germany", "Qatar", "Saudi Arabia", "Other",
+  "USA", "Canada", "UAE", "UK", "Australia", "Germany", "Qatar", "Saudi Arabia", "Turkey", "Other",
 ];
 
 // ─── Component ────────────────────────────────────────────────────────────────

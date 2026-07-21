@@ -1509,6 +1509,8 @@ export async function seedCountryPortals(): Promise<void> {
       { code: "uk",        name: "United Kingdom",       flag: "🇬🇧" },
       { code: "europe",    name: "Europe",               flag: "🇪🇺" },
       { code: "australia", name: "Australia",            flag: "🇦🇺" },
+      // 2026-07: Turkey added as a supported destination.
+      { code: "turkey",    name: "Turkey",               flag: "🇹🇷" },
     ];
     for (const c of wantedCountries) {
       await pool.query(

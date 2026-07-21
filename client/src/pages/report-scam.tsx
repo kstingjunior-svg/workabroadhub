@@ -35,7 +35,7 @@ import {
 const COUNTRIES = [
   "Kenya", "Uganda", "Tanzania", "Nigeria", "Ghana", "South Africa",
   "UAE", "Saudi Arabia", "Qatar", "Kuwait", "Bahrain", "Oman",
-  "UK", "USA", "Canada", "Australia", "Germany", "Malaysia", "Singapore",
+  "UK", "USA", "Canada", "Australia", "Germany", "Malaysia", "Singapore", "Turkey",
   "Other",
 ];
 

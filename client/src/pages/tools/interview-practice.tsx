@@ -53,7 +53,7 @@ interface InterviewState {
   finalSummary?: string;
 }
 
-const COUNTRIES = ["United Kingdom", "UAE", "Saudi Arabia", "Canada", "Qatar", "Germany", "Australia"];
+const COUNTRIES = ["United Kingdom", "UAE", "Saudi Arabia", "Canada", "Qatar", "Germany", "Australia", "Turkey"];
 const TOTAL_QUESTIONS = 5;
 
 // ─── Web Speech helpers ──────────────────────────────────────────────────────

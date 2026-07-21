@@ -40,7 +40,7 @@ import { isPaidUser } from "@/lib/plan";
 
 const TARGET_COUNTRIES = [
   "Canada", "UK", "UAE", "Saudi Arabia", "Qatar", "Bahrain",
-  "Germany", "Australia", "USA", "Ireland", "Netherlands",
+  "Germany", "Australia", "USA", "Ireland", "Netherlands", "Turkey",
 ];
 
 interface ExperienceBlock {

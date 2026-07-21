@@ -51,6 +51,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: any }>
 const COUNTRIES = [
   { code: "usa", name: "USA" },
   { code: "canada", name: "Canada" },
+  { code: "turkey", name: "Turkey" },
   { code: "uk", name: "United Kingdom" },
   { code: "uae", name: "UAE" },
   { code: "australia", name: "Australia" },

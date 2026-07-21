@@ -25,7 +25,7 @@ import {
 const COUNTRIES = [
   "Kenya", "Uganda", "Tanzania", "Rwanda", "Ghana", "Nigeria", "Ethiopia",
   "South Africa", "Global", "UAE", "Saudi Arabia", "Qatar", "Kuwait",
-  "Bahrain", "Oman", "UK", "Canada", "Australia", "Germany", "Other",
+  "Bahrain", "Oman", "UK", "Canada", "Australia", "Germany", "Turkey", "Other",
 ];
 
 const EMPTY = { url: "", name: "", country: "Kenya", description: "" };

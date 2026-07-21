@@ -53,7 +53,7 @@ interface Job {
 const FLAG: Record<string, string> = {
   "Saudi Arabia": "🇸🇦", "UAE": "🇦🇪", "Qatar": "🇶🇦", "Bahrain": "🇧🇭",
   "Kuwait": "🇰🇼", "Oman": "🇴🇲", "United Kingdom": "🇬🇧", "UK": "🇬🇧",
-  "Canada": "🇨🇦", "Australia": "🇦🇺", "Germany": "🇩🇪", "USA": "🇺🇸",
+  "Canada": "🇨🇦", "Australia": "🇦🇺", "Germany": "🇩🇪", "USA": "🇺🇸", "Turkey": "🇹🇷",
   "United States": "🇺🇸",
 };
 

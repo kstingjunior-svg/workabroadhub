@@ -39,7 +39,7 @@ interface ScoutJobSummary {
 
 const COUNTRIES = [
   "UK", "UAE", "Canada", "Australia", "Saudi Arabia", "Qatar", "Bahrain",
-  "Germany", "USA", "Luxembourg", "Kuwait", "Oman", "Ireland", "Netherlands",
+  "Germany", "USA", "Luxembourg", "Kuwait", "Oman", "Ireland", "Netherlands", "Turkey",
 ];
 const INDUSTRIES = [
   "hospitality", "care", "nursing", "farming", "driving", "construction",

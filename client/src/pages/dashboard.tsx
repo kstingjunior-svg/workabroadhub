@@ -1418,6 +1418,8 @@ export default function Dashboard() {
               // 2026-06 (Tony's "ship it"): Luxembourg, with the salary floor
               // visible in the desc so users self-select before paying.
               { flag: "🇱🇺", code: "LU", slug: "luxembourg", name: "Luxembourg", desc: "Skilled only · 800k+/mo", tone: "from-sky-500/10 to-red-500/10" },
+              // 2026-07: Turkey added as a supported destination.
+              { flag: "🇹🇷", code: "TR", slug: "turkey",     name: "Turkey",     desc: "Hospitality + Tourism",   tone: "from-red-600/15 to-red-400/5" },
             ].map((c) => (
               <Link
                 key={c.name}

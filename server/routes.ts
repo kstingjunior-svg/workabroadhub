@@ -2892,6 +2892,7 @@ Crawl-delay: 1`);
         uk:        { name: "United Kingdom",       flag: "🇬🇧" },
         europe:    { name: "Europe",               flag: "🇪🇺" },
         australia: { name: "Australia",            flag: "🇦🇺" },
+        turkey:    { name: "Turkey",               flag: "🇹🇷" },
       };
 
       let country: any = null;
