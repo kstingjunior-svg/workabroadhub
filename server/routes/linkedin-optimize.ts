@@ -16,19 +16,36 @@
  */
 
 import type { Express, Request, Response } from "express";
+import multer from "multer";
 import { pool } from "../db";
 import { openai } from "../lib/openai";
 import { requireProPlan } from "../middleware/requirePlan";
 import { stripAiTells } from "../ai/human-voice";
+import { extractTextFromBuffer } from "../utils/extract-text";
 import {
   buildScorePrompt,
   buildRewritePrompt,
   buildRefinePrompt,
+  buildHeadlineVariantsPrompt,
+  buildAboutTonePrompt,
+  buildKeywordAnalysisPrompt,
+  buildRecruiterViewPrompt,
+  buildNetworkingPrompt,
+  buildPostPrompt,
+  buildInterviewPrepPrompt,
+  buildCvParsePrompt,
   type ProfileInput,
   type ProfileScores,
   type ProfileRewrite,
+  type NetworkingKind,
+  type PostCategory,
 } from "../services/linkedin/prompts";
 import PDFDocument from "pdfkit";
+
+const cvUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 8 * 1024 * 1024 },
+});
 
 function currentUserId(req: any): string | null {
   return (
@@ -403,6 +420,216 @@ export function registerLinkedinOptimizeRoutes(app: Express): void {
     } catch (err: any) {
       console.error("[linkedin-optimize] pdf error:", err?.message);
       res.status(500).json({ error: "Could not generate PDF" });
+    }
+  });
+
+  // ══════════════════════════════════════════════════════════════════════
+  // v2 (2026-07): world-class expansion
+  // ══════════════════════════════════════════════════════════════════════
+
+  /* ─── POST /parse-cv — upload PDF/DOCX, get structured ProfileInput ─── */
+  app.post(
+    "/api/linkedin-optimize/parse-cv",
+    requireProPlan,
+    cvUpload.single("cv"),
+    async (req: any, res: Response) => {
+      try {
+        if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+        const filename = req.file.originalname || "upload.pdf";
+        const mime = req.file.mimetype || "application/pdf";
+
+        let raw = "";
+        try {
+          const r = await extractTextFromBuffer(req.file.buffer, mime, filename);
+          raw = typeof r === "string" ? r : (r?.text ?? "");
+        } catch (err: any) {
+          console.error("[linkedin-optimize] CV extract failed:", err?.message);
+          return res.status(422).json({ error: "Could not read this file. Try a text-based PDF or DOCX." });
+        }
+        if (!raw || raw.length < 120) {
+          return res.status(422).json({ error: "The file has too little text. Try a different CV." });
+        }
+
+        const p = buildCvParsePrompt(raw);
+        const parsed = await completeJson(p.system, p.user, { temperature: 0.15, maxTokens: 2000 });
+        res.json({ input: parsed });
+      } catch (err: any) {
+        console.error("[linkedin-optimize] parse-cv error:", err?.message);
+        res.status(500).json({ error: "Could not parse CV. Please try again or use manual entry." });
+      }
+    },
+  );
+
+  /* ─── POST /:id/headline-variants — 5 headlines to choose from ──────── */
+  app.post("/api/linkedin-optimize/:id/headline-variants", requireProPlan, async (req: any, res: Response) => {
+    try {
+      const userId = currentUserId(req);
+      const draft = await loadDraft(req.params.id);
+      if (!draft) return res.status(404).json({ error: "Not found" });
+      if (draft.user_id !== userId) return res.status(403).json({ error: "Forbidden" });
+      const input = draft.input_json as ProfileInput;
+      const p = buildHeadlineVariantsPrompt(input);
+      const variants = await completeJson(p.system, p.user, { temperature: 0.7, maxTokens: 900 });
+      // scrub tells on each variant
+      const scrubbed: any = {};
+      for (const [k, v] of Object.entries(variants ?? {})) {
+        scrubbed[k] = stripAiTells(String(v ?? ""));
+      }
+      res.json({ variants: scrubbed });
+    } catch (err: any) {
+      console.error("[linkedin-optimize] headline-variants error:", err?.message);
+      res.status(500).json({ error: "Could not generate headline variants" });
+    }
+  });
+
+  /* ─── POST /:id/about-tone — rewrite About in a chosen tone ─────────── */
+  app.post("/api/linkedin-optimize/:id/about-tone", requireProPlan, async (req: any, res: Response) => {
+    try {
+      const userId = currentUserId(req);
+      const draft = await loadDraft(req.params.id);
+      if (!draft) return res.status(404).json({ error: "Not found" });
+      if (draft.user_id !== userId) return res.status(403).json({ error: "Forbidden" });
+      const tone = String(req.body?.tone ?? "professional") as any;
+      const valid = ["professional", "leadership", "friendly", "executive", "technical", "international"];
+      if (!valid.includes(tone)) return res.status(400).json({ error: "Invalid tone" });
+
+      const input = draft.input_json as ProfileInput;
+      const p = buildAboutTonePrompt(input, tone);
+      const out = await completeJson(p.system, p.user, { temperature: 0.6, maxTokens: 900 });
+      res.json({ about: stripAiTells(String(out?.about ?? "")) });
+    } catch (err: any) {
+      console.error("[linkedin-optimize] about-tone error:", err?.message);
+      res.status(500).json({ error: "Could not rewrite About" });
+    }
+  });
+
+  /* ─── POST /:id/keyword-analysis — detected / missing / high-value ── */
+  app.post("/api/linkedin-optimize/:id/keyword-analysis", requireProPlan, async (req: any, res: Response) => {
+    try {
+      const userId = currentUserId(req);
+      const draft = await loadDraft(req.params.id);
+      if (!draft) return res.status(404).json({ error: "Not found" });
+      if (draft.user_id !== userId) return res.status(403).json({ error: "Forbidden" });
+      const p = buildKeywordAnalysisPrompt(draft.input_json as ProfileInput);
+      const analysis = await completeJson(p.system, p.user, { temperature: 0.3, maxTokens: 900 });
+      res.json({ analysis });
+    } catch (err: any) {
+      console.error("[linkedin-optimize] keyword-analysis error:", err?.message);
+      res.status(500).json({ error: "Could not analyse keywords" });
+    }
+  });
+
+  /* ─── POST /:id/recruiter-view — what a recruiter sees ──────────────── */
+  app.post("/api/linkedin-optimize/:id/recruiter-view", requireProPlan, async (req: any, res: Response) => {
+    try {
+      const userId = currentUserId(req);
+      const draft = await loadDraft(req.params.id);
+      if (!draft) return res.status(404).json({ error: "Not found" });
+      if (draft.user_id !== userId) return res.status(403).json({ error: "Forbidden" });
+      const input   = draft.input_json  as ProfileInput;
+      const rewrite = (draft.output_json ?? {}) as ProfileRewrite;
+      const p = buildRecruiterViewPrompt(input, rewrite.about, rewrite.headline);
+      const view = await completeJson(p.system, p.user, { temperature: 0.35, maxTokens: 700 });
+      res.json({ view });
+    } catch (err: any) {
+      console.error("[linkedin-optimize] recruiter-view error:", err?.message);
+      res.status(500).json({ error: "Could not simulate recruiter view" });
+    }
+  });
+
+  /* ─── POST /:id/networking — draft a connection / follow-up message ─ */
+  app.post("/api/linkedin-optimize/:id/networking", requireProPlan, async (req: any, res: Response) => {
+    try {
+      const userId = currentUserId(req);
+      const draft = await loadDraft(req.params.id);
+      if (!draft) return res.status(404).json({ error: "Not found" });
+      if (draft.user_id !== userId) return res.status(403).json({ error: "Forbidden" });
+      const kind = String(req.body?.kind ?? "") as NetworkingKind;
+      if (!["connection_request", "recruiter_intro", "follow_up", "thank_you"].includes(kind)) {
+        return res.status(400).json({ error: "Invalid kind" });
+      }
+      const ctx = req.body?.context ?? {};
+      const p = buildNetworkingPrompt(draft.input_json as ProfileInput, kind, ctx);
+      const out = await completeJson(p.system, p.user, { temperature: 0.6, maxTokens: 500 });
+      res.json({ message: stripAiTells(String(out?.message ?? "")) });
+    } catch (err: any) {
+      console.error("[linkedin-optimize] networking error:", err?.message);
+      res.status(500).json({ error: "Could not draft the message" });
+    }
+  });
+
+  /* ─── POST /:id/post — generate a LinkedIn post ─────────────────────── */
+  app.post("/api/linkedin-optimize/:id/post", requireProPlan, async (req: any, res: Response) => {
+    try {
+      const userId = currentUserId(req);
+      const draft = await loadDraft(req.params.id);
+      if (!draft) return res.status(404).json({ error: "Not found" });
+      if (draft.user_id !== userId) return res.status(403).json({ error: "Forbidden" });
+      const category = String(req.body?.category ?? "") as PostCategory;
+      const validCats: PostCategory[] = [
+        "career_growth", "certification", "new_job", "networking", "industry_insights", "job_search",
+      ];
+      if (!validCats.includes(category)) return res.status(400).json({ error: "Invalid category" });
+      const topic = req.body?.topic ? String(req.body.topic).slice(0, 200) : undefined;
+
+      const p = buildPostPrompt(draft.input_json as ProfileInput, category, topic);
+      const out = await completeJson(p.system, p.user, { temperature: 0.65, maxTokens: 700 });
+      res.json({
+        post:     stripAiTells(String(out?.post ?? "")),
+        hashtags: Array.isArray(out?.hashtags) ? out.hashtags : [],
+      });
+    } catch (err: any) {
+      console.error("[linkedin-optimize] post error:", err?.message);
+      res.status(500).json({ error: "Could not draft the post" });
+    }
+  });
+
+  /* ─── POST /:id/interview-prep — 5 questions + coached answers ──────── */
+  app.post("/api/linkedin-optimize/:id/interview-prep", requireProPlan, async (req: any, res: Response) => {
+    try {
+      const userId = currentUserId(req);
+      const draft = await loadDraft(req.params.id);
+      if (!draft) return res.status(404).json({ error: "Not found" });
+      if (draft.user_id !== userId) return res.status(403).json({ error: "Forbidden" });
+      const p = buildInterviewPrepPrompt(draft.input_json as ProfileInput);
+      const prep = await completeJson(p.system, p.user, { temperature: 0.55, maxTokens: 1500 });
+      res.json({ prep });
+    } catch (err: any) {
+      console.error("[linkedin-optimize] interview-prep error:", err?.message);
+      res.status(500).json({ error: "Could not generate interview prep" });
+    }
+  });
+
+  /* ─── POST /:id/restore-version — restore a saved snapshot ──────────── */
+  app.post("/api/linkedin-optimize/:id/restore-version", requireProPlan, async (req: any, res: Response) => {
+    try {
+      const userId = currentUserId(req);
+      const draft = await loadDraft(req.params.id);
+      if (!draft) return res.status(404).json({ error: "Not found" });
+      if (draft.user_id !== userId) return res.status(403).json({ error: "Forbidden" });
+
+      const idx = Number(req.body?.index);
+      const versions = Array.isArray(draft.versions_json) ? draft.versions_json : [];
+      if (!Number.isFinite(idx) || idx < 0 || idx >= versions.length) {
+        return res.status(400).json({ error: "Invalid version index" });
+      }
+      const chosen = versions[idx];
+      if (!chosen?.output) return res.status(400).json({ error: "Version has no snapshot" });
+
+      // Push current output onto history before overwriting
+      const nextVersions = [
+        { at: new Date().toISOString(), output: draft.output_json, note: "auto-saved before restore" },
+        ...versions,
+      ].slice(0, 10);
+
+      await saveDraft(draft.id, {
+        output_json:   chosen.output,
+        versions_json: nextVersions,
+      });
+      res.json({ output: chosen.output });
+    } catch (err: any) {
+      console.error("[linkedin-optimize] restore-version error:", err?.message);
+      res.status(500).json({ error: "Could not restore version" });
     }
   });
 }
