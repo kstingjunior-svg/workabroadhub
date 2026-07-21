@@ -33,7 +33,7 @@ const VALID_INDUSTRIES = [
 const VALID_COUNTRIES = [
     "UK", "UAE", "Canada", "Australia", "Saudi Arabia", "Qatar", "Bahrain",
     "Germany", "USA", "Luxembourg", "Kuwait", "Oman", "Ireland", "Netherlands",
-    "Other",
+    "Turkey", "Other",
 ];
 function currentUserId(req) {
     return (req.user?.claims?.sub ??

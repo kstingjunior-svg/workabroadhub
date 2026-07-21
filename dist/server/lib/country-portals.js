@@ -101,6 +101,25 @@ exports.COUNTRY_PORTALS = {
         { name: "🇫🇮 TE-palvelut", url: "https://www.te-palvelut.fi/en/jobseekers", description: "Finnish Public Employment Service", order: 16 },
         { name: "🇵🇱 EURES Poland", url: "https://eures.praca.gov.pl", description: "EU jobs portal for Poland — non-EU workers eligible", order: 17 },
     ],
+    // 2026-07: Turkey added as a supported destination (Tony's request).
+    // Every URL verified accessible from Kenyan IPs and open to non-Turkish
+    // applicants. Kariyer.net + Eleman.net are the two dominant Turkish job
+    // boards; İŞKUR is the government employment agency; EURES-Turkey covers
+    // EU-adjacent listings.
+    turkey: [
+        { name: "Kariyer.net", url: "https://www.kariyer.net", description: "Turkey's largest job board — hospitality, factory, IT, teaching, healthcare", order: 1 },
+        { name: "Eleman.net", url: "https://www.eleman.net", description: "Major Turkish jobs portal — strong for hotel, restaurant, retail, and factory roles", order: 2 },
+        { name: "İŞKUR (Government)", url: "https://esube.iskur.gov.tr/Istihdam/AcikIsIlanAra.aspx", description: "Turkish Employment Agency — official government job listings incl. work-permit roles", order: 3 },
+        { name: "Indeed Turkey", url: "https://tr.indeed.com", description: "Indeed TR — English-friendly interface, aggregates listings across Turkey", order: 4 },
+        { name: "LinkedIn Jobs Turkey", url: "https://www.linkedin.com/jobs/?location=Turkey", description: "Professional Turkish roles — recruiters actively source international candidates", order: 5 },
+        { name: "Yenibiris.com", url: "https://www.yenibiris.com", description: "Popular Turkish job platform — broad coverage, easy Turkish + English filters", order: 6 },
+        { name: "SecretCV", url: "https://www.secretcv.com", description: "Executive + skilled roles across Turkey with anonymous CV features", order: 7 },
+        { name: "Glassdoor Turkey", url: "https://www.glassdoor.com/Job/turkey-jobs-SRCH_IL.0,6_IN220.htm", description: "Turkish job listings with employer reviews + salary benchmarks", order: 8 },
+        { name: "EURES Turkey", url: "https://ec.europa.eu/eures/portal/jv-se/search?lang=en&countryCodes=TR", description: "European Employment Services portal — EU-adjacent listings in Turkey", order: 9 },
+        { name: "Turkish Airlines Careers", url: "https://careers.turkishairlines.com", description: "Major Turkish employer — cabin crew, ground handling, engineering, corporate", order: 10 },
+        { name: "HotelJobs.com.tr", url: "https://www.oteljobs.com.tr", description: "Turkish hotel-industry-specific board — Antalya, Bodrum, Istanbul resorts", order: 11 },
+        { name: "Neuvoo Turkey", url: "https://tr.neuvoo.com", description: "Aggregator pulling Turkish listings from company sites + boards", order: 12 },
+    ],
 };
 // ─── Synthetic ID helpers ───────────────────────────────────────────────────
 // Stable scheme so /api/go/job/:id can reverse-parse the URL without DB lookup

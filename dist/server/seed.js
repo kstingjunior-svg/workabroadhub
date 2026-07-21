@@ -1471,6 +1471,8 @@ async function seedCountryPortals() {
             { code: "uk", name: "United Kingdom", flag: "🇬🇧" },
             { code: "europe", name: "Europe", flag: "🇪🇺" },
             { code: "australia", name: "Australia", flag: "🇦🇺" },
+            // 2026-07: Turkey added as a supported destination.
+            { code: "turkey", name: "Turkey", flag: "🇹🇷" },
         ];
         for (const c of wantedCountries) {
             await db_1.pool.query(`INSERT INTO countries (name, code, flag_emoji, is_active)

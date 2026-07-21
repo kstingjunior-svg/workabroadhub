@@ -65,7 +65,17 @@ const COUNTRY_CV_STANDARDS = {
 - Personal details: Varies by country
 - Include language proficiency levels (A1-C2)
 - Highlight cross-cultural experience
-`
+`,
+    "Turkey": `
+## TURKEY CV STANDARDS
+- Length: 2 pages maximum
+- Photo: Common and expected on Turkish CVs (professional headshot)
+- Personal details: Full name, date of birth, marital status, nationality, address are standard
+- Include: Native language + English + Turkish proficiency level (A1-C2)
+- Highlight: Any Turkish language study, prior travel to Turkey, hospitality/tourism/factory experience
+- Structure: Personal Info, Objective, Experience, Education, Skills, Languages, References
+- Include contact for any current or prior Turkish employer if applicable
+`,
 };
 // Country-specific SOP standards
 const COUNTRY_SOP_STANDARDS = {
@@ -120,7 +130,17 @@ const COUNTRY_SOP_STANDARDS = {
 - Netherlands: Emphasize innovation, practical skills
 - Format: Often called "Motivation Letter" rather than SOP
 - Include: European mobility/Erasmus interest if applicable
-`
+`,
+    "Turkey": `
+## TURKEY SOP / MOTIVATION LETTER STANDARDS
+- Length: 1 page (400-700 words)
+- Address to specific Turkish employer or institution
+- Explain why Turkey specifically (not "abroad" in general)
+- Mention any Turkish language study, cultural interest, prior visits
+- Highlight relevant hospitality, tourism, textile, engineering, or care background
+- Confirm you have the right to obtain a Turkish work permit through employer sponsorship
+- Close with polite request for an interview and thanks
+`,
 };
 // Country-specific Motivation Letter standards
 const COUNTRY_MOTIVATION_LETTER_STANDARDS = {
@@ -174,7 +194,16 @@ const COUNTRY_MOTIVATION_LETTER_STANDARDS = {
 - Netherlands: Direct, practical, innovative
 - Include: Language skills, European experience
 - Format: Often more formal than US/UK versions
-`
+`,
+    "Turkey": `
+## TURKEY MOTIVATION LETTER STANDARDS
+- Length: 1 page (400-600 words)
+- Address by name if you have the hiring manager, otherwise "Dear Hiring Team"
+- Open with why Turkey specifically (tourism ambition, Turkish language interest, industry fit)
+- Body: match your background to the Turkish employer's needs, use numbers
+- Close: confirm ability to relocate + work-permit process understanding + politely request an interview
+- Include Turkish greetings only if natural (Merhaba, Teşekkürler); do not over-use
+`,
 };
 function getCountryStandards(targetCountry) {
     const country = targetCountry?.toLowerCase() || "";
@@ -190,6 +219,8 @@ function getCountryStandards(targetCountry) {
         return COUNTRY_CV_STANDARDS["UAE"];
     if (country.includes("europe") || country.includes("germany") || country.includes("france") || country.includes("netherlands"))
         return COUNTRY_CV_STANDARDS["Europe"];
+    if (country.includes("turkey") || country.includes("türkiye") || country.includes("istanbul"))
+        return COUNTRY_CV_STANDARDS["Turkey"];
     return "";
 }
 function getSOPStandards(targetCountry) {
@@ -206,6 +237,8 @@ function getSOPStandards(targetCountry) {
         return COUNTRY_SOP_STANDARDS["UAE"];
     if (country.includes("europe") || country.includes("germany") || country.includes("france") || country.includes("netherlands"))
         return COUNTRY_SOP_STANDARDS["Europe"];
+    if (country.includes("turkey") || country.includes("türkiye") || country.includes("istanbul"))
+        return COUNTRY_SOP_STANDARDS["Turkey"];
     return "";
 }
 function getMotivationLetterStandards(targetCountry) {
@@ -222,6 +255,8 @@ function getMotivationLetterStandards(targetCountry) {
         return COUNTRY_MOTIVATION_LETTER_STANDARDS["UAE"];
     if (country.includes("europe") || country.includes("germany") || country.includes("france") || country.includes("netherlands"))
         return COUNTRY_MOTIVATION_LETTER_STANDARDS["Europe"];
+    if (country.includes("turkey") || country.includes("türkiye") || country.includes("istanbul"))
+        return COUNTRY_MOTIVATION_LETTER_STANDARDS["Turkey"];
     return "";
 }
 const SERVICE_PROMPTS = {
