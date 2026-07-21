@@ -779,6 +779,8 @@ function Router() {
         <Route path="/scout-jobs/post" component={LazyScoutJobPost} />
         <Route path="/scout-jobs/:id" component={LazyScoutJobDetail} />
         <Route path="/scout-jobs" component={LazyScoutJobsIndex} />
+        {/* LinkedIn Optimizer — page shows a friendly sign-in prompt for guests. */}
+        <Route path="/tools/linkedin-optimize" component={LazyLinkedinOptimize} />
         <Route path="/student-visas" component={LazyStudentVisas} />
         <Route path="/passport-application" component={LazyPassportApplication} />
       <Route path="/good-conduct" component={LazyGoodConduct} />
