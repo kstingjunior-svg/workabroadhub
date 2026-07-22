@@ -129,6 +129,86 @@ export const COUNTRY_PORTALS: Record<string, PortalLink[]> = {
     { name: "HotelJobs.com.tr",       url: "https://www.oteljobs.com.tr",                                description: "Turkish hotel-industry-specific board — Antalya, Bodrum, Istanbul resorts",       order: 11 },
     { name: "Neuvoo Turkey",          url: "https://tr.neuvoo.com",                                      description: "Aggregator pulling Turkish listings from company sites + boards",                order: 12 },
   ],
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // 2026-07 TIER 1: highest Kenya-to-country hiring pipelines
+  // Every URL verified accessible from Kenyan IPs.
+  // ═══════════════════════════════════════════════════════════════════════
+
+  ireland: [
+    { name: "IrishJobs.ie",              url: "https://www.irishjobs.ie",                                    description: "Ireland's leading job board — nurse, care, hospitality, tech, construction",         order: 1 },
+    { name: "Jobs.ie",                   url: "https://www.jobs.ie",                                         description: "Popular Irish jobs site — broad coverage across sectors",                             order: 2 },
+    { name: "HSE Jobs (Health Service)", url: "https://www.hse.ie/eng/staff/jobs/",                          description: "Official Irish public health service — nurses, doctors, HCAs, allied health",         order: 3 },
+    { name: "Indeed Ireland",            url: "https://ie.indeed.com",                                       description: "Indeed IE — search 'visa sponsorship' or 'critical skills' for eligible roles",       order: 4 },
+    { name: "LinkedIn Jobs Ireland",     url: "https://www.linkedin.com/jobs/?location=Ireland",             description: "Professional Irish roles — many multinationals recruit Kenyans directly",             order: 5 },
+    { name: "Nurse Recruitment Ireland", url: "https://www.threeq.com",                                      description: "Three Q agency — specialises in international nurses for HSE + private hospitals",    order: 6 },
+    { name: "EURES Ireland",             url: "https://ec.europa.eu/eures/portal/jv-se/search?lang=en&countryCodes=IE", description: "European Employment Services — verified Irish jobs open to international candidates", order: 7 },
+    { name: "Critical Skills List (Gov)",url: "https://enterprise.gov.ie/en/what-we-do/workplace-and-skills/employment-permits/employment-permit-eligibility/highly-skilled-eligible-occupations-list/", description: "Official Critical Skills Occupations List — these roles get fast-track visas", order: 8 },
+    { name: "Recruit Ireland",           url: "https://www.recruitireland.com",                              description: "Recruit Ireland — general job listings with visa sponsorship filter",                order: 9 },
+  ],
+
+  netherlands: [
+    { name: "IamExpat Jobs",             url: "https://www.iamexpat.nl/career/jobs-netherlands",             description: "Netherlands #1 board for international/expat hires — English-friendly, sponsor-friendly", order: 1 },
+    { name: "Indeed Netherlands",        url: "https://nl.indeed.com/jobs?q=english&l=Netherlands",          description: "Indeed NL pre-filtered to English-speaking roles",                                     order: 2 },
+    { name: "LinkedIn Jobs Netherlands", url: "https://www.linkedin.com/jobs/?location=Netherlands",         description: "Professional Dutch roles — highly skilled migrant recruiters source directly",         order: 3 },
+    { name: "Nationale Vacaturebank",    url: "https://www.nationalevacaturebank.nl",                        description: "Major Dutch job board — broad coverage, some English roles",                          order: 4 },
+    { name: "Werk.nl (Government)",      url: "https://www.werk.nl/werkzoekenden/",                          description: "Dutch UWV government employment portal — official job listings",                       order: 5 },
+    { name: "IND — Highly Skilled Migrant", url: "https://ind.nl/en/residence-permits/work/highly-skilled-migrant", description: "Official IND page — how the highly-skilled migrant sponsor system works",         order: 6 },
+    { name: "Recognized Sponsor List (IND)", url: "https://ind.nl/en/public-register-recognised-sponsors",   description: "Search here for IND-approved employers — the ONLY companies that can sponsor you",     order: 7 },
+    { name: "TogetherAbroad",            url: "https://www.togetherabroad.nl",                               description: "Netherlands expat jobs + relocation support",                                          order: 8 },
+    { name: "EURES Netherlands",         url: "https://ec.europa.eu/eures/portal/jv-se/search?lang=en&countryCodes=NL", description: "European Employment Services — verified NL jobs open internationally",       order: 9 },
+    { name: "Undutchables",              url: "https://www.undutchables.nl",                                 description: "Recruiter specialising in placing multilingual international candidates in NL",         order: 10 },
+  ],
+
+  "new-zealand": [
+    { name: "Seek New Zealand",          url: "https://www.seek.co.nz",                                      description: "New Zealand's largest job board — care, farming, trades, engineering",                order: 1 },
+    { name: "Trade Me Jobs",             url: "https://www.trademe.co.nz/a/jobs",                            description: "Trade Me — second-largest NZ job board with strong regional coverage",                 order: 2 },
+    { name: "New Zealand Now (Gov)",     url: "https://www.newzealandnow.govt.nz/work-in-nz",                description: "Official NZ Government immigration + jobs portal — Skilled Migrant guide",             order: 3 },
+    { name: "Immigration NZ — Green List", url: "https://www.immigration.govt.nz/new-zealand-visas/preparing-a-visa-application/working-in-nz/hiring-migrant-workers/lists-of-occupations-in-demand/green-list-occupations", description: "Green List occupations — fast-track residence for these skills", order: 4 },
+    { name: "Indeed New Zealand",        url: "https://nz.indeed.com/jobs?q=visa+sponsorship",               description: "Indeed NZ pre-filtered to visa-sponsoring roles",                                     order: 5 },
+    { name: "LinkedIn Jobs NZ",          url: "https://www.linkedin.com/jobs/?location=New+Zealand",         description: "Professional NZ roles — many employers accredited to sponsor visas",                  order: 6 },
+    { name: "Kiwi Health Jobs",          url: "https://kiwihealthjobs.com",                                  description: "New Zealand's health sector jobs — Health New Zealand / Te Whatu Ora recruiter",       order: 7 },
+    { name: "MyJobSpace NZ",             url: "https://www.myjobspace.co.nz",                                description: "NZ-owned jobs site — strong for trades, hospitality, farm work",                       order: 8 },
+    { name: "Working In NZ",             url: "https://www.workingin-newzealand.com",                        description: "Working In NZ — dedicated portal for skilled migrants",                                order: 9 },
+    { name: "Farm Source Careers",       url: "https://www.fonterra.com/nz/en/careers.html",                 description: "Fonterra + dairy farm careers — top employer for agricultural skilled migrants",       order: 10 },
+  ],
+
+  poland: [
+    { name: "Pracuj.pl",                 url: "https://www.pracuj.pl",                                       description: "Poland's largest job board — IT, logistics, factory, construction, hospitality",       order: 1 },
+    { name: "OLX Praca",                 url: "https://www.olx.pl/praca/",                                   description: "OLX Poland jobs section — hands-on labour, factory, warehouse listings",              order: 2 },
+    { name: "LinkedIn Jobs Poland",      url: "https://www.linkedin.com/jobs/?location=Poland",              description: "Professional Polish roles — international recruiters source Kenyans for IT and engineering", order: 3 },
+    { name: "EURES Poland",              url: "https://eures.praca.gov.pl",                                  description: "Official EU Employment Services portal for Poland — non-EU workers eligible",         order: 4 },
+    { name: "Praca.gov.pl (Government)", url: "https://www.praca.gov.pl",                                    description: "Polish Ministry of Family, Labour and Social Policy job portal",                       order: 5 },
+    { name: "Indeed Poland",             url: "https://pl.indeed.com",                                       description: "Indeed PL — broad Polish coverage with English filters",                              order: 6 },
+    { name: "NoFluffJobs (IT)",          url: "https://nofluffjobs.com/pl",                                  description: "Polish IT jobs board — every listing shows salary + tech stack; English-friendly",     order: 7 },
+    { name: "JustJoin.it (IT)",          url: "https://justjoin.it",                                         description: "Polish tech jobs board — strong for developer + engineering roles",                     order: 8 },
+    { name: "Praca.pl",                  url: "https://www.praca.pl",                                        description: "Praca.pl — broad Polish job aggregator",                                              order: 9 },
+    { name: "Work Permit Info (Poland)", url: "https://www.gov.pl/web/gov/apply-for-a-work-permit",          description: "Official Polish work permit application guide from the government",                    order: 10 },
+  ],
+
+  kuwait: [
+    { name: "Bayt Kuwait",               url: "https://www.bayt.com/en/kuwait/",                             description: "Middle East's largest job board — Kuwait section, strong Kenya-to-Gulf pipeline",     order: 1 },
+    { name: "Naukri Gulf Kuwait",        url: "https://www.naukrigulf.com/jobs-in-kuwait",                   description: "Major Gulf board — India + Africa friendly listings",                                  order: 2 },
+    { name: "GulfTalent Kuwait",         url: "https://www.gulftalent.com/kuwait/jobs",                      description: "Mid-to-senior Gulf roles — Kuwait section",                                            order: 3 },
+    { name: "LinkedIn Jobs Kuwait",      url: "https://www.linkedin.com/jobs/?location=Kuwait",              description: "Professional Kuwait roles, recruiters actively source international candidates",       order: 4 },
+    { name: "Indeed Kuwait",             url: "https://kw.indeed.com",                                       description: "Indeed KW — Gulf coverage",                                                            order: 5 },
+    { name: "PACI (Government)",         url: "https://www.paci.gov.kw",                                     description: "Public Authority for Civil Information — Kuwaiti government sites incl. Civil ID info", order: 6 },
+    { name: "Kuwait Airways Careers",    url: "https://www.kuwaitairways.com/en/about-us/careers",           description: "Major Kuwaiti employer — cabin crew, ground handling, engineering",                    order: 7 },
+    { name: "Manpower Kuwait",           url: "https://www.manpower.com.kw",                                 description: "Manpower Kuwait — staffing agency with African hires pipeline",                        order: 8 },
+    { name: "Laimoon Kuwait",            url: "https://jobs.laimoon.com/kuwait",                             description: "Kuwait-focused aggregator — Kenya-friendly",                                          order: 9 },
+  ],
+
+  oman: [
+    { name: "Bayt Oman",                 url: "https://www.bayt.com/en/oman/",                               description: "Middle East's largest job board — Oman section, hospitality/oil/care roles",           order: 1 },
+    { name: "Naukri Gulf Oman",          url: "https://www.naukrigulf.com/jobs-in-oman",                     description: "Major Gulf board — India + Africa friendly listings for Oman",                        order: 2 },
+    { name: "GulfTalent Oman",           url: "https://www.gulftalent.com/oman/jobs",                        description: "Mid-to-senior Gulf roles — Oman section",                                              order: 3 },
+    { name: "LinkedIn Jobs Oman",        url: "https://www.linkedin.com/jobs/?location=Oman",                description: "Professional Oman roles — recruiters actively source Kenyan candidates",              order: 4 },
+    { name: "Indeed Oman",               url: "https://om.indeed.com",                                       description: "Indeed OM — Gulf coverage",                                                            order: 5 },
+    { name: "Oman Manpower Ministry",    url: "https://www.manpower.gov.om",                                 description: "Ministry of Labour Oman — official work permit + labour law information",              order: 6 },
+    { name: "Oman Air Careers",          url: "https://careers.omanair.com",                                 description: "Major Omani employer — cabin crew, ground handling, engineering",                      order: 7 },
+    { name: "Petroleum Development Oman", url: "https://www.pdo.co.om/en/careers",                           description: "PDO — Oman's largest employer in oil & gas, engineering roles for international staff", order: 8 },
+    { name: "Laimoon Oman",              url: "https://jobs.laimoon.com/oman",                               description: "Oman-focused aggregator — Kenya-friendly",                                            order: 9 },
+  ],
 };
 
 // ─── Synthetic ID helpers ───────────────────────────────────────────────────

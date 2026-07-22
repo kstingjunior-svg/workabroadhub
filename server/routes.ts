@@ -2894,6 +2894,13 @@ Crawl-delay: 1`);
         australia: { name: "Australia",            flag: "🇦🇺" },
         turkey:    { name: "Turkey",               flag: "🇹🇷" },
         luxembourg:{ name: "Luxembourg",           flag: "🇱🇺" },
+        // 2026-07 Tier 1
+        ireland:    { name: "Ireland",             flag: "🇮🇪" },
+        netherlands:{ name: "Netherlands",         flag: "🇳🇱" },
+        "new-zealand":{ name: "New Zealand",       flag: "🇳🇿" },
+        poland:     { name: "Poland",              flag: "🇵🇱" },
+        kuwait:     { name: "Kuwait",              flag: "🇰🇼" },
+        oman:       { name: "Oman",                flag: "🇴🇲" },
       };
 
       let country: any = null;

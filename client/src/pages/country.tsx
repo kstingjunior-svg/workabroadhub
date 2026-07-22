@@ -230,6 +230,13 @@ const countryData: Record<string, { name: string; flagEmoji: string }> = {
   turkey: { name: "Turkey", flagEmoji: "🇹🇷" },
   // 2026-07: Luxembourg added.
   luxembourg: { name: "Luxembourg", flagEmoji: "🇱🇺" },
+  // 2026-07 Tier 1: highest Kenya-to-country hiring pipelines.
+  ireland:      { name: "Ireland",      flagEmoji: "🇮🇪" },
+  netherlands:  { name: "Netherlands",  flagEmoji: "🇳🇱" },
+  "new-zealand":{ name: "New Zealand",  flagEmoji: "🇳🇿" },
+  poland:       { name: "Poland",       flagEmoji: "🇵🇱" },
+  kuwait:       { name: "Kuwait",       flagEmoji: "🇰🇼" },
+  oman:         { name: "Oman",         flagEmoji: "🇴🇲" },
 };
 
 export default function Country() {

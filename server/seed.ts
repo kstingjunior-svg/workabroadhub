@@ -1557,6 +1557,13 @@ export async function seedCountryPortals(): Promise<void> {
       { code: "turkey",    name: "Turkey",               flag: "🇹🇷" },
       // 2026-07: Luxembourg added as a supported destination (Tony's request).
       { code: "luxembourg", name: "Luxembourg",          flag: "🇱🇺" },
+      // 2026-07 Tier 1: highest Kenya-to-country hiring pipelines.
+      { code: "ireland",     name: "Ireland",             flag: "🇮🇪" },
+      { code: "netherlands", name: "Netherlands",         flag: "🇳🇱" },
+      { code: "new-zealand", name: "New Zealand",         flag: "🇳🇿" },
+      { code: "poland",      name: "Poland",              flag: "🇵🇱" },
+      { code: "kuwait",      name: "Kuwait",              flag: "🇰🇼" },
+      { code: "oman",        name: "Oman",                flag: "🇴🇲" },
     ];
     for (const c of wantedCountries) {
       await pool.query(

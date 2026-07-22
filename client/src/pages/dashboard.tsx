@@ -1420,6 +1420,13 @@ export default function Dashboard() {
               { flag: "🇱🇺", code: "LU", slug: "luxembourg", name: "Luxembourg", desc: "Skilled only · 800k+/mo", tone: "from-sky-500/10 to-red-500/10" },
               // 2026-07: Turkey added as a supported destination.
               { flag: "🇹🇷", code: "TR", slug: "turkey",     name: "Turkey",     desc: "Hospitality + Tourism",   tone: "from-red-600/15 to-red-400/5" },
+              // 2026-07 Tier 1: highest Kenya-to-country hiring pipelines.
+              { flag: "🇮🇪", code: "IE", slug: "ireland",     name: "Ireland",     desc: "Nurse + care hiring",       tone: "from-green-500/10 to-orange-500/10" },
+              { flag: "🇳🇱", code: "NL", slug: "netherlands", name: "Netherlands", desc: "Skilled + tech visa",       tone: "from-orange-500/10 to-blue-500/10" },
+              { flag: "🇳🇿", code: "NZ", slug: "new-zealand", name: "New Zealand", desc: "Skilled + care + farm",     tone: "from-blue-600/10 to-red-500/10" },
+              { flag: "🇵🇱", code: "PL", slug: "poland",      name: "Poland",      desc: "EU work permit growth",     tone: "from-red-600/15 to-white/0" },
+              { flag: "🇰🇼", code: "KW", slug: "kuwait",      name: "Kuwait",      desc: "Care + drivers + hotels",   tone: "from-green-700/10 to-red-500/10" },
+              { flag: "🇴🇲", code: "OM", slug: "oman",        name: "Oman",        desc: "Hospitality + Gulf salary", tone: "from-red-500/10 to-green-500/10" },
             ].map((c) => (
               <Link
                 key={c.name}

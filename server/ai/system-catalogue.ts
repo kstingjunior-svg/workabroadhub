@@ -46,6 +46,13 @@ export const SYSTEM_CATALOGUE: CatalogueGroup[] = [
       { label: "USA",                  path: "/country/usa",       purpose: "H-1B sponsorship, EB-3 unskilled-worker route, Green Card DV Lottery",                                            audience: "paid" },
       { label: "Europe",               path: "/country/europe",    purpose: "EU Blue Card, Germany / Ireland / Netherlands / France / Nordic countries",                                       audience: "paid" },
       { label: "Turkey",               path: "/country/turkey",    purpose: "Turkish work visa + permit. Hospitality, factory, textile, agriculture, care, IT. Kariyer.net + İŞKUR portals",  audience: "paid" },
+      // 2026-07 Tier 1
+      { label: "Ireland",              path: "/country/ireland",   purpose: "Critical Skills / General Employment / Stamp 1G. Big nurse + care worker + tech pipeline for Kenyans",              audience: "paid" },
+      { label: "Netherlands",          path: "/country/netherlands", purpose: "Highly Skilled Migrant / EU Blue Card / Search Year. English-friendly EU market for tech, logistics, hospitality", audience: "paid" },
+      { label: "New Zealand",          path: "/country/new-zealand", purpose: "Skilled Migrant Category / Accredited Employer Work Visa. Care, farming, trades, engineering",                     audience: "paid" },
+      { label: "Poland",               path: "/country/poland",    purpose: "Work Permit A / Blue Card. Fast-growing EU market — logistics, factory, IT, construction",                            audience: "paid" },
+      { label: "Kuwait",               path: "/country/kuwait",    purpose: "Article 18 work visa. Care, hospitality, drivers, hotel",                                                             audience: "paid" },
+      { label: "Oman",                 path: "/country/oman",      purpose: "Employment Visa. Hospitality, healthcare, engineering, oil & gas",                                                    audience: "paid" },
     ],
   },
   {
