@@ -523,6 +523,42 @@ export async function seedStudentVisas() {
     { visaId: germanyStudent.id, stepNumber: 6, title: "Visa Interview", description: "Attend visa interview with all original documents.", estimatedTime: "15-30 minutes", tips: "Basic German knowledge may be tested" },
   ]);
 
+  // 2026-07: Luxembourg Student Visa (Tony's request).
+  const [luxStudent] = await db.insert(studentVisas).values({
+    countryCode:    "luxembourg",
+    visaName:       "Luxembourg Student Residence Permit",
+    visaType:       "Student",
+    description:    "For non-EU students admitted to a Luxembourg higher-education programme. University of Luxembourg tuition is €400/semester, one of Europe's lowest. Includes a 9-month post-study job-search visa on graduation.",
+    processingTime: "1-3 months",
+    applicationFee: "€80 (temporary authorisation) + €99 (Type D visa)",
+    validityPeriod: "1 year, renewable for duration of study",
+    workRights:     "10 hours/week during term, full-time in holidays",
+    isActive:       true,
+  }).returning();
+
+  await db.insert(visaRequirements).values([
+    { visaId: luxStudent.id, category: "academic",  requirement: "Admission letter from University of Luxembourg or accredited higher-education institution", isRequired: true, order: 1 },
+    { visaId: luxStudent.id, category: "academic",  requirement: "Recognised secondary/tertiary qualification (KCSE plus degree/diploma for postgrad)",         isRequired: true, order: 2 },
+    { visaId: luxStudent.id, category: "financial", requirement: "Proof of sufficient funds — at least €13,464/year (approx €1,122/month) in a Luxembourg bank or blocked account", isRequired: true, order: 3 },
+    { visaId: luxStudent.id, category: "financial", requirement: "Scholarship letter, if applicable (Aide financière de l'État)",                                isRequired: false, order: 4 },
+    { visaId: luxStudent.id, category: "english",   requirement: "English proficiency (IELTS 6.5+/TOEFL 90+) for English-taught programmes",                     isRequired: false, order: 5 },
+    { visaId: luxStudent.id, category: "english",   requirement: "French or German proficiency (B2) for programmes taught in those languages",                    isRequired: false, order: 6 },
+    { visaId: luxStudent.id, category: "health",    requirement: "Health insurance valid in Luxembourg (CMSS or private cover)",                                  isRequired: true, order: 7 },
+    { visaId: luxStudent.id, category: "other",     requirement: "Valid Kenyan passport (at least 12 months validity beyond study period)",                       isRequired: true, order: 8 },
+    { visaId: luxStudent.id, category: "other",     requirement: "Signed accommodation certificate or rental contract in Luxembourg",                             isRequired: true, order: 9 },
+    { visaId: luxStudent.id, category: "other",     requirement: "Certificate of Good Conduct (DCI Nairobi), translated and legalised",                           isRequired: true, order: 10 },
+  ]);
+
+  await db.insert(visaSteps).values([
+    { visaId: luxStudent.id, stepNumber: 1, title: "Get University Admission",             description: "Apply to University of Luxembourg or another Luxembourg higher-education institution. Application deadline for autumn intake: 30 April.", estimatedTime: "6-10 weeks",  tips: "Most Bachelor programmes are in French; most Master programmes offer English tracks." },
+    { visaId: luxStudent.id, stepNumber: 2, title: "Request Temporary Authorisation",       description: "Apply to the Luxembourg Immigration Directorate (MAEE) with your admission letter, proof of funds, insurance, and accommodation.",         estimatedTime: "1-3 months",  tips: "This is a mandatory pre-approval before you apply for the visa." },
+    { visaId: luxStudent.id, stepNumber: 3, title: "Apply for Type D Long-Stay Visa",       description: "Once the authorisation is granted, apply at the Belgian embassy in Nairobi (which handles Luxembourg visas in Kenya).",                    estimatedTime: "2-4 weeks",   tips: "Book the embassy appointment as soon as your authorisation is issued — slots fill fast." },
+    { visaId: luxStudent.id, stepNumber: 4, title: "Travel to Luxembourg",                  description: "Enter Luxembourg on the Type D visa. Take the direct flight via Amsterdam, Brussels, or Paris.",                                             estimatedTime: "1 day",       tips: "Bring all original documents in your hand luggage." },
+    { visaId: luxStudent.id, stepNumber: 5, title: "Register with the Commune",             description: "Within 3 working days of arrival, register at the local commune (town hall) with your passport, visa, admission letter, and rental contract.",     estimatedTime: "1 day",       tips: "The 3-day window is enforced. Register the day after you arrive if possible." },
+    { visaId: luxStudent.id, stepNumber: 6, title: "Medical Examination",                    description: "Complete the mandatory medical check with a Luxembourg-approved doctor within 3 months.",                                                    estimatedTime: "1 day",       tips: "The University of Luxembourg's international office arranges this for you if asked." },
+    { visaId: luxStudent.id, stepNumber: 7, title: "Collect Residence Permit Card",         description: "Submit biometrics at the Immigration Directorate. Your residence permit is issued within 4-6 weeks and lasts 1 year (renewable).",           estimatedTime: "4-6 weeks",   tips: "You cannot legally travel outside the Schengen area until the physical card is issued." },
+  ]);
+
   // Add useful links for all countries
   await db.insert(visaLinks).values([
     // USA Links
@@ -555,6 +591,14 @@ export async function seedStudentVisas() {
     { countryCode: "europe", linkType: "official", name: "DAAD", url: "https://www.daad.de/en", description: "German Academic Exchange Service" },
     { countryCode: "europe", linkType: "scholarship", name: "Study in Europe", url: "https://ec.europa.eu/education/study-in-europe", description: "EU education portal" },
     { countryCode: "europe", linkType: "university", name: "uni-assist", url: "https://www.uni-assist.de/en", description: "German university application portal" },
+
+    // 2026-07: Luxembourg Links (Tony's request).
+    { countryCode: "luxembourg", linkType: "official",    name: "guichet.lu — Student Immigration",         url: "https://guichet.public.lu/en/citoyens/immigration/etudiant.html",     description: "Official Luxembourg government portal for student immigration" },
+    { countryCode: "luxembourg", linkType: "official",    name: "Luxembourg Immigration Directorate (MAEE)", url: "https://maee.gouvernement.lu/en/directions-du-ministere/immigration.html", description: "Ministry office that approves temporary authorisations to stay" },
+    { countryCode: "luxembourg", linkType: "university",  name: "University of Luxembourg",                   url: "https://wwwen.uni.lu/",                                                 description: "The country's public research university — English + French + German programmes" },
+    { countryCode: "luxembourg", linkType: "university",  name: "Sacred Heart University Luxembourg",         url: "https://www.shu.edu/luxembourg/",                                       description: "US-accredited private business school in Luxembourg City" },
+    { countryCode: "luxembourg", linkType: "scholarship", name: "Aide financière de l'État (AideFi)",         url: "https://guichet.public.lu/en/citoyens/enseignement-formation/etudes-superieures/financement-etudes/aide-financiere.html", description: "State financial aid for higher-education students" },
+    { countryCode: "luxembourg", linkType: "official",    name: "Belgian Embassy Nairobi (Luxembourg visas)", url: "https://kenya.diplomatie.belgium.be",                                    description: "Represents Luxembourg for visa applications in Kenya" },
   ]);
 
   console.log("Student visas seeded successfully!");
@@ -1511,6 +1555,8 @@ export async function seedCountryPortals(): Promise<void> {
       { code: "australia", name: "Australia",            flag: "🇦🇺" },
       // 2026-07: Turkey added as a supported destination.
       { code: "turkey",    name: "Turkey",               flag: "🇹🇷" },
+      // 2026-07: Luxembourg added as a supported destination (Tony's request).
+      { code: "luxembourg", name: "Luxembourg",          flag: "🇱🇺" },
     ];
     for (const c of wantedCountries) {
       await pool.query(

@@ -46,6 +46,8 @@ import type { StudentVisaWithDetails, VisaLink } from "@shared/schema";
 const countryData = [
   { code: "usa", name: "USA", flagEmoji: "🇺🇸", color: "from-blue-600 to-red-600", accent: "bg-blue-500" },
   { code: "canada", name: "Canada", flagEmoji: "🇨🇦", color: "from-red-600 to-red-700", accent: "bg-red-500" },
+  // 2026-07: Luxembourg added.
+  { code: "luxembourg", name: "Luxembourg", flagEmoji: "🇱🇺", color: "from-sky-500 to-red-600", accent: "bg-sky-500" },
   { code: "uk", name: "UK", flagEmoji: "🇬🇧", color: "from-blue-700 to-red-700", accent: "bg-blue-600" },
   { code: "australia", name: "Australia", flagEmoji: "🇦🇺", color: "from-blue-600 to-yellow-500", accent: "bg-blue-500" },
   { code: "uae", name: "UAE", flagEmoji: "🇦🇪", color: "from-green-600 to-red-600", accent: "bg-green-500" },
@@ -103,6 +105,13 @@ const countryHighlights: Record<string, { icon: typeof Star; title: string; valu
     { icon: DollarSign, title: "Tuition (Public)", value: "Free-Low", link: "https://www.study.eu/article/free-education-in-europe-a-reality" },
     { icon: Globe, title: "Schengen Access", value: "26 Countries", link: "https://home-affairs.ec.europa.eu/policies/schengen-borders-and-visa/schengen-area_en" },
     { icon: Briefcase, title: "Job Seeker Visa", value: "Available", link: "https://www.make-it-in-germany.com/en/visa-residence/types/job-search" },
+  ],
+  // 2026-07: Luxembourg (Tony's request).
+  luxembourg: [
+    { icon: Building2, title: "Universities",         value: "1 public + Sacred Heart", link: "https://wwwen.uni.lu/" },
+    { icon: DollarSign, title: "Tuition (Uni Lux)",   value: "€400/semester",           link: "https://wwwen.uni.lu/students/registration_and_admission/fees_and_scholarships" },
+    { icon: Users,      title: "Int'l Students",      value: "~57%",                    link: "https://wwwen.uni.lu/university/about/facts_and_figures" },
+    { icon: Briefcase,  title: "Post-Study Work",     value: "9-month search visa",     link: "https://guichet.public.lu/en/citoyens/immigration/etudiant.html" },
   ],
 };
 

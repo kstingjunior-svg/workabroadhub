@@ -228,6 +228,8 @@ const countryData: Record<string, { name: string; flagEmoji: string }> = {
   europe: { name: "Europe", flagEmoji: "🇪🇺" },
   // 2026-07: Turkey added.
   turkey: { name: "Turkey", flagEmoji: "🇹🇷" },
+  // 2026-07: Luxembourg added.
+  luxembourg: { name: "Luxembourg", flagEmoji: "🇱🇺" },
 };
 
 export default function Country() {
