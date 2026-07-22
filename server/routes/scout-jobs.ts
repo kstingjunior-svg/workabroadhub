@@ -24,6 +24,7 @@ import { pool } from "../db";
 import { storage } from "../storage";
 import { stkPush, isMpesaAvailable, getCallbackBaseUrl } from "../mpesa";
 import { createPayPalOrder, capturePayPalOrder, isPayPalConfigured } from "../paypal";
+import { stripHtml } from "../lib/html-sanitizer";
 
 const PRICE_KES = 200;
 const VALID_INDUSTRIES = [
@@ -65,20 +66,24 @@ function validateBody(body: any): { ok: true; data: any } | { ok: false; error: 
   if (body.jobDescription.length > 4000) {
     return { ok: false, error: "jobDescription too long (4000 char max)" };
   }
+  // 2026-07 XSS defense: strip HTML from every user-supplied string before
+  // it reaches the DB. React auto-escapes in the UI, but this guarantees
+  // that any future render surface (email, PDF, admin panel) never sees
+  // raw <script> or event-handler attrs.
   return {
     ok: true,
     data: {
-      scoutName:      String(body.scoutName).trim().slice(0, 150),
-      scoutCountry:   String(body.scoutCountry).trim().slice(0, 100),
+      scoutName:      stripHtml(String(body.scoutName)).slice(0, 150),
+      scoutCountry:   stripHtml(String(body.scoutCountry)).slice(0, 100),
       scoutWhatsapp:  String(body.scoutWhatsapp).trim().slice(0, 30),
       scoutEmail:     body.scoutEmail ? String(body.scoutEmail).trim().slice(0, 200) : null,
-      jobTitle:       String(body.jobTitle).trim().slice(0, 200),
+      jobTitle:       stripHtml(String(body.jobTitle)).slice(0, 200),
       jobCountry:     String(body.jobCountry).trim(),
-      jobCity:        body.jobCity ? String(body.jobCity).trim().slice(0, 100) : null,
+      jobCity:        body.jobCity ? stripHtml(String(body.jobCity)).slice(0, 100) : null,
       jobIndustry:    String(body.jobIndustry).toLowerCase().trim(),
-      jobDescription: String(body.jobDescription).trim(),
-      salaryText:     body.salaryText ? String(body.salaryText).trim().slice(0, 120) : null,
-      howToApply:     body.howToApply ? String(body.howToApply).trim().slice(0, 1000) : null,
+      jobDescription: stripHtml(String(body.jobDescription)),
+      salaryText:     body.salaryText ? stripHtml(String(body.salaryText)).slice(0, 120) : null,
+      howToApply:     body.howToApply ? stripHtml(String(body.howToApply)).slice(0, 1000) : null,
     },
   };
 }
