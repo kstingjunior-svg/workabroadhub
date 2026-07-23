@@ -62,16 +62,21 @@ const SUPPORT_WHATSAPP = "254742619777";
 const SUPPORT_EMAIL = "support@workabroadhub.tech";
 
 function buildRef(code: string | number) {
+  // 2026-07: use UTC (getUTC*) so the ref timestamp matches Render log
+  // timestamps directly. Previously used local time which made
+  // user-reported refs ambiguous — a "23 00:07" ref in Kenya (EAT) was
+  // actually "22 21:07" UTC in Render logs, and support had to convert
+  // by hand for every ticket.
   const now = new Date();
   const ts =
-    String(now.getFullYear()).slice(-2) +
-    String(now.getMonth() + 1).padStart(2, "0") +
-    String(now.getDate()).padStart(2, "0") +
-    String(now.getHours()).padStart(2, "0") +
-    String(now.getMinutes()).padStart(2, "0");
-  // 2026-07: 4-char random suffix so two users hitting different errors
-  // at the same minute don't share the same ref. Enables us to search
-  // support DMs for a specific incident.
+    String(now.getUTCFullYear()).slice(-2) +
+    String(now.getUTCMonth() + 1).padStart(2, "0") +
+    String(now.getUTCDate()).padStart(2, "0") +
+    String(now.getUTCHours()).padStart(2, "0") +
+    String(now.getUTCMinutes()).padStart(2, "0");
+  // 4-char random suffix so two users hitting different errors at the
+  // same minute don't share the same ref. Enables us to search support
+  // DMs for a specific incident.
   const rand = Math.random().toString(36).slice(2, 6);
   return `WAH-${code}-${ts}-${rand}`;
 }
