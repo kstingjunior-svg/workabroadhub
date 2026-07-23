@@ -94,6 +94,79 @@ function currentUserId(req: any): string | null {
   );
 }
 
+/**
+ * 2026-07: Shared generation helper. Used by BOTH the client-triggered
+ * /generate endpoint AND the auto-trigger inside the M-Pesa callback +
+ * PayPal capture. Keeping generation in one function means:
+ *   • The tool is truly automatic — no reliance on the client staying
+ *     on the page after payment confirms.
+ *   • Idempotent — safe to call twice (returns already-generated body).
+ *   • Same error handling everywhere.
+ */
+type GenerationOutcome =
+  | { status: "not_found" }
+  | { status: "not_paid" }
+  | { status: "already_generated"; body: string; wordCount?: number }
+  | { status: "generated"; body: string; wordCount: number }
+  | { status: "failed"; error: string };
+
+async function runGenerationForDraft(draftId: string): Promise<GenerationOutcome> {
+  const { rows } = await pool.query(
+    `SELECT id, doc_type, input_json, status, output_body
+       FROM write_from_scratch_drafts
+      WHERE id = $1`,
+    [draftId],
+  );
+  if (rows.length === 0) return { status: "not_found" };
+  const row = rows[0];
+
+  if (row.status === "pending_payment") return { status: "not_paid" };
+  if (row.status === "generated" && row.output_body) {
+    return { status: "already_generated", body: row.output_body };
+  }
+  if (row.status === "failed") {
+    // Reset to paid so we can try once more
+    await pool.query(
+      `UPDATE write_from_scratch_drafts SET status = 'paid', error_message = NULL WHERE id = $1`,
+      [row.id],
+    );
+  }
+
+  const request = {
+    docType: row.doc_type,
+    input: typeof row.input_json === "string" ? JSON.parse(row.input_json) : row.input_json,
+  } as WriteFromScratchInput;
+
+  let result;
+  try {
+    result = await generateDocument(request);
+  } catch (err: any) {
+    const isKnown = err instanceof WriteFromScratchGenerationError;
+    const message = isKnown ? err.message : "Could not generate the document.";
+    await pool.query(
+      `UPDATE write_from_scratch_drafts SET status = 'failed', error_message = $1 WHERE id = $2`,
+      [message, row.id],
+    );
+    return { status: "failed", error: message };
+  }
+
+  await pool.query(
+    `UPDATE write_from_scratch_drafts
+        SET output_body   = $1,
+            status        = 'generated',
+            generated_at  = NOW(),
+            error_message = NULL
+      WHERE id = $2`,
+    [result.body, row.id],
+  );
+
+  return {
+    status: "generated",
+    body: result.body,
+    wordCount: result.wordCount,
+  };
+}
+
 export function registerWriteFromScratchRoutes(app: Express): void {
   /* ─── POST /api/write-from-scratch/init ─────────────────────────────── */
   app.post("/api/write-from-scratch/init", async (req: Request, res: Response) => {
@@ -248,6 +321,32 @@ export function registerWriteFromScratchRoutes(app: Express): void {
           [receipt, checkoutId],
         );
         console.log(`[write-from-scratch] Payment success: checkoutId=${checkoutId} receipt=${receipt}`);
+
+        // 2026-07 CRITICAL: auto-trigger generation the moment the callback
+        // confirms payment. Previously we relied on the client polling
+        // /status and then calling /generate — if the user closed the tab
+        // after paying, their draft sat at 'paid' forever with no output.
+        // Now the server drives generation as soon as Safaricom confirms,
+        // making the tool truly automated. Client polling still works
+        // (idempotent) and picks up the completed body on next tick.
+        try {
+          const { rows: paidRows } = await pool.query<{ id: string }>(
+            `SELECT id FROM write_from_scratch_drafts
+              WHERE mpesa_checkout_id = $1 AND status = 'paid'
+              LIMIT 1`,
+            [checkoutId],
+          );
+          const draftId = paidRows[0]?.id;
+          if (draftId) {
+            // Fire-and-forget so we always ACK Safaricom fast. Silent errors
+            // are picked up by the client's error state on next poll.
+            runGenerationForDraft(draftId).catch((err: any) =>
+              console.error(`[write-from-scratch] auto-generate failed for ${draftId}:`, err?.message)
+            );
+          }
+        } catch (autoErr: any) {
+          console.error("[write-from-scratch] auto-generate dispatch failed:", autoErr?.message);
+        }
       } else {
         // User cancelled or STK failed. Leave draft as pending_payment so
         // client sees "not paid" and can retry.
@@ -421,6 +520,13 @@ export function registerWriteFromScratchRoutes(app: Express): void {
         `[write-from-scratch] PayPal captured: draftId=${draft.id} txn=${capture.transactionId} $${capture.amountUSD}`,
       );
 
+      // 2026-07: same auto-trigger as the M-Pesa callback. Kick off
+      // generation immediately so the user doesn't have to leave the
+      // browser tab open after paying.
+      runGenerationForDraft(draft.id).catch((err: any) =>
+        console.error(`[write-from-scratch] PayPal auto-generate failed for ${draft.id}:`, err?.message)
+      );
+
       return res.json({
         status: "paid",
         transactionId: capture.transactionId,
@@ -456,67 +562,14 @@ export function registerWriteFromScratchRoutes(app: Express): void {
   /* ─── POST /api/write-from-scratch/:id/generate ─────────────────────── */
   app.post("/api/write-from-scratch/:id/generate", async (req, res) => {
     try {
-      const { rows } = await pool.query(
-        `SELECT id, doc_type, input_json, status, output_body
-           FROM write_from_scratch_drafts
-          WHERE id = $1`,
-        [req.params.id],
-      );
-      if (rows.length === 0) return res.status(404).json({ error: "Not found" });
-      const row = rows[0];
-
-      if (row.status === "pending_payment") {
-        return res.status(402).json({
-          error: "Payment not yet confirmed. Please complete the M-Pesa prompt.",
-        });
-      }
-      if (row.status === "generated" && row.output_body) {
-        // Idempotent — client can call again after a page refresh.
-        return res.json({ status: "generated", body: row.output_body });
-      }
-      if (row.status === "failed") {
-        // Reset to paid so we can try one more time.
-        await pool.query(
-          `UPDATE write_from_scratch_drafts
-              SET status = 'paid', error_message = NULL
-            WHERE id = $1`,
-          [row.id],
-        );
-      }
-
-      const request = {
-        docType: row.doc_type,
-        input: typeof row.input_json === "string" ? JSON.parse(row.input_json) : row.input_json,
-      } as WriteFromScratchInput;
-
-      let result;
-      try {
-        result = await generateDocument(request);
-      } catch (err: any) {
-        const isKnown = err instanceof WriteFromScratchGenerationError;
-        const message = isKnown ? err.message : "Could not generate the document.";
-        await pool.query(
-          `UPDATE write_from_scratch_drafts
-              SET status = 'failed', error_message = $1
-            WHERE id = $2`,
-          [message, row.id],
-        );
-        return res.status(500).json({ error: message });
-      }
-
-      await pool.query(
-        `UPDATE write_from_scratch_drafts
-            SET output_body  = $1,
-                status       = 'generated',
-                generated_at = NOW(),
-                error_message = NULL
-          WHERE id = $2`,
-        [result.body, row.id],
-      );
-
+      const result = await runGenerationForDraft(req.params.id);
+      if (result.status === "not_found")        return res.status(404).json({ error: "Not found" });
+      if (result.status === "not_paid")         return res.status(402).json({ error: "Payment not yet confirmed. Please complete the M-Pesa prompt." });
+      if (result.status === "failed")           return res.status(500).json({ error: result.error });
+      // "generated" or "already_generated" — return the body
       return res.json({
-        status: "generated",
-        body: result.body,
+        status:    "generated",
+        body:      result.body,
         wordCount: result.wordCount,
       });
     } catch (err: any) {
