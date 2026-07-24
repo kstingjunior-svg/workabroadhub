@@ -48,7 +48,7 @@ const CATEGORIES = [
 
 const SERVICE_ICONS: Record<string, any> = {
   "CV Health Check": Search,
-  "CV Fix Lite": FileEdit,
+  "CV Revamp": FileEdit,
   "ATS CV Optimization": FileEdit,
   "Country-Specific CV Rewrite": FileCheck,
   "Cover Letter Writing": FileEdit,

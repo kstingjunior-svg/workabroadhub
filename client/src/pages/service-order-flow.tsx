@@ -39,7 +39,7 @@ interface ServiceMeta {
 
 const SERVICE_META: Record<string, ServiceMeta> = {
   cv_fix_lite: {
-    name: "CV Fix Lite",
+    name: "CV Revamp",
     needsCv: true,
     needsCountry: false,
     needsJobDescription: false,

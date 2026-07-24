@@ -42,7 +42,7 @@ const SERVICES: ServiceCard[] = [
   {
     slug: "cv_fix_lite",
     emoji: "✨",
-    name: "CV Fix Lite",
+    name: "CV Revamp",
     desc: "Grammar, formatting & structure cleaned up. 3 minutes.",
     price: 99,
     bgColor: "bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800",

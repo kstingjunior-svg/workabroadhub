@@ -250,13 +250,13 @@ export async function deliverService(payment: any, user: any): Promise<void> {
 
       await sendWhatsApp(
         phone,
-        `✅ CV Fix Confirmed — KES ${amount.toLocaleString()} received!\n\nHi ${name}, your CV is being professionally reviewed and fixed by our AI.\n\nYou'll receive your improved CV on this WhatsApp within minutes.\n\n— Nanjila 🤖`,
+        `✅ CV Revamp Confirmed — KES ${amount.toLocaleString()} received!\n\nHi ${name}, your CV is being aggressively revamped by our AI — cleaner structure, sharper achievement bullets, and stronger recruiter keywords. You'll receive the revamped CV on this WhatsApp within minutes.\n\n— Nanjila 🤖`,
       ).catch((err) => { console.error('[deliverService] WhatsApp failed:', { error: err?.message, timestamp: new Date().toISOString() }); });
 
       storage.createUserNotification({
         userId: user.id,
         type: "info",
-        title: "CV Fix In Progress",
+        title: "CV Revamp In Progress",
         message: "Your CV is being reviewed and improved. You'll receive it on WhatsApp shortly.",
       }).catch((err) => { console.error('[deliverService] Notification failed:', err?.message); });
 

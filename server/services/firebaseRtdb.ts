@@ -310,7 +310,7 @@ export const AMOUNT_SERVICE_MAP: Record<
     creditType:      "cv_services",
     credits:         1,
     expiryDays:      null,
-    packName:        "CV Fix Lite",
+    packName:        "CV Revamp",
     revenueCategory: "cv_services",
   },
   149: {

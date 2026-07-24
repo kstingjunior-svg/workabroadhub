@@ -87,7 +87,7 @@ const SLUG_KEYWORDS: Array<{ slug: string; rx: RegExp }> = [
   // ── CV services (most-hallucinated category) ────────────────────────────
   { slug: "ats_cv_optimization",  rx: /\bATS\b.{0,30}\bCV\b|\bCV\b.{0,30}\bATS\b|ATS CV Optim|ATS optim|ATS [Cc]ompat/i },
   { slug: "cv_rewrite",           rx: /Country[- ]Specific|CV [Rr]ewrite|UAE[- ]format|UK[- ]format|target country|tailored to.{0,30}country/i },
-  { slug: "cv_fix_lite",          rx: /CV Fix Lite|quick polish|CV polish|fix lite|cv fix\b|CV fix\b|\blight fix\b|lite CV|polish your CV/i },
+  { slug: "cv_fix_lite",          rx: /CV Revamp|CV Fix Lite|quick polish|CV polish|fix lite|cv fix\b|CV fix\b|\blight fix\b|lite CV|polish your CV|revamp your CV|revamp CV/i },
   // ── Other documents ────────────────────────────────────────────────────
   { slug: "cover_letter",         rx: /Cover Letter Writing|cover letter|Cover Letter/i },
   { slug: "ats_cover_bundle",     rx: /ATS \+ Cover|Cover Letter Bundle|ATS bundle/i },

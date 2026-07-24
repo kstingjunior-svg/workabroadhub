@@ -136,7 +136,7 @@ export function CvFixLiteInstantPayModal({ open, onOpenChange, cvFile, score }: 
           method: "mpesa",
           phoneNumber: normalisedPhone(),
           serviceId: "cv_fix_lite",
-          serviceName: "CV Fix Lite",
+          serviceName: "CV Revamp",
           orderId: createdOrderId,
           amount: 99,
         }),
@@ -258,7 +258,7 @@ export function CvFixLiteInstantPayModal({ open, onOpenChange, cvFile, score }: 
         {stage === "intro" && (
           <div className="space-y-4 py-2">
             <div className="flex items-center justify-between rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-3 py-2">
-              <span className="text-sm font-medium">CV Fix Lite</span>
+              <span className="text-sm font-medium">CV Revamp</span>
               <Badge className="bg-amber-500 text-white border-0">KES 99</Badge>
             </div>
             <div className="space-y-1.5">

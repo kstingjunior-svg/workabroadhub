@@ -73,7 +73,7 @@ async function scoreCvStrength(userId: string): Promise<ReadinessScore> {
     score,
     factors: [{ label: `ATS score ${score}`, contribution: score, direction: score >= 60 ? "up" : "down" }],
     nextAction: score < 70
-      ? "Run CV Fix Lite to raise your ATS score past 70."
+      ? "Run CV Revamp to raise your ATS score past 70."
       : score < 90
         ? "Consider ATS CV Optimization (KES 499) to hit 90+."
         : "Refresh your CV every 3 months to keep the score fresh.",

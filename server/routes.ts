@@ -21673,7 +21673,7 @@ Tone examples:
           // figure back on every subsequent turn even after the LIVE PRICE
           // OVERRIDE in the system prompt told it otherwise.)
           let atsLiveCopy = "*CV optimization* for ATS systems";
-          let cvFixCopy   = "*CV Fix Lite* — quick polish";
+          let cvFixCopy   = "*CV Revamp* — quick polish";
           try {
             const { rows: priceRows } = await pool.query<{ slug: string; price: number }>(
               `SELECT slug, price FROM services
@@ -21683,7 +21683,7 @@ Tone examples:
             const atsRow    = priceRows.find((r) => r.slug === "ats_cv_optimization");
             const fixRow    = priceRows.find((r) => r.slug === "cv_fix_lite");
             if (atsRow) atsLiveCopy = `*CV optimization* for ATS systems (KES ${atsRow.price.toLocaleString("en-KE")})`;
-            if (fixRow) cvFixCopy   = `*CV Fix Lite* — quick polish (KES ${fixRow.price.toLocaleString("en-KE")})`;
+            if (fixRow) cvFixCopy   = `*CV Revamp* — quick polish (KES ${fixRow.price.toLocaleString("en-KE")})`;
           } catch (e: any) {
             console.warn("[Nanjila CV reply] live price lookup failed:", e?.message);
           }

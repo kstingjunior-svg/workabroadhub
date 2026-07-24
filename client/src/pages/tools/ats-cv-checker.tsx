@@ -419,7 +419,7 @@ export default function ATSCVChecker() {
                           Fix everything we found — for KES 99
                         </h3>
                         <p className="text-sm text-muted-foreground leading-relaxed mt-1">
-                          Your CV scored {result.score}/100. CV Fix Lite rewrites the formatting,
+                          Your CV scored {result.score}/100. CV Revamp rewrites the formatting,
                           fixes grammar, and restructures it to pass ATS — delivered in 3 minutes
                           for less than a mandazi.
                         </p>
@@ -493,7 +493,7 @@ export default function ATSCVChecker() {
                           Get a human review — advisor fixes what we found
                         </h3>
                         <p className="text-sm text-muted-foreground leading-relaxed mt-1">
-                          Your CV scored {result.score}/100. CV Fix Lite gives you the full report PLUS rewrites the
+                          Your CV scored {result.score}/100. CV Revamp gives you the full report PLUS rewrites the
                           formatting, fixes grammar, and restructures it to pass ATS — delivered in 3 minutes for less
                           than a mandazi.
                         </p>

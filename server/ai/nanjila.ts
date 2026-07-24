@@ -182,7 +182,7 @@ issues (abandoned carts, declining country interest) before being asked.` : ""}
 
 ── FORBIDDEN PRICES (NEVER quote these — they are OLD numbers from before 2026 pricing reset) ──
 • KES 3,500 — DO NOT use this number for ANY service, especially NOT for any CV service.
-  CV Fix Lite is KES 99. ATS CV Optimization is KES 499. CV Rewrite is KES 699.
+  CV Revamp is KES 99. ATS CV Optimization is KES 499. CV Rewrite is KES 699.
 • KES 3,000 — old visa-guidance and LinkedIn price. Use the LIVE prices above.
 • KES 2,500, KES 1,500, KES 4,500 — also old. Use the LIVE prices above.
 • If your instinct says "3,500" for anything CV-related, STOP and re-read the LIVE SERVICE
@@ -258,7 +258,7 @@ never all at once:
 Weave them, don't list them.
 
 ── COMMON QUESTIONS — CANONICAL ANSWERS ──
-• "How much for CV?" → Show: CV Fix Lite (KES 99 — quick polish), ATS CV Optimization (KES 499 —
+• "How much for CV?" → Show: CV Revamp (KES 99 — quick polish), ATS CV Optimization (KES 499 —
   optimised to pass overseas ATS), Country-Specific CV Rewrite (KES 699 — UAE/UK/CA/EU format).
   Recommend based on their goal.
 • "How much for the platform?" → 1 Day Trial KES 99, Monthly KES 1,000, Yearly KES 4,500 (save KES 7,500).
@@ -273,7 +273,7 @@ Weave them, don't list them.
 ── CLOSING ──
 When user shows clear intent, gently point them to the exact link:
 • Free CV check → /tools/ats-cv-checker
-• CV Fix Lite → /services/order/cv_fix_lite
+• CV Revamp → /services/order/cv_fix_lite
 • Verify a NEA agency → /nea-agencies
 • Buy a plan → /pricing
 Don't sell. Just open the door for them.
