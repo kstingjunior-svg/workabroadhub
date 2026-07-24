@@ -20130,7 +20130,7 @@ Tone examples:
                     // figure back on every subsequent turn even after the LIVE PRICE
                     // OVERRIDE in the system prompt told it otherwise.)
                     let atsLiveCopy = "*CV optimization* for ATS systems";
-                    let cvFixCopy = "*CV Fix Lite* — quick polish";
+                    let cvFixCopy = "*CV Revamp* — quick polish";
                     try {
                         const { rows: priceRows } = await db_1.pool.query(`SELECT slug, price FROM services
                 WHERE slug IN ('ats_cv_optimization','cv_fix_lite')
@@ -20140,7 +20140,7 @@ Tone examples:
                         if (atsRow)
                             atsLiveCopy = `*CV optimization* for ATS systems (KES ${atsRow.price.toLocaleString("en-KE")})`;
                         if (fixRow)
-                            cvFixCopy = `*CV Fix Lite* — quick polish (KES ${fixRow.price.toLocaleString("en-KE")})`;
+                            cvFixCopy = `*CV Revamp* — quick polish (KES ${fixRow.price.toLocaleString("en-KE")})`;
                     }
                     catch (e) {
                         console.warn("[Nanjila CV reply] live price lookup failed:", e?.message);

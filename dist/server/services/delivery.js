@@ -181,11 +181,11 @@ async function deliverService(payment, user) {
         case "cv_fix_lite":
         case "cv_fix": {
             await cvQueue_1.cvQueue.add("generate_cv", { userId: user.id, phone, mode: "fix" }, { attempts: 3, backoff: { type: "exponential", delay: 10000 } });
-            await (0, whatsapp_1.sendWhatsApp)(phone, `✅ CV Fix Confirmed — KES ${amount.toLocaleString()} received!\n\nHi ${name}, your CV is being professionally reviewed and fixed by our AI.\n\nYou'll receive your improved CV on this WhatsApp within minutes.\n\n— Nanjila 🤖`).catch((err) => { console.error('[deliverService] WhatsApp failed:', { error: err?.message, timestamp: new Date().toISOString() }); });
+            await (0, whatsapp_1.sendWhatsApp)(phone, `✅ CV Revamp Confirmed — KES ${amount.toLocaleString()} received!\n\nHi ${name}, your CV is being aggressively revamped by our AI — cleaner structure, sharper achievement bullets, and stronger recruiter keywords. You'll receive the revamped CV on this WhatsApp within minutes.\n\n— Nanjila 🤖`).catch((err) => { console.error('[deliverService] WhatsApp failed:', { error: err?.message, timestamp: new Date().toISOString() }); });
             storage_1.storage.createUserNotification({
                 userId: user.id,
                 type: "info",
-                title: "CV Fix In Progress",
+                title: "CV Revamp In Progress",
                 message: "Your CV is being reviewed and improved. You'll receive it on WhatsApp shortly.",
             }).catch((err) => { console.error('[deliverService] Notification failed:', err?.message); });
             break;

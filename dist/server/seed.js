@@ -137,7 +137,7 @@ async function seedDatabase() {
         },
         {
             slug: "cv_fix_lite",
-            name: "CV Fix Lite",
+            name: "CV Revamp",
             description: "Quick CV polish — fix formatting, grammar, and structure so your CV looks professional fast",
             price: 99, currency: "KES", isActive: true, order: 1,
             category: "CV & Documents",
