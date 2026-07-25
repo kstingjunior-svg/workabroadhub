@@ -19221,6 +19221,11 @@ Rules:
     // See server/tools/offer-screening.ts + offer-check-endpoint.ts.
     const { registerOfferCheckRoute } = await Promise.resolve().then(() => __importStar(require("./tools/offer-check-endpoint")));
     registerOfferCheckRoute(app);
+    // 2026-07: IELTS Verifier — user uploads their TRF, we run heuristic +
+    // AI-vision checks and flag likely fakes. Always ends by directing them
+    // to the official IELTS verification portal.
+    const { registerIeltsVerifyRoute } = await Promise.resolve().then(() => __importStar(require("./tools/ielts-verify-endpoint")));
+    registerIeltsVerifyRoute(app);
     // ═══════════════════════════════════════════════════════════════════════════
     // SERVICE ORDER FLOW — unified upload → pay → AI → download for paid services
     // (CV Fix Lite, ATS, Cover Letter, SOP, Country CV Rewrite, Motivation, etc.)

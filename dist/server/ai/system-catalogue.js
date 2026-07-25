@@ -21,6 +21,7 @@ exports.SYSTEM_CATALOGUE = [
         entries: [
             { label: "ATS CV Health Check", path: "/tools/ats-cv-checker", purpose: "User wants to know if their CV is good enough for overseas employers — uploads PDF/DOCX, gets a 0-100 score" },
             { label: "Job Scam Checker", path: "/tools/job-scam-checker", purpose: "User got a job offer or saw a posting and isn't sure if it's a scam" },
+            { label: "IELTS Verifier", path: "/tools/ielts-verify", purpose: "User has an IELTS TRF (Test Report Form) and wants to check if it's genuine before submitting to an employer. Free 2/day, Pro unlimited. Anti-scam tool for TRF fraud." },
             { label: "Visa Sponsorship Jobs feed", path: "/tools/visa-sponsorship-jobs", purpose: "User just wants to browse real overseas jobs with visa sponsorship — entry-level + skilled" },
             { label: "Free CV Templates", path: "/tools/cv-templates", purpose: "User doesn't have a CV yet and needs a starting template" },
             { label: "NEA Agency Verifier", path: "/nea-agencies", purpose: "User wants to check if a Kenyan recruitment agency is licensed — critical anti-scam tool" },
