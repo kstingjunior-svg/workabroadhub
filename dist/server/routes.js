@@ -6069,7 +6069,7 @@ Crawl-delay: 1`);
         try {
             const adminId = req.user?.claims?.sub;
             const { userId } = req.params;
-            const { planId, transactionCode, note } = req.body;
+            const { planId, transactionCode, note, force } = req.body;
             const ADMIN_GRANT_VALID = ["trial", "basic", "monthly", "yearly", "pro", "pro_referral"];
             if (!planId || !ADMIN_GRANT_VALID.includes(planId)) {
                 return res.status(400).json({ message: "planId must be one of: trial, basic, monthly, yearly, pro, pro_referral" });
@@ -6084,6 +6084,44 @@ Crawl-delay: 1`);
             const existing = await storage_1.storage.getPaymentByTransactionRef(transactionCode);
             if (existing && existing.status === "success") {
                 return res.status(409).json({ message: `Transaction code ${transactionCode} was already used for payment ${existing.id}` });
+            }
+            // ── 2026-07 (Tony's request): idempotent activation guard ─────────────
+            // If the user is ALREADY active on the same plan and it hasn't expired,
+            // refuse the grant instead of wiping their remaining days. Prevents:
+            //   • Founder accidentally granting a plan twice when a user asks
+            //     "please activate my account" (they're already active)
+            //   • Shortening a user's paid time via a well-intentioned admin grant
+            //   • Cluttering the audit log + subscriptions table with duplicates
+            // Bypass via { force: true } in the request body for the rare case
+            // where the founder genuinely wants to overwrite (e.g. wrong plan set,
+            // needs to reset the clock deliberately).
+            try {
+                const { rows: activeRows } = await db_1.pool.query(`SELECT id, plan_id, end_date, created_at
+             FROM user_subscriptions
+            WHERE user_id = $1
+              AND status = 'active'
+              AND (end_date IS NULL OR end_date > NOW())
+            ORDER BY end_date DESC NULLS LAST
+            LIMIT 1`, [userId]);
+                const activeRow = activeRows[0];
+                if (activeRow && !force) {
+                    const samePlan = String(activeRow.plan_id).toLowerCase() === String(planId).toLowerCase();
+                    const expiryStr = activeRow.end_date
+                        ? new Date(activeRow.end_date).toISOString()
+                        : "no expiry";
+                    return res.status(409).json({
+                        alreadyActive: true,
+                        currentPlan: activeRow.plan_id,
+                        requestedPlan: planId,
+                        expiresAt: activeRow.end_date,
+                        message: samePlan
+                            ? `User is already active on "${activeRow.plan_id}" until ${expiryStr}. No action taken. Pass { force: true } to overwrite.`
+                            : `User is already active on "${activeRow.plan_id}" (until ${expiryStr}). You requested "${planId}". Pass { force: true } to switch tiers and reset the clock.`,
+                    });
+                }
+            }
+            catch (guardErr) {
+                console.warn(`[Admin/grant-plan] active-check failed (non-fatal, proceeding):`, guardErr?.message);
             }
             // Create a payment record for audit trail
             const payment = await storage_1.storage.createPayment({
