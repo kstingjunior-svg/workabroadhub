@@ -21304,10 +21304,27 @@ Tone examples:
       const { findMatchesForCv, rememberUserCvEmbedding } = await import("./services/jobMatchEmbeddings");
       const matches = await findMatchesForCv(cvText, VISA_JOBS, limit);
 
-      // Strip applyUrl for non-signed-in users so they have to sign up to apply
-      // (mirrors the existing /api/visa-jobs paywall in visa-jobs-routes.ts).
+      // ── 2026-07 (Tony's report): CRITICAL monetisation gate ─────────────
+      // Previously only ANON users had applyUrl stripped. Signed-in FREE
+      // users got the applyUrl and clicked straight through to the portal
+      // without paying — big revenue leak.
+      // Now: applyUrl is only exposed to PAID tiers. Free users see
+      // applyLocked=true and the client renders an upgrade CTA.
       const userId = (req.session as any)?.customUserId as string | undefined;
-      const cleaned = matches.map((m) => userId ? m : { ...m, applyUrl: undefined });
+      let userIsPaid = false;
+      if (userId) {
+        try {
+          const { rows } = await pool.query<{ plan: string | null }>(
+            `SELECT plan FROM users WHERE id = $1 LIMIT 1`,
+            [userId],
+          );
+          const p = String(rows[0]?.plan ?? "").toLowerCase().trim();
+          userIsPaid = !!p && p !== "free";
+        } catch { /* default false is the safe fallback */ }
+      }
+      const cleaned = matches.map((m) => userIsPaid
+        ? m
+        : { ...m, applyUrl: undefined, applyLocked: true });
 
       // Persist the embedding for signed-in users so the dashboard
       // "Today's Best Match" widget can run without a re-upload. Fire and

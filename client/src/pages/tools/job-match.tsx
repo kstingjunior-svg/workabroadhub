@@ -31,6 +31,7 @@ interface MatchResult {
   visaType?: string;
   category?: string;
   applyUrl?: string;
+  applyLocked?: boolean;   // 2026-07: true for free users — client renders upgrade CTA
   scorePct: number;
 }
 
@@ -172,6 +173,34 @@ export default function JobMatchPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
+              {/* 2026-07: signed-in but FREE users see this upfront so they
+                  understand the paywall before clicking any match card. */}
+              {results.signedIn && results.matches.some((m) => m.applyLocked) && (
+                <div className="rounded-lg border-2 border-amber-400 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/30 p-4 space-y-2">
+                  <div className="flex items-start gap-2">
+                    <Lock className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <div className="font-bold text-amber-900 dark:text-amber-200">
+                        Upgrade to apply directly to employers
+                      </div>
+                      <div className="text-xs text-amber-800 dark:text-amber-300 mt-1 leading-relaxed">
+                        You can see the matches for free. Applying requires an active account so we can invest in keeping the job database fresh + AI matching sharp for you.
+                      </div>
+                      <div className="text-xs text-amber-800 dark:text-amber-300 mt-2">
+                        <b>KES 99</b> for a 1-day trial · <b>KES 1,000</b>/month · <b>KES 4,500</b>/year (save 62%)
+                      </div>
+                    </div>
+                  </div>
+                  <Link href="/pricing">
+                    <Button
+                      className="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-semibold"
+                      data-testid="btn-upgrade-banner-job-match"
+                    >
+                      Upgrade to unlock Apply <ArrowRight className="h-4 w-4 ml-2" />
+                    </Button>
+                  </Link>
+                </div>
+              )}
               {results.matches.length === 0 && (
                 <p className="text-sm text-muted-foreground">
                   No matches yet — try again with a longer or more detailed CV.
@@ -217,12 +246,25 @@ export default function JobMatchPage() {
                     </div>
                   </div>
                   <Progress value={m.scorePct} className="h-1.5" />
+                  {/* 2026-07 (Tony's report): monetisation gate. Free users MUST
+                      upgrade before clicking through to the external portal. Only
+                      paid tiers get the raw applyUrl from the server. */}
                   {m.applyUrl ? (
                     <a href={m.applyUrl} target="_blank" rel="noopener noreferrer">
                       <Button size="sm" variant="outline" className="w-full">
                         Open application <ExternalLink className="h-3 w-3 ml-1" />
                       </Button>
                     </a>
+                  ) : m.applyLocked ? (
+                    <Link href="/pricing">
+                      <Button
+                        size="sm"
+                        className="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-semibold"
+                        data-testid={`btn-upgrade-to-apply-${m.id ?? ""}`}
+                      >
+                        <Lock className="h-3 w-3 mr-1" /> Upgrade to apply · from KES 99
+                      </Button>
+                    </Link>
                   ) : (
                     <Link href="/login">
                       <Button size="sm" variant="outline" className="w-full">
