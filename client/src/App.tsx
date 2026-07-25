@@ -233,6 +233,8 @@ const ToolReport = lazyWithRetry(() => import("@/pages/tools/tool-report"));
 const BulkAgencyVerify = lazyWithRetry(() => import("@/pages/tools/bulk-agency-verify"));
 const VisaCheck = lazyWithRetry(() => import("@/pages/tools/visa-check"));
 const OfferCheck = lazyWithRetry(() => import("@/pages/tools/offer-check"));
+// 2026-07: IELTS Verifier — anti-scam tool that flags likely-fake TRFs.
+const IeltsVerify = lazyWithRetry(() => import("@/pages/tools/ielts-verify"));
 const WriteFromScratch = lazyWithRetry(() => import("@/pages/tools/write-from-scratch"));
 const AdminErrorMonitor = lazyWithRetry(() => import("@/pages/admin/error-monitor"));
 
@@ -508,6 +510,7 @@ const LazyToolReport = withSuspense(ToolReport);
 const LazyBulkAgencyVerify = withSuspense(BulkAgencyVerify);
 const LazyVisaCheck = withSuspense(VisaCheck);
 const LazyOfferCheck = withSuspense(OfferCheck);
+const LazyIeltsVerify = withSuspense(IeltsVerify);
 const LazyWriteFromScratch = withSuspense(WriteFromScratch);
 const LazyGlobalOpportunities = withSuspense(GlobalOpportunities);
 
@@ -686,6 +689,7 @@ function AuthenticatedRoutes() {
       <Route path="/tools/bulk-agency-verify" component={LazyBulkAgencyVerify} />
       <Route path="/tools/visa-check" component={LazyVisaCheck} />
       <Route path="/tools/offer-check" component={LazyOfferCheck} />
+      <Route path="/tools/ielts-verify" component={LazyIeltsVerify} />
       <Route path="/tools/write-from-scratch" component={LazyWriteFromScratch} />
       <Route path="/global-opportunities" component={LazyGlobalOpportunities} />
       <Route path="/tools/cv-templates" component={LazyCVTemplates} />
@@ -815,6 +819,7 @@ function Router() {
         <Route path="/tools/bulk-agency-verify" component={LazyBulkAgencyVerify} />
       <Route path="/tools/visa-check" component={LazyVisaCheck} />
       <Route path="/tools/offer-check" component={LazyOfferCheck} />
+      <Route path="/tools/ielts-verify" component={LazyIeltsVerify} />
       <Route path="/tools/write-from-scratch" component={LazyWriteFromScratch} />
         <Route path="/tools/cv-templates" component={LazyCVTemplates} />
         <Route path="/tools/job-application-assistant" component={LazyJobApplicationAssistant} />

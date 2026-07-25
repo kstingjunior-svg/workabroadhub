@@ -2473,3 +2473,41 @@ export const linkedinOptimizations = pgTable("linkedin_optimizations", {
   byStatus: index("linkedin_optimizations_status_idx").on(t.status),
 }));
 export type LinkedinOptimization = typeof linkedinOptimizations.$inferSelect;
+
+// ============================================
+// IELTS CHECKS — 2026-07 (IELTS Verifier tool)
+// ============================================
+//
+// Anti-scam tool: user uploads their Test Report Form (TRF), we run
+// heuristic + AI-vision checks against IELTS's public TRF conventions and
+// flag likely fakes. Always ends by directing the user to the official
+// IELTS verification portal for the definitive check.
+export const ieltsChecks = pgTable("ielts_checks", {
+  id:               varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId:           varchar("user_id"),
+  guestFingerprint: varchar("guest_fingerprint", { length: 64 }),
+  fileSha256:       varchar("file_sha256", { length: 64 }).notNull(),
+  trfNumber:        varchar("trf_number", { length: 32 }),
+  testCentreCode:   varchar("test_centre_code", { length: 16 }),
+  testDate:         timestamp("test_date"),
+  candidateName:    varchar("candidate_name", { length: 200 }),
+  testType:         varchar("test_type", { length: 30 }),
+  overallBand:      numeric("overall_band", { precision: 2, scale: 1 }),
+  listeningBand:    numeric("listening_band", { precision: 2, scale: 1 }),
+  readingBand:      numeric("reading_band", { precision: 2, scale: 1 }),
+  writingBand:      numeric("writing_band", { precision: 2, scale: 1 }),
+  speakingBand:     numeric("speaking_band", { precision: 2, scale: 1 }),
+  verdict:          varchar("verdict", { length: 30 }).notNull(),
+  confidence:       integer("confidence").notNull().default(0),
+  findingsJson:     jsonb("findings_json").notNull().default(sql`'[]'::jsonb`),
+  aiVisionUsed:     boolean("ai_vision_used").notNull().default(false),
+  rawText:          text("raw_text"),
+  errorMessage:     text("error_message"),
+  createdAt:        timestamp("created_at").defaultNow(),
+}, (t) => ({
+  byUser:    index("ielts_checks_user_idx").on(t.userId),
+  byGuest:   index("ielts_checks_guest_idx").on(t.guestFingerprint),
+  bySha:     index("ielts_checks_sha_idx").on(t.fileSha256),
+  byCreated: index("ielts_checks_created_idx").on(t.createdAt),
+}));
+export type IeltsCheck = typeof ieltsChecks.$inferSelect;
