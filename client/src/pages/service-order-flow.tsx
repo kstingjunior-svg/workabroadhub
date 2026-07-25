@@ -591,14 +591,17 @@ export default function ServiceOrderFlow() {
               )}
 
               <div>
-                <Label htmlFor="extra">Anything else? (optional)</Label>
+                <Label htmlFor="extra">Anything else? (optional — all of this WILL be included in your final CV)</Label>
                 <Textarea
                   id="extra"
-                  placeholder="Special preferences, must-mention experiences, target salary, etc."
+                  placeholder={`Add anything you want on the final CV, e.g.\n• Target salary: KES 250,000/month or USD 3,500/month\n• Availability: 30-day notice\n• Open to relocation to Canada, UAE, UK\n• Languages: English (fluent), Swahili (native), French (intermediate)\n• Must-mention: led the 2024 Nairobi expansion project`}
                   value={extraInput}
                   onChange={(e) => setExtraInput(e.target.value)}
-                  rows={2}
+                  rows={4}
                 />
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Every item you list here is treated as authoritative and will appear in the final CV. If you type a target salary, it appears. If you mention certifications, they're added.
+                </p>
               </div>
 
               <Button onClick={handleSubmit} disabled={submitting} size="lg" className="w-full">

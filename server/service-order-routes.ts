@@ -153,6 +153,8 @@ STRICT RULES:
 - Keep every real fact intact — company names, dates, degrees, certifications.
 - Length: ~600-800 words (1-2 pages when rendered).
 
+8. USER PREFERENCES ARE NOT FABRICATION. If the user provides preferences in the "USER-SUPPLIED PREFERENCES" block (target salary, availability, languages, willingness to relocate, certifications, achievements, must-mention experiences), you MUST include every one of them in the appropriate section of the final CV. These are the user's own truthful additions, not invented facts. Ignoring them is a defect.
+
 CRITICAL: Do NOT include any title, header, or label like "CV Revamp", "CV Fix Lite", "CV", "Resume", "Curriculum Vitae", or any service / product name at the very top. Start the output directly with "## [Candidate Name]" using the real name from their CV. The document goes to a real employer — never reveal it was processed by an editing service.
 
 Return ONLY the revamped CV body — no commentary, no markdown code fences, no preamble.`,
@@ -516,11 +518,32 @@ async function processOrder(orderId: string): Promise<void> {
     await updateOrderStatus(orderId, "processing");
 
     // Build the user message for GPT
+    // 2026-07 (Tony's report): the AI was IGNORING user-supplied preferences
+    // like target salary because the previous prompt only said "additional
+    // details" — the model didn't know it MUST honour them in the output.
+    // Now we label the block clearly and use CAPS so the model treats the
+    // preferences as authoritative instructions, not decorative context.
     let userMessage = "";
     if (config.needsCv && order.cv_text) userMessage += `Here is the user's CV:\n\n${order.cv_text.slice(0, 6000)}\n\n`;
-    if (order.target_country) userMessage += `Target country: ${order.target_country}\n`;
-    if (order.job_description) userMessage += `Job description / role they're applying for:\n${order.job_description.slice(0, 2000)}\n`;
-    if (order.extra_input) userMessage += `Additional details:\n${order.extra_input}\n`;
+    if (order.target_country) userMessage += `TARGET COUNTRY (include country-appropriate conventions in the output): ${order.target_country}\n\n`;
+    if (order.job_description) userMessage += `TARGET JOB / ROLE the candidate is applying for (tailor the CV to match these keywords + requirements):\n${order.job_description.slice(0, 2000)}\n\n`;
+    if (order.extra_input) {
+      userMessage += `╔════════════════════════════════════════════════════════════╗
+║ USER-SUPPLIED PREFERENCES — YOU MUST HONOUR EVERY ITEM     ║
+║ BELOW IN THE FINAL OUTPUT. THESE ARE NOT SUGGESTIONS.      ║
+╚════════════════════════════════════════════════════════════╝
+${order.extra_input}
+
+Rules for handling the preferences above:
+- If the user mentions a TARGET SALARY or compensation expectation, add a "Compensation Expectations" line (or include it in the Professional Summary) using their exact figure.
+- If the user mentions AVAILABILITY / NOTICE PERIOD / START DATE, add an "Availability" line near the top.
+- If the user mentions specific ACHIEVEMENTS or PROJECTS to emphasize, work them into the relevant experience bullets using their exact words.
+- If the user mentions LANGUAGES, add a "Languages" section.
+- If the user mentions willingness to RELOCATE, add a one-line "Open to relocation to {country}" note in the Summary.
+- If the user mentions any CERTIFICATIONS not already in the CV, add them to the Certifications section.
+- Do NOT invent facts the user didn't provide, but DO include every fact they did provide even if it wasn't in the original CV.
+`;
+    }
     if (!userMessage) userMessage = "Please generate the document with reasonable defaults.";
 
     // 2026-07: CV Revamp + other CV outputs now use gpt-4o (not gpt-4o-mini)
