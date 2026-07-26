@@ -161,17 +161,30 @@ export default function ServiceOrderFlow() {
   }
 
   function handleFile(f: File) {
+    // 2026-07: matches the loosened server-side multer config — 10 MB cap,
+    // accepts PDF, Word, AND phone-camera images (JPG/PNG/WEBP/HEIC).
+    // Previously blocked users who tried to upload a photo of their CV
+    // or a slightly-large scan.
     const allowed = [
       "application/pdf",
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       "application/msword",
+      "image/jpeg", "image/jpg", "image/png", "image/webp", "image/heic", "image/heif",
     ];
     if (!allowed.includes(f.type)) {
-      toast({ title: "File type not supported", description: "Please upload a PDF or Word file.", variant: "destructive" });
+      toast({
+        title: "File type not supported",
+        description: "Please upload a PDF, Word document, or a clear photo of your CV.",
+        variant: "destructive",
+      });
       return;
     }
-    if (f.size > 5 * 1024 * 1024) {
-      toast({ title: "File too large", description: "Maximum size is 5 MB.", variant: "destructive" });
+    if (f.size > 10 * 1024 * 1024) {
+      toast({
+        title: "File too large",
+        description: "Please compress your CV under 10 MB or upload a smaller version.",
+        variant: "destructive",
+      });
       return;
     }
     setCvFile(f);
@@ -283,8 +296,11 @@ export default function ServiceOrderFlow() {
       const data = await res.json();
       if (!res.ok) {
         if (res.status === 403 && /verify/i.test(data?.message ?? "")) {
+          // 2026-07 (Tony's conversion audit): thread returnTo so users land
+          // right back on THIS order page after verifying — no lost intent.
           toast({ title: "Verify your account", description: "Redirecting…" });
-          setTimeout(() => navigate("/account/verify"), 1200);
+          const returnTo = encodeURIComponent(window.location.pathname + window.location.search);
+          setTimeout(() => navigate(`/account/verify?returnTo=${returnTo}`), 1200);
           return;
         }
         throw new Error(data?.message || "Could not create order.");
@@ -369,7 +385,8 @@ export default function ServiceOrderFlow() {
       if (!initRes.ok || initData?.success === false) {
         if (initRes.status === 403 && /verify/i.test(initData?.message ?? "")) {
           toast({ title: "Verify your account first", description: "Redirecting…" });
-          setTimeout(() => navigate("/account/verify"), 1200);
+          const returnTo = encodeURIComponent(window.location.pathname + window.location.search);
+          setTimeout(() => navigate(`/account/verify?returnTo=${returnTo}`), 1200);
           return;
         }
         throw new Error(initData?.message || initData?.error || "Could not create payment record.");

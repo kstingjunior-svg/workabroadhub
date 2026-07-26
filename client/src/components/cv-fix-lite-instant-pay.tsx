@@ -358,18 +358,61 @@ export function CvFixLiteInstantPayModal({ open, onOpenChange, cvFile, score }: 
         )}
 
         {/* ── Error ─────────────────────────────────────────────────────── */}
-        {stage === "error" && (
-          <div className="py-4 space-y-3">
-            <div className="flex items-start gap-3 rounded-md border border-red-300 bg-red-50 dark:bg-red-950/30 dark:border-red-800 p-3">
-              <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
-              <p className="text-sm">{errMsg || "Something went wrong."}</p>
+        {stage === "error" && (() => {
+          // 2026-07 (Tony's conversion audit): detect email-verification wall
+          // and show a big prominent "Verify now" CTA that threads returnTo
+          // so users land right back here after confirming their code. Before
+          // this, the error was text-only with no button — users didn't know
+          // where to go and abandoned the purchase.
+          const isVerifyBlocker = /verify your email|verification/i.test(errMsg);
+          if (isVerifyBlocker) {
+            return (
+              <div className="py-4 space-y-3">
+                <div className="rounded-md border-2 border-amber-400 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 p-4 space-y-3">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                    <div>
+                      <div className="font-bold text-amber-900 dark:text-amber-200">One quick step first</div>
+                      <p className="text-sm text-amber-800 dark:text-amber-300 mt-1 leading-relaxed">
+                        For your security, we need to verify your email before your first payment. Takes 30 seconds. We already sent you a 6-digit code.
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    onClick={() => {
+                      onOpenChange(false);
+                      // Return to the ATS-checker page so they can re-open this modal
+                      // and pay again after verification succeeds.
+                      const returnTo = encodeURIComponent(window.location.pathname + window.location.search);
+                      navigate(`/account/verify?returnTo=${returnTo}`);
+                    }}
+                    className="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-bold"
+                    size="lg"
+                    data-testid="button-verify-email-now"
+                  >
+                    Verify my email in 30 seconds →
+                  </Button>
+                </div>
+                <DialogFooter className="gap-2">
+                  <Button variant="ghost" onClick={() => onOpenChange(false)}>Close</Button>
+                </DialogFooter>
+              </div>
+            );
+          }
+          // Any other error — regular error card with Try again
+          return (
+            <div className="py-4 space-y-3">
+              <div className="flex items-start gap-3 rounded-md border border-red-300 bg-red-50 dark:bg-red-950/30 dark:border-red-800 p-3">
+                <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+                <p className="text-sm">{errMsg || "Something went wrong."}</p>
+              </div>
+              <DialogFooter className="gap-2">
+                <Button variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
+                <Button onClick={resetForRetry}>Try again</Button>
+              </DialogFooter>
             </div>
-            <DialogFooter className="gap-2">
-              <Button variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
-              <Button onClick={resetForRetry}>Try again</Button>
-            </DialogFooter>
-          </div>
-        )}
+          );
+        })()}
       </DialogContent>
     </Dialog>
   );

@@ -110,8 +110,16 @@ export default function AccountVerifyPage() {
       const data: VerificationStatus = await res.json();
       setStatus(data);
       if (data.emailVerified) {
-        toast({ title: "All verified", description: "You're good to go." });
-        setTimeout(() => navigate("/dashboard"), 1200);
+        // 2026-07 (Tony's conversion audit): honour ?returnTo so users
+        // finishing verification mid-purchase land straight back on the
+        // paid-service page they were trying to buy from — instead of
+        // being dropped on /dashboard where they have to re-navigate
+        // and re-click Get Started. Big conversion win.
+        const params = new URLSearchParams(window.location.search);
+        const returnTo = params.get("returnTo");
+        const isSafeReturn = returnTo && returnTo.startsWith("/") && !returnTo.startsWith("//");
+        toast({ title: "All verified ✓", description: isSafeReturn ? "Taking you back to finish your payment..." : "You're good to go." });
+        setTimeout(() => navigate(isSafeReturn ? returnTo : "/dashboard"), 1000);
       }
     } catch (err: any) {
       toast({
