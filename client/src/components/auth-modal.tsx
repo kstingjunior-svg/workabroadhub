@@ -345,10 +345,22 @@ export function AuthModal({
         onClose();
         resetForm();
 
-        const dest =
+        // 2026-07 (Tony's conversion audit): after signup, land users on
+        // /account/verify FIRST so they verify their email BEFORE their
+        // first purchase attempt. The verify page auto-redirects to the
+        // real destination (dashboard, service order, etc) once the code
+        // is confirmed — preserving intent via ?returnTo=.
+        //
+        // Login path is unchanged — existing users go straight to their
+        // intended destination.
+        const finalDest =
           redirectPath ||
           localStorage.getItem("auth_redirect") ||
           "/dashboard";
+
+        const dest = tab === "signup"
+          ? `/account/verify?returnTo=${encodeURIComponent(finalDest)}`
+          : finalDest;
 
         localStorage.removeItem("auth_redirect");
         navigate(dest);
