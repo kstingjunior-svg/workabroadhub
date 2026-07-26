@@ -47,19 +47,60 @@ const db_1 = require("./db");
 const openai_1 = require("./lib/openai");
 const extract_text_1 = require("./utils/extract-text");
 const document_renderer_1 = require("./services/document-renderer");
-// ── Multer (memory storage, 5 MB cap, PDF/DOCX only) ─────────────────────────
+// ── Multer (memory storage, 10 MB cap) ───────────────────────────────────────
+// 2026-07 (Tony's users report "can't upload CV"): loosened previously-strict
+// limits. Root cause was: (a) 5 MB was too small for scanned/graphic-heavy CVs,
+// (b) fileFilter rejected images so mobile users who photographed their CV got
+// silent multer errors, (c) multer rejections weren't wrapped in JSON so the
+// client got a raw 500 HTML page and displayed "Could not create order".
+//
+// Now: 10 MB cap (matches offer-check + ielts-verify), accepts image types
+// (users take phone photos of CVs and we OCR them via vision), and the wrapper
+// below catches all multer errors and returns JSON with a friendly message.
 const cvUpload = (0, multer_1.default)({
     storage: multer_1.default.memoryStorage(),
-    limits: { fileSize: 5 * 1024 * 1024 },
+    limits: { fileSize: 10 * 1024 * 1024 },
     fileFilter: (_req, file, cb) => {
         const ok = [
             "application/pdf",
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             "application/msword",
+            // 2026-07: allow phone photos of CVs — extractTextFromBuffer + OCR
+            // handles image → text on the server. Better UX than rejecting.
+            "image/jpeg",
+            "image/jpg",
+            "image/png",
+            "image/webp",
+            "image/heic",
+            "image/heif",
         ].includes(file.mimetype);
         cb(null, ok);
     },
 });
+/**
+ * Multer error → JSON. Wraps cvUpload.single("cv") so LIMIT_FILE_SIZE,
+ * unsupported mime, and generic multer errors return a proper JSON body
+ * the client can display. Without this, multer errors surface as raw HTML
+ * 500 pages and the client shows a useless "Could not create order" toast.
+ */
+function cvUploadWithJsonErrors(fieldName) {
+    const mw = cvUpload.single(fieldName);
+    return (req, res, next) => {
+        mw(req, res, (err) => {
+            if (!err)
+                return next();
+            const isMulter = err.name === "MulterError";
+            const isSize = err.code === "LIMIT_FILE_SIZE";
+            const isMime = err.message === "Unexpected field" || /mime|file type/i.test(String(err.message));
+            const msg = isSize ? "Your CV is larger than 10 MB. Please compress it or upload a smaller version."
+                : isMulter ? "Could not process your upload. Please try a PDF, Word, or image file up to 10 MB."
+                    : /file type|mimetype|unsupported/i.test(String(err.message)) ? "That file type is not supported. Please upload a PDF, Word document, or a clear photo/scan."
+                        : "Something went wrong reading your file. Please try again with a fresh copy.";
+            console.warn(`[ServiceOrder] multer error code=${err.code} name=${err.name} msg="${err.message}" → responding to client`);
+            return res.status(400).json({ message: msg, code: err.code ?? "UPLOAD_ERROR" });
+        });
+    };
+}
 // ─────────────────────────────────────────────────────────────────────────────
 // workPermitSystemPrompt — generates the system prompt for the Light and Mid
 // tiers of Work Permit Assistance. Light returns a country-specific guide;
@@ -646,7 +687,7 @@ function registerServiceOrderRoutes(app, isAuthenticated) {
     // POST /api/services/order/:slug
     // Body: multipart/form-data { cv: File, jobDescription?, targetCountry?, extraInput? }
     // Response: { orderId, serviceName, price, needsPayment: true }
-    app.post("/api/services/order/:slug", isAuthenticated, cvUpload.single("cv"), async (req, res) => {
+    app.post("/api/services/order/:slug", isAuthenticated, cvUploadWithJsonErrors("cv"), async (req, res) => {
         const t0 = Date.now();
         const slug = String(req.params.slug || "").toLowerCase();
         console.log(`[ServiceOrder] POST /api/services/order/${slug} | userId=${req.user?.claims?.sub ?? req.user?.id ?? "??"} hasFile=${!!req.file}`);
