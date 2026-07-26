@@ -258,13 +258,13 @@ export default function ServiceOrderFlow() {
         });
       }
 
-      // 2026-07: 6 attempts with exponential backoff (0/1/4/8/15/25s
-      // = 53s total window). Silently retries so Render cold starts
-      // (20-40s) never surface as user-facing errors. A subtle
-      // "warming up" toast appears from attempt 2+ so the user knows
-      // we haven't hung — but it's never framed as a failure.
+      // 2026-07 v2 (Tony's "Connection issue" user report): 8 attempts with
+      // exponential backoff (0/1/4/8/15/25/30/30s = 113s total window).
+      // Render free-tier cold starts routinely hit 60-90s and the previous
+      // 53s window would time out with the server still warming up. New
+      // ladder covers the worst realistic cold-start case.
       let res: Response | null = null;
-      const backoffs = [0, 1000, 4000, 8000, 15000, 25000];
+      const backoffs = [0, 1000, 4000, 8000, 15000, 25000, 30000, 30000];
       let lastNetErr: any = null;
       let warmingToastShown = false;
       for (let attempt = 0; attempt < backoffs.length; attempt++) {
@@ -331,13 +331,18 @@ export default function ServiceOrderFlow() {
       // the button they can tap again. The scary "Couldn't reach our
       // server" title is gone — Tony's screenshot showed users freaking
       // out because it looked like the app was broken.
+      // 2026-07 v3 (Tony's user stuck in retry loop): reframed message so
+      // the user knows it's the server warming up (not their fault) and
+      // gives them a specific action: wait 30 sec then retry. Also fires
+      // a background health-ping so the next attempt hits a warm server.
+      fetch("/api/health/live").catch(() => {});   // wake it up NOW for the next tap
       toast({
-        title: isNetwork ? "Connection issue — please try again" : "Order couldn't be created",
+        title: isNetwork ? "Our server is waking up — one more try" : "Order couldn't be created",
         description: isNetwork
-          ? "Something interrupted the request. Tap Continue to Payment again — it usually works on the second try. If it keeps happening, WhatsApp +254 742 619 777."
+          ? "This happens on the first request after a quiet period. Wait 30 seconds, then tap Continue to Payment. The next try almost always works. Still stuck? WhatsApp +254 742 619 777."
           : (err?.message || "Something went wrong. Please try again."),
         variant: isNetwork ? "default" : "destructive",
-        duration: 10_000,
+        duration: 12_000,
       });
     } finally {
       setSubmitting(false);
@@ -467,16 +472,28 @@ export default function ServiceOrderFlow() {
   // 2026-07: silent pre-warm on mount. GET /api/health/live wakes the
   // Render container so by the time the user submits the CV, the server
   // is already warm. Fire-and-forget — errors are ignored.
+  //
+  // 2026-07 v2 (Tony's "Connection issue" report): bumped timeout 15s→45s.
+  // Render free-tier cold starts routinely hit 30-60s and my previous 15s
+  // ping was abandoning before the container was actually warm — meaning
+  // by the time the user tapped Continue to Payment, the server was still
+  // cold and their 53s retry window ran out. Second ping fires at 20s in
+  // case the first fails.
   useEffect(() => {
     (async () => {
       try {
-        // 15s timeout so we don't hang if the container is really cold.
         const ctl = new AbortController();
-        const to  = setTimeout(() => ctl.abort(), 15_000);
+        const to  = setTimeout(() => ctl.abort(), 45_000);
         await fetch("/api/health/live", { signal: ctl.signal }).catch(() => {});
         clearTimeout(to);
       } catch {}
     })();
+    // Second warmup ping 20s later — belt-and-suspenders for the case where
+    // the first ping itself was queued behind the cold start.
+    const secondPing = setTimeout(() => {
+      fetch("/api/health/live").catch(() => {});
+    }, 20_000);
+    return () => clearTimeout(secondPing);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
