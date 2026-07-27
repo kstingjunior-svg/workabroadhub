@@ -466,13 +466,30 @@ async function extractCvOrError(req) {
 // ── DB helpers ──────────────────────────────────────────────────────────────
 async function createOrder(args) {
     const id = crypto_1.default.randomUUID();
+    // Sanitize the referrer token — must look like a UUID, must NOT be the
+    // user's own prior order (self-referral is meaningless). Silently drop
+    // anything that doesn't validate rather than reject the whole order.
+    let referrer = null;
+    if (args.referrerOrderId && typeof args.referrerOrderId === "string") {
+        const t = args.referrerOrderId.trim();
+        if (/^[0-9a-fA-F-]{8,64}$/.test(t)) {
+            try {
+                const { rows } = await db_1.pool.query(`SELECT user_id FROM service_orders WHERE id = $1 LIMIT 1`, [t]);
+                // Only credit when the referring order belongs to a DIFFERENT user.
+                if (rows[0] && rows[0].user_id !== args.userId)
+                    referrer = t;
+            }
+            catch { /* non-fatal — proceed without attribution */ }
+        }
+    }
     // We fill BOTH service_id (old schema, NOT NULL) and service_slug (new
     // columns added for the unified flow) with the same slug — so both old
     // Drizzle-based code paths AND new service-order-routes work cleanly.
     await db_1.pool.query(`INSERT INTO service_orders
        (id, user_id, service_id, service_slug, service_name, amount, currency, status,
-        cv_text, job_description, target_country, extra_input, created_at, updated_at)
-     VALUES ($1, $2, $3, $3, $4, $5, 'KES', 'pending_payment', $6, $7, $8, $9, NOW(), NOW())
+        cv_text, job_description, target_country, extra_input, referrer_order_id,
+        created_at, updated_at)
+     VALUES ($1, $2, $3, $3, $4, $5, 'KES', 'pending_payment', $6, $7, $8, $9, $10, NOW(), NOW())
      ON CONFLICT (id) DO NOTHING`, [
         id,
         args.userId,
@@ -483,6 +500,7 @@ async function createOrder(args) {
         args.jobDescription,
         args.targetCountry,
         args.extraInput,
+        referrer,
     ]);
     return id;
 }
@@ -713,6 +731,10 @@ function registerServiceOrderRoutes(app, isAuthenticated) {
             const jobDescription = String(req.body?.jobDescription ?? "").trim() || null;
             const targetCountry = String(req.body?.targetCountry ?? "").trim() || null;
             const extraInput = String(req.body?.extraInput ?? "").trim() || null;
+            // 2026-07 (viral share loop): client sends the ref token from
+            // localStorage in every order-init request. Attribution happens in
+            // createOrder — safe to send any value, it's re-validated there.
+            const referrerOrderId = String(req.body?.referrerOrderId ?? "").trim() || null;
             // Look up the canonical price BEFORE creating the order so we can
             // record it in the `amount` column (the old schema requires it).
             const { rows: priceRows } = await db_1.pool.query(`SELECT price FROM services WHERE slug = $1 OR code = $1 LIMIT 1`, [slug]);
@@ -726,6 +748,7 @@ function registerServiceOrderRoutes(app, isAuthenticated) {
                 jobDescription,
                 targetCountry,
                 extraInput,
+                referrerOrderId,
             });
             console.log(`[ServiceOrder] Created orderId=${orderId} slug=${slug} price=${price} cvLen=${cvText?.length ?? 0} in ${Date.now() - t0}ms`);
             res.json({

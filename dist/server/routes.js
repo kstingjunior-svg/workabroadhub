@@ -1303,6 +1303,11 @@ async function registerRoutes(httpServer, app) {
     // at /api/linkedin-optimize/:id/stream.
     const { registerLinkedinOptimizeRoutes } = await Promise.resolve().then(() => __importStar(require("./routes/linkedin-optimize")));
     registerLinkedinOptimizeRoutes(app);
+    // Viral share loop — 2026-07 (growth). Public /api/share/:token endpoint
+    // powers the /share/:token landing page every paying user's WhatsApp
+    // Status card links to. No auth — visitor doesn't have an account yet.
+    const { registerShareRoutes } = await Promise.resolve().then(() => __importStar(require("./routes/share")));
+    registerShareRoutes(app);
     // Track active sessions for the admin dashboard real-time counter.
     // Must run after setupAuth so req.session is populated.
     app.use(active_users_1.trackActiveUser);
