@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   X,
   Eye,
@@ -18,6 +18,13 @@ import { useLocation } from "wouter";
 import { queryClient } from "@/lib/queryClient";
 
 type Tab = "login" | "signup";
+// 2026-07 (Tony's inline-verify request): "verify" is a stage the modal
+// SWITCHES to after signup succeeds. User stays in the same modal on the
+// same page, enters the 6-digit code from their email (which iOS/Android
+// will auto-suggest above the keyboard thanks to autoComplete="one-time-code"),
+// and only then are they redirected to their destination. No page-hop
+// to /account/verify while they hunt for the code in Gmail.
+type Stage = Tab | "verify";
 
 interface AuthModalProps {
   open: boolean;
@@ -88,6 +95,20 @@ export function AuthModal({
 }: AuthModalProps) {
   const [tab, setTab] =
     useState<Tab>(defaultTab);
+
+  // 2026-07: inline verification stage state
+  const [stage, setStage] =
+    useState<Stage>(defaultTab);
+  const [verifyCode, setVerifyCode] =
+    useState("");
+  const [verifying, setVerifying] =
+    useState(false);
+  const [verifyError, setVerifyError] =
+    useState("");
+  const [resendCooldown, setResendCooldown] =
+    useState(0);
+  const [pendingDest, setPendingDest] =
+    useState<string>("/dashboard");
 
   const [, navigate] = useLocation();
 
@@ -341,29 +362,31 @@ export function AuthModal({
       // the initial dashboard mount; any extra fields the dashboard needs are
       // fetched by its own queries.
 
+      const finalDest =
+        redirectPath ||
+        localStorage.getItem("auth_redirect") ||
+        "/dashboard";
+
+      if (tab === "signup") {
+        // 2026-07 (Tony's inline-verify request): stay INSIDE the modal.
+        // Server already fired a 6-digit code to the user's email during
+        // signup. Switch to the "verify" stage — user sees the code on
+        // their phone's email notification, types it right here, and only
+        // then are they redirected. No page navigation away from signup.
+        setPendingDest(finalDest);
+        setStage("verify");
+        // clear the auth_redirect intent for later
+        localStorage.removeItem("auth_redirect");
+        setLoading(false);
+        return;
+      }
+
+      // Login path — unchanged, straight to destination
       setTimeout(() => {
         onClose();
         resetForm();
-
-        // 2026-07 (Tony's conversion audit): after signup, land users on
-        // /account/verify FIRST so they verify their email BEFORE their
-        // first purchase attempt. The verify page auto-redirects to the
-        // real destination (dashboard, service order, etc) once the code
-        // is confirmed — preserving intent via ?returnTo=.
-        //
-        // Login path is unchanged — existing users go straight to their
-        // intended destination.
-        const finalDest =
-          redirectPath ||
-          localStorage.getItem("auth_redirect") ||
-          "/dashboard";
-
-        const dest = tab === "signup"
-          ? `/account/verify?returnTo=${encodeURIComponent(finalDest)}`
-          : finalDest;
-
         localStorage.removeItem("auth_redirect");
-        navigate(dest);
+        navigate(finalDest);
       }, 400);
     } catch {
       setServerError(
@@ -373,6 +396,112 @@ export function AuthModal({
       setLoading(false);
     }
   };
+
+  // ── 2026-07: inline-verify handlers ───────────────────────────────────
+  //
+  // submitVerify — POST /api/auth/verify-email with the code. On success,
+  // close the modal + navigate to pendingDest (the same dest we would have
+  // gone to had verification not been required). On failure, show the
+  // error inline in the modal.
+  const submitVerify = async () => {
+    setVerifyError("");
+    const clean = verifyCode.replace(/\D/g, "");
+    if (clean.length !== 6) {
+      setVerifyError("Enter the 6-digit code from your email.");
+      return;
+    }
+    setVerifying(true);
+    try {
+      const apiBase = import.meta.env.VITE_API_URL || "";
+      const csrfRes = await fetch(
+        `${apiBase}/api/csrf-token`,
+        { credentials: "include" },
+      );
+      const { csrfToken } = await csrfRes.json();
+      const res = await fetch(
+        `${apiBase}/api/auth/verify-email`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": csrfToken,
+          },
+          credentials: "include",
+          body: JSON.stringify({ code: clean }),
+        },
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setVerifyError(
+          data?.message ??
+            "That code didn't match. Check your inbox (and spam) or resend a new one.",
+        );
+        return;
+      }
+      // Success — close modal + go to destination
+      onClose();
+      resetForm();
+      navigate(pendingDest);
+    } catch (err: any) {
+      setVerifyError(
+        "Could not reach the server. Please try again.",
+      );
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  const resendCode = async () => {
+    if (resendCooldown > 0) return;
+    setVerifyError("");
+    try {
+      const apiBase = import.meta.env.VITE_API_URL || "";
+      const csrfRes = await fetch(
+        `${apiBase}/api/csrf-token`,
+        { credentials: "include" },
+      );
+      const { csrfToken } = await csrfRes.json();
+      await fetch(
+        `${apiBase}/api/auth/send-email-code`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": csrfToken,
+          },
+          credentials: "include",
+          body: JSON.stringify({}),
+        },
+      );
+      setResendCooldown(30);
+    } catch {
+      setVerifyError(
+        "Could not resend the code. Please try again in a moment.",
+      );
+    }
+  };
+
+  // Countdown for the resend button
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const id = setTimeout(
+      () => setResendCooldown((c) => c - 1),
+      1000,
+    );
+    return () => clearTimeout(id);
+  }, [resendCooldown]);
+
+  // Auto-submit when 6 digits entered — same UX as iOS mail apps
+  useEffect(() => {
+    if (
+      stage === "verify" &&
+      verifyCode.replace(/\D/g, "").length === 6 &&
+      !verifying
+    ) {
+      submitVerify();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [verifyCode]);
 
   if (!open) return null;
 
@@ -408,17 +537,96 @@ export function AuthModal({
           </div>
 
           <h2 className="text-xl font-bold text-foreground mt-2">
-            {tab === "login"
+            {stage === "verify"
+              ? "Verify your email"
+              : tab === "login"
               ? "Welcome back"
               : "Create your free account"}
           </h2>
 
           <p className="text-sm text-muted-foreground mt-0.5">
-            {tab === "login"
+            {stage === "verify"
+              ? `We sent a 6-digit code to ${email}. Check your inbox and spam folder.`
+              : tab === "login"
               ? "Sign in to access your overseas career tools"
               : "Join professionals worldwide building overseas careers"}
           </p>
         </div>
+
+        {/* 2026-07: inline verify stage — replaces the form when user
+            just signed up. iOS + Android auto-suggest the code above
+            the keyboard thanks to autoComplete="one-time-code" so users
+            never leave the page. */}
+        {stage === "verify" && (
+          <div className="p-6 pt-4 space-y-4" data-testid="stage-verify">
+            <div>
+              <Label htmlFor="verify-code" className="mb-2 block">
+                Enter the 6-digit code
+              </Label>
+              <Input
+                id="verify-code"
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                pattern="[0-9]{6}"
+                maxLength={6}
+                autoFocus
+                placeholder="123456"
+                value={verifyCode}
+                onChange={(e) =>
+                  setVerifyCode(
+                    e.target.value.replace(/\D/g, "").slice(0, 6),
+                  )
+                }
+                className="text-center text-2xl tracking-[0.5em] font-mono h-14"
+                disabled={verifying}
+                data-testid="input-verify-code"
+              />
+              {verifyError && (
+                <p className="text-xs text-red-600 dark:text-red-400 mt-2">
+                  {verifyError}
+                </p>
+              )}
+            </div>
+
+            <Button
+              onClick={submitVerify}
+              disabled={
+                verifying ||
+                verifyCode.replace(/\D/g, "").length !== 6
+              }
+              className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
+              size="lg"
+              data-testid="button-verify-code"
+            >
+              {verifying ? "Verifying..." : "Verify & continue"}
+            </Button>
+
+            <div className="text-center">
+              <button
+                type="button"
+                onClick={resendCode}
+                disabled={resendCooldown > 0}
+                className="text-sm text-primary hover:underline disabled:text-muted-foreground disabled:no-underline disabled:cursor-not-allowed"
+                data-testid="button-resend-code"
+              >
+                {resendCooldown > 0
+                  ? `Resend code in ${resendCooldown}s`
+                  : "Didn't get it? Resend code"}
+              </button>
+            </div>
+
+            <div className="text-[11px] text-muted-foreground text-center leading-relaxed">
+              The code should appear on your phone within seconds as an
+              email notification. Pull down your notification bar to see
+              it — you don't have to open Gmail. On iPhone the code appears
+              right above your keyboard when you tap the box above.
+            </div>
+          </div>
+        )}
+
+        {stage !== "verify" && (<>
+        {/* ── Tabs + login/signup form (hidden during verify stage) ── */}
 
         <div className="flex mx-6 mt-4 rounded-lg bg-muted p-1 gap-1">
           <button
@@ -726,6 +934,7 @@ export function AuthModal({
             )}
           </p>
         </form>
+        </>)}
       </div>
     </div>
   );
