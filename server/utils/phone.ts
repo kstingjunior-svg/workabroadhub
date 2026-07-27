@@ -17,4 +17,20 @@
  *   "+27821234567"    → "27821234567"                 (SA, prefix preserved)
  *   "0821234567", "ZA" → "27821234567"                 (SA, leading 0 hint)
  *   "254722123456"    → "254722123456"                (already normalised)
- *   "722123456"       → "722123456"           
+ *   "722123456"       → "722123456"                   (unknown, no change)
+ */
+export function normalizePhone(raw: string, country: "KE" | "ZA" = "KE"): string {
+  const stripped = raw.replace(/\s+/g, "").replace(/^\+/, "");
+  if (stripped.startsWith("254")) return stripped;
+  if (stripped.startsWith("27"))  return stripped;
+  const prefix = country === "ZA" ? "27" : "254";
+  return stripped.replace(/^0/, prefix);
+}
+
+/**
+ * Returns true when the input looks like a phone number rather than an email.
+ * A simple heuristic: emails always contain "@".
+ */
+export function isPhoneLike(input: string): boolean {
+  return !input.trim().includes("@");
+}

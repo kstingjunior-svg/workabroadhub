@@ -18,7 +18,7 @@ exports.jobCounts = exports.pushSubscriptions = exports.notificationTemplates = 
 exports.userJobApplications = exports.userApplicationPacks = exports.applicationPacks = exports.insertSuccessStorySchema = exports.insertConsultationBookingSchema = exports.insertAdvisorSchema = exports.insertCountryInsightsSchema = exports.successStories = exports.consultationBookings = exports.advisors = exports.countryInsights = exports.insertVisaLinkSchema = exports.insertVisaStepSchema = exports.insertVisaRequirementSchema = exports.insertStudentVisaSchema = exports.insertJobCountSchema = exports.insertScheduledNotificationSchema = exports.insertPushSubscriptionSchema = exports.insertNotificationTemplateSchema = exports.insertNotificationPreferencesSchema = exports.insertUserNotificationSchema = exports.insertServiceDeliverableSchema = exports.insertServiceOrderSchema = exports.insertAgencyProfileSchema = exports.insertAgencyClickSchema = exports.insertAgencyAddOnSchema = exports.insertAgencyNotificationSchema = exports.insertAgencyReportSchema = exports.insertNeaAgencySchema = exports.insertAdminLogSchema = exports.insertUserSubscriptionSchema = exports.insertServiceSchema = exports.insertScamAlertSchema = exports.insertJobLinkSchema = exports.insertCountryGuideSchema = exports.insertCountrySchema = exports.insertPaymentSchema = exports.insertInfluencerSchema = exports.influencers = exports.insertReferralSchema = exports.referrals = exports.scamAlertsRelations = exports.jobLinksRelations = exports.countryGuidesRelations = exports.countriesRelations = exports.visaLinks = exports.visaSteps = exports.visaRequirements = exports.studentVisas = exports.scheduledNotifications = void 0;
 exports.insertComplianceAuditLogSchema = exports.complianceAuditLogs = exports.insertManualOverrideSchema = exports.manualOverrides = exports.insertGovernmentFeatureFlagSchema = exports.governmentFeatureFlags = exports.insertGovernmentSyncLogSchema = exports.governmentSyncLogs = exports.insertGovernmentIntegrationSchema = exports.governmentIntegrations = exports.insertLicenseReminderLogSchema = exports.insertAgencyNotificationPreferencesSchema = exports.licenseReminderLogs = exports.agencyNotificationPreferences = exports.insertLicenseRenewalPaymentSchema = exports.licenseRenewalPayments = exports.NOTIFICATION_CHANNELS = exports.REMINDER_TIERS = exports.insertVideoTestimonialSchema = exports.videoTestimonials = exports.insertJobAlertSubscriptionSchema = exports.jobAlertSubscriptions = exports.insertUserCareerProfileSchema = exports.userCareerProfiles = exports.EVENT_CATEGORIES = exports.FUNNEL_STEPS = exports.insertDailyStatsSchema = exports.dailyStats = exports.insertConversionEventSchema = exports.conversionEvents = exports.insertAnalyticsEventSchema = exports.analyticsEvents = exports.insertUserBookmarkSchema = exports.userBookmarks = exports.JOURNEY_STAGES = exports.insertUserCountryJourneySchema = exports.userCountryJourneys = exports.insertTrackedApplicationSchema = exports.TRACKED_APP_STATUSES = exports.trackedApplications = exports.insertWebhookProcessingLockSchema = exports.webhookProcessingLocks = exports.insertAccountLockoutSchema = exports.accountLockouts = exports.APPLICATION_STATUSES = exports.insertApplicationStatusHistorySchema = exports.insertUserJobApplicationSchema = exports.insertUserApplicationPackSchema = exports.insertApplicationPackSchema = exports.applicationStatusHistory = void 0;
 exports.insertAgencyJobSchema = exports.agencyJobs = exports.insertJobSchema = exports.jobs = exports.insertSecurityEventSchema = exports.securityEvents = exports.insertSecurityAlertSchema = exports.securityAlerts = exports.insertFraudIndicatorSchema = exports.fraudIndicators = exports.insertFraudReportSchema = exports.fraudReports = exports.insertAgencyCertificateSchema = exports.agencyCertificates = exports.insertComplianceIndexConfigSchema = exports.complianceIndexConfig = exports.insertComplianceIndexHistorySchema = exports.complianceIndexHistory = exports.insertComplianceIndexScoreSchema = exports.complianceIndexScores = exports.insertComplianceRiskConfigSchema = exports.complianceRiskConfig = exports.insertComplianceAlertSchema = exports.complianceAlerts = exports.insertComplianceAnomalySchema = exports.complianceAnomalies = exports.insertComplianceRiskHistorySchema = exports.complianceRiskHistory = exports.insertComplianceRiskScoreSchema = exports.complianceRiskScores = exports.insertFraudDetectionRuleSchema = exports.fraudDetectionRules = exports.insertFraudInvestigationNoteSchema = exports.fraudInvestigationNotes = exports.insertFraudFlagSchema = exports.fraudFlags = exports.insertBlacklistedEntitySchema = exports.blacklistedEntities = exports.insertAgencyScoreWeightSchema = exports.agencyScoreWeights = exports.insertAgencyComplianceEventSchema = exports.agencyComplianceEvents = exports.insertAgencyScoreHistorySchema = exports.agencyScoreHistory = exports.insertAgencyLegitimacyScoreSchema = exports.agencyLegitimacyScores = exports.insertAuditExportSchema = exports.auditExports = exports.insertGovernmentDowntimeEventSchema = exports.governmentDowntimeEvents = void 0;
-exports.insertDeliverySchema = exports.deliveries = exports.waFollowups = exports.insertWhatsappQueueSchema = exports.whatsappQueue = exports.cvEmailQueue = exports.insertVerifiedPortalSchema = exports.verifiedPortals = exports.abuseReports = exports.mpesaPullTransactions = exports.platformStats = exports.mpesaPullConfig = exports.activityEvents = exports.scamWallComments = exports.scamWallLikes = exports.insertScamReportSchema = exports.scamReports = exports.insertAiUsageSchema = exports.aiUsage = exports.insertToolReportSchema = exports.toolReports = exports.insertCvTemplateDownloadSchema = exports.cvTemplateDownloads = exports.insertToolUsageSchema = exports.toolUsage = exports.jobClickLog = void 0;
+exports.ieltsChecks = exports.linkedinOptimizations = exports.insertScoutJobSchema = exports.scoutJobs = exports.insertDeliverySchema = exports.deliveries = exports.waFollowups = exports.insertWhatsappQueueSchema = exports.whatsappQueue = exports.cvEmailQueue = exports.insertVerifiedPortalSchema = exports.verifiedPortals = exports.abuseReports = exports.mpesaPullTransactions = exports.platformStats = exports.mpesaPullConfig = exports.activityEvents = exports.scamWallComments = exports.scamWallLikes = exports.insertScamReportSchema = exports.scamReports = exports.insertAiUsageSchema = exports.aiUsage = exports.insertToolReportSchema = exports.toolReports = exports.insertCvTemplateDownloadSchema = exports.cvTemplateDownloads = exports.insertToolUsageSchema = exports.toolUsage = exports.jobClickLog = void 0;
 exports.isPaymentSuccess = isPaymentSuccess;
 const drizzle_orm_1 = require("drizzle-orm");
 const pg_core_1 = require("drizzle-orm/pg-core");
@@ -1944,3 +1944,128 @@ exports.deliveries = (0, pg_core_1.pgTable)("deliveries", {
     createdAt: (0, pg_core_1.timestamp)("created_at").defaultNow(),
 });
 exports.insertDeliverySchema = (0, drizzle_zod_1.createInsertSchema)(exports.deliveries).omit({ id: true, createdAt: true });
+// ============================================
+// SCOUT JOBS — 2026-07 (Tony's Job Scout feature)
+// ============================================
+//
+// Individuals already living in a destination country (UK, UAE, Canada, Gulf,
+// Germany, etc) who know of direct job openings can post them here for KES 200.
+// They are NOT registered recruitment agents — hence "scout", not "agent".
+//
+// Flow:
+//   1. Scout signs in, fills the post-a-job form on /scout-jobs/post
+//   2. POST /api/scout-jobs/init creates a row with status='pending_payment'
+//      and STK-pushes KES 200 via M-Pesa (or PayPal for outside Kenya)
+//   3. Payment callback flips status → 'pending_review' — admin moderates
+//      to filter fraud/duplicates
+//   4. Admin approve → status='active' and the post appears on /scout-jobs
+//   5. After 60 days a scheduled job flips 'active' → 'expired'
+//
+// Contact fields are visible to any authenticated user (to grow demand fast);
+// gate behind Pro later if abuse becomes a problem.
+exports.scoutJobs = (0, pg_core_1.pgTable)("scout_jobs", {
+    id: (0, pg_core_1.varchar)("id").primaryKey().default((0, drizzle_orm_1.sql) `gen_random_uuid()`),
+    // ── Who posted (the scout) ─────────────────────────────────────────────
+    postedByUserId: (0, pg_core_1.varchar)("posted_by_user_id").notNull(), // FK → users.id
+    scoutName: (0, pg_core_1.varchar)("scout_name", { length: 150 }).notNull(),
+    scoutCountry: (0, pg_core_1.varchar)("scout_country", { length: 100 }).notNull(),
+    scoutWhatsapp: (0, pg_core_1.varchar)("scout_whatsapp", { length: 30 }).notNull(), // E.164
+    scoutEmail: (0, pg_core_1.varchar)("scout_email", { length: 200 }),
+    // ── What the job is ────────────────────────────────────────────────────
+    jobTitle: (0, pg_core_1.varchar)("job_title", { length: 200 }).notNull(),
+    jobCountry: (0, pg_core_1.varchar)("job_country", { length: 100 }).notNull(),
+    jobCity: (0, pg_core_1.varchar)("job_city", { length: 100 }),
+    jobIndustry: (0, pg_core_1.varchar)("job_industry", { length: 100 }).notNull(), // hospitality, farming, care, driver, construction, etc.
+    jobDescription: (0, pg_core_1.text)("job_description").notNull(),
+    salaryText: (0, pg_core_1.varchar)("salary_text", { length: 120 }), // freeform: "USD 2,500/mo + accommodation"
+    howToApply: (0, pg_core_1.text)("how_to_apply"), // freeform instructions
+    // ── Payment tie-in ─────────────────────────────────────────────────────
+    paymentId: (0, pg_core_1.varchar)("payment_id"), // FK → payments.id (KES 200 slot fee)
+    amountPaid: (0, pg_core_1.integer)("amount_paid").notNull().default(200),
+    currency: (0, pg_core_1.varchar)("currency", { length: 8 }).notNull().default("KES"),
+    // ── Moderation lifecycle ───────────────────────────────────────────────
+    //   pending_payment → user submitted form, payment in flight
+    //   pending_review  → payment confirmed, waiting for admin
+    //   active          → visible to seekers
+    //   flagged         → admin rejected or user reported abuse
+    //   expired         → automatic 60-day rollover
+    //   closed          → scout marked "position filled"
+    status: (0, pg_core_1.varchar)("status", { length: 30 }).notNull().default("pending_payment"),
+    moderationNotes: (0, pg_core_1.text)("moderation_notes"),
+    // ── Views / interest metrics for the scout's peace of mind ─────────────
+    viewCount: (0, pg_core_1.integer)("view_count").notNull().default(0),
+    contactCount: (0, pg_core_1.integer)("contact_count").notNull().default(0),
+    expiresAt: (0, pg_core_1.timestamp)("expires_at"), // set on approval, +60 days
+    approvedAt: (0, pg_core_1.timestamp)("approved_at"),
+    createdAt: (0, pg_core_1.timestamp)("created_at").defaultNow(),
+    updatedAt: (0, pg_core_1.timestamp)("updated_at").defaultNow(),
+}, (t) => ({
+    byStatus: (0, pg_core_1.index)("scout_jobs_status_idx").on(t.status),
+    byCountry: (0, pg_core_1.index)("scout_jobs_country_idx").on(t.jobCountry),
+    byIndustry: (0, pg_core_1.index)("scout_jobs_industry_idx").on(t.jobIndustry),
+    byPoster: (0, pg_core_1.index)("scout_jobs_poster_idx").on(t.postedByUserId),
+}));
+exports.insertScoutJobSchema = (0, drizzle_zod_1.createInsertSchema)(exports.scoutJobs).omit({
+    id: true, createdAt: true, updatedAt: true, viewCount: true, contactCount: true,
+    approvedAt: true, expiresAt: true, paymentId: true, status: true,
+});
+// ============================================
+// LINKEDIN OPTIMIZATIONS — 2026-07 (Pro tool)
+// ============================================
+//
+// Live AI workspace that rewrites the user's LinkedIn profile section by
+// section. State is stored so users can resume, refine via chat, or
+// restore earlier versions. See server/routes/linkedin-optimize.ts.
+exports.linkedinOptimizations = (0, pg_core_1.pgTable)("linkedin_optimizations", {
+    id: (0, pg_core_1.varchar)("id").primaryKey().default((0, drizzle_orm_1.sql) `gen_random_uuid()`),
+    userId: (0, pg_core_1.varchar)("user_id").notNull(),
+    inputJson: (0, pg_core_1.jsonb)("input_json").notNull().default((0, drizzle_orm_1.sql) `'{}'::jsonb`),
+    targetRole: (0, pg_core_1.varchar)("target_role", { length: 200 }),
+    targetCountry: (0, pg_core_1.varchar)("target_country", { length: 100 }),
+    scoresJson: (0, pg_core_1.jsonb)("scores_json").default((0, drizzle_orm_1.sql) `'{}'::jsonb`),
+    outputJson: (0, pg_core_1.jsonb)("output_json").default((0, drizzle_orm_1.sql) `'{}'::jsonb`),
+    versionsJson: (0, pg_core_1.jsonb)("versions_json").default((0, drizzle_orm_1.sql) `'[]'::jsonb`),
+    status: (0, pg_core_1.varchar)("status", { length: 30 }).notNull().default("draft"),
+    lastError: (0, pg_core_1.text)("last_error"),
+    createdAt: (0, pg_core_1.timestamp)("created_at").defaultNow(),
+    updatedAt: (0, pg_core_1.timestamp)("updated_at").defaultNow(),
+}, (t) => ({
+    byUser: (0, pg_core_1.index)("linkedin_optimizations_user_idx").on(t.userId),
+    byStatus: (0, pg_core_1.index)("linkedin_optimizations_status_idx").on(t.status),
+}));
+// ============================================
+// IELTS CHECKS — 2026-07 (IELTS Verifier tool)
+// ============================================
+//
+// Anti-scam tool: user uploads their Test Report Form (TRF), we run
+// heuristic + AI-vision checks against IELTS's public TRF conventions and
+// flag likely fakes. Always ends by directing the user to the official
+// IELTS verification portal for the definitive check.
+exports.ieltsChecks = (0, pg_core_1.pgTable)("ielts_checks", {
+    id: (0, pg_core_1.varchar)("id").primaryKey().default((0, drizzle_orm_1.sql) `gen_random_uuid()`),
+    userId: (0, pg_core_1.varchar)("user_id"),
+    guestFingerprint: (0, pg_core_1.varchar)("guest_fingerprint", { length: 64 }),
+    fileSha256: (0, pg_core_1.varchar)("file_sha256", { length: 64 }).notNull(),
+    trfNumber: (0, pg_core_1.varchar)("trf_number", { length: 32 }),
+    testCentreCode: (0, pg_core_1.varchar)("test_centre_code", { length: 16 }),
+    testDate: (0, pg_core_1.timestamp)("test_date"),
+    candidateName: (0, pg_core_1.varchar)("candidate_name", { length: 200 }),
+    testType: (0, pg_core_1.varchar)("test_type", { length: 30 }),
+    overallBand: (0, pg_core_1.numeric)("overall_band", { precision: 2, scale: 1 }),
+    listeningBand: (0, pg_core_1.numeric)("listening_band", { precision: 2, scale: 1 }),
+    readingBand: (0, pg_core_1.numeric)("reading_band", { precision: 2, scale: 1 }),
+    writingBand: (0, pg_core_1.numeric)("writing_band", { precision: 2, scale: 1 }),
+    speakingBand: (0, pg_core_1.numeric)("speaking_band", { precision: 2, scale: 1 }),
+    verdict: (0, pg_core_1.varchar)("verdict", { length: 30 }).notNull(),
+    confidence: (0, pg_core_1.integer)("confidence").notNull().default(0),
+    findingsJson: (0, pg_core_1.jsonb)("findings_json").notNull().default((0, drizzle_orm_1.sql) `'[]'::jsonb`),
+    aiVisionUsed: (0, pg_core_1.boolean)("ai_vision_used").notNull().default(false),
+    rawText: (0, pg_core_1.text)("raw_text"),
+    errorMessage: (0, pg_core_1.text)("error_message"),
+    createdAt: (0, pg_core_1.timestamp)("created_at").defaultNow(),
+}, (t) => ({
+    byUser: (0, pg_core_1.index)("ielts_checks_user_idx").on(t.userId),
+    byGuest: (0, pg_core_1.index)("ielts_checks_guest_idx").on(t.guestFingerprint),
+    bySha: (0, pg_core_1.index)("ielts_checks_sha_idx").on(t.fileSha256),
+    byCreated: (0, pg_core_1.index)("ielts_checks_created_idx").on(t.createdAt),
+}));

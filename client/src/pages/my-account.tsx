@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useLocation } from "wouter";
+import { isPaidUser, planLabel } from "@/lib/plan";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -242,9 +243,12 @@ export default function MyAccountPage() {
   const proSub = subscriptions["pro_plan"];
 
   // Is the DB subscription active? (plan='pro', status='active', not expired)
+  // 2026-07 FIX (Irene): was requiring plan==="pro" — this excluded trial
+  // (KES 99), monthly (KES 1,000), pro_referral, basic. isPaidUser() accepts
+  // every tier the pricing engine issues.
   const dbProActive =
     dbSubscription &&
-    dbSubscription.plan === "pro" &&
+    isPaidUser(dbSubscription.plan) &&
     dbSubscription.status === "active" &&
     (dbSubscription.endDate == null || new Date(dbSubscription.endDate) > new Date());
 
@@ -259,7 +263,7 @@ export default function MyAccountPage() {
       ? dbSubscription?.endDate && daysLeft(new Date(dbSubscription.endDate).getTime()) <= 30
         ? "expiring"
         : "active"
-      : user?.plan === "pro"
+      : isPaidUser(user?.plan as string)
       ? "active"
       : "expired";
 
@@ -348,12 +352,12 @@ export default function MyAccountPage() {
               </p>
               <span
                 className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                  user?.plan === "pro"
+                  isPaidUser(user?.plan as string)
                     ? "bg-[#4A7C59] text-white"
                     : "bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300"
                 }`}
               >
-                {user?.plan === "pro" ? "Pro Member" : "Free Member"}
+                {isPaidUser(user?.plan as string) ? `${planLabel(user?.plan as string)} Member` : "Free Member"}
               </span>
             </div>
             <div className="h-10 w-10 rounded-full bg-[#1A2530] dark:bg-gray-700 flex items-center justify-center text-white font-bold text-sm">
@@ -384,7 +388,7 @@ export default function MyAccountPage() {
               } else if (proExpiryDays != null && proExpiryDays > 0) {
                 parts.push(`${proExpiryDays} days remaining`);
               }
-              return parts.length > 0 ? parts.join(" · ") : user?.plan === "pro" ? "Active" : "Not subscribed";
+              return parts.length > 0 ? parts.join(" · ") : isPaidUser(user?.plan as string) ? "Active" : "Not subscribed";
             })()}
           >
             <StatusBadge status={proStatus} daysRemaining={proExpiryDays} />
