@@ -571,6 +571,14 @@ export const serviceOrders = pgTable("service_orders", {
   reviewedBy: varchar("reviewed_by"),
   reviewedAt: timestamp("reviewed_at"),
   abandonedCartAlertSentAt: timestamp("abandoned_cart_alert_sent_at"),
+  // ── Viral share loop attribution (2026-07) ───────────────────────────────
+  // When a user pays through a share link (either /share/:token or ?ref=X),
+  // we record the ORIGINATING order id here. Foundation for future rewards:
+  // count paid conversions per referrer and credit them.
+  // NOTE: referrerOrderId is a self-reference — we deliberately don't add a
+  // FK constraint (so orphan tokens don't reject writes if the origin order
+  // was later deleted). Reward-computation code should nullsafe-join.
+  referrerOrderId: varchar("referrer_order_id"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

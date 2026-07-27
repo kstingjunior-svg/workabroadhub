@@ -28,6 +28,10 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { fetchCsrfToken } from "@/lib/queryClient";
+import { useAuth } from "@/hooks/use-auth";
+import { ShareSuccessModal } from "@/components/share-success-modal";
+import type { ShareCardProps } from "@/components/share-success-card";
+import { captureRefFromUrl, getStoredRef, clearStoredRef } from "@/lib/referral";
 
 interface ServiceMeta {
   name: string;
@@ -134,6 +138,14 @@ export default function ServiceOrderFlow() {
   const pollRef = useRef<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  // ── Viral share loop ─────────────────────────────────────────────────────
+  // 2026-07 (growth): after a successful order, auto-open the ShareSuccessModal.
+  // Every paying user becomes a billboard — see /components/share-success-modal.tsx.
+  const { user } = useAuth();
+  const [shareOpen, setShareOpen] = useState(false);
+  const [autoOpenedShare, setAutoOpenedShare] = useState(false);
+  const [deliveredScore, setDeliveredScore] = useState<number | null>(null);
+
   useEffect(() => () => {
     if (pollRef.current) window.clearInterval(pollRef.current);
   }, []);
@@ -146,8 +158,33 @@ export default function ServiceOrderFlow() {
       setStage("processing");
       startPolling(urlOrder);
     }
+    // 2026-07 (viral share loop): capture any ?ref=X on this page too so
+    // users who deep-link into a service page still carry the attribution.
+    captureRefFromUrl();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Auto-open share modal ~1.2s after landing on the "done" stage — gives
+  // the user a moment to see the download buttons before we ask them to share.
+  // Fires exactly ONCE per order (autoOpenedShare guard).
+  useEffect(() => {
+    if (stage !== "done" || !orderId || autoOpenedShare) return;
+    const t = window.setTimeout(() => {
+      setShareOpen(true);
+      setAutoOpenedShare(true);
+    }, 1200);
+    return () => window.clearTimeout(t);
+  }, [stage, orderId, autoOpenedShare]);
+
+  // Compute the ShareCard variant from the slug so the accent colour + copy
+  // fit the actual service the user just paid for.
+  function cardVariantFromSlug(): ShareCardProps["variant"] {
+    if (slug.startsWith("cv_") || slug.startsWith("ats_cv")) return "cv";
+    if (slug.startsWith("linkedin"))                          return "linkedin";
+    if (slug.startsWith("cover"))                             return "cover";
+    if (slug.startsWith("sop") || slug.startsWith("motivation")) return "sop";
+    return "generic";
+  }
 
   if (!match || !meta) {
     return (
@@ -205,6 +242,10 @@ export default function ServiceOrderFlow() {
         if (data.status === "completed") {
           if (pollRef.current) window.clearInterval(pollRef.current);
           setServiceName(data.serviceName || meta.name);
+          // Capture any delivered ATS score so the share card can display it.
+          // Server may report it as `deliveredScore` or `atsScore` — accept both.
+          const score = Number(data.deliveredScore ?? data.atsScore ?? 0);
+          if (Number.isFinite(score) && score > 0) setDeliveredScore(score);
           setStage("done");
         } else if (data.status === "failed") {
           if (pollRef.current) window.clearInterval(pollRef.current);
@@ -242,6 +283,17 @@ export default function ServiceOrderFlow() {
       if (jobDescription) form.append("jobDescription", jobDescription);
       if (targetCountry)  form.append("targetCountry", targetCountry);
       if (extraInput)     form.append("extraInput", extraInput);
+      // 2026-07 (viral share loop): attach the stored referrer if present.
+      // Server re-validates + attributes on successful order creation.
+      const referrer = getStoredRef();
+      if (referrer) {
+        form.append("referrerOrderId", referrer);
+        // Clear immediately so a subsequent unrelated order doesn't
+        // double-attribute. If order creation fails, the client can still
+        // recover the ref from the /share/:token localStorage capture on
+        // the visitor's next page load — but this order's attempt is done.
+        clearStoredRef();
+      }
 
       // 2026-06: was failing as "Failed to fetch" (raw browser TypeError) on
       // flaky mobile networks + Render cold starts. Now we retry once with
@@ -777,12 +829,37 @@ export default function ServiceOrderFlow() {
                   <Download className="h-4 w-4" /> Word
                 </a>
               </div>
-              <div className="pt-3">
+              <div className="pt-3 flex flex-col sm:flex-row items-center justify-center gap-2">
+                <Button
+                  onClick={() => setShareOpen(true)}
+                  className="bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-600 hover:to-cyan-600 text-white font-semibold"
+                  data-testid="button-open-share-modal"
+                >
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  Share your win
+                </Button>
                 <Button variant="outline" size="sm" onClick={() => navigate("/my-documents")}>
                   See all my documents
                 </Button>
               </div>
             </CardContent>
+          )}
+
+          {/* Share modal — always mounted at bottom of tree so it opens
+              cleanly from both the auto-effect and the manual button.  */}
+          {orderId && (
+            <ShareSuccessModal
+              open={shareOpen}
+              onOpenChange={setShareOpen}
+              orderId={orderId}
+              card={{
+                firstName:     user?.firstName ?? null,
+                serviceName:   serviceName || meta.name,
+                targetCountry: targetCountry || null,
+                atsScore:      deliveredScore,
+                variant:       cardVariantFromSlug(),
+              }}
+            />
           )}
 
           {stage === "failed" && (

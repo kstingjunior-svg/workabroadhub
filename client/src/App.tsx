@@ -71,6 +71,8 @@ const ScoutJobDetail  = lazyWithRetry(() => import("@/pages/scout-jobs/detail"))
 const ScoutJobPost    = lazyWithRetry(() => import("@/pages/scout-jobs/post"));
 // 2026-07: LinkedIn Profile Optimizer — Pro-tier premium AI workspace.
 const LinkedinOptimize = lazyWithRetry(() => import("@/pages/tools/linkedin-optimize"));
+// 2026-07: Viral share loop — public /share/:token landing page.
+const SharePage = lazyWithRetry(() => import("@/pages/share"));
 const AgencyProfilePage = lazyWithRetry(() => import("@/pages/agency-profile"));
 const Profile = lazyWithRetry(() => import("@/pages/profile"));
 const AgencyPortal = lazyWithRetry(() => import("@/pages/agency-portal"));
@@ -351,6 +353,7 @@ const LazyScoutJobsIndex    = withSuspense(ScoutJobsIndex);
 const LazyScoutJobDetail    = withSuspense(ScoutJobDetail);
 const LazyScoutJobPost      = withSuspense(ScoutJobPost);
 const LazyLinkedinOptimize  = withSuspense(LinkedinOptimize);
+const LazySharePage         = withSuspense(SharePage);
 const LazyProfile = withSuspense(Profile);
 const LazyAgencyPortal = withSuspense(AgencyPortal);
 const LazyServiceOrderPage = withSuspense(ServiceOrderPage);
@@ -539,6 +542,7 @@ function AuthenticatedRoutes() {
       <Route path="/scout-jobs/post" component={LazyScoutJobPost} />
       <Route path="/scout-jobs/:id" component={LazyScoutJobDetail} />
       <Route path="/scout-jobs" component={LazyScoutJobsIndex} />
+      <Route path="/share/:token" component={LazySharePage} />
       {/* LinkedIn AI Optimizer — Pro tool, workspace at /tools/linkedin-optimize */}
       <Route path="/tools/linkedin-optimize" component={LazyLinkedinOptimize} />
       <Route path="/student-visas" component={LazyStudentVisas} />
@@ -757,6 +761,11 @@ function Router() {
     if (ref) {
       localStorage.setItem("referral_code", ref);
     }
+    // 2026-07 (viral share loop): also feed the same value into the share-loop
+    // tracker so it survives the auth flow and gets attached to the eventual
+    // paid order. Different storage key (wah_ref_v1) with a 30-day TTL, kept
+    // separate from the existing referral_code system so both continue to work.
+    import("@/lib/referral").then((m) => m.captureRefFromUrl()).catch(() => {});
   }, []);
 
   // Conversion funnel: trigger upgrade modal after 2 page views for free users
@@ -783,6 +792,7 @@ function Router() {
         <Route path="/scout-jobs/post" component={LazyScoutJobPost} />
         <Route path="/scout-jobs/:id" component={LazyScoutJobDetail} />
         <Route path="/scout-jobs" component={LazyScoutJobsIndex} />
+        <Route path="/share/:token" component={LazySharePage} />
         {/* LinkedIn Optimizer — page shows a friendly sign-in prompt for guests. */}
         <Route path="/tools/linkedin-optimize" component={LazyLinkedinOptimize} />
         <Route path="/student-visas" component={LazyStudentVisas} />

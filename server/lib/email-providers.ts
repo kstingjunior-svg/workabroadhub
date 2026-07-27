@@ -304,44 +304,54 @@ async function sendViaResend(args: SendArgs): Promise<SendOutcome> {
 
 // ── Public API: sendWithFailover ──────────────────────────────────────────
 /**
- * Send email through the best available provider. Tries Gmail/SMTP first,
- * automatically falls back to Resend if the primary fails. Every attempt is
- * recorded in the ring buffer so the admin diagnostic can show what's
- * happening when users complain about missing codes.
+ * Send email through the best available provider.
+ *
+ * 2026-07 (Tony's Resend cutover): Resend is now PRIMARY, SMTP is FALLBACK.
+ * Previously the order was SMTP → Resend, but SMTP was silently accepting
+ * mail that Gmail then junked or dropped, so Resend never ran. Resend's
+ * HTTP API also returns immediately with an actionable error code when
+ * something's wrong, whereas SMTP would hang or false-succeed. Flipping the
+ * order means: when Resend is configured (it is now), that's what runs;
+ * SMTP only kicks in if Resend is temporarily unreachable OR unconfigured.
+ *
+ * Every attempt is recorded in the ring buffer so the admin diagnostic can
+ * show what's happening when users complain about missing codes.
  */
 export async function sendWithFailover(args: SendArgs): Promise<SendOutcome> {
-  // Attempt 1: SMTP
-  const smtpAttempt = await sendViaSmtp(args);
-  if (smtpAttempt.success) {
-    recordOutcome(args, smtpAttempt);
-    console.log(`[email] Sent via ${smtpAttempt.provider} to ${args.to}: ${smtpAttempt.messageId} (${smtpAttempt.durationMs}ms)`);
-    return smtpAttempt;
-  }
-  if (smtpAttempt.error !== "SMTP not configured") {
-    console.warn(
-      `[email] SMTP send failed to ${args.to}: ${smtpAttempt.errorCode || ""} ${smtpAttempt.error?.slice(0, 200)} — trying fallback`,
-    );
-  }
-
-  // Attempt 2: Resend
+  // Attempt 1: Resend (primary — proven inbox delivery via HTTP API)
   const resendAttempt = await sendViaResend(args);
   if (resendAttempt.success) {
     recordOutcome(args, resendAttempt);
     console.log(`[email] Sent via Resend to ${args.to}: ${resendAttempt.messageId} (${resendAttempt.durationMs}ms)`);
     return resendAttempt;
   }
+  if (resendAttempt.error !== "Resend not configured") {
+    console.warn(
+      `[email] Resend send failed to ${args.to}: ${resendAttempt.errorCode || ""} ${resendAttempt.error?.slice(0, 200)} — trying SMTP fallback`,
+    );
+  }
 
-  // Both failed — record the SMTP failure (more informative) but report Resend if SMTP wasn't even configured
+  // Attempt 2: SMTP (fallback — used when Resend is down or unconfigured)
+  const smtpAttempt = await sendViaSmtp(args);
+  if (smtpAttempt.success) {
+    recordOutcome(args, smtpAttempt);
+    console.log(`[email] Sent via ${smtpAttempt.provider} to ${args.to}: ${smtpAttempt.messageId} (${smtpAttempt.durationMs}ms) [FALLBACK]`);
+    return smtpAttempt;
+  }
+
+  // Both failed — report the more informative failure. Resend errors are
+  // typically more actionable (HTTP status + JSON body), so prefer them
+  // unless Resend was never configured at all.
   const finalOutcome: SendOutcome =
-    smtpAttempt.error === "SMTP not configured" ? resendAttempt : smtpAttempt;
+    resendAttempt.error === "Resend not configured" ? smtpAttempt : resendAttempt;
 
   recordOutcome(args, finalOutcome);
 
   // Console fallback — last resort so codes are at least visible in Render logs
   console.error(
     `[email] BOTH PROVIDERS FAILED for ${args.to}\n` +
-    `  SMTP: ${smtpAttempt.error}\n` +
     `  Resend: ${resendAttempt.error}\n` +
+    `  SMTP:   ${smtpAttempt.error}\n` +
     `  Subject: ${args.subject}\n` +
     `  Body (text): ${(args.text || "").slice(0, 300)}`,
   );
