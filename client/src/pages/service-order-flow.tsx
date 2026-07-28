@@ -32,6 +32,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { ShareSuccessModal } from "@/components/share-success-modal";
 import type { ShareCardProps } from "@/components/share-success-card";
 import { captureRefFromUrl, getStoredRef, clearStoredRef } from "@/lib/referral";
+import { PhotoUploadField } from "@/components/photo-upload-field";
 
 interface ServiceMeta {
   name: string;
@@ -127,6 +128,10 @@ export default function ServiceOrderFlow() {
   const [jobDescription, setJobDescription] = useState("");
   const [targetCountry, setTargetCountry] = useState("");
   const [extraInput, setExtraInput] = useState("");
+  // 2026-07 (Tony's founder ask): optional passport-style photo the user
+  // wants embedded in the delivered CV. Blob (compressed JPEG), not File —
+  // PhotoUploadField handles the compression. Null when skipped.
+  const [photoBlob, setPhotoBlob] = useState<Blob | null>(null);
 
   // ── Payment-stage state (standalone M-Pesa STK on the same page) ─────────
   const [amount, setAmount] = useState<number>(0);
@@ -283,6 +288,14 @@ export default function ServiceOrderFlow() {
       if (jobDescription) form.append("jobDescription", jobDescription);
       if (targetCountry)  form.append("targetCountry", targetCountry);
       if (extraInput)     form.append("extraInput", extraInput);
+      // 2026-07 (photo embed): attach optional headshot for top-right
+      // placement in the delivered PDF/DOCX. Named "photo" per multer field.
+      if (photoBlob) {
+        // Give it a friendly filename with the right extension so the server's
+        // multer error messages (if any) mention a sensible name.
+        const photoFile = new File([photoBlob], "photo.jpg", { type: photoBlob.type || "image/jpeg" });
+        form.append("photo", photoFile);
+      }
       // 2026-07 (viral share loop): attach the stored referrer if present.
       // Server re-validates + attributes on successful order creation.
       const referrer = getStoredRef();
@@ -648,6 +661,17 @@ export default function ServiceOrderFlow() {
                       </div>
                     )}
                   </div>
+                </div>
+              )}
+
+              {/* 2026-07 (Tony's founder ask): passport-style photo for CV
+                  services only. Shown between the CV upload and the country
+                  field so it feels like a natural next step, not tacked on
+                  at the end. Skipping is one tap — the field never blocks.
+                  Restricted to CV-family services (needsCv AND slug matches). */}
+              {meta.needsCv && /^(cv_|ats_cv|ats_cover_bundle)/.test(slug) && (
+                <div className="rounded-xl border border-teal-200/60 dark:border-teal-900/40 bg-teal-50/30 dark:bg-teal-950/10 p-4">
+                  <PhotoUploadField value={photoBlob} onChange={setPhotoBlob} />
                 </div>
               )}
 

@@ -579,6 +579,13 @@ export const serviceOrders = pgTable("service_orders", {
   // FK constraint (so orphan tokens don't reject writes if the origin order
   // was later deleted). Reward-computation code should nullsafe-join.
   referrerOrderId: varchar("referrer_order_id"),
+  // ── Passport-style photo (2026-07) ───────────────────────────────────────
+  // Optional base64 data URL ("data:image/jpeg;base64,...") the user
+  // uploaded to embed in the final CV/document. Rendered top-right by
+  // document-renderer.renderPdf / renderDocx. NULL when the user chose
+  // to skip. TEXT (not VARCHAR) because compressed 400x400 JPEG data URLs
+  // regularly run 50-200 KB — well past varchar's practical limits.
+  photoData: text("photo_data"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

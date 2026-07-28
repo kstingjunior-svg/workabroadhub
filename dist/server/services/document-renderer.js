@@ -67,6 +67,33 @@ function bodyToDocxParagraphs(body) {
 }
 async function renderDocx(input) {
     const paragraphs = [];
+    // 2026-07: photo goes FIRST — right-aligned so the recruiter sees the
+    // candidate before the text. Fixed 100pt square (~1.4 inches) which is
+    // the professional CV convention in most markets (UK/EU/Gulf/EAC).
+    // Silently skipped when no photo — the doc is identical to the pre-2026
+    // layout in that case.
+    if (input.photo?.buffer && input.photo.buffer.length > 0) {
+        try {
+            // Detect type from mime so ImageRun picks the right decoder.
+            const mime = (input.photo.mimeType || "image/jpeg").toLowerCase();
+            const type = mime.includes("png") ? "png" : "jpg";
+            paragraphs.push(new docx_1.Paragraph({
+                alignment: docx_1.AlignmentType.RIGHT,
+                children: [
+                    new docx_1.ImageRun({
+                        data: input.photo.buffer,
+                        transformation: { width: 100, height: 100 },
+                        type,
+                    }),
+                ],
+            }));
+        }
+        catch (photoErr) {
+            // Don't fail the whole document if the photo is corrupt — just log
+            // and continue without it. User still gets their CV.
+            console.warn("[document-renderer] DOCX photo embed failed:", photoErr.message);
+        }
+    }
     if (input.title) {
         paragraphs.push(new docx_1.Paragraph({
             heading: docx_1.HeadingLevel.TITLE,
@@ -111,6 +138,51 @@ function renderPdf(input) {
             doc.on("data", (c) => chunks.push(c));
             doc.on("end", () => resolve(Buffer.concat(chunks)));
             doc.on("error", reject);
+            // 2026-07 (photo embed): draw the candidate's photo at top-right BEFORE
+            // any text so the text flows naturally beneath it. Clipped to a rounded
+            // rectangle so it reads as warm/professional rather than a stark
+            // passport-booth cutout. Size = 90pt (~1.25 inches), tucked into the
+            // top-right corner with 6pt breathing room from the page edge.
+            // Silently skipped on any decode error — CV still generates.
+            const photoSize = 90;
+            const photoX = doc.page.width - doc.page.margins.right - photoSize;
+            const photoY = doc.page.margins.top - 20; // sit slightly higher than title baseline
+            let photoDrawn = false;
+            if (input.photo?.buffer && input.photo.buffer.length > 0) {
+                try {
+                    doc.save();
+                    // Rounded-rectangle clipping path — gives it a soft edge without
+                    // being goofy about it. 6pt radius = subtle but human.
+                    doc.roundedRect(photoX, photoY, photoSize, photoSize, 6).clip();
+                    doc.image(input.photo.buffer, photoX, photoY, {
+                        width: photoSize,
+                        height: photoSize,
+                        // "cover" would be nicer but pdfkit uses "fit"/"cover" via fit/cover
+                        // props on some versions. Use fit which centres the image within
+                        // the bounding box preserving aspect ratio.
+                        fit: [photoSize, photoSize],
+                        align: "center",
+                        valign: "center",
+                    });
+                    doc.restore();
+                    // Add a subtle border ring OUTSIDE the clip so it draws on top.
+                    doc
+                        .roundedRect(photoX, photoY, photoSize, photoSize, 6)
+                        .lineWidth(0.75)
+                        .strokeColor("#e2e8f0")
+                        .stroke();
+                    photoDrawn = true;
+                }
+                catch (photoErr) {
+                    console.warn("[document-renderer] PDF photo embed failed:", photoErr.message);
+                }
+            }
+            // When a photo is drawn, push the text cursor down a bit so the first
+            // paragraph doesn't overlap the photo. Without this, the recruiter sees
+            // the name/heading TUCKED under the image which looks janky.
+            if (photoDrawn) {
+                doc.y = photoY + photoSize + 10;
+            }
             if (input.title) {
                 doc
                     .font("Helvetica-Bold")

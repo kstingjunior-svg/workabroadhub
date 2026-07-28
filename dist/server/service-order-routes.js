@@ -61,6 +61,13 @@ const cvUpload = (0, multer_1.default)({
     storage: multer_1.default.memoryStorage(),
     limits: { fileSize: 10 * 1024 * 1024 },
     fileFilter: (_req, file, cb) => {
+        // Different mime whitelist per field: `cv` accepts docs + phone photos;
+        // `photo` (2026-07) accepts real images only (no PDFs / Word docs).
+        if (file.fieldname === "photo") {
+            const okPhoto = ["image/jpeg", "image/jpg", "image/png", "image/webp"]
+                .includes(file.mimetype);
+            return cb(null, okPhoto);
+        }
         const ok = [
             "application/pdf",
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -78,25 +85,41 @@ const cvUpload = (0, multer_1.default)({
     },
 });
 /**
- * Multer error → JSON. Wraps cvUpload.single("cv") so LIMIT_FILE_SIZE,
- * unsupported mime, and generic multer errors return a proper JSON body
- * the client can display. Without this, multer errors surface as raw HTML
- * 500 pages and the client shows a useless "Could not create order" toast.
+ * Multer error → JSON. Wraps a fields upload (cv + optional photo) so
+ * LIMIT_FILE_SIZE, unsupported mime, and generic multer errors return a
+ * proper JSON body the client can display.
+ *
+ * 2026-07: refactored from .single("cv") to .fields([cv, photo]) so users
+ * can OPTIONALLY attach a passport-style headshot to embed in the final
+ * CV/document. Downstream code reads req.files.cv[0] and req.files.photo[0]
+ * — see the compat shim below that also mirrors req.files.cv[0] to req.file
+ * for existing extractCvOrError() code that expected the .single() shape.
  */
-function cvUploadWithJsonErrors(fieldName) {
-    const mw = cvUpload.single(fieldName);
+function cvUploadWithJsonErrors(_fieldName) {
+    const mw = cvUpload.fields([
+        { name: "cv", maxCount: 1 },
+        { name: "photo", maxCount: 1 },
+    ]);
     return (req, res, next) => {
         mw(req, res, (err) => {
-            if (!err)
+            if (!err) {
+                // Compat shim — expose req.files.cv[0] as req.file so existing
+                // helpers (extractCvOrError) keep working without modification.
+                const cvFile = req.files?.cv?.[0];
+                if (cvFile)
+                    req.file = cvFile;
                 return next();
+            }
             const isMulter = err.name === "MulterError";
             const isSize = err.code === "LIMIT_FILE_SIZE";
-            const isMime = err.message === "Unexpected field" || /mime|file type/i.test(String(err.message));
-            const msg = isSize ? "Your CV is larger than 10 MB. Please compress it or upload a smaller version."
-                : isMulter ? "Could not process your upload. Please try a PDF, Word, or image file up to 10 MB."
-                    : /file type|mimetype|unsupported/i.test(String(err.message)) ? "That file type is not supported. Please upload a PDF, Word document, or a clear photo/scan."
-                        : "Something went wrong reading your file. Please try again with a fresh copy.";
-            console.warn(`[ServiceOrder] multer error code=${err.code} name=${err.name} msg="${err.message}" → responding to client`);
+            const isPhoto = err.field === "photo";
+            const msg = isSize && isPhoto ? "Your photo is larger than 10 MB. Please choose a smaller photo — even 500 KB is plenty."
+                : isSize ? "Your CV is larger than 10 MB. Please compress it or upload a smaller version."
+                    : isMulter && isPhoto ? "Could not process your photo. Please try a JPG or PNG."
+                        : isMulter ? "Could not process your upload. Please try a PDF, Word, or image file up to 10 MB."
+                            : /file type|mimetype|unsupported/i.test(String(err.message)) ? "That file type is not supported. Please upload a PDF, Word document, or a clear photo/scan."
+                                : "Something went wrong reading your file. Please try again with a fresh copy.";
+            console.warn(`[ServiceOrder] multer error code=${err.code} name=${err.name} field=${err.field ?? "?"} msg="${err.message}" → responding to client`);
             return res.status(400).json({ message: msg, code: err.code ?? "UPLOAD_ERROR" });
         });
     };
@@ -487,9 +510,9 @@ async function createOrder(args) {
     // Drizzle-based code paths AND new service-order-routes work cleanly.
     await db_1.pool.query(`INSERT INTO service_orders
        (id, user_id, service_id, service_slug, service_name, amount, currency, status,
-        cv_text, job_description, target_country, extra_input, referrer_order_id,
+        cv_text, job_description, target_country, extra_input, referrer_order_id, photo_data,
         created_at, updated_at)
-     VALUES ($1, $2, $3, $3, $4, $5, 'KES', 'pending_payment', $6, $7, $8, $9, $10, NOW(), NOW())
+     VALUES ($1, $2, $3, $3, $4, $5, 'KES', 'pending_payment', $6, $7, $8, $9, $10, $11, NOW(), NOW())
      ON CONFLICT (id) DO NOTHING`, [
         id,
         args.userId,
@@ -501,6 +524,7 @@ async function createOrder(args) {
         args.targetCountry,
         args.extraInput,
         referrer,
+        args.photoDataUrl ?? null,
     ]);
     return id;
 }
@@ -735,6 +759,24 @@ function registerServiceOrderRoutes(app, isAuthenticated) {
             // localStorage in every order-init request. Attribution happens in
             // createOrder — safe to send any value, it's re-validated there.
             const referrerOrderId = String(req.body?.referrerOrderId ?? "").trim() || null;
+            // 2026-07 (photo embed): optional passport-style photo the user
+            // wants embedded in the final CV/document. Store as data URL so
+            // it's easy to slice back into buffer+mime at render time.
+            const photoFile = req.files?.photo?.[0];
+            let photoDataUrl = null;
+            if (photoFile && photoFile.buffer && photoFile.buffer.length > 0) {
+                // Sanity-cap at 2 MB for the stored payload — client should have
+                // compressed to well under this, but paranoia is cheap.
+                if (photoFile.buffer.length > 2 * 1024 * 1024) {
+                    return res.status(400).json({
+                        message: "Your photo is too large after upload. Please pick a smaller image (under 2 MB).",
+                    });
+                }
+                const mime = photoFile.mimetype && /^image\//.test(photoFile.mimetype)
+                    ? photoFile.mimetype
+                    : "image/jpeg";
+                photoDataUrl = `data:${mime};base64,${photoFile.buffer.toString("base64")}`;
+            }
             // Look up the canonical price BEFORE creating the order so we can
             // record it in the `amount` column (the old schema requires it).
             const { rows: priceRows } = await db_1.pool.query(`SELECT price FROM services WHERE slug = $1 OR code = $1 LIMIT 1`, [slug]);
@@ -749,6 +791,7 @@ function registerServiceOrderRoutes(app, isAuthenticated) {
                 targetCountry,
                 extraInput,
                 referrerOrderId,
+                photoDataUrl,
             });
             console.log(`[ServiceOrder] Created orderId=${orderId} slug=${slug} price=${price} cvLen=${cvText?.length ?? 0} in ${Date.now() - t0}ms`);
             res.json({
@@ -833,7 +876,7 @@ function registerServiceOrderRoutes(app, isAuthenticated) {
             if (!["docx", "pdf"].includes(format)) {
                 return res.status(400).json({ message: "Format must be 'docx' or 'pdf'." });
             }
-            const { rows } = await db_1.pool.query(`SELECT user_id, service_slug, service_name, status, output_text FROM service_orders WHERE id = $1`, [req.params.orderId]);
+            const { rows } = await db_1.pool.query(`SELECT user_id, service_slug, service_name, status, output_text, photo_data FROM service_orders WHERE id = $1`, [req.params.orderId]);
             const order = rows[0];
             if (!order)
                 return res.status(404).json({ message: "Order not found." });
@@ -909,14 +952,34 @@ function registerServiceOrderRoutes(app, isAuthenticated) {
                 return body.replace(/^[\s\n]+/, "");
             };
             const cleanBody = stripLeadingServiceTitle(order.output_text, order.service_name ?? "", order.service_slug ?? "");
+            // 2026-07 (photo embed): parse the stored data URL back into a raw
+            // buffer + mime so the renderer can embed it. Null when the user
+            // chose not to attach a photo — renderer treats it as "no photo".
+            let renderPhoto;
+            if (order.photo_data && order.photo_data.startsWith("data:image/")) {
+                try {
+                    const match = order.photo_data.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+                    if (match) {
+                        renderPhoto = {
+                            buffer: Buffer.from(match[2], "base64"),
+                            mimeType: match[1],
+                        };
+                    }
+                }
+                catch (photoParseErr) {
+                    console.warn("[ServiceOrder] photo parse failed:", photoParseErr.message);
+                }
+            }
             const buffer = format === "docx"
                 ? await (0, document_renderer_1.renderDocx)({
                     body: cleanBody,
                     footer: "Generated by WorkAbroad Hub — workabroadhub.tech",
+                    photo: renderPhoto,
                 })
                 : await (0, document_renderer_1.renderPdf)({
                     body: cleanBody,
                     footer: "Generated by WorkAbroad Hub — workabroadhub.tech",
+                    photo: renderPhoto,
                 });
             res.setHeader("Content-Type", format === "docx"
                 ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document"

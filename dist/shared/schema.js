@@ -523,6 +523,21 @@ exports.serviceOrders = (0, pg_core_1.pgTable)("service_orders", {
     reviewedBy: (0, pg_core_1.varchar)("reviewed_by"),
     reviewedAt: (0, pg_core_1.timestamp)("reviewed_at"),
     abandonedCartAlertSentAt: (0, pg_core_1.timestamp)("abandoned_cart_alert_sent_at"),
+    // ── Viral share loop attribution (2026-07) ───────────────────────────────
+    // When a user pays through a share link (either /share/:token or ?ref=X),
+    // we record the ORIGINATING order id here. Foundation for future rewards:
+    // count paid conversions per referrer and credit them.
+    // NOTE: referrerOrderId is a self-reference — we deliberately don't add a
+    // FK constraint (so orphan tokens don't reject writes if the origin order
+    // was later deleted). Reward-computation code should nullsafe-join.
+    referrerOrderId: (0, pg_core_1.varchar)("referrer_order_id"),
+    // ── Passport-style photo (2026-07) ───────────────────────────────────────
+    // Optional base64 data URL ("data:image/jpeg;base64,...") the user
+    // uploaded to embed in the final CV/document. Rendered top-right by
+    // document-renderer.renderPdf / renderDocx. NULL when the user chose
+    // to skip. TEXT (not VARCHAR) because compressed 400x400 JPEG data URLs
+    // regularly run 50-200 KB — well past varchar's practical limits.
+    photoData: (0, pg_core_1.text)("photo_data"),
     createdAt: (0, pg_core_1.timestamp)("created_at").defaultNow(),
     updatedAt: (0, pg_core_1.timestamp)("updated_at").defaultNow(),
 });

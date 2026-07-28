@@ -59,16 +59,18 @@ function PasswordStrength({
     },
   ];
 
-  if (!password) return null;
-
+  // 2026-07 UX FIX: previously hidden until user typed — meant users hit
+  // 3 sequential errors before figuring out the rules. Now ALWAYS visible
+  // in signup mode so rules are seen BEFORE typing starts. Muted colour when
+  // empty, filled/green as each rule passes.
   return (
-    <div className="flex gap-3 mt-1">
+    <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1">
       {checks.map((c) => (
         <span
           key={c.label}
           className={`flex items-center gap-1 text-[11px] ${
             c.ok
-              ? "text-green-600"
+              ? "text-green-600 font-medium"
               : "text-muted-foreground"
           }`}
         >
@@ -85,6 +87,44 @@ function PasswordStrength({
       ))}
     </div>
   );
+}
+
+/**
+ * Detect common email typos (gmial.com, hotmial.com, yahho.com, etc.) and
+ * suggest a fix. Kenya-heavy user base means Gmail is the dominant provider
+ * so we bias toward gmail-typo detection. Returns null when the email looks
+ * fine OR is too short to judge.
+ */
+function suggestEmailFix(email: string): string | null {
+  const trimmed = email.trim().toLowerCase();
+  if (!trimmed.includes("@")) return null;
+  const [local, domain] = trimmed.split("@");
+  if (!local || !domain || domain.length < 4) return null;
+
+  const typos: Record<string, string> = {
+    "gmial.com":     "gmail.com",
+    "gnail.com":     "gmail.com",
+    "gamil.com":     "gmail.com",
+    "gmai.com":      "gmail.com",
+    "gmal.com":      "gmail.com",
+    "gmailc.om":     "gmail.com",
+    "gmail.co":      "gmail.com",
+    "gmail.cm":      "gmail.com",
+    "gmail.con":     "gmail.com",
+    "gmailcom":      "gmail.com",
+    "yahho.com":     "yahoo.com",
+    "yaho.com":      "yahoo.com",
+    "yahoo.co":      "yahoo.com",
+    "yahoocom":      "yahoo.com",
+    "hotmial.com":   "hotmail.com",
+    "hotmai.com":    "hotmail.com",
+    "hotmail.co":    "hotmail.com",
+    "outlok.com":    "outlook.com",
+    "outloo.com":    "outlook.com",
+  };
+  const fix = typos[domain];
+  if (fix && fix !== domain) return `${local}@${fix}`;
+  return null;
 }
 
 export function AuthModal({
@@ -172,31 +212,30 @@ export function AuthModal({
       firstName.trim().length < 2
     ) {
       errs.firstName =
-        "Name must be at least 2 characters";
+        "Please enter your first name";
     }
 
-    if (
-      !email.includes("@") ||
-      !email.includes(".")
-    ) {
-      errs.email =
-        "Please enter a valid email";
+    // 2026-07 UX: stricter email validation. Was accepting "a@b" (missing
+    // any domain suffix character), which triggers a confusing server 400
+    // AFTER submit instead of a friendly inline error BEFORE submit.
+    // New regex catches: missing @, missing dot in domain, dot at end,
+    // trailing spaces (auto-trimmed), and doubles like grace@gmail..com.
+    const emailTrimmed = email.trim();
+    if (!emailTrimmed) {
+      errs.email = "Please enter your email";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(emailTrimmed)) {
+      errs.email = "Please enter a valid email address";
     }
 
     if (tab === "signup") {
-      if (password.length < 8) {
-        errs.password =
-          "Password must be at least 8 characters";
-      } else if (
-        !/[A-Z]/.test(password)
-      ) {
-        errs.password =
-          "Must include an uppercase letter";
-      } else if (
-        !/[0-9]/.test(password)
-      ) {
-        errs.password =
-          "Must include a number";
+      // Show ALL failing password rules at once so user can fix everything
+      // in one edit instead of hitting 3 sequential errors.
+      const missing: string[] = [];
+      if (password.length < 8)   missing.push("at least 8 characters");
+      if (!/[A-Z]/.test(password)) missing.push("an uppercase letter");
+      if (!/[0-9]/.test(password)) missing.push("a number");
+      if (missing.length > 0) {
+        errs.password = `Password needs ${missing.join(", ")}`;
       }
     } else {
       if (!password) {
@@ -735,6 +774,11 @@ export function AuthModal({
                       e.target.value
                     )
                   }
+                  // 2026-07 UX: autofocus first field + browser autofill hints
+                  autoFocus={tab === "signup"}
+                  autoComplete="given-name"
+                  autoCapitalize="words"
+                  data-testid="input-firstName"
                   className={
                     fieldErrors.firstName
                       ? "border-red-500"
@@ -753,7 +797,10 @@ export function AuthModal({
 
               <div className="space-y-1.5">
                 <Label htmlFor="auth-lastName">
-                  Last name
+                  Last name{" "}
+                  <span className="text-muted-foreground text-xs font-normal">
+                    (optional)
+                  </span>
                 </Label>
 
                 <Input
@@ -765,6 +812,9 @@ export function AuthModal({
                       e.target.value
                     )
                   }
+                  autoComplete="family-name"
+                  autoCapitalize="words"
+                  data-testid="input-lastName"
                 />
               </div>
             </div>
@@ -781,11 +831,18 @@ export function AuthModal({
             <Input
               id="auth-email"
               type="email"
-              placeholder="grace@example.com"
+              // 2026-07 UX: Kenya-common placeholder + mobile-optimized keyboard hints
+              placeholder="grace@gmail.com"
               value={email}
               onChange={(e) =>
                 setEmail(e.target.value)
               }
+              autoComplete="email"
+              inputMode="email"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              data-testid="input-email"
               className={
                 fieldErrors.email
                   ? "border-red-500"
@@ -798,6 +855,24 @@ export function AuthModal({
                 {fieldErrors.email}
               </p>
             )}
+
+            {/* Email typo suggestion — one-tap fix for gmial.com / yahho.com etc. */}
+            {(() => {
+              const suggested = suggestEmailFix(email);
+              if (!suggested || fieldErrors.email) return null;
+              return (
+                <button
+                  type="button"
+                  onClick={() => setEmail(suggested)}
+                  className="text-xs text-amber-600 dark:text-amber-400 hover:underline flex items-center gap-1"
+                  data-testid="button-email-typo-fix"
+                >
+                  <span>Did you mean</span>
+                  <strong className="font-semibold">{suggested}</strong>
+                  <span>? Tap to fix</span>
+                </button>
+              );
+            })()}
           </div>
 
           <div className="space-y-1.5">
@@ -827,6 +902,11 @@ export function AuthModal({
                     e.target.value
                   )
                 }
+                // 2026-07 UX: correct autocomplete hint lets password managers
+                // offer to save new passwords on signup + auto-fill on login.
+                autoComplete={tab === "signup" ? "new-password" : "current-password"}
+                autoFocus={tab === "login"}
+                data-testid="input-password"
                 className={`pr-10 ${
                   fieldErrors.password
                     ? "border-red-500"
