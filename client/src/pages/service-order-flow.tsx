@@ -887,13 +887,47 @@ export default function ServiceOrderFlow() {
           )}
 
           {stage === "failed" && (
-            <CardContent className="text-center py-12 space-y-3">
-              <AlertCircle className="h-12 w-12 text-red-500 mx-auto" />
-              <h3 className="font-semibold text-lg">Something went wrong</h3>
-              <p className="text-sm text-muted-foreground">{errorMsg || "Please try again or contact support."}</p>
-              <Button variant="outline" onClick={() => { setStage("upload"); setErrorMsg(null); }}>
-                Try again
-              </Button>
+            <CardContent className="text-center py-10 space-y-4 max-w-md mx-auto">
+              {/* 2026-07 (Tony's founder ask): warm "we've got you" error card
+                  instead of a bare "Something went wrong". The server already
+                  translates raw provider errors (OpenAI quota, 429, timeouts)
+                  into human copy via mapErrorForUser — this UI just presents
+                  it kindly with clear next steps. */}
+              <div className="mx-auto h-14 w-14 rounded-full bg-amber-100 dark:bg-amber-950/40 flex items-center justify-center">
+                <AlertCircle className="h-7 w-7 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div className="space-y-2">
+                <h3 className="font-semibold text-lg text-gray-900 dark:text-gray-100">
+                  We're on it — your payment is safe
+                </h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  {errorMsg || "We had a small hiccup processing your order. Our team has been alerted and your document will be delivered within the hour by email and WhatsApp."}
+                </p>
+              </div>
+              <div className="rounded-lg bg-teal-50 dark:bg-teal-950/20 border border-teal-200/60 dark:border-teal-900/40 px-4 py-3 text-left space-y-1.5">
+                <p className="text-xs font-semibold text-teal-900 dark:text-teal-200">What happens next</p>
+                <ul className="text-xs text-teal-800 dark:text-teal-300 space-y-1 list-disc pl-4">
+                  <li>You'll get an email + WhatsApp the moment your document is ready</li>
+                  <li>It'll also appear in your <button onClick={() => navigate("/my-documents")} className="underline font-medium">My Documents</button> page</li>
+                  <li>Prefer a refund? Reply to your payment confirmation and we'll process it right away</li>
+                </ul>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-2 justify-center pt-1">
+                <Button
+                  variant="outline"
+                  onClick={() => { setStage("upload"); setErrorMsg(null); }}
+                  data-testid="button-try-again"
+                >
+                  Try again
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={() => navigate("/my-documents")}
+                  data-testid="button-view-documents"
+                >
+                  Check my documents →
+                </Button>
+              </div>
             </CardContent>
           )}
         </Card>

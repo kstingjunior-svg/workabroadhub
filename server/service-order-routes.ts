@@ -99,6 +99,86 @@ function cvUploadWithJsonErrors(_fieldName?: string) {
   };
 }
 
+/**
+ * mapErrorForUser — translate raw provider errors into warm, reassuring
+ * messages the user can read without losing trust.
+ *
+ * 2026-07 (Tony's founder ask, prompted by an "429 You exceeded your current
+ * quota" leak): a paying user should NEVER see the words "quota", "billing",
+ * "OpenAI", "API key", etc. Those are OUR problems, not theirs. The user
+ * needs to know two things: (1) their payment is safe, (2) we'll get their
+ * CV to them shortly.
+ *
+ * Raw error is still stored in service_orders.error_message for admin
+ * debugging + Sentry — this only affects what the user sees.
+ */
+function mapErrorForUser(raw: string): string {
+  const lower = String(raw || "").toLowerCase();
+
+  // OpenAI billing / quota exhaustion — this is the founder's #1 issue.
+  // Whatever exact wording OpenAI uses, we normalize to a warm message.
+  if (
+    lower.includes("quota") ||
+    lower.includes("insufficient_quota") ||
+    lower.includes("billing") ||
+    (lower.includes("429") && lower.includes("exceeded")) ||
+    lower.includes("check your plan")
+  ) {
+    return "We're catching up on high demand right now. Your payment is safe. Our team has been alerted and your document will be delivered within the hour — you'll get an email and WhatsApp the moment it's ready. If you'd prefer a refund, reply to your confirmation email.";
+  }
+
+  // Rate limit — transient, will self-heal on the retry sweep.
+  if (
+    lower.includes("rate limit") ||
+    lower.includes("too many requests") ||
+    (lower.includes("429") && !lower.includes("quota"))
+  ) {
+    return "Our AI is busy handling other orders right now. Your payment is safe. We're already retrying — your document will be ready in a few minutes. You can safely close this tab and check back, or wait here for the download buttons.";
+  }
+
+  // Timeout — same recovery story.
+  if (
+    lower.includes("timeout") ||
+    lower.includes("timed out") ||
+    lower.includes("etimedout") ||
+    lower.includes("econnreset")
+  ) {
+    return "That took longer than expected. Your payment is safe. We're already retrying — you'll get your document by email and WhatsApp the moment it's ready.";
+  }
+
+  // Empty / invalid AI response — retry sweep handles it.
+  if (
+    lower.includes("empty response") ||
+    lower.includes("invalid response") ||
+    lower.includes("unexpected response")
+  ) {
+    return "We had a small hiccup generating your document. Your payment is safe. We're already retrying automatically — you'll have it in a few minutes.";
+  }
+
+  // Server 5xx — same story.
+  if (/\b5\d\d\b/.test(lower) || lower.includes("internal server error")) {
+    return "The AI had a temporary issue. Your payment is safe. We're retrying automatically — check back in a couple minutes or watch your email/WhatsApp.";
+  }
+
+  // File / extraction errors — user CAN act on these.
+  if (
+    lower.includes("cv text") ||
+    lower.includes("extract") ||
+    lower.includes("no text found") ||
+    lower.includes("unreadable")
+  ) {
+    return "We couldn't read the CV you uploaded — the file might be a scanned image or password-protected. Your payment is safe. Please reply to your confirmation email with a fresh copy (PDF or Word) and we'll process it manually.";
+  }
+
+  // Unknown model / config — never expose "gpt-4o" etc.
+  if (lower.includes("model") && (lower.includes("not found") || lower.includes("unavailable"))) {
+    return "One of our AI models needed a quick restart. Your payment is safe. We're retrying automatically — your document will be ready shortly.";
+  }
+
+  // Default fallback — polite but concrete about payment safety.
+  return "Something didn't go through on our side. Your payment is safe. Our team has been alerted and your document will be delivered within the hour by email and WhatsApp. If you'd prefer a refund, reply to your confirmation email and we'll process it right away.";
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // workPermitSystemPrompt — generates the system prompt for the Light and Mid
 // tiers of Work Permit Assistance. Light returns a country-specific guide;
@@ -689,6 +769,16 @@ Rules for handling the preferences above:
       [orderId, output],
     );
 
+    // ── Notify the user that their document is READY ────────────────────────
+    // 2026-07 (Tony's audit): previously nothing ran after status=completed.
+    // Users who closed the tab never knew their CV was ready — the earlier
+    // WhatsApp had promised delivery "within minutes" but no follow-up ever
+    // fired. Now: email + WhatsApp with a direct link to the download page.
+    // Fire-and-forget — must NOT block order completion or fail the request.
+    notifyOrderCompleted(orderId).catch((notifyErr) => {
+      console.warn(`[ServiceOrder] completion notification failed for ${orderId}:`, notifyErr?.message);
+    });
+
     // ── Fingerprint the delivered CV ──────────────────────────────────────
     // For any service whose output IS a CV, persist a hash so that when
     // the user later re-uploads the same CV to /tools/ats-cv-checker the
@@ -722,6 +812,132 @@ Rules for handling the preferences above:
       [orderId, err?.message ?? "Unknown error"],
     ).catch(() => {});
   }
+}
+
+/**
+ * notifyOrderCompleted — email + WhatsApp the user the moment their document
+ * is ready. Called from processOrder() right after status flips to 'completed'.
+ *
+ * 2026-07 (Tony's audit fix): previously nothing ran here. Users who closed
+ * the tab never learned their CV was ready — the earlier delivery.ts WhatsApp
+ * had promised "within minutes" but no follow-up ever fired.
+ *
+ * Delivery model:
+ *   - EMAIL (primary): warm HTML with a big "Download my CV" button linking
+ *     to /my-documents. Uses sendWithFailover (Resend first, SMTP fallback).
+ *   - WHATSAPP (secondary): short "your CV is ready" line with the same
+ *     link. Non-blocking — if Twilio is unhealthy, the email still lands.
+ *
+ * Never throws. Every branch swallows its own errors so a broken notification
+ * cannot roll back a completed order.
+ */
+async function notifyOrderCompleted(orderId: string): Promise<void> {
+  try {
+    const { rows } = await pool.query<{
+      user_id: string;
+      service_name: string;
+      service_slug: string;
+    }>(
+      `SELECT user_id, service_name, service_slug FROM service_orders WHERE id = $1 AND status = 'completed'`,
+      [orderId],
+    );
+    const order = rows[0];
+    if (!order) return;
+
+    // Fetch the user for their email + phone + first name
+    const { rows: userRows } = await pool.query<{
+      email: string | null;
+      phone: string | null;
+      first_name: string | null;
+    }>(
+      `SELECT email, phone, first_name FROM users WHERE id = $1`,
+      [order.user_id],
+    );
+    const user = userRows[0];
+    if (!user) return;
+
+    const firstName = (user.first_name || "").split(/\s+/)[0] || "there";
+    const serviceName = order.service_name || "document";
+    const appOrigin = (process.env.APP_ORIGIN || "https://workabroadhub.tech").replace(/\/$/, "");
+    const documentsUrl = `${appOrigin}/my-documents`;
+    // Direct PDF download URL — one-tap on mobile if the user still has a session.
+    const directPdfUrl = `${appOrigin}/api/services/order/${orderId}/download/pdf`;
+
+    // ── Email (primary) ───────────────────────────────────────────────────
+    if (user.email) {
+      try {
+        const { sendWithFailover } = await import("./lib/email-providers");
+        const html = `
+          <div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1e293b">
+            <h1 style="font-size:22px;font-weight:700;color:#0f766e;margin:0 0 8px">Your ${serviceName} is ready 🎉</h1>
+            <p style="font-size:15px;line-height:1.55;margin:0 0 20px">
+              Hi ${escapeHtml(firstName)}, we've just finished your ${serviceName.toLowerCase()}. It's optimized, warm, and ready for recruiters.
+            </p>
+            <a href="${documentsUrl}" style="display:inline-block;background:linear-gradient(90deg,#14b8a6,#06b6d4);color:#fff;font-weight:600;text-decoration:none;padding:14px 24px;border-radius:8px;font-size:15px">
+              Download my document →
+            </a>
+            <p style="font-size:13px;line-height:1.55;margin:24px 0 8px;color:#64748b">
+              Prefer a direct download? <a href="${directPdfUrl}" style="color:#0f766e;font-weight:600">Grab the PDF here</a> (sign in required).
+            </p>
+            <div style="border-top:1px solid #e2e8f0;margin:24px 0 12px"></div>
+            <p style="font-size:12px;line-height:1.5;color:#94a3b8;margin:0">
+              You're getting this because you completed an order at WorkAbroad Hub. If something looks off, just reply to this email — we read every message.
+            </p>
+          </div>
+        `;
+        const text = `Your ${serviceName} is ready.\n\nHi ${firstName}, we've just finished your ${serviceName.toLowerCase()}. Download it here:\n\n${documentsUrl}\n\nOr grab the PDF directly (sign in required): ${directPdfUrl}\n\n— WorkAbroad Hub`;
+        await sendWithFailover({
+          to: user.email,
+          subject: `Your ${serviceName} is ready — download it here`,
+          html,
+          text,
+        });
+      } catch (emailErr: any) {
+        console.warn(`[ServiceOrder] completion email failed for ${orderId}:`, emailErr?.message);
+      }
+    }
+
+    // ── WhatsApp (secondary) ──────────────────────────────────────────────
+    if (user.phone) {
+      try {
+        const { sendWhatsApp } = await import("./services/whatsapp");
+        await sendWhatsApp(
+          user.phone,
+          `✅ Your ${serviceName} is ready, ${firstName}!\n\nDownload it here: ${documentsUrl}\n\n(Also sent to your email.)`,
+        );
+      } catch (waErr: any) {
+        console.warn(`[ServiceOrder] completion WhatsApp failed for ${orderId}:`, waErr?.message);
+      }
+    }
+
+    // ── In-app notification (tertiary) ────────────────────────────────────
+    // Populates the bell icon in the header so returning users see the alert.
+    try {
+      const { storage } = await import("./storage");
+      await storage.createUserNotification({
+        userId: order.user_id,
+        type: "success",
+        title: `Your ${serviceName} is ready`,
+        message: `Tap to download your ${serviceName.toLowerCase()} — PDF and Word both available.`,
+      } as any);
+    } catch (notifErr: any) {
+      console.warn(`[ServiceOrder] in-app notification failed for ${orderId}:`, notifErr?.message);
+    }
+
+    console.log(`[ServiceOrder] Completion notifications dispatched for order ${orderId} (email=${!!user.email} wa=${!!user.phone})`);
+  } catch (outer: any) {
+    console.error(`[ServiceOrder] notifyOrderCompleted outer failure for ${orderId}:`, outer?.message);
+  }
+}
+
+/** Tiny HTML escaper for the completion email — no template engine needed. */
+function escapeHtml(s: string): string {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 // ── Public: trigger from payment callback after success ─────────────────────
@@ -961,7 +1177,12 @@ export function registerServiceOrderRoutes(app: Express, isAuthenticated: Reques
       serviceSlug: order.service_slug,
       serviceName: order.service_name,
       status: order.status, // pending_payment | paid | processing | completed | failed
-      error: order.error_message,
+      // 2026-07 (Tony's founder ask): NEVER expose raw provider errors like
+      // "429 You exceeded your current quota, please check your plan and
+      // billing details..." to a paying user. That kills trust instantly.
+      // mapErrorForUser() translates known raw errors into warm, reassuring
+      // messages that make it clear the user's payment is safe.
+      error: order.error_message ? mapErrorForUser(order.error_message) : null,
       createdAt: order.created_at,
       completedAt: order.completed_at,
       downloadAvailable: order.status === "completed",

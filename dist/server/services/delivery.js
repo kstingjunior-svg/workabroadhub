@@ -5,7 +5,6 @@ exports.deliverService = deliverService;
 const db_1 = require("../db");
 const whatsapp_1 = require("./whatsapp");
 const storage_1 = require("../storage");
-const cvQueue_1 = require("../lib/cvQueue");
 const cv_1 = require("./cv");
 const schema_1 = require("@shared/schema");
 const drizzle_orm_1 = require("drizzle-orm");
@@ -58,13 +57,16 @@ async function deliverService(payment, user) {
         case "ats_cv_optimization":
         case "cv_service":
         case "cv_services": {
-            await cvQueue_1.cvQueue.add("generate_cv", { userId: user.id, phone }, { attempts: 3, backoff: { type: "exponential", delay: 10000 } });
-            await (0, whatsapp_1.sendWhatsApp)(phone, `✅ Payment Confirmed — KES ${amount.toLocaleString()} received!\n\nHi ${name}, your ATS-optimised CV is being generated and will be sent to this WhatsApp within minutes.\n\nThank you for choosing WorkAbroad Hub 🌍`).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+            // 2026-07 (Tony's audit fix): removed cvQueue.add — same duplication
+            // as cv_fix_lite below. New unified processOrder handles the real
+            // generation and notifyOrderCompleted sends the ready-to-download
+            // email + WhatsApp when the AI finishes. See service-order-routes.ts.
+            await (0, whatsapp_1.sendWhatsApp)(phone, `✅ Payment Confirmed — KES ${amount.toLocaleString()} received!\n\nHi ${name}, your ATS-optimised CV is being generated right now. We'll message you here the moment it's ready (usually 1-2 minutes).\n\nThank you for choosing WorkAbroad Hub 🌍`).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
             storage_1.storage.createUserNotification({
                 userId: user.id,
                 type: "info",
                 title: "CV Generation Started",
-                message: "Your ATS CV is being generated and will be delivered to your WhatsApp shortly.",
+                message: "Your ATS CV is being generated. You'll get a WhatsApp + email the moment it's ready.",
             }).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
             break;
         }
@@ -180,13 +182,20 @@ async function deliverService(payment, user) {
         // ─── 7. CV FIX LITE ──────────────────────────────────────────────────────
         case "cv_fix_lite":
         case "cv_fix": {
-            await cvQueue_1.cvQueue.add("generate_cv", { userId: user.id, phone, mode: "fix" }, { attempts: 3, backoff: { type: "exponential", delay: 10000 } });
-            await (0, whatsapp_1.sendWhatsApp)(phone, `✅ CV Revamp Confirmed — KES ${amount.toLocaleString()} received!\n\nHi ${name}, your CV is being aggressively revamped by our AI — cleaner structure, sharper achievement bullets, and stronger recruiter keywords. You'll receive the revamped CV on this WhatsApp within minutes.\n\n— Nanjila 🤖`).catch((err) => { console.error('[deliverService] WhatsApp failed:', { error: err?.message, timestamp: new Date().toISOString() }); });
+            // 2026-07 (Tony's audit fix): removed the cvQueue.add("generate_cv") that
+            // ran the OLD generator alongside the new unified processOrder flow.
+            // The old queue produced a DIFFERENT CV (based on user profile) and
+            // WhatsApp'd its preview to the user, while the new flow produced the
+            // REAL revamped CV from the uploaded document. Users got contradictory
+            // outputs. Now: only the new flow runs. The "your CV is ready"
+            // WhatsApp+email is sent by notifyOrderCompleted() the moment the AI
+            // finishes — see server/service-order-routes.ts.
+            await (0, whatsapp_1.sendWhatsApp)(phone, `✅ CV Revamp Confirmed — KES ${amount.toLocaleString()} received!\n\nHi ${name}, your CV is being revamped right now — cleaner structure, sharper achievement bullets, stronger recruiter keywords. We'll message you here the moment it's ready (usually 1-2 minutes).\n\n— Nanjila 🤖`).catch((err) => { console.error('[deliverService] WhatsApp failed:', { error: err?.message, timestamp: new Date().toISOString() }); });
             storage_1.storage.createUserNotification({
                 userId: user.id,
                 type: "info",
                 title: "CV Revamp In Progress",
-                message: "Your CV is being reviewed and improved. You'll receive it on WhatsApp shortly.",
+                message: "Your CV is being revamped. You'll get a WhatsApp + email the moment it's ready.",
             }).catch((err) => { console.error('[deliverService] Notification failed:', err?.message); });
             break;
         }
@@ -240,8 +249,10 @@ async function deliverService(payment, user) {
         // ─── 12. ATS CV OPTIMIZATION ALIASES ─────────────────────────────────────
         case "ats_cv":
         case "ats_cv_optimization_v2": {
-            await cvQueue_1.cvQueue.add("generate_cv", { userId: user.id, phone }, { attempts: 3, backoff: { type: "exponential", delay: 10000 } });
-            await (0, whatsapp_1.sendWhatsApp)(phone, `✅ ATS CV Optimization Confirmed — KES ${amount.toLocaleString()} received!\n\nHi ${name}, your ATS-optimised CV is being generated and will be sent to this WhatsApp within minutes.\n\n— WorkAbroad Hub 🌍`).catch((err) => { console.error('[deliverService] WhatsApp failed:', { error: err?.message, timestamp: new Date().toISOString() }); });
+            // 2026-07 (Tony's audit fix): same duplication issue as the other CV
+            // cases above — cvQueue.add ran the old generator alongside the new
+            // unified processOrder. Removed. notifyOrderCompleted handles delivery.
+            await (0, whatsapp_1.sendWhatsApp)(phone, `✅ ATS CV Optimization Confirmed — KES ${amount.toLocaleString()} received!\n\nHi ${name}, your ATS-optimised CV is being generated right now. We'll message you here the moment it's ready (usually 1-2 minutes).\n\n— WorkAbroad Hub 🌍`).catch((err) => { console.error('[deliverService] WhatsApp failed:', { error: err?.message, timestamp: new Date().toISOString() }); });
             storage_1.storage.createUserNotification({
                 userId: user.id,
                 type: "info",
