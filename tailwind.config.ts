@@ -150,6 +150,12 @@ export default {
           "18%":  { color: "hsl(var(--foreground))", textShadow: "none" },
           "100%": { color: "hsl(var(--foreground))", textShadow: "none" },
         },
+        // 2026-07 delivery-banner attention-getter (gentler than Tailwind's
+        // default pulse — floors at 85% so it's noticeable, not distressing).
+        "pulse-slow": {
+          "0%, 100%": { opacity: "1" },
+          "50%":      { opacity: "0.85" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -158,6 +164,10 @@ export default {
         shimmer:          "shimmer 2.8s linear infinite",
         // 3.6s total cycle: ~2s sweep across the headline + ~1.6s rest
         "letter-glow":    "letter-glow 3.6s ease-in-out infinite",
+        // 2026-07 (delivery banner): slower, calmer pulse than default
+        // (default is 2s and feels seizure-inducing at 100% opacity dip).
+        // 2.4s cycle, floor at 85% opacity — noticeable but not stressful.
+        "pulse-slow":     "pulse-slow 2.4s ease-in-out infinite",
       },
     },
   },

@@ -33,6 +33,7 @@ import { ShareSuccessModal } from "@/components/share-success-modal";
 import type { ShareCardProps } from "@/components/share-success-card";
 import { captureRefFromUrl, getStoredRef, clearStoredRef } from "@/lib/referral";
 import { PhotoUploadField } from "@/components/photo-upload-field";
+import { DeliveryBanner, type DeliveryBannerStage } from "@/components/delivery-banner";
 
 interface ServiceMeta {
   name: string;
@@ -603,8 +604,28 @@ export default function ServiceOrderFlow() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // 2026-07 (Tony's founder ask): map the internal 5-stage state to the
+  // banner's 4-state model. Users must NEVER see the banner during the
+  // upload / paying stages — it only appears once processing starts.
+  const bannerStage: DeliveryBannerStage =
+    stage === "processing" ? "processing"
+    : stage === "done"     ? "done"
+    : stage === "failed"   ? "failed"
+    : "idle";
+
   return (
-    <div className="min-h-screen bg-background py-8 px-4">
+    <>
+      {/* Sticky "DO NOT CLOSE" → "READY TO DOWNLOAD" banner. Rendered
+          OUTSIDE the page container so the sticky positioning latches to
+          the viewport, not the max-w-2xl column. */}
+      <DeliveryBanner
+        stage={bannerStage}
+        orderId={orderId}
+        serviceName={serviceName || meta.name}
+        errorMessage={errorMsg}
+      />
+
+      <div className="min-h-screen bg-background py-8 px-4">
       <div className="max-w-2xl mx-auto">
         <button
           onClick={() => navigate("/services")}
@@ -932,6 +953,7 @@ export default function ServiceOrderFlow() {
           )}
         </Card>
       </div>
-    </div>
+      </div>
+    </>
   );
 }
