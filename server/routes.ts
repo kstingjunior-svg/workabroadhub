@@ -21990,24 +21990,25 @@ If your instinct says "3,500", STOP and re-read the SERVICES block above.`;
   });
 
   // ── Support: self-service payment status check ──────────────────────────────
-  app.post("/api/support/check-payment", async (req: any, res) => {
+  // 2026-07 (production audit HIGH-1): requires auth AND locks the query to
+  // the authenticated user's own userId. Previously accepted any phone
+  // number — allowing anonymous enumeration of who has / hasn't paid.
+  app.post("/api/support/check-payment", isAuthenticated, async (req: any, res) => {
     try {
-      const { phone } = req.body;
-      if (!phone) return res.status(400).json({ message: "Phone number is required" });
-
-      const normalizedPhone = normalizePhone(String(phone), "KE") ?? String(phone);
+      const userId: string | undefined = req.user?.claims?.sub ?? req.user?.id;
+      if (!userId) return res.status(401).json({ message: "Please sign in first." });
 
       const { data: payment, error } = await supabase
         .from("payments")
         .select("*")
-        .eq("phone", normalizedPhone)
+        .eq("user_id", userId)
         .order("created_at", { ascending: false })
         .limit(1);
 
       if (error) return res.status(500).json({ message: "Failed to check payment status" });
 
       if (!payment?.length) {
-        return res.json({ message: "❌ No payment found" });
+        return res.json({ message: "❌ No payment found for your account" });
       }
 
       if (payment[0].auto_upgraded) {
@@ -22024,22 +22025,24 @@ If your instinct says "3,500", STOP and re-read the SERVICES block above.`;
     }
   });
 
-  app.post("/api/support/request-refund", async (req: any, res) => {
+  // 2026-07 (production audit HIGH-1): CRITICAL fix — this endpoint used to
+  // accept any phone and mark the most recent matching payment as
+  // refund_requested. An attacker could refund every payment on the
+  // platform. Now: locked to the authed user's own payments only.
+  app.post("/api/support/request-refund", isAuthenticated, async (req: any, res) => {
     try {
-      const { phone } = req.body;
-      if (!phone) return res.status(400).json({ message: "Phone number is required" });
-
-      const normalizedPhone = normalizePhone(String(phone), "KE") ?? String(phone);
+      const userId: string | undefined = req.user?.claims?.sub ?? req.user?.id;
+      if (!userId) return res.status(401).json({ message: "Please sign in first." });
 
       const { data: payments, error } = await supabase
         .from("payments")
         .select("id, auto_upgraded, refund_requested")
-        .eq("phone", normalizedPhone)
+        .eq("user_id", userId)
         .order("created_at", { ascending: false })
         .limit(1);
 
       if (error) return res.status(500).json({ message: "Failed to look up payment" });
-      if (!payments?.length) return res.status(404).json({ message: "❌ No payment found for this number" });
+      if (!payments?.length) return res.status(404).json({ message: "❌ No payment found on your account" });
 
       const payment = payments[0];
 
@@ -22050,7 +22053,8 @@ If your instinct says "3,500", STOP and re-read the SERVICES block above.`;
       await supabase
         .from("payments")
         .update({ refund_requested: true })
-        .eq("id", payment.id);
+        .eq("id", payment.id)
+        .eq("user_id", userId); // double-check on write too
 
       return res.json({ message: "✅ Refund request received. We'll review and respond within 24 hours." });
     } catch (err: any) {

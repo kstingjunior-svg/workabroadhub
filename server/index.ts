@@ -139,11 +139,24 @@ httpServer.listen(PORT, "0.0.0.0", () => {
   // Each worker logs its own startup line so Render's startup log makes it
   // obvious if any of them failed to come up.
   (async () => {
+    // 2026-07 (production audit CRIT-5): legacy cvQueue retired. The old
+    // worker ran alongside the new unified processOrder flow (see
+    // server/service-order-routes.ts + services/delivery.ts) and generated
+    // a DIFFERENT CV from a user's career profile, then WhatsApp'd its
+    // preview. Users got contradictory outputs. All queue-add calls have
+    // been removed from delivery.ts. The worker is now dead code.
+    //
+    // Not deleting the file yet in case any straggling job sits in Redis
+    // and needs draining. Revisit + delete server/lib/cvQueue.ts and
+    // server/services/cv.ts after 30 days of stable production.
+    //
+    // Comment restored intentionally:
+    // const { startCvWorker } = await import("./lib/cvQueue");
+    // startCvWorker();
     try {
-      const { startCvWorker } = await import("./lib/cvQueue");
-      startCvWorker();
+      // no-op — CV worker retired 2026-07 (see comment above)
     } catch (err: any) {
-      console.error("[Server] ❌ CV worker failed to start:", err?.message);
+      console.error("[Server] ❌ CV worker init failed:", err?.message);
     }
     try {
       const { startAppWorker } = await import("./lib/appQueue");
@@ -648,6 +661,51 @@ app.use((req, res, next) => {
     // Wire Sentry's Express error handler AFTER all routes are registered
     // but BEFORE any custom 500 middleware. No-op if Sentry isn't initialised.
     attachSentryErrorHandler(app);
+
+    // 2026-07 (production audit MED-4): global catch-all handler. Runs LAST,
+    // after Sentry has captured the exception. Ensures every unhandled
+    // exception returns friendly JSON to the client (no HTML "Cannot GET /"
+    // or stack-trace leakage). Every 500 gets a shareable error ref that
+    // matches the Sentry event id + Render log timestamp.
+    app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
+      // If a handler already sent a response, delegate to the default handler
+      // so headers-already-sent doesn't blow up.
+      if (res.headersSent) return _next(err);
+
+      const timestamp = new Date();
+      const y = timestamp.getUTCFullYear().toString().slice(-2);
+      const m = String(timestamp.getUTCMonth() + 1).padStart(2, "0");
+      const d = String(timestamp.getUTCDate()).padStart(2, "0");
+      const h = String(timestamp.getUTCHours()).padStart(2, "0");
+      const mi = String(timestamp.getUTCMinutes()).padStart(2, "0");
+      const rand = Math.random().toString(36).slice(2, 6);
+      const ref = `WAH-500-${y}${m}${d}${h}${mi}-${rand}`;
+
+      // Log with enough context to correlate in Render logs
+      console.error(
+        `[error-handler] ${ref} ${req.method} ${req.path} | user=${(req as any).user?.claims?.sub ?? "anon"} | msg="${err?.message ?? err}"`,
+        err?.stack ? `\n${err.stack.split("\n").slice(0, 5).join("\n")}` : "",
+      );
+
+      // Best-effort Sentry capture (may already have been captured by attachSentryErrorHandler)
+      try { captureException(err); } catch { /* noop */ }
+
+      const isProd = process.env.NODE_ENV === "production";
+      res.status(err?.status ?? 500).json({
+        ok: false,
+        message: isProd
+          ? "Something went wrong on our end. Our team has been alerted."
+          : `[dev] ${err?.message ?? "Unknown error"}`,
+        ref,
+        supportEmail: "support@workabroadhub.tech",
+      });
+    });
+
+    // 404 fallback for any /api/* route that no handler matched.
+    // Returns JSON instead of Express's default HTML.
+    app.use("/api", (_req: Request, res: Response) => {
+      res.status(404).json({ ok: false, message: "Endpoint not found." });
+    });
 
     // 2026-06 scaling work — fire-and-forget boot-time index creation.
     // Idempotent (CREATE INDEX IF NOT EXISTS) so safe to run every deploy.
