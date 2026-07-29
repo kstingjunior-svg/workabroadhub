@@ -21295,11 +21295,25 @@ Tone examples:
 
   const chatUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
+  // 2026-07 (production audit CRIT-3): AI-cost drain protection.
+  // These endpoints each spend real OpenAI tokens per call. Without a
+  // rate limiter, a bot can hit /api/nanjila/chat at 10 req/s and burn
+  // ~$1500 in an hour. Rule: 15 calls per minute per IP for anonymous
+  // AI endpoints. Authenticated endpoints already benefit from session
+  // throttling, but we double-cover with the same limiter.
+  const aiHotPathLimiter = rateLimit({
+    windowMs: 60_000,
+    max: 15,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { message: "You're going a bit fast — please wait a minute and try again." },
+  });
+
   // ───────────────────────────────────────────────────────────────────────────
   // Job match — semantic similarity between candidate CV and the visa-jobs
   // catalogue using OpenAI embeddings. See server/services/jobMatchEmbeddings.ts.
   // ───────────────────────────────────────────────────────────────────────────
-  app.post("/api/jobs/match-my-cv", async (req: any, res: Response) => {
+  app.post("/api/jobs/match-my-cv", aiHotPathLimiter, async (req: any, res: Response) => {
     try {
       const cvText = String(req.body?.cvText ?? "").trim();
       if (!cvText || cvText.length < 100) {
@@ -21596,7 +21610,7 @@ Tone examples:
   // ───────────────────────────────────────────────────────────────────────────
 
   // POST /api/interview/start — body: { country, role }
-  app.post("/api/interview/start", async (req: any, res: Response) => {
+  app.post("/api/interview/start", aiHotPathLimiter, async (req: any, res: Response) => {
     try {
       const userId = (req.session as any)?.customUserId as string | undefined;
       if (!userId) return res.status(401).json({ message: "Please sign in first." });
@@ -21615,7 +21629,7 @@ Tone examples:
   // POST /api/interview/respond — body: { sessionId, answerText }
   // Audio is transcribed in the BROWSER via Web Speech API. Server only
   // ever sees the resulting text string.
-  app.post("/api/interview/respond", async (req: any, res: Response) => {
+  app.post("/api/interview/respond", aiHotPathLimiter, async (req: any, res: Response) => {
     try {
       const userId = (req.session as any)?.customUserId as string | undefined;
       if (!userId) return res.status(401).json({ message: "Please sign in first." });
@@ -21647,7 +21661,7 @@ Tone examples:
     }
   });
 
-  app.post("/api/nanjila/chat", chatUpload.single("cv"), async (req: any, res: Response) => {
+  app.post("/api/nanjila/chat", aiHotPathLimiter, chatUpload.single("cv"), async (req: any, res: Response) => {
     try {
       const sessionId: string = req.body.sessionId || `web_${Date.now()}_${Math.random().toString(36).slice(2)}`;
       const userMessage: string = (req.body.message || "").trim();
