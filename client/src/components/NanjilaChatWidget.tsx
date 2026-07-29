@@ -36,8 +36,13 @@ type JobMatch = {
 // Now: HTML-escape EVERY character first, then apply the bold + newline
 // transforms over the escaped text. Bold formatting still works; injection
 // no longer does.
-function escapeHtml(s: string): string {
-  return s
+function escapeHtml(s: string | null | undefined): string {
+  // 2026-07 (production crash fix): messages hydrated from stale localStorage
+  // or a mid-flight AI response could arrive with msg.text=undefined, causing
+  // `Cannot read properties of undefined (reading 'replace')` on /dashboard.
+  // Coerce to a safe string so the widget never explodes the whole page.
+  if (s === null || s === undefined) return "";
+  return String(s)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
@@ -45,7 +50,7 @@ function escapeHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
-function formatText(text: string): string {
+function formatText(text: string | null | undefined): string {
   return escapeHtml(text)
     .replace(/\*([^*]+)\*/g, "<strong>$1</strong>")
     .replace(/\n/g, "<br/>");

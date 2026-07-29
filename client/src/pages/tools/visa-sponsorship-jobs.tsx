@@ -171,6 +171,11 @@ function JobCard({
 }) {
   const flag = COUNTRY_FLAGS[job.country] ?? "🌍";
   const { openJob } = useJobRedirect();
+  // 2026-07 (production crash fix): the "Apply now" button called navigate()
+  // but this sub-component never wired useLocation, so onClick threw
+  // "navigate is not defined" the moment a user clicked Apply. Adding the
+  // hook here — parent JobsList also has one, they're independent.
+  const [, navigate] = useLocation();
   const [showSimilar, setShowSimilar]   = useState(false);
   const [similarJobs, setSimilarJobs]   = useState<Job[]>([]);
   const [loadingSimilar, setLoadingSimilar] = useState(false);
