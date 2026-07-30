@@ -23,6 +23,29 @@
  * in server/index.ts (per-IP window across all tool routes). Additional
  * per-user daily cap enforced here for authenticated users.
  */
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -357,4 +380,85 @@ function registerVisaCheckRoute(app) {
         }
     });
     console.log("[VisaCheck] Route registered: POST /api/tools/visa-check");
+    // ═══════════════════════════════════════════════════════════════════════
+    // v2 — 2026-07 AI Visa Verification engine (Tony's founder spec).
+    //
+    // Instead of a single riskScore, returns the full forensic report:
+    // 7 sub-scores, per-country rule verdicts, verdict copy, government
+    // resource panel, recommendations, scam-pattern matches. Used by the
+    // new premium visa-check dashboard.
+    //
+    // Same route pattern (multer + rate limit + optional auth) as v1.
+    // ═══════════════════════════════════════════════════════════════════════
+    app.post("/api/tools/visa-verify", (req, res, next) => upload.single("file")(req, res, (err) => {
+        if (!err)
+            return next();
+        const isSize = err?.code === "LIMIT_FILE_SIZE";
+        return res.status(400).json({
+            message: isSize
+                ? "That file is larger than 10 MB. Please upload a smaller image or PDF."
+                : "We couldn't process that upload. Please try a JPG, PNG, WEBP or PDF.",
+        });
+    }), async (req, res) => {
+        const t0 = Date.now();
+        try {
+            if (!req.file)
+                return res.status(400).json({ message: "Please attach a visa image or PDF." });
+            if (!req.file.mimetype.startsWith("image/") && req.file.mimetype !== "application/pdf") {
+                return res.status(400).json({ message: "Please upload an image (JPG, PNG, WEBP) or PDF." });
+            }
+            // Convert buffer → base64 data URL for the vision model.
+            // PDFs: we can't render pages server-side without pdfjs — vision
+            // API accepts image only. For PDFs, fall back to the existing v1
+            // logic (extractText + heuristic screening) instead of crashing.
+            if (req.file.mimetype === "application/pdf") {
+                return res.status(400).json({
+                    message: "PDFs aren't supported in the new AI verifier yet. Please upload a clear photo or scan (JPG, PNG, WEBP).",
+                    fallbackAvailable: true,
+                    fallbackEndpoint: "/api/tools/visa-check",
+                });
+            }
+            const base64 = req.file.buffer.toString("base64");
+            const dataUrl = `data:${req.file.mimetype};base64,${base64}`;
+            const { analyzeVisa } = await Promise.resolve().then(() => __importStar(require("../visa-verify/analyzer")));
+            const report = await analyzeVisa(dataUrl);
+            if (!report.ok) {
+                return res.status(502).json({ ok: false, message: report.message });
+            }
+            console.log(`[VisaVerify] verdict=${report.verdict} trust=${report.overallTrust} band=${report.riskBand} country=${report.country?.code ?? "?"} in ${Date.now() - t0}ms`);
+            res.json({
+                ok: true,
+                overallTrust: report.overallTrust,
+                confidence: report.confidence,
+                riskBand: report.riskBand,
+                verdict: report.verdict,
+                headline: report.headline,
+                explanation: report.explanation,
+                extractedFields: report.extractedFields,
+                country: report.country ? {
+                    code: report.country.code,
+                    name: report.country.name,
+                    flag: report.country.flag,
+                    links: report.country.links,
+                    contacts: report.country.contacts,
+                    nextStepAdvice: report.country.nextStepAdvice,
+                } : null,
+                subScores: report.subScores,
+                findings: report.findings,
+                forgeryIndicators: report.forgeryIndicators,
+                positiveIndicators: report.positiveIndicators,
+                recommendations: report.recommendations,
+                scamPatternsMatched: report.scamPatternsMatched,
+                disclaimer: "This is an AI-assisted screening, not an official verification. Always confirm through the government portals shown before making travel, payment, or contract decisions.",
+            });
+        }
+        catch (err) {
+            console.error("[VisaVerify] endpoint error:", err?.message);
+            res.status(500).json({
+                ok: false,
+                message: "We couldn't verify this document right now. Please try again shortly, or use the classic verifier at /api/tools/visa-check.",
+            });
+        }
+    });
+    console.log("[VisaVerify] Route registered: POST /api/tools/visa-verify (AI engine v2)");
 }
