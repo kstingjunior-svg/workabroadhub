@@ -387,4 +387,90 @@ export function registerOfferCheckRoute(app: Express): void {
   );
 
   console.log("[OfferCheck] Route registered: POST /api/tools/offer-check");
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // v2 — 2026-07 AI Employment Offer Letter Verification engine.
+  //
+  // Full forensic analysis: 8 sub-scores, per-country salary benchmarks,
+  // universal fraud pattern detection, official government links per
+  // country. Same pipeline as visa-verify but tailored for offer letters.
+  // ═══════════════════════════════════════════════════════════════════════
+  app.post(
+    "/api/tools/offer-verify",
+    (req: any, res, next) => upload.single("file")(req, res, (err: any) => {
+      if (!err) return next();
+      const isSize = err?.code === "LIMIT_FILE_SIZE";
+      return res.status(400).json({
+        message: isSize
+          ? "That file is larger than 10 MB. Please upload a smaller image or PDF."
+          : "We couldn't process that upload. Please try a JPG, PNG, WEBP or PDF.",
+      });
+    }),
+    async (req: any, res: Response) => {
+      const t0 = Date.now();
+      try {
+        if (!req.file) return res.status(400).json({ message: "Please attach the offer letter (image or PDF)." });
+        if (!req.file.mimetype.startsWith("image/") && req.file.mimetype !== "application/pdf") {
+          return res.status(400).json({ message: "Please upload an image (JPG, PNG, WEBP) or PDF." });
+        }
+        if (req.file.mimetype === "application/pdf") {
+          return res.status(400).json({
+            message: "PDFs aren't supported in the new AI verifier yet. Please upload a clear photo or screenshot (JPG, PNG, WEBP).",
+            fallbackAvailable: true,
+            fallbackEndpoint: "/api/tools/offer-check",
+          });
+        }
+
+        const base64 = req.file.buffer.toString("base64");
+        const dataUrl = `data:${req.file.mimetype};base64,${base64}`;
+
+        const { analyzeOffer } = await import("../offer-verify/analyzer");
+        const report = await analyzeOffer(dataUrl);
+
+        if (!report.ok) {
+          return res.status(502).json({ ok: false, message: report.message });
+        }
+
+        console.log(
+          `[OfferVerify] verdict=${report.verdict} trust=${report.overallTrust} country=${report.country?.code ?? "?"} ` +
+          `salary=${report.salaryAssessment.band} findings=${report.findings.length} in ${Date.now() - t0}ms`,
+        );
+
+        res.json({
+          ok: true,
+          overallTrust:         report.overallTrust,
+          confidence:           report.confidence,
+          riskBand:             report.riskBand,
+          verdict:              report.verdict,
+          headline:             report.headline,
+          explanation:          report.explanation,
+          extractedFields:      report.extractedFields,
+          country:              report.country ? {
+            code:            report.country.code,
+            name:            report.country.name,
+            flag:            report.country.flag,
+            links:           report.country.links,
+            contacts:        report.country.contacts,
+            nextStepAdvice:  report.country.nextStepAdvice,
+          } : null,
+          subScores:            report.subScores,
+          findings:             report.findings,
+          salaryAssessment:     report.salaryAssessment,
+          positiveIndicators:   report.positiveIndicators,
+          negativeIndicators:   report.negativeIndicators,
+          recommendations:      report.recommendations,
+          scamPatternsMatched:  report.scamPatternsMatched,
+          disclaimer:           "This is an AI-assisted screening, not an official verification. Always confirm the employer, recruiter, and work-permit process through the government portals below before making travel, payment, or contract decisions.",
+        });
+      } catch (err: any) {
+        console.error("[OfferVerify] endpoint error:", err?.message);
+        res.status(500).json({
+          ok: false,
+          message: "We couldn't verify this offer right now. Please try again shortly, or use the classic verifier at /api/tools/offer-check.",
+        });
+      }
+    },
+  );
+
+  console.log("[OfferVerify] Route registered: POST /api/tools/offer-verify (AI engine v2)");
 }
