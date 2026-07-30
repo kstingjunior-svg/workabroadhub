@@ -445,4 +445,87 @@ export function registerIeltsVerifyRoute(app: Express): void {
       res.status(500).json({ error: "Could not process the TRF. Please try again." });
     }
   });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // v2 — 2026-07 AI IELTS Certificate Verification engine.
+  //
+  // Full forensic analysis: 7 sub-scores, score-consistency check, security
+  // features report, provider identification, official portal links.
+  // ═══════════════════════════════════════════════════════════════════════
+  app.post(
+    "/api/tools/ielts-verify-ai",
+    (req: any, res, next) => upload.single("file")(req, res, (err: any) => {
+      if (!err) return next();
+      const isSize = err?.code === "LIMIT_FILE_SIZE";
+      return res.status(400).json({
+        message: isSize
+          ? "That file is larger than 8 MB. Please upload a smaller image or PDF."
+          : "We couldn't process that upload. Please try a JPG, PNG, WEBP or PDF.",
+      });
+    }),
+    async (req: any, res: Response) => {
+      const t0 = Date.now();
+      try {
+        if (!req.file) return res.status(400).json({ message: "Please attach the IELTS TRF (image or PDF)." });
+        if (!req.file.mimetype.startsWith("image/") && req.file.mimetype !== "application/pdf") {
+          return res.status(400).json({ message: "Please upload an image (JPG, PNG, WEBP) or PDF." });
+        }
+        if (req.file.mimetype === "application/pdf") {
+          return res.status(400).json({
+            message: "PDFs aren't supported in the new AI verifier yet. Please upload a clear photo or screenshot (JPG, PNG, WEBP).",
+            fallbackAvailable: true,
+            fallbackEndpoint: "/api/tools/ielts-verify",
+          });
+        }
+
+        const base64 = req.file.buffer.toString("base64");
+        const dataUrl = `data:${req.file.mimetype};base64,${base64}`;
+
+        const { analyzeIelts } = await import("../ielts-verify/analyzer");
+        const report = await analyzeIelts(dataUrl);
+
+        if (!report.ok) {
+          return res.status(502).json({ ok: false, message: report.message });
+        }
+
+        console.log(
+          `[IeltsVerifyAI] verdict=${report.verdict} trust=${report.overallTrust} provider=${report.provider?.key ?? "?"} findings=${report.findings.length} in ${Date.now() - t0}ms`,
+        );
+
+        res.json({
+          ok: true,
+          overallTrust:        report.overallTrust,
+          confidence:          report.confidence,
+          riskBand:            report.riskBand,
+          verdict:             report.verdict,
+          headline:            report.headline,
+          explanation:         report.explanation,
+          extractedFields:     report.extractedFields,
+          provider:            report.provider ? {
+            key:              report.provider.key,
+            name:             report.provider.name,
+            operatingRegions: report.provider.operatingRegions,
+            links:            report.provider.links,
+            contacts:         report.provider.contacts,
+            notes:            report.provider.notes,
+          } : null,
+          subScores:           report.subScores,
+          findings:            report.findings,
+          forgeryIndicators:   report.forgeryIndicators,
+          positiveIndicators:  report.positiveIndicators,
+          recommendations:     report.recommendations,
+          officialResources:   report.officialResources,
+          disclaimer:          "This is an AI-assisted screening, not an official verification. Only the IELTS Verification Service (ORS) can confirm authenticity — access is restricted to registered institutions. Candidates should share their eTRF from the official Test Taker Portal.",
+        });
+      } catch (err: any) {
+        console.error("[IeltsVerifyAI] endpoint error:", err?.message);
+        res.status(500).json({
+          ok: false,
+          message: "We couldn't verify this TRF right now. Please try again shortly, or use the classic verifier at /api/tools/ielts-verify.",
+        });
+      }
+    },
+  );
+
+  console.log("[IeltsVerifyAI] Route registered: POST /api/tools/ielts-verify-ai (AI engine v2)");
 }
