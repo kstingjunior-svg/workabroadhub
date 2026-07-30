@@ -22,28 +22,27 @@ const sslConfig =
     ? false
     : { rejectUnauthorized: false };
 
-// 2026-06 scaling work: bumped defaults for 3,000 concurrent users.
-// At 2 Render instances * max 25 = 50 total connections, well under the
-// 100 default Postgres connection limit. Override via env in Render if
-// the Postgres tier changes.
-//
-// Settings:
-//   max 25                : per-instance peak
+// 2026-07 (production pool-exhaustion fix): tightened timeouts + bumped max.
+// The old 25s statement_timeout was longer than the HTTP-side 30s window,
+// which meant a hanging query held a pool slot until the LB gave up. Every
+// held slot cascaded into 408 timeouts + "Cannot set headers" for the whole
+// service. Now:
+//   max 40                : per-instance peak (was 25 — Supabase Pro supports 100+)
 //   min 5                 : keep warm connections to skip first-req handshake
-//   idleTimeout 30s       : reclaim idle conns
-//   connectionTimeout 5s  : fail fast under load
-//   statement_timeout 25s : kill runaway queries before pool exhaustion
-//   query_timeout 25s     : node-side ceiling
+//   idleTimeout 20s       : reclaim idle conns faster
+//   connectionTimeout 3s  : fail fast on connect (was 5s)
+//   statement_timeout 8s  : kill queries BEFORE the HTTP timeout — pool stays healthy
+//   query_timeout 10s     : node-side ceiling (slightly longer than statement_timeout)
 //   keepAlive             : prevents Render LB from silently dropping conns
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: sslConfig,
-  max: parseInt(process.env.DB_POOL_MAX || "25", 10),
+  max: parseInt(process.env.DB_POOL_MAX || "40", 10),
   min: parseInt(process.env.DB_POOL_MIN || "5", 10),
-  idleTimeoutMillis: parseInt(process.env.DB_IDLE_TIMEOUT_MS || "30000", 10),
-  connectionTimeoutMillis: parseInt(process.env.DB_CONN_TIMEOUT_MS || "5000", 10),
-  statement_timeout: parseInt(process.env.DB_STATEMENT_TIMEOUT_MS || "25000", 10),
-  query_timeout: parseInt(process.env.DB_QUERY_TIMEOUT_MS || "25000", 10),
+  idleTimeoutMillis: parseInt(process.env.DB_IDLE_TIMEOUT_MS || "20000", 10),
+  connectionTimeoutMillis: parseInt(process.env.DB_CONN_TIMEOUT_MS || "3000", 10),
+  statement_timeout: parseInt(process.env.DB_STATEMENT_TIMEOUT_MS || "8000", 10),
+  query_timeout: parseInt(process.env.DB_QUERY_TIMEOUT_MS || "10000", 10),
   keepAlive: true,
   keepAliveInitialDelayMillis: 10_000,
 });

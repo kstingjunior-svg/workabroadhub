@@ -286,6 +286,38 @@ app.use((req, res, next) => {
   next();
 });
 
+// 2026-07 (production pool-exhaustion fallout fix):
+// When DB queries take longer than the HTTP timeout, express-timeout (or the
+// LB) sends a 408 to the client. THEN the query finally errors, and the
+// route's catch block tries to res.json(...) — throwing "Cannot set headers
+// after they are sent to the client". That error cascades into 400+ noisy
+// unhandledRejection log lines per minute.
+//
+// This guard patches res.json / res.send / res.status.send at request start
+// so any post-timeout send is a silent no-op instead of a throw. Routes with
+// old, badly-guarded try/catch blocks now behave gracefully after timeout.
+app.use((_req, res, next) => {
+  const origJson  = res.json.bind(res);
+  const origSend  = res.send.bind(res);
+  const origSetHeader = res.setHeader.bind(res);
+  res.json = ((body?: any) => {
+    if (res.headersSent) {
+      // console.debug("[res-guard] Ignored double res.json after headers sent");
+      return res;
+    }
+    return origJson(body);
+  }) as typeof res.json;
+  res.send = ((body?: any) => {
+    if (res.headersSent) return res;
+    return origSend(body);
+  }) as typeof res.send;
+  res.setHeader = ((name: string, value: any) => {
+    if (res.headersSent) return res;
+    return origSetHeader(name, value);
+  }) as typeof res.setHeader;
+  next();
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // SECURITY
 // ─────────────────────────────────────────────────────────────────────────────

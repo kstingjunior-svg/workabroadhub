@@ -156,7 +156,12 @@ export const CACHE_KEYS = {
 
 export const CACHE_TTL = {
   COUNTRIES: 10 * 60 * 1000,         // 10 min — rarely changes
-  SERVICES: 30 * 1000,                 // 30 sec — price accuracy critical
+  // 2026-07 (pool-exhaustion fix): bumped 30s → 5 min. `/api/services` was
+  // cache-missing on every hit during a DB slowdown, each miss holding a
+  // pool slot for the full 30s query timeout. 5 min TTL cuts pool pressure
+  // 10x — admin price updates still invalidate immediately via
+  // cache.invalidate(CACHE_KEYS.SERVICES) in admin/services endpoints.
+  SERVICES: 5 * 60 * 1000,             // 5 min (was 30 sec)
   NEA_AGENCIES: 5 * 60 * 1000,        // 5 min — public search
   NEA_AGENCIES_BLACKLIST: 2 * 60 * 1000, // 2 min — security-sensitive
   AGENCIES: 2 * 60 * 1000,            // 2 min — changes more often
