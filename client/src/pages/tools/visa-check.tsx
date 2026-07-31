@@ -36,6 +36,7 @@ import {
   Building2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { fetchCsrfToken } from "@/lib/queryClient";
 
 interface SubScore {
   key: string;
@@ -143,9 +144,12 @@ export default function VisaCheckPage() {
     try {
       const form = new FormData();
       form.append("file", file);
+      // 2026-07 (production CSRF fix): every mutating request needs the token.
+      const csrf = await fetchCsrfToken();
       const res = await fetch("/api/tools/visa-verify", {
         method: "POST",
         credentials: "include",
+        headers: { "X-CSRF-Token": csrf },
         body: form,
       });
       const data = await res.json();

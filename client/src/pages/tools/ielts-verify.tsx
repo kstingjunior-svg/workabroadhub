@@ -20,6 +20,7 @@ import {
   Phone, Mail, Globe, FileText, GraduationCap,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { fetchCsrfToken } from "@/lib/queryClient";
 
 interface SubScore { key: string; label: string; score: number; detail: string; }
 interface Finding  { id: string; label: string; status: "pass" | "warn" | "fail" | "info"; detail: string; }
@@ -114,7 +115,14 @@ export default function IeltsVerifyPage() {
     try {
       const form = new FormData();
       form.append("file", file);
-      const res = await fetch("/api/tools/ielts-verify-ai", { method: "POST", credentials: "include", body: form });
+      // 2026-07 (production CSRF fix): every mutating request needs the token.
+      const csrf = await fetchCsrfToken();
+      const res = await fetch("/api/tools/ielts-verify-ai", {
+        method: "POST",
+        credentials: "include",
+        headers: { "X-CSRF-Token": csrf },
+        body: form,
+      });
       const data = await res.json();
       if (!data.ok) {
         toast({ title: "Couldn't verify", description: data.message || "Please try again with a clearer image.", variant: "destructive" });

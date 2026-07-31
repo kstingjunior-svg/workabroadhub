@@ -22,6 +22,7 @@ import {
   Phone, Mail, Globe, Building2, MessageSquare, DollarSign, Search,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { fetchCsrfToken } from "@/lib/queryClient";
 
 interface SubScore { key: string; label: string; score: number; detail: string; }
 interface Finding  {
@@ -122,7 +123,14 @@ export default function JobScamCheckerPage() {
       const form = new FormData();
       if (text.trim()) form.append("text", text.trim());
       if (file)         form.append("file", file);
-      const res = await fetch("/api/tools/job-scam-check", { method: "POST", credentials: "include", body: form });
+      // 2026-07 (production CSRF fix): every mutating request needs the token.
+      const csrf = await fetchCsrfToken();
+      const res = await fetch("/api/tools/job-scam-check", {
+        method: "POST",
+        credentials: "include",
+        headers: { "X-CSRF-Token": csrf },
+        body: form,
+      });
       const data = await res.json();
       if (!data.ok) {
         toast({ title: "Couldn't complete the check", description: data.message || "Please try again.", variant: "destructive" });

@@ -20,6 +20,7 @@ import {
   Mail, Globe, Building2, DollarSign, Briefcase,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { fetchCsrfToken } from "@/lib/queryClient";
 
 interface SubScore { key: string; label: string; score: number; detail: string; }
 interface Finding  { id: string; label: string; severity: "hard" | "soft" | "info"; detail: string; actionable?: string; }
@@ -120,9 +121,12 @@ export default function OfferCheckPage() {
     try {
       const form = new FormData();
       form.append("file", file);
+      // 2026-07 (production CSRF fix): every mutating request needs the token.
+      const csrf = await fetchCsrfToken();
       const res = await fetch("/api/tools/offer-verify", {
         method: "POST",
         credentials: "include",
+        headers: { "X-CSRF-Token": csrf },
         body: form,
       });
       const data = await res.json();

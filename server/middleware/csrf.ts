@@ -23,6 +23,21 @@ const CSRF_EXEMPT = new Set([
   "/api/gpt-match",
   "/api/score-cv",
   "/api/prepare-application",
+  // 2026-07: Free AI screening tools — same category. All are read-only
+  // screenings that return a report without persisting state changes.
+  // Client SHOULD still send X-CSRF-Token (defense in depth); the exempt
+  // entry protects against session cookies dropped between page load and
+  // upload (in-app browsers, aggressive privacy modes) which would
+  // otherwise break the paying-user experience.
+  "/api/tools/visa-verify",
+  "/api/tools/offer-verify",
+  "/api/tools/ielts-verify-ai",
+  "/api/tools/job-scam-check",
+  "/api/tools/visa-check",
+  "/api/tools/offer-check",
+  "/api/tools/ielts-verify",
+  "/api/tools/ats-check",
+  "/api/tools/job-assistant",
   // Passive telemetry — no destructive state changes
   "/api/track-live",
   "/api/track-event",
