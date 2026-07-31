@@ -139,16 +139,114 @@ async function userHasPaidAccess(userId: string | undefined): Promise<boolean> {
 }
 
 export function registerVisaJobsRoutes(app: Express, isAuthenticated: RequestHandler) {
-  // GET /api/visa-jobs — public list, no applyUrl leaked
-  // The job catalogue is a const array — it doesn't change between deploys —
-  // so we can cache aggressively at the CDN. 5 min browser, 10 min CDN with
-  // stale-while-revalidate so users effectively never wait on this.
+  // Sanitise: strip applyUrl before serving to clients
   const SANITISED_JOBS = VISA_JOBS.map(({ applyUrl, ...rest }) => rest);
-  const SANITISED_PAYLOAD = { jobs: SANITISED_JOBS, total: SANITISED_JOBS.length };
-  app.get("/api/visa-jobs", (_req: Request, res: Response) => {
-    res.setHeader("Cache-Control", "public, max-age=300, s-maxage=600, stale-while-revalidate=1800");
-    res.setHeader("Vary", "Accept-Encoding");
-    res.json(SANITISED_PAYLOAD);
+
+  // GET /api/visa-jobs — public list, no applyUrl leaked, ROTATED per user.
+  //
+  // 2026-07 (Tony's founder brief): replaced the static-list response with
+  // the dynamic rotation engine (server/lib/job-rotation.ts). Every user
+  // now sees a personalized order that's stable within a day and rotates
+  // across users. Cache is now PRIVATE + short — public shared cache would
+  // defeat the per-user rotation.
+  app.get("/api/visa-jobs", async (req: any, res: Response) => {
+    const { rotateJobs, deriveSessionId } = await import("./lib/job-rotation");
+
+    // Derive stable session ID (auth user → "u:<id>", anon → hash of IP+UA)
+    const sessionId = deriveSessionId(req);
+
+    // Pull personalization signals from the authenticated user (if present)
+    let userCountry: string | null = null;
+    let affinityCategories: string[] = [];
+    let affinityCountries: string[] = [];
+    const userId = req.user?.claims?.sub ?? req.user?.id;
+    if (userId) {
+      try {
+        const { rows } = await pool.query<{
+          country: string | null;
+          interests: any;
+        }>(
+          `SELECT country, interests FROM users WHERE id = $1 LIMIT 1`,
+          [userId],
+        );
+        const u = rows[0];
+        if (u?.country) userCountry = u.country;
+        // users.interests is a JSONB array of { service: string } records
+        if (Array.isArray(u?.interests)) {
+          affinityCategories = u.interests
+            .map((i: any) => (typeof i?.service === "string" ? i.service : null))
+            .filter(Boolean) as string[];
+        }
+      } catch (err) {
+        // Non-fatal — rotation still works with default weights
+      }
+    }
+
+    // Load admin overrides + impression counters (best-effort, safe on empty tables)
+    let pinnedJobIds: string[] = [];
+    let blacklistedJobIds: string[] = [];
+    let impressions: Record<string, number> = {};
+    try {
+      const { rows: overrides } = await pool.query<{
+        job_id: string; rank_type: string;
+      }>(`SELECT job_id, rank_type
+            FROM job_admin_overrides
+           WHERE (starts_at IS NULL OR starts_at <= NOW())
+             AND (expires_at IS NULL OR expires_at > NOW())`);
+      pinnedJobIds     = overrides.filter((o) => o.rank_type === "pinned").map((o) => o.job_id);
+      blacklistedJobIds = overrides.filter((o) => o.rank_type === "blacklisted").map((o) => o.job_id);
+    } catch { /* table not migrated yet — proceed without */ }
+    try {
+      const { rows: imps } = await pool.query<{ job_id: string; impressions: number }>(
+        `SELECT job_id, impressions FROM job_impressions`,
+      );
+      impressions = Object.fromEntries(imps.map((i) => [i.job_id, Number(i.impressions) || 0]));
+    } catch { /* table not migrated yet — proceed without */ }
+
+    const result = rotateJobs(SANITISED_JOBS, {
+      sessionId,
+      userCountry,
+      affinityCategories,
+      affinityCountries,
+      pinnedJobIds,
+      blacklistedJobIds,
+      impressions,
+    });
+
+    // Fire-and-forget: bump impression counters for the top 12 (what the user
+    // will actually see on first render). Non-blocking — we don't await.
+    if (result.jobs.length > 0) {
+      const top = result.jobs.slice(0, 12).map((j) => j.id);
+      (async () => {
+        try {
+          await pool.query(
+            `INSERT INTO job_impressions (job_id, impressions, last_seen, updated_at)
+             SELECT unnest($1::varchar[]), 1, NOW(), NOW()
+             ON CONFLICT (job_id) DO UPDATE
+               SET impressions = job_impressions.impressions + 1,
+                   last_seen   = NOW(),
+                   updated_at  = NOW()`,
+            [top],
+          );
+        } catch { /* table not migrated yet — safe to skip */ }
+      })();
+    }
+
+    // Private cache — per user, short-lived. Different users have different
+    // orderings so a shared CDN cache would leak one user's ordering to
+    // another. 60s private cache gives repeated same-user page loads a fast
+    // path without pinning the ordering.
+    res.setHeader("Cache-Control", "private, max-age=60");
+    res.setHeader("Vary", "Cookie, Accept-Encoding");
+    res.json({
+      jobs: result.jobs,
+      total: result.meta.total,
+      rotation: {
+        seed: result.meta.seed,
+        dayBucket: result.meta.dayBucket,
+        personalized: result.meta.hasPersonalization,
+      },
+    });
   });
 
   // GET /api/visa-jobs/:id/apply — paid-tier gated redirect

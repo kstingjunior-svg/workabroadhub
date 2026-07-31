@@ -14,6 +14,29 @@
  *   GET  /api/visa-jobs                   public — returns jobs without applyUrl
  *   GET  /api/visa-jobs/:id/apply         pro-only — 302 to the real portal
  */
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.VISA_JOBS = void 0;
 exports.registerVisaJobsRoutes = registerVisaJobsRoutes;
@@ -116,16 +139,99 @@ async function userHasPaidAccess(userId) {
     }
 }
 function registerVisaJobsRoutes(app, isAuthenticated) {
-    // GET /api/visa-jobs — public list, no applyUrl leaked
-    // The job catalogue is a const array — it doesn't change between deploys —
-    // so we can cache aggressively at the CDN. 5 min browser, 10 min CDN with
-    // stale-while-revalidate so users effectively never wait on this.
+    // Sanitise: strip applyUrl before serving to clients
     const SANITISED_JOBS = exports.VISA_JOBS.map(({ applyUrl, ...rest }) => rest);
-    const SANITISED_PAYLOAD = { jobs: SANITISED_JOBS, total: SANITISED_JOBS.length };
-    app.get("/api/visa-jobs", (_req, res) => {
-        res.setHeader("Cache-Control", "public, max-age=300, s-maxage=600, stale-while-revalidate=1800");
-        res.setHeader("Vary", "Accept-Encoding");
-        res.json(SANITISED_PAYLOAD);
+    // GET /api/visa-jobs — public list, no applyUrl leaked, ROTATED per user.
+    //
+    // 2026-07 (Tony's founder brief): replaced the static-list response with
+    // the dynamic rotation engine (server/lib/job-rotation.ts). Every user
+    // now sees a personalized order that's stable within a day and rotates
+    // across users. Cache is now PRIVATE + short — public shared cache would
+    // defeat the per-user rotation.
+    app.get("/api/visa-jobs", async (req, res) => {
+        const { rotateJobs, deriveSessionId } = await Promise.resolve().then(() => __importStar(require("./lib/job-rotation")));
+        // Derive stable session ID (auth user → "u:<id>", anon → hash of IP+UA)
+        const sessionId = deriveSessionId(req);
+        // Pull personalization signals from the authenticated user (if present)
+        let userCountry = null;
+        let affinityCategories = [];
+        let affinityCountries = [];
+        const userId = req.user?.claims?.sub ?? req.user?.id;
+        if (userId) {
+            try {
+                const { rows } = await db_1.pool.query(`SELECT country, interests FROM users WHERE id = $1 LIMIT 1`, [userId]);
+                const u = rows[0];
+                if (u?.country)
+                    userCountry = u.country;
+                // users.interests is a JSONB array of { service: string } records
+                if (Array.isArray(u?.interests)) {
+                    affinityCategories = u.interests
+                        .map((i) => (typeof i?.service === "string" ? i.service : null))
+                        .filter(Boolean);
+                }
+            }
+            catch (err) {
+                // Non-fatal — rotation still works with default weights
+            }
+        }
+        // Load admin overrides + impression counters (best-effort, safe on empty tables)
+        let pinnedJobIds = [];
+        let blacklistedJobIds = [];
+        let impressions = {};
+        try {
+            const { rows: overrides } = await db_1.pool.query(`SELECT job_id, rank_type
+            FROM job_admin_overrides
+           WHERE (starts_at IS NULL OR starts_at <= NOW())
+             AND (expires_at IS NULL OR expires_at > NOW())`);
+            pinnedJobIds = overrides.filter((o) => o.rank_type === "pinned").map((o) => o.job_id);
+            blacklistedJobIds = overrides.filter((o) => o.rank_type === "blacklisted").map((o) => o.job_id);
+        }
+        catch { /* table not migrated yet — proceed without */ }
+        try {
+            const { rows: imps } = await db_1.pool.query(`SELECT job_id, impressions FROM job_impressions`);
+            impressions = Object.fromEntries(imps.map((i) => [i.job_id, Number(i.impressions) || 0]));
+        }
+        catch { /* table not migrated yet — proceed without */ }
+        const result = rotateJobs(SANITISED_JOBS, {
+            sessionId,
+            userCountry,
+            affinityCategories,
+            affinityCountries,
+            pinnedJobIds,
+            blacklistedJobIds,
+            impressions,
+        });
+        // Fire-and-forget: bump impression counters for the top 12 (what the user
+        // will actually see on first render). Non-blocking — we don't await.
+        if (result.jobs.length > 0) {
+            const top = result.jobs.slice(0, 12).map((j) => j.id);
+            (async () => {
+                try {
+                    await db_1.pool.query(`INSERT INTO job_impressions (job_id, impressions, last_seen, updated_at)
+             SELECT unnest($1::varchar[]), 1, NOW(), NOW()
+             ON CONFLICT (job_id) DO UPDATE
+               SET impressions = job_impressions.impressions + 1,
+                   last_seen   = NOW(),
+                   updated_at  = NOW()`, [top]);
+                }
+                catch { /* table not migrated yet — safe to skip */ }
+            })();
+        }
+        // Private cache — per user, short-lived. Different users have different
+        // orderings so a shared CDN cache would leak one user's ordering to
+        // another. 60s private cache gives repeated same-user page loads a fast
+        // path without pinning the ordering.
+        res.setHeader("Cache-Control", "private, max-age=60");
+        res.setHeader("Vary", "Cookie, Accept-Encoding");
+        res.json({
+            jobs: result.jobs,
+            total: result.meta.total,
+            rotation: {
+                seed: result.meta.seed,
+                dayBucket: result.meta.dayBucket,
+                personalized: result.meta.hasPersonalization,
+            },
+        });
     });
     // GET /api/visa-jobs/:id/apply — paid-tier gated redirect
     app.get("/api/visa-jobs/:id/apply", isAuthenticated, async (req, res) => {
