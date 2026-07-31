@@ -35,6 +35,20 @@ interface PhotoUploadFieldProps {
  * aspect ratio) then export as JPEG q=0.85. Handles landscape or portrait
  * gracefully — the CV renderer will center-crop to a square anyway.
  */
+/**
+ * 2026-07 (mobile fix): convert a Blob to a data URL for use in <img src>.
+ * Data URLs are self-contained (no revocation risk), work in every WebView
+ * including tab-suspended Android Chrome, and don't need cleanup.
+ */
+async function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload  = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error("Preview generation failed"));
+    reader.readAsDataURL(blob);
+  });
+}
+
 async function compressToJpeg(file: File, maxDim = 400, quality = 0.85): Promise<Blob> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -74,15 +88,13 @@ export function PhotoUploadField({ value, onChange, label }: PhotoUploadFieldPro
   const { toast } = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
   const [processing, setProcessing] = useState(false);
+  // 2026-07 (production fix): switched from blob URL to data URL for the
+  // preview. Mobile Chrome (Android WebView, low-memory tabs) revokes blob
+  // URLs unpredictably — the "Looking good" panel would render with a
+  // broken image icon. Data URLs are self-contained strings that never
+  // expire and always render. Slight memory cost (~2x the blob size) is
+  // fine for a 40-150 KB compressed JPEG.
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-
-  // Keep an object URL for the preview as long as `value` is set.
-  // Re-derive whenever value changes, and revoke the previous URL.
-  if (value) {
-    // Only recompute if the current previewUrl doesn't match the current blob.
-    // Cheap check: object URLs are unique-per-call so we can compare by reference
-    // via a hidden data attribute — but simpler: just always recreate on onChange.
-  }
 
   async function handleFile(f: File | null) {
     if (!f) return;
@@ -107,9 +119,9 @@ export function PhotoUploadField({ value, onChange, label }: PhotoUploadFieldPro
     try {
       const compressed = await compressToJpeg(f);
       onChange(compressed);
-      // Fresh preview URL for the new blob
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
-      setPreviewUrl(URL.createObjectURL(compressed));
+      // Convert to data URL (bulletproof — never gets revoked)
+      const dataUrl = await blobToDataUrl(compressed);
+      setPreviewUrl(dataUrl);
     } catch (err: any) {
       toast({
         title: "Couldn't process the photo",
@@ -123,7 +135,6 @@ export function PhotoUploadField({ value, onChange, label }: PhotoUploadFieldPro
 
   function handleRemove() {
     onChange(null);
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
     setPreviewUrl(null);
     if (inputRef.current) inputRef.current.value = "";
   }
