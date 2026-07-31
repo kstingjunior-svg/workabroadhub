@@ -61,8 +61,13 @@ export function buildShareCardSvg(p: ShareCardProps): string {
     `
     : "";
 
+  // 2026-07 (mobile overflow fix): DO NOT set explicit width/height on the
+  // SVG. Some browsers (mobile Chrome especially) prioritize the SVG's
+  // intrinsic size over CSS width:100%, which made the card render at its
+  // full 1080x1080 pixel size and blow past the modal edges. Keeping only
+  // viewBox + preserveAspectRatio lets CSS scale it correctly.
   return `
-<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1080" viewBox="0 0 1080 1080">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1080" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;display:block">
   <!-- Background gradient -->
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">

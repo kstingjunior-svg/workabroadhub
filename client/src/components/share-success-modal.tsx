@@ -84,11 +84,24 @@ export function ShareSuccessModal({ open, onOpenChange, orderId, card }: ShareSu
     } catch (e: any) {
       // AbortError means the user cancelled the share sheet — not an error
       if (e?.name !== "AbortError") {
-        toast({
-          title: "Couldn't share",
-          description: "Try 'Download image' and post it manually on WhatsApp Status.",
-          variant: "destructive",
-        });
+        // 2026-07: auto-fall-through to download instead of showing a scary
+        // toast. Web Share fails often on desktop Chrome + some in-app
+        // WebViews, and users don't understand what "manually on WhatsApp
+        // Status" means. Just download the image + tell them what to do.
+        try {
+          await handleDownload();
+          toast({
+            title: "Image saved instead",
+            description: "Your browser blocked the share sheet — we saved the image to your downloads. Open WhatsApp → Status → Add photo → pick it.",
+            duration: 8000,
+          });
+        } catch {
+          toast({
+            title: "Couldn't share",
+            description: "Please tap 'Download image' below and post it manually on WhatsApp Status.",
+            variant: "destructive",
+          });
+        }
       }
     } finally {
       setBusy(null);
