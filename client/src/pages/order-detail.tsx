@@ -273,6 +273,51 @@ export default function OrderDetail() {
           )}
         </div>
 
+        {/* 2026-07 PRODUCTION FIX: new-flow AI service orders (CV Revamp,
+            CV Rewrite, Cover Letter, SOP, etc.) don't populate the legacy
+            service_deliverables table — the output lives in
+            service_orders.output_text and is streamed via
+            /api/services/order/:id/download/pdf|docx.
+            When status='completed' but no legacy deliverables exist, show
+            direct PDF + Word download buttons pointing at the new endpoint.
+            Users like the KES 699 CV Rewrite case (2026-07-31 report)
+            were stranded on this page seeing "Completed" with no download.  */}
+        {order.status === "completed" && (!order.deliverables || order.deliverables.length === 0) && (
+          <Card className="border-green-200 dark:border-green-900">
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2 text-green-600 dark:text-green-400">
+                <Download className="h-5 w-5" />
+                Your Deliverables
+              </CardTitle>
+              <CardDescription>
+                Your document is ready. Download in the format you prefer.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-3 max-w-md">
+                <a
+                  href={`/api/services/order/${order.id}/download/pdf`}
+                  className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold text-sm"
+                  data-testid="button-download-pdf-fallback"
+                >
+                  <Download className="h-4 w-4" /> PDF
+                </a>
+                <a
+                  href={`/api/services/order/${order.id}/download/docx`}
+                  className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm"
+                  data-testid="button-download-docx-fallback"
+                >
+                  <Download className="h-4 w-4" /> Word
+                </a>
+              </div>
+              <p className="text-xs text-muted-foreground mt-3">
+                Trouble downloading? Also available on your{" "}
+                <a href="/my-documents" className="text-primary hover:underline">My Documents</a> page.
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
         {order.deliverables && order.deliverables.length > 0 && (
           <Card className="border-green-200 dark:border-green-900">
             <CardHeader>
