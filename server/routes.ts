@@ -20695,6 +20695,13 @@ Rules:
   const { registerScamCheckRoute } = await import("./scam-check/endpoint");
   registerScamCheckRoute(app);
 
+  // 2026-07: Community Fraud Intelligence Platform — structured scam
+  // reports with auto cross-referencing (shared phones/emails/bank
+  // accounts group reports into agency clusters) + public agency
+  // profile pages powered by moderated evidence.
+  const { registerFraudIntelligenceRoutes } = await import("./routes/fraud-intelligence");
+  registerFraudIntelligenceRoutes(app);
+
   // ═══════════════════════════════════════════════════════════════════════════
   // SERVICE ORDER FLOW — unified upload → pay → AI → download for paid services
   // (CV Fix Lite, ATS, Cover Letter, SOP, Country CV Rewrite, Motivation, etc.)

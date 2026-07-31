@@ -74,6 +74,8 @@ const ScoutJobPost    = lazyWithRetry(() => import("@/pages/scout-jobs/post"));
 const LinkedinOptimize = lazyWithRetry(() => import("@/pages/tools/linkedin-optimize"));
 // 2026-07: Viral share loop — public /share/:token landing page.
 const SharePage = lazyWithRetry(() => import("@/pages/share"));
+// 2026-07: Community Fraud Intelligence — public agency profile page.
+const AgencyReported = lazyWithRetry(() => import("@/pages/agency-reported"));
 const AgencyProfilePage = lazyWithRetry(() => import("@/pages/agency-profile"));
 const Profile = lazyWithRetry(() => import("@/pages/profile"));
 const AgencyPortal = lazyWithRetry(() => import("@/pages/agency-portal"));
@@ -355,6 +357,7 @@ const LazyScoutJobDetail    = withSuspense(ScoutJobDetail);
 const LazyScoutJobPost      = withSuspense(ScoutJobPost);
 const LazyLinkedinOptimize  = withSuspense(LinkedinOptimize);
 const LazySharePage         = withSuspense(SharePage);
+const LazyAgencyReported    = withSuspense(AgencyReported);
 const LazyProfile = withSuspense(Profile);
 const LazyAgencyPortal = withSuspense(AgencyPortal);
 const LazyServiceOrderPage = withSuspense(ServiceOrderPage);
@@ -554,6 +557,7 @@ function AuthenticatedRoutes() {
       <Route path="/scout-jobs/:id" component={LazyScoutJobDetail} />
       <Route path="/scout-jobs" component={LazyScoutJobsIndex} />
       <Route path="/share/:token" component={LazySharePage} />
+      <Route path="/agencies-reported/:slug" component={LazyAgencyReported} />
       {/* LinkedIn AI Optimizer — Pro tool, workspace at /tools/linkedin-optimize */}
       <Route path="/tools/linkedin-optimize" component={LazyLinkedinOptimize} />
       <Route path="/student-visas" component={LazyStudentVisas} />
@@ -804,6 +808,7 @@ function Router() {
         <Route path="/scout-jobs/:id" component={LazyScoutJobDetail} />
         <Route path="/scout-jobs" component={LazyScoutJobsIndex} />
         <Route path="/share/:token" component={LazySharePage} />
+      <Route path="/agencies-reported/:slug" component={LazyAgencyReported} />
         {/* LinkedIn Optimizer — page shows a friendly sign-in prompt for guests. */}
         <Route path="/tools/linkedin-optimize" component={LazyLinkedinOptimize} />
         <Route path="/student-visas" component={LazyStudentVisas} />
