@@ -1,652 +1,526 @@
-import { useState, useEffect, useRef } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+/**
+ * Job Scam Checker — premium AI investigation dashboard.
+ *
+ * 2026-07 (Tony's founder brief): "The AI should investigate overseas job
+ * opportunities... Never simply answer 'This job is genuine.' Instead
+ * explain WHY."
+ *
+ * Route: /tools/job-scam-checker
+ * Backend: POST /api/tools/job-scam-check
+ *
+ * Accepts either pasted text (WhatsApp chat / email / job ad) OR an image
+ * upload (screenshot / offer letter) — or both.
+ */
+
+import { useRef, useState } from "react";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Link } from "wouter";
-import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/hooks/use-auth";
-import { apiRequest, fetchCsrfToken } from "@/lib/queryClient";
-import { FreemiumGate } from "@/components/freemium-gate";
-import { UpgradePrompt } from "@/components/upgrade-prompt";
-import { SeoHead, buildArticleSchema, buildFaqSchema } from "@/components/seo-head";
-import { trackPageView } from "@/lib/analytics";
-import { ReportShareBar } from "@/components/report-share-bar";
 import {
-  ShieldAlert,
-  ShieldCheck,
-  AlertTriangle,
-  XCircle,
-  ArrowLeft,
-  CheckCircle,
-  ChevronRight,
-  Search,
-  Upload,
-  FileImage,
-  FileText,
-  X,
+  Loader2, ShieldCheck, ShieldAlert, AlertTriangle, CheckCircle2, XCircle,
+  Info, ExternalLink, ChevronDown, ChevronUp, Camera, RefreshCw,
+  Phone, Mail, Globe, Building2, MessageSquare, DollarSign, Search,
 } from "lucide-react";
-import { isPaidUser } from "@/lib/plan";
-import {
-  WrongDocumentCard,
-  isWrongDocumentResponse,
-  type WrongDocumentPayload,
-} from "@/components/wrong-document-card";
-import { AskNanjilaButton } from "@/components/ask-nanjila-button";
-import { AiDisclaimer } from "@/components/ai-disclaimer";
+import { useToast } from "@/hooks/use-toast";
 
-const SCAM_FAQS = [
-  { q: "How common are overseas job scams targeting Kenyans?", a: "Job scams targeting Kenyans seeking overseas employment are extremely common. Fraudsters impersonate legitimate employers in the UK, UAE, Saudi Arabia, and Canada, charging fake processing fees, visa fees, or training fees. Thousands of Kenyans lose money every year. Our free checker helps you detect red flags before engaging with any employer." },
-  { q: "What are the most common signs of a fake overseas job advert?", a: "Key red flags include: requests to pay any fee upfront (visa, training, registration), generic email addresses like Gmail or Yahoo instead of company domains, salaries that seem unrealistically high, vague job descriptions, pressure to respond urgently, and requests to share personal documents before any interview." },
-  { q: "How does the Job Scam Checker detect fraud?", a: "Our rule-based engine scans the text for over 40 known scam signals including fee-request phrases, suspicious contact patterns, unrealistic salary claims, urgency language, and high-risk recruiter patterns. It assigns a risk score from 0–100 and lists every warning signal found." },
-  { q: "If a job passes the checker, is it safe?", a: "A low risk score means the advert shows few known scam indicators — it does not guarantee the job is legitimate. Always verify the employer independently: check their website, call their registered office, and never pay any fee before signing a verified employment contract." },
-  { q: "Which countries have the most overseas job scams targeting Kenyans?", a: "The UAE, Saudi Arabia, Malaysia, and some parts of Europe have historically had high rates of scam job adverts targeting Kenyan workers. Always verify licensed recruitment agencies before engaging with recruiters for these destinations." },
-];
-
-interface ScamResult {
-  riskLevel: "low" | "medium" | "high";
-  riskScore: number;
-  warningSignals: string[];
+interface SubScore { key: string; label: string; score: number; detail: string; }
+interface Finding  {
+  id: string;
+  label: string;
+  severity: "hard" | "soft" | "info";
+  category: "phone" | "url" | "text" | "payment" | "recruitment" | "identity";
+  detail: string;
+  actionable?: string;
+}
+interface CountryPanel {
+  code: string; name: string; flag: string;
+  links: Record<string, string | null>;
+  contacts: Record<string, string | null>;
+  nextStepAdvice: string;
+}
+interface CheckResponse {
+  ok: true;
+  overallTrust: number; confidence: number;
+  riskBand: "low" | "medium" | "high" | "critical";
+  verdict: "trustworthy" | "verify_first" | "suspicious" | "high_risk";
+  headline: string; explanation: string;
+  extractedFields: Record<string, any>;
+  country: CountryPanel | null;
+  subScores: SubScore[];
+  findings: Finding[];
+  positiveIndicators: string[];
   recommendations: string[];
-  aiVerdict?: "SAFE" | "SUSPICIOUS" | "LIKELY SCAM";
-  aiExplanation?: string;
-  aiFlags?: string[];
-  aiConfidence?: number;
-  extractedText?: string;
+  scamPatternsMatched: string[];
+  disclaimer: string;
 }
 
-const RISK_CONFIG = {
-  low: {
-    label: "Low Risk",
+const VERDICT_STYLES = {
+  trustworthy: {
+    bg: "bg-emerald-500",
+    text: "text-emerald-700 dark:text-emerald-400",
+    accent: "bg-emerald-50 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-900",
     icon: ShieldCheck,
-    color: "text-green-600 dark:text-green-400",
-    bg: "bg-green-50 dark:bg-green-900/20",
-    border: "border-green-200 dark:border-green-700",
-    badgeClass: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300",
-    bar: "bg-green-500",
-    description: "This job advert shows few or no known scam indicators. Proceed carefully and verify independently.",
+    label: "Looks legitimate",
   },
-  medium: {
-    label: "Medium Risk",
+  verify_first: {
+    bg: "bg-amber-500",
+    text: "text-amber-700 dark:text-amber-400",
+    accent: "bg-amber-50 border-amber-200 dark:bg-amber-950/30 dark:border-amber-900",
+    icon: Info,
+    label: "Verify before proceeding",
+  },
+  suspicious: {
+    bg: "bg-orange-500",
+    text: "text-orange-700 dark:text-orange-400",
+    accent: "bg-orange-50 border-orange-200 dark:bg-orange-950/30 dark:border-orange-900",
+    icon: ShieldAlert,
+    label: "Suspicious",
+  },
+  high_risk: {
+    bg: "bg-red-600",
+    text: "text-red-700 dark:text-red-400",
+    accent: "bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-900",
     icon: AlertTriangle,
-    color: "text-amber-600 dark:text-amber-400",
-    bg: "bg-amber-50 dark:bg-amber-900/20",
-    border: "border-amber-200 dark:border-amber-700",
-    badgeClass: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300",
-    bar: "bg-amber-500",
-    description: "Some suspicious patterns detected. Proceed with caution and verify before sharing documents or paying any fees.",
+    label: "High risk — likely scam",
   },
-  high: {
-    label: "High Risk — Likely Scam",
-    icon: XCircle,
-    color: "text-red-600 dark:text-red-400",
-    bg: "bg-red-50 dark:bg-red-900/20",
-    border: "border-red-200 dark:border-red-700",
-    badgeClass: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300",
-    bar: "bg-red-500",
-    description: "Multiple high-risk indicators found. This advert strongly resembles known recruitment scam patterns. Do NOT pay any fees.",
-  },
-};
+} as const;
 
-const SAMPLE_ADVERTS = [
-  {
-    label: "Suspicious advert",
-    text: "URGENT: Earn $5000/month from home! No experience needed, no CV required. Send KES 5000 processing fee via M-Pesa. Contact agent via WhatsApp only: +254712345678 (gmail.com). Guaranteed visa sponsorship! Limited slots — apply IMMEDIATELY!",
-  },
-  {
-    label: "Normal job advert",
-    text: "Registered Nurse — NHS South London. We are seeking Band 5 nurses for our busy medical ward. Visa sponsorship available under the Health and Care Worker visa. Apply via our official careers portal. No fees charged at any stage. Interviews conducted virtually.",
-  },
-];
-
-export default function JobScamChecker() {
-  const { user } = useAuth();
+export default function JobScamCheckerPage() {
   const { toast } = useToast();
+  const inputRef = useRef<HTMLInputElement>(null);
+
   const [text, setText] = useState("");
-  const [result, setResult] = useState<ScamResult | null>(null);
-  const [reportId, setReportId] = useState<string | null>(null);
-  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [feedbackGiven, setFeedbackGiven] = useState<"yes" | "no" | null>(null);
-  const [wrongDoc, setWrongDoc] = useState<WrongDocumentPayload | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<CheckResponse | null>(null);
+  const [showTechnical, setShowTechnical] = useState(false);
 
-  const { data: userPlan } = useQuery<{ planId: string } | null>({
-    queryKey: ["/api/user/plan"],
-    enabled: !!user,
-  });
-  const isPaid = isPaidUser(userPlan?.planId);
-
-  useEffect(() => {
-    trackPageView("job_scam_checker");
-  }, []);
-
-  const { mutate: generateReport } = useMutation({
-    mutationFn: (reportData: ScamResult) =>
-      apiRequest("POST", "/api/tool-reports", { toolName: "scam", reportData }),
-    onSuccess: (data: any) => setReportId(data.reportId),
-  });
-
-  const { mutate: checkScam, isPending } = useMutation({
-    mutationFn: async (text: string) => {
-      const res = await fetch("/api/tools/scam-check", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ text }),
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message);
-      }
-      return res.json() as Promise<ScamResult>;
-    },
-    onSuccess: (data) => {
-      setResult(data);
-      setReportId(null);
-      setFeedbackGiven(null);
-      generateReport(data);
-    },
-    onError: (err: any) => {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
-    },
-  });
-
-  const { mutate: checkScamFile, isPending: isFilePending } = useMutation({
-    mutationFn: async (arg: File | { file: File; forceAnalyze?: boolean }) => {
-      const file = arg instanceof File ? arg : arg.file;
-      const forceAnalyze = arg instanceof File ? false : !!arg.forceAnalyze;
-      const formData = new FormData();
-      formData.append("file", file);
-      if (forceAnalyze) formData.append("forceAnalyze", "true");
-      const csrfToken = await fetchCsrfToken();
-      const res = await fetch("/api/tools/scam-check-file", {
-        method: "POST",
-        credentials: "include",
-        headers: { "X-CSRF-Token": csrfToken },
-        body: formData,
-      });
-      if (!res.ok) {
-        const text = await res.text();
-        try {
-          const body = JSON.parse(text);
-          if (isWrongDocumentResponse(body)) {
-            const wrongErr: any = new Error(body.message);
-            wrongErr.wrongDocument = body;
-            throw wrongErr;
-          }
-          throw new Error(body.message ?? "File analysis failed. Please try pasting the text manually.");
-        } catch (parseErr: any) {
-          if (parseErr?.wrongDocument) throw parseErr;
-          throw new Error("File analysis failed. Please try pasting the text manually.");
-        }
-      }
-      return res.json() as Promise<ScamResult & { extractedText?: string }>;
-    },
-    onSuccess: (data) => {
-      setWrongDoc(null);
-      if (data.extractedText) setText(data.extractedText);
-      const { extractedText: _, ...scamResult } = data as any;
-      setResult(scamResult);
-      setReportId(null);
-      setFeedbackGiven(null);
-      generateReport(scamResult);
-    },
-    onError: (err: any) => {
-      if (err?.wrongDocument) {
-        setWrongDoc(err.wrongDocument);
-        setResult(null);
-        return;
-      }
-      toast({ title: "File analysis failed", description: err.message, variant: "destructive" });
-    },
-  });
-
-  const { mutate: submitFeedback } = useMutation({
-    mutationFn: async (wasScam: boolean) => {
-      const csrfToken = await fetchCsrfToken();
-      const res = await fetch("/api/tools/scam-feedback", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken },
-        body: JSON.stringify({ reportId, wasScam, advertText: text.slice(0, 2000) }),
-      });
-      if (!res.ok) throw new Error("Feedback failed");
-      return res.json();
-    },
-    onSuccess: (_data, wasScam) => {
-      setFeedbackGiven(wasScam ? "yes" : "no");
-      toast({ title: "Thanks for your feedback!", description: wasScam ? "This advert has been flagged for review." : "Noted — helps us improve accuracy." });
-    },
-  });
-
-  function handleFileSelect(file: File) {
-    const isImage = file.type.startsWith("image/");
-    const isPdf   = file.type === "application/pdf";
-    const isDoc   = [
-      "application/msword",
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    ].includes(file.type);
-    if (!isImage && !isPdf && !isDoc) {
-      toast({ title: "Unsupported file", description: "Please upload an image (JPG, PNG, screenshot), PDF, or Word document.", variant: "destructive" });
+  function handleFile(f: File | null) {
+    if (!f) return;
+    if (!f.type.startsWith("image/")) {
+      toast({ title: "Please upload an image", description: "JPG, PNG or WEBP.", variant: "destructive" });
       return;
     }
-    if (file.size > 15 * 1024 * 1024) {
-      toast({ title: "File too large", description: "Maximum file size is 15 MB.", variant: "destructive" });
+    if (f.size > 10 * 1024 * 1024) {
+      toast({ title: "File too large", description: "Please upload under 10 MB.", variant: "destructive" });
       return;
     }
-    setUploadedFile(file);
-    setText("");
+    setFile(f);
     setResult(null);
-    setReportId(null);
+    setPreview(URL.createObjectURL(f));
   }
 
-  const isLoading = isPending || isFilePending;
-  const cfg = result ? RISK_CONFIG[result.riskLevel] : null;
+  async function handleCheck() {
+    if (!text.trim() && !file) {
+      toast({ title: "Nothing to check", description: "Paste the chat text OR upload a screenshot (or both).", variant: "destructive" });
+      return;
+    }
+    setLoading(true);
+    setResult(null);
+    try {
+      const form = new FormData();
+      if (text.trim()) form.append("text", text.trim());
+      if (file)         form.append("file", file);
+      const res = await fetch("/api/tools/job-scam-check", { method: "POST", credentials: "include", body: form });
+      const data = await res.json();
+      if (!data.ok) {
+        toast({ title: "Couldn't complete the check", description: data.message || "Please try again.", variant: "destructive" });
+      } else {
+        setResult(data);
+      }
+    } catch {
+      toast({ title: "Network issue", description: "Check your connection and try again.", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  }
 
-  const seoSchemas = [
-    buildArticleSchema({
-      title: "Free Job Scam Checker — Detect Fake Job Adverts",
-      description: "Paste any overseas job advert and instantly detect scam signals — fake fees, suspicious contacts, and high-risk phrases.",
-      url: "https://workabroadhub.tech/tools/job-scam-checker",
-    }),
-    buildFaqSchema(SCAM_FAQS),
-  ];
+  function handleReset() {
+    setText("");
+    setFile(null);
+    setPreview(null);
+    setResult(null);
+    setShowTechnical(false);
+    if (inputRef.current) inputRef.current.value = "";
+  }
 
   return (
-    <div className="min-h-screen bg-background pb-24">
-      <SeoHead
-        title="Free Job Scam Checker — Detect Fake Overseas Job Adverts | WorkAbroad Hub"
-        description="Paste any overseas job advert and instantly detect scam signals — fake fees, suspicious contacts, and high-risk phrases. Protect yourself from fraudulent recruiters targeting Kenyans."
-        keywords="job scam checker, fake job advert, Kenya job scam, overseas job fraud, verify job offer, scam detection, overseas employment scam, fraudulent recruiter"
-        canonicalPath="/tools/job-scam-checker"
-        schemas={seoSchemas}
-      />
-
-      {/* Header */}
-      <div className="bg-gradient-to-r from-red-600 to-red-500 px-4 pt-10 pb-6 text-white">
-        <Link href="/tools">
-          <button className="flex items-center gap-1 text-red-100 text-sm mb-4 hover:text-white" data-testid="link-back-tools">
-            <ArrowLeft className="h-4 w-4" /> Tools
-          </button>
-        </Link>
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 bg-white/20 rounded-xl flex items-center justify-center">
-            <ShieldAlert className="h-5 w-5" />
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white dark:from-slate-950 dark:to-slate-900 py-8 px-4">
+      <div className="max-w-3xl mx-auto space-y-6">
+        <div className="text-center space-y-2">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-teal-100 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 text-xs font-semibold">
+            <Search className="h-3.5 w-3.5" />
+            AI JOB SCAM INVESTIGATOR
           </div>
-          <div>
-            <h1 className="text-xl font-bold" data-testid="text-page-title">Job Scam Checker</h1>
-            <p className="text-red-100 text-xs">Detect fraudulent job adverts instantly</p>
-          </div>
-        </div>
-      </div>
-
-      <div className="max-w-xl mx-auto px-4 mt-4 space-y-4">
-        <AiDisclaimer className="mb-4" />
-        {/* Intro / Guide */}
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-xl p-4 space-y-2">
-          <p className="text-sm font-semibold text-red-900 dark:text-red-200">How to spot a fake overseas job advert</p>
-          <p className="text-xs text-red-800 dark:text-red-300 leading-relaxed">
-            Fraudsters target Kenyans seeking overseas work in the UK, UAE, Saudi Arabia, and Canada. Common tactics include requesting upfront payments for "visa processing", "training fees", or "registration" — legitimate employers never charge workers any fees.
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Is this job real?</h1>
+          <p className="text-sm text-gray-600 dark:text-gray-400 max-w-lg mx-auto leading-relaxed">
+            Paste the WhatsApp chat, email, or job ad. Upload a screenshot too if you have one. We check the recruiter, payment method, phone number, salary, and 40+ scam patterns.
           </p>
-          <ul className="text-xs text-red-800 dark:text-red-300 space-y-1 list-none">
-            <li className="flex items-start gap-1.5"><CheckCircle className="h-3.5 w-3.5 text-red-500 shrink-0 mt-0.5" /> Paste the full text of any job advert below</li>
-            <li className="flex items-start gap-1.5"><CheckCircle className="h-3.5 w-3.5 text-red-500 shrink-0 mt-0.5" /> Our engine scans 40+ known scam signals</li>
-            <li className="flex items-start gap-1.5"><CheckCircle className="h-3.5 w-3.5 text-red-500 shrink-0 mt-0.5" /> Get a risk score and every warning flag found</li>
-          </ul>
         </div>
-      </div>
 
-      <div className="max-w-xl mx-auto px-4 mt-4 space-y-4">
-        {/* Input card */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold">Paste or Upload the Job Advert</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {/* File upload drop zone */}
-            <div
-              className={`relative border-2 border-dashed rounded-lg p-4 text-center transition-colors cursor-pointer ${
-                isDragging
-                  ? "border-red-400 bg-red-50 dark:bg-red-900/20"
-                  : "border-border hover:border-red-300 hover:bg-muted/30"
-              }`}
-              onClick={() => fileInputRef.current?.click()}
-              onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-              onDragLeave={() => setIsDragging(false)}
-              onDrop={(e) => {
-                e.preventDefault();
-                setIsDragging(false);
-                const file = e.dataTransfer.files[0];
-                if (file) handleFileSelect(file);
-              }}
-              data-testid="dropzone-file-upload"
-            >
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                className="hidden"
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileSelect(f); }}
-                data-testid="input-file-upload"
-              />
-              {uploadedFile ? (
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-                    {uploadedFile.type === "application/pdf"
-                      ? <FileText className="h-4 w-4 text-red-500 shrink-0" />
-                      : <FileImage className="h-4 w-4 text-red-500 shrink-0" />}
-                    <span className="truncate max-w-[220px]">{uploadedFile.name}</span>
-                    <span className="text-xs text-muted-foreground shrink-0">({(uploadedFile.size / 1024).toFixed(0)} KB)</span>
-                  </div>
+        {!result && (
+          <Card className="border-2 border-teal-200 dark:border-teal-900">
+            <CardContent className="pt-6 pb-6 space-y-4">
+              <div>
+                <label className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2 mb-1.5">
+                  <MessageSquare className="h-4 w-4" />
+                  Paste chat, email, or job ad
+                </label>
+                <Textarea
+                  placeholder="Paste the WhatsApp message, email body, or job description here…"
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  rows={6}
+                  className="text-sm"
+                  data-testid="input-scam-text"
+                />
+                <p className="text-[11px] text-gray-500 mt-1">Anything you paste stays private — we analyze then discard.</p>
+              </div>
+
+              <div>
+                <label className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2 mb-1.5">
+                  <Camera className="h-4 w-4" />
+                  Or attach a screenshot (optional)
+                </label>
+                <input
+                  ref={inputRef}
+                  type="file"
+                  accept="image/jpeg,image/jpg,image/png,image/webp"
+                  onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
+                  className="hidden"
+                  data-testid="input-scam-file"
+                />
+                {!preview ? (
                   <button
-                    onClick={(e) => { e.stopPropagation(); setUploadedFile(null); setText(""); setResult(null); }}
-                    className="text-muted-foreground hover:text-foreground shrink-0"
-                    data-testid="button-remove-file"
+                    type="button"
+                    onClick={() => inputRef.current?.click()}
+                    className="w-full py-4 border-2 border-dashed border-teal-300 dark:border-teal-800 rounded-lg hover:bg-teal-50/50 dark:hover:bg-teal-950/20 transition text-sm text-gray-600 dark:text-gray-400"
+                    data-testid="button-pick-scam-file"
                   >
-                    <X className="h-4 w-4" />
+                    Tap to attach a WhatsApp screenshot, email screenshot, or offer letter
                   </button>
-                </div>
-              ) : (
-                <div className="space-y-1">
-                  <Upload className="h-5 w-5 text-muted-foreground mx-auto" />
-                  <p className="text-xs font-medium text-foreground">Upload image, screenshot, or document</p>
-                  <p className="text-xs text-muted-foreground">Any image · PDF · Word doc · max 15 MB</p>
-                </div>
-              )}
-            </div>
-
-            {/* Divider */}
-            <div className="flex items-center gap-2">
-              <div className="flex-1 border-t border-border" />
-              <span className="text-xs text-muted-foreground">or paste text</span>
-              <div className="flex-1 border-t border-border" />
-            </div>
-
-            <Textarea
-              placeholder="Paste the full job advert text here — include the salary, contact details, and any fee mentions…"
-              value={text}
-              onChange={(e) => { setText(e.target.value); setUploadedFile(null); setResult(null); }}
-              rows={6}
-              className="text-sm resize-none"
-              data-testid="input-job-advert"
-            />
-
-            {/* Quick samples */}
-            <div className="flex gap-2 flex-wrap">
-              <p className="text-xs text-muted-foreground self-center">Try a sample:</p>
-              {SAMPLE_ADVERTS.map((s) => (
-                <button
-                  key={s.label}
-                  onClick={() => { setText(s.text); setUploadedFile(null); setResult(null); }}
-                  className="text-xs px-2 py-1 bg-muted rounded-md hover:bg-muted/70 transition-colors"
-                  data-testid={`button-sample-${s.label.toLowerCase().replace(/\s/g, "-")}`}
-                >
-                  {s.label}
-                </button>
-              ))}
-            </div>
-
-            <Button
-              className="w-full"
-              disabled={(!uploadedFile && text.trim().length < 10) || isLoading}
-              onClick={() => {
-                if (uploadedFile) checkScamFile(uploadedFile);
-                else checkScam(text);
-              }}
-              data-testid="button-check-scam"
-            >
-              {isLoading ? (
-                <><Search className="h-4 w-4 mr-2 animate-pulse" />{isFilePending ? "Reading file…" : "Scanning…"}</>
-              ) : (
-                <><Search className="h-4 w-4 mr-2" />Check for Scams</>
-              )}
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* Wrong-document redirect */}
-        {wrongDoc && (
-          <div className="space-y-4 mt-6">
-            <WrongDocumentCard
-              payload={wrongDoc}
-              onTryAnother={() => { setWrongDoc(null); setUploadedFile(null); }}
-              onAnalyzeAnyway={uploadedFile ? () => checkScamFile({ file: uploadedFile, forceAnalyze: true }) : undefined}
-            />
-          </div>
-        )}
-
-        {/* Results */}
-        {result && cfg && (
-          <div className="space-y-4" data-testid="section-scam-results">
-            {/* Risk level card */}
-            <Card className={`${cfg.border} ${cfg.bg}`}>
-              <CardContent className="p-5 space-y-3">
-                <div className="flex items-center gap-3">
-                  <cfg.icon className={`h-7 w-7 ${cfg.color} shrink-0`} />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h2 className={`font-bold text-base ${cfg.color}`} data-testid="text-risk-level">{cfg.label}</h2>
-                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${cfg.badgeClass}`}>
-                        Score: {result.riskScore}/100
-                      </span>
-                      {result.aiVerdict && (
-                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${
-                          result.aiVerdict === "LIKELY SCAM" ? "bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-700"
-                          : result.aiVerdict === "SUSPICIOUS" ? "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700"
-                          : "bg-green-100 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-700"
-                        }`} data-testid="text-ai-verdict">
-                          AI: {result.aiVerdict}
-                        </span>
-                      )}
-                      {result.aiConfidence != null && (
-                        <span className="text-xs text-muted-foreground" data-testid="text-ai-confidence">
-                          {result.aiConfidence}% confidence
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-0.5">{cfg.description}</p>
-                  </div>
-                </div>
-
-                {/* Risk bar */}
-                <div className="h-2.5 bg-white/60 dark:bg-black/20 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all duration-700 ${cfg.bar}`}
-                    style={{ width: `${result.riskScore}%` }}
-                  />
-                </div>
-
-                {/* AI Explanation */}
-                {result.aiExplanation && (
-                  <div className="bg-white/50 dark:bg-black/20 rounded-lg px-3 py-2.5">
-                    <p className="text-xs font-semibold text-foreground/80 mb-0.5">AI Analysis</p>
-                    <p className="text-xs text-foreground/70 leading-relaxed" data-testid="text-ai-explanation">
-                      {result.aiExplanation}
-                    </p>
-                  </div>
-                )}
-
-                {/* Feedback */}
-                {feedbackGiven ? (
-                  <p className="text-xs text-center text-muted-foreground pt-1" data-testid="text-feedback-thanks">
-                    ✓ Feedback received — thank you
-                  </p>
                 ) : (
-                  <div className="flex items-center gap-2 pt-1" data-testid="section-feedback">
-                    <p className="text-xs text-muted-foreground flex-1">Was this a scam?</p>
-                    <button
-                      onClick={() => submitFeedback(true)}
-                      className="text-xs px-3 py-1 rounded-full bg-red-100 hover:bg-red-200 text-red-700 dark:bg-red-900/30 dark:text-red-300 dark:hover:bg-red-900/50 transition-colors font-medium"
-                      data-testid="button-feedback-yes"
-                    >Yes, it's a scam</button>
-                    <button
-                      onClick={() => submitFeedback(false)}
-                      className="text-xs px-3 py-1 rounded-full bg-green-100 hover:bg-green-200 text-green-700 dark:bg-green-900/30 dark:text-green-300 dark:hover:bg-green-900/50 transition-colors font-medium"
-                      data-testid="button-feedback-no"
-                    >No, looks legit</button>
+                  <div className="space-y-2">
+                    <div className="rounded-lg overflow-hidden border border-gray-200 dark:border-gray-800 max-h-60">
+                      <img src={preview} alt="Evidence" className="w-full h-auto object-contain max-h-60" />
+                    </div>
+                    <Button type="button" variant="outline" size="sm" onClick={() => { setFile(null); setPreview(null); if (inputRef.current) inputRef.current.value = ""; }}>
+                      Remove image
+                    </Button>
                   </div>
                 )}
-              </CardContent>
-            </Card>
+              </div>
 
-            {/* Ask Nanjila — protective coaching after any risk finding */}
-            <div className="flex justify-center">
-              <AskNanjilaButton
-                topic="scam"
-                summary={`${result.riskLevel} risk — score ${result.riskScore}/100`}
-                variant={result.riskLevel === "high" ? "default" : "outline"}
-                className={result.riskLevel === "high" ? "bg-red-600 hover:bg-red-700 text-white" : ""}
-              />
-            </div>
-
-            {/* Share bar */}
-            {reportId && <ReportShareBar toolName="scam" reportId={reportId} />}
-
-            {/* Warning signals + recommendations — locked for free users */}
-            {isPaid ? (
-              <>
-                {result.warningSignals.length > 0 ? (
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm flex items-center gap-2">
-                        <AlertTriangle className="h-4 w-4 text-amber-500" />
-                        Warning Signals ({result.warningSignals.length})
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <ul className="space-y-2">
-                        {result.warningSignals.map((w, i) => (
-                          <li key={i} className="flex items-start gap-2 text-sm" data-testid={`warning-${i}`}>
-                            <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
-                            <span>{w}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </CardContent>
-                  </Card>
-                ) : (
-                  <Card>
-                    <CardContent className="p-4 flex items-center gap-3">
-                      <CheckCircle className="h-5 w-5 text-green-500" />
-                      <p className="text-sm">No common scam phrases detected in this advert.</p>
-                    </CardContent>
-                  </Card>
-                )}
-
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm flex items-center gap-2">
-                      <ShieldCheck className="h-4 w-4 text-blue-500" />
-                      Recommendations
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <ul className="space-y-2">
-                      {result.recommendations.map((r, i) => (
-                        <li key={i} className="flex items-start gap-2 text-sm" data-testid={`recommendation-${i}`}>
-                          <span className="h-5 w-5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center text-xs font-bold shrink-0">{i + 1}</span>
-                          <span>{r}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </CardContent>
-                </Card>
-
-                {/* CTA: Verify agency via public licence register */}
-                <Card className="border-blue-200 bg-blue-50 dark:bg-blue-900/10 dark:border-blue-800">
-                  <CardContent className="p-4 flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold">Verify the Agency</p>
-                      <p className="text-xs text-muted-foreground">Check if this recruiter appears in Kenya's public licence register</p>
-                    </div>
-                    <Link href="/nea-agencies">
-                      <Button size="sm" variant="outline" data-testid="button-verify-agency">
-                        Licence Check <ChevronRight className="h-4 w-4 ml-1" />
-                      </Button>
-                    </Link>
-                  </CardContent>
-                </Card>
-              </>
-            ) : (
-              <FreemiumGate
-                title="Human Analysis of Full Report"
-                description={`${result.warningSignals.length} warning signals detected. Upgrade to see every red flag and get personalised safety recommendations.`}
-                ctaText="Get Advisor Review"
-                blurHeight={140}
+              <Button
+                onClick={handleCheck}
+                disabled={loading || (!text.trim() && !file)}
+                className="w-full h-12 bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-600 hover:to-cyan-600 text-white font-semibold"
+                data-testid="button-run-scam-check"
               >
-                <Card>
-                  <CardContent className="p-4">
-                    <p className="text-sm font-medium text-amber-600 mb-2">⚠ {result.warningSignals.length} warning signals detected</p>
-                    <ul className="space-y-1.5">
-                      {result.warningSignals.slice(0, 2).map((w, i) => (
-                        <li key={i} className="flex items-start gap-2 text-sm">
-                          <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
-                          <span className="text-muted-foreground">{w}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </CardContent>
-                </Card>
-              </FreemiumGate>
-            )}
+                {loading ? <><Loader2 className="h-5 w-5 mr-2 animate-spin" /> Investigating (up to 30 sec)…</> : <><ShieldCheck className="h-5 w-5 mr-2" /> Check this job</>}
+              </Button>
 
-            {/* Post-result upgrade prompt for free users */}
-            {!isPaid && user && (
-              <UpgradePrompt
-                triggerType="tool_used"
-                title="See every scam warning signal"
-                description="Premium members get the full breakdown of all warning flags and personalised safety recommendations."
-                compact
-              />
-            )}
-          </div>
+              <div className="text-[11px] text-gray-500 dark:text-gray-400 flex items-start gap-1.5 leading-relaxed pt-2 border-t border-gray-100 dark:border-gray-800">
+                <Info className="h-3 w-3 flex-shrink-0 mt-0.5" />
+                <span>This is an AI screening — not a legal determination. Always verify through official government portals before making decisions.</span>
+              </div>
+            </CardContent>
+          </Card>
         )}
 
-        {/* Info box */}
-        <Card className="bg-muted/30">
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground font-semibold mb-2">Common Scam Signals to Watch For</p>
-            <ul className="text-xs text-muted-foreground space-y-1">
-              {["Any request to pay a fee (processing, visa, training)", "Employers using Gmail, Yahoo, Hotmail addresses", "WhatsApp-only communication with no official website", "Promises of guaranteed visa or immediate deployment", "Vague job descriptions with unrealistic salaries"].map((item, i) => (
-                <li key={i} className="flex items-start gap-1.5">
-                  <span className="text-red-500 mt-0.5">•</span> {item}
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
+        {result && (
+          <ResultView
+            result={result}
+            showTechnical={showTechnical}
+            onToggleTechnical={() => setShowTechnical((v) => !v)}
+            onReset={handleReset}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
 
-        {/* FAQ Section */}
-        <div className="space-y-3 pt-2" data-testid="faq-section-scam">
-          <div className="flex items-center gap-2">
-            <CheckCircle className="h-4 w-4 text-red-500" />
-            <p className="text-sm font-semibold">Frequently Asked Questions</p>
+function ResultView({ result, showTechnical, onToggleTechnical, onReset }: {
+  result: CheckResponse; showTechnical: boolean; onToggleTechnical: () => void; onReset: () => void;
+}) {
+  const style = VERDICT_STYLES[result.verdict];
+  const Icon = style.icon;
+  const hardFindings = result.findings.filter((f) => f.severity === "hard" || f.severity === "soft");
+
+  return (
+    <div className="space-y-4">
+      <Card className={`border-2 ${style.accent}`}>
+        <CardContent className="pt-6 pb-6 space-y-4">
+          <div className="flex items-start gap-4">
+            <div className={`h-14 w-14 rounded-full ${style.bg} flex items-center justify-center flex-shrink-0`}>
+              <Icon className="h-7 w-7 text-white" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className={`text-xs uppercase tracking-widest font-bold ${style.text}`}>{style.label}</p>
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white mt-0.5 leading-tight">{result.headline}</h2>
+              <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed mt-2">{result.explanation}</p>
+            </div>
           </div>
-          {SCAM_FAQS.map((faq, i) => (
-            <details key={i} className="group rounded-lg border border-border bg-card" data-testid={`faq-item-scam-${i}`}>
-              <summary className="flex items-center justify-between cursor-pointer p-3 text-xs font-semibold select-none marker:hidden list-none">
-                {faq.q}
-                <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0 ml-2 group-open:rotate-90 transition-transform" />
-              </summary>
-              <div className="px-3 pb-3 text-xs text-muted-foreground leading-relaxed">{faq.a}</div>
-            </details>
+          <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-200 dark:border-gray-800">
+            <TrustGauge value={result.overallTrust} label="Overall Trust" />
+            <TrustGauge value={result.confidence} label="AI Confidence" muted />
+          </div>
+        </CardContent>
+      </Card>
+
+      <EvidenceSummary fields={result.extractedFields} country={result.country} />
+
+      {hardFindings.length > 0 && (
+        <ConcernsPanel findings={hardFindings} />
+      )}
+
+      {result.country && <GovLinksPanel country={result.country} />}
+      <RecommendationsPanel recommendations={result.recommendations} />
+
+      {result.scamPatternsMatched.length > 0 && (
+        <ScamPatternsPanel patterns={result.scamPatternsMatched} country={result.country?.name || "this country"} />
+      )}
+
+      <Card>
+        <CardContent className="pt-4 pb-4">
+          <button
+            type="button"
+            onClick={onToggleTechnical}
+            className="w-full flex items-center justify-between text-sm font-semibold text-gray-900 dark:text-white"
+          >
+            <span>Investigation Report ({result.subScores.length + result.findings.length} checks)</span>
+            {showTechnical ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </button>
+          {showTechnical && (
+            <div className="mt-4 space-y-4">
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Sub-scores</p>
+                {result.subScores.map((s) => (
+                  <div key={s.key} className="space-y-1">
+                    <div className="flex justify-between text-xs">
+                      <span className="font-medium text-gray-900 dark:text-gray-100">{s.label}</span>
+                      <span className="font-bold">{Math.round(s.score)}%</span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-gray-200 dark:bg-gray-800 overflow-hidden">
+                      <div
+                        className={`h-full ${s.score >= 80 ? "bg-emerald-500" : s.score >= 60 ? "bg-amber-500" : s.score >= 40 ? "bg-orange-500" : "bg-red-600"}`}
+                        style={{ width: `${Math.max(4, s.score)}%` }}
+                      />
+                    </div>
+                    <p className="text-[11px] text-gray-600 dark:text-gray-400 leading-snug">{s.detail}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="space-y-2 pt-3 border-t border-gray-200 dark:border-gray-800">
+                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">All findings</p>
+                {result.findings.map((f) => <FindingRow key={f.id} finding={f} />)}
+              </div>
+              {result.positiveIndicators.length > 0 && (
+                <div className="space-y-2 pt-3 border-t border-gray-200 dark:border-gray-800">
+                  <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Positive observations</p>
+                  {result.positiveIndicators.map((i, idx) => (
+                    <div key={`p-${idx}`} className="flex items-start gap-2 text-xs">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0 mt-0.5" />
+                      <span className="text-gray-700 dark:text-gray-300">{i}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <div className="flex gap-2">
+        <Button variant="outline" onClick={onReset} className="flex-1" data-testid="button-check-another">
+          <RefreshCw className="h-4 w-4 mr-2" /> Check another
+        </Button>
+      </div>
+      <p className="text-[11px] text-center text-gray-500 dark:text-gray-400 leading-relaxed">{result.disclaimer}</p>
+    </div>
+  );
+}
+
+function TrustGauge({ value, label, muted = false }: { value: number; label: string; muted?: boolean }) {
+  const color = value >= 80 ? "text-emerald-600" : value >= 60 ? "text-amber-600" : value >= 40 ? "text-orange-600" : "text-red-600";
+  return (
+    <div className="text-center">
+      <div className={`text-3xl font-extrabold ${muted ? "text-gray-500 dark:text-gray-400" : color}`}>{value}%</div>
+      <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">{label}</p>
+    </div>
+  );
+}
+
+function EvidenceSummary({ fields, country }: { fields: Record<string, any>; country: CountryPanel | null }) {
+  const rows: [string, string, React.ReactNode][] = [];
+  if (fields.employerName)     rows.push(["Employer",           fields.employerName,           <Building2 className="h-3.5 w-3.5" />]);
+  if (fields.jobTitle)         rows.push(["Job title",          fields.jobTitle,               <Search className="h-3.5 w-3.5" />]);
+  if (fields.recruiterName)    rows.push(["Recruiter",          fields.recruiterName,          <Search className="h-3.5 w-3.5" />]);
+  if (fields.recruiterEmail)   rows.push(["Recruiter email",   fields.recruiterEmail,         <Mail className="h-3.5 w-3.5" />]);
+  if (fields.recruiterPhone)   rows.push(["Recruiter phone",   fields.recruiterPhone,         <Phone className="h-3.5 w-3.5" />]);
+  if (fields.companyWebsite)   rows.push(["Website",            fields.companyWebsite,         <Globe className="h-3.5 w-3.5" />]);
+  if (fields.salaryText)       rows.push(["Salary",             fields.salaryText,             <DollarSign className="h-3.5 w-3.5" />]);
+  if (fields.recruitmentAgency) rows.push(["Agency",            fields.recruitmentAgency,     <Building2 className="h-3.5 w-3.5" />]);
+  return (
+    <Card>
+      <CardContent className="pt-5 pb-5 space-y-3">
+        <div className="flex items-center gap-3">
+          <Search className="h-6 w-6 text-teal-600 dark:text-teal-400" />
+          <div className="flex-1 min-w-0">
+            <p className="text-xs uppercase tracking-widest text-gray-500 dark:text-gray-400 font-semibold">What we extracted</p>
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white truncate">
+              {fields.employerName || fields.recruiterName || "Evidence analyzed"}
+            </h3>
+          </div>
+          {country && <span className="text-2xl" title={country.name}>{country.flag}</span>}
+        </div>
+        {rows.length > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 pt-2 border-t border-gray-200 dark:border-gray-800 text-sm">
+            {rows.map(([label, value, icon]) => (
+              <div key={label}>
+                <p className="text-[11px] uppercase tracking-wider text-gray-500 dark:text-gray-400 font-semibold flex items-center gap-1">{icon} {label}</p>
+                <p className="text-gray-900 dark:text-white font-medium truncate">{value}</p>
+              </div>
+            ))}
+          </div>
+        )}
+        {rows.length === 0 && (
+          <p className="text-xs text-gray-500 dark:text-gray-400 pt-2 border-t border-gray-200 dark:border-gray-800">
+            The evidence didn't contain enough clearly-identifiable fields to extract details — but scam-pattern detection still ran on the text.
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ConcernsPanel({ findings }: { findings: Finding[] }) {
+  const hardCount = findings.filter(f => f.severity === "hard").length;
+  return (
+    <Card className={`border-2 ${hardCount > 0 ? "border-red-400 bg-red-50/50 dark:bg-red-950/20 dark:border-red-900" : "border-amber-400 bg-amber-50/50 dark:bg-amber-950/20 dark:border-amber-900"}`}>
+      <CardContent className="pt-5 pb-5 space-y-3">
+        <div className="flex items-center gap-2">
+          <AlertTriangle className={`h-5 w-5 ${hardCount > 0 ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400"}`} />
+          <p className={`font-bold ${hardCount > 0 ? "text-red-900 dark:text-red-200" : "text-amber-900 dark:text-amber-200"}`}>
+            {hardCount > 0
+              ? `${hardCount} critical scam indicator${hardCount === 1 ? "" : "s"} detected`
+              : `${findings.length} concern${findings.length === 1 ? "" : "s"} detected`}
+          </p>
+        </div>
+        <div className="space-y-3">
+          {findings.map((f) => (
+            <div key={f.id} className={`rounded-md p-3 ${f.severity === "hard" ? "bg-red-100/70 dark:bg-red-950/30" : "bg-amber-100/60 dark:bg-amber-950/25"}`}>
+              <p className={`text-sm font-semibold ${f.severity === "hard" ? "text-red-900 dark:text-red-200" : "text-amber-900 dark:text-amber-200"}`}>
+                {f.severity === "hard" ? "❌" : "⚠️"} {f.label}
+              </p>
+              <p className="text-xs text-gray-800 dark:text-gray-200 leading-relaxed mt-1">{f.detail}</p>
+              {f.actionable && (
+                <p className="text-[11px] text-gray-700 dark:text-gray-300 leading-relaxed mt-1.5 pl-3 border-l-2 border-current/30">
+                  <strong>What to do:</strong> {f.actionable}
+                </p>
+              )}
+            </div>
           ))}
         </div>
+      </CardContent>
+    </Card>
+  );
+}
 
-        {/* Internal links */}
-        <div className="pb-2">
-          <p className="text-xs text-muted-foreground font-semibold mb-2">Related tools & services</p>
-          <div className="flex flex-wrap gap-2">
-            <Link href="/agencies"><span className="text-xs text-blue-600 dark:text-blue-400 underline underline-offset-2">Verify Recruitment Agencies</span></Link>
-            <span className="text-xs text-muted-foreground">·</span>
-            <Link href="/tools/visa-sponsorship-jobs"><span className="text-xs text-blue-600 dark:text-blue-400 underline underline-offset-2">Visa Sponsorship Jobs</span></Link>
-            <span className="text-xs text-muted-foreground">·</span>
-            <Link href="/tools/ats-cv-checker"><span className="text-xs text-blue-600 dark:text-blue-400 underline underline-offset-2">ATS CV Checker</span></Link>
-            <span className="text-xs text-muted-foreground">·</span>
-            <a href="/"><span className="text-xs text-blue-600 dark:text-blue-400 underline underline-offset-2">Create Free Account</span></a>
-          </div>
+function GovLinksPanel({ country }: { country: CountryPanel }) {
+  const linkRows: [string, string | null, typeof Globe][] = [
+    ["Employer / Sponsor Registry",  country.links.employerCheck,     Building2],
+    ["Recruitment Agency Check",     country.links.recruitmentCheck,  Building2],
+    ["Work Permit Info",             country.links.workPermitChecker, ShieldCheck],
+    ["Immigration Department",       country.links.immigration,       Globe],
+    ["Labour Ministry",              country.links.labourMinistry,    Building2],
+    ["Embassy in Kenya",             country.links.embassyInKenya,    Globe],
+    ["Fraud Reporting",              country.links.fraudReporting,    AlertTriangle],
+    ["Kenya MFA (Consular)",         country.links.kenyaConsularSupport, Globe],
+  ];
+  const available = linkRows.filter(([, url]) => !!url);
+  return (
+    <Card className="border-teal-200 dark:border-teal-900 bg-teal-50/40 dark:bg-teal-950/10">
+      <CardContent className="pt-5 pb-5 space-y-3">
+        <div>
+          <p className="text-xs uppercase tracking-widest text-teal-700 dark:text-teal-400 font-bold">Official Verification — {country.name}</p>
+          <p className="text-sm text-gray-700 dark:text-gray-300 mt-1 leading-relaxed">{country.nextStepAdvice}</p>
         </div>
+        <div className="grid gap-1.5 pt-3 border-t border-teal-200 dark:border-teal-900">
+          {available.map(([label, url, IconLink]) => (
+            <a key={label} href={url!} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm text-teal-700 dark:text-teal-400 hover:underline">
+              <IconLink className="h-4 w-4 flex-shrink-0" />
+              <span className="flex-1">{label}</span>
+              <ExternalLink className="h-3.5 w-3.5 flex-shrink-0 opacity-60" />
+            </a>
+          ))}
+        </div>
+        {(country.contacts.embassyPhone || country.contacts.embassyEmail) && (
+          <div className="pt-3 border-t border-teal-200 dark:border-teal-900 space-y-1 text-xs text-gray-700 dark:text-gray-300">
+            <p className="font-semibold text-teal-700 dark:text-teal-400 uppercase tracking-wider text-[11px]">Direct contact</p>
+            {country.contacts.embassyPhone && <div className="flex items-center gap-1.5"><Phone className="h-3 w-3" /> Embassy: {country.contacts.embassyPhone}</div>}
+            {country.contacts.embassyEmail && <div className="flex items-center gap-1.5"><Mail  className="h-3 w-3" /> {country.contacts.embassyEmail}</div>}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function RecommendationsPanel({ recommendations }: { recommendations: string[] }) {
+  return (
+    <Card>
+      <CardContent className="pt-5 pb-5">
+        <p className="text-xs uppercase tracking-widest text-gray-500 dark:text-gray-400 font-bold mb-3">What to do next</p>
+        <ol className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
+          {recommendations.map((rec, idx) => (
+            <li key={idx} className="flex items-start gap-2 leading-relaxed">
+              <span className="flex-shrink-0 w-5 h-5 rounded-full bg-teal-100 dark:bg-teal-950/40 text-teal-700 dark:text-teal-400 text-xs font-bold flex items-center justify-center mt-0.5">{idx + 1}</span>
+              <span>{rec}</span>
+            </li>
+          ))}
+        </ol>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ScamPatternsPanel({ patterns, country }: { patterns: string[]; country: string }) {
+  return (
+    <Card className="border-amber-400 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20">
+      <CardContent className="pt-5 pb-5 space-y-2">
+        <div className="flex items-center gap-2">
+          <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+          <p className="font-bold text-amber-900 dark:text-amber-200">Known {country} scam patterns — watch for these</p>
+        </div>
+        <ul className="space-y-1.5 text-xs text-amber-900 dark:text-amber-200 leading-relaxed">
+          {patterns.map((p, idx) => (
+            <li key={idx} className="flex items-start gap-1.5">
+              <span className="text-amber-500 mt-0.5">•</span>
+              <span>{p}</span>
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+    </Card>
+  );
+}
+
+function FindingRow({ finding }: { finding: Finding }) {
+  const Icon = finding.severity === "hard" ? XCircle
+             : finding.severity === "soft" ? AlertTriangle
+             :                                 Info;
+  const color = finding.severity === "hard" ? "text-red-500"
+              : finding.severity === "soft" ? "text-amber-500"
+              :                                 "text-blue-500";
+  return (
+    <div className="flex items-start gap-2 text-xs">
+      <Icon className={`h-3.5 w-3.5 flex-shrink-0 mt-0.5 ${color}`} />
+      <div>
+        <span className="font-semibold text-gray-900 dark:text-white">{finding.label}:</span>{" "}
+        <span className="text-gray-700 dark:text-gray-300">{finding.detail}</span>
       </div>
     </div>
   );

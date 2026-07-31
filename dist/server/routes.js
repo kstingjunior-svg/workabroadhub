@@ -19231,6 +19231,11 @@ Rules:
     // to the official IELTS verification portal.
     const { registerIeltsVerifyRoute } = await Promise.resolve().then(() => __importStar(require("./tools/ielts-verify-endpoint")));
     registerIeltsVerifyRoute(app);
+    // 2026-07: Job Scam Checker (AI v2) — accepts text + optional image,
+    // combines every detector (fraud patterns, phone, URL, email, salary
+    // benchmark, country rules) into one investigation report.
+    const { registerScamCheckRoute } = await Promise.resolve().then(() => __importStar(require("./scam-check/endpoint")));
+    registerScamCheckRoute(app);
     // ═══════════════════════════════════════════════════════════════════════════
     // SERVICE ORDER FLOW — unified upload → pay → AI → download for paid services
     // (CV Fix Lite, ATS, Cover Letter, SOP, Country CV Rewrite, Motivation, etc.)
