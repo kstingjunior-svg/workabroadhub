@@ -54,6 +54,14 @@ exports.users = (0, pg_core_1.pgTable)("users", {
     lastName: (0, pg_core_1.varchar)("last_name"),
     profileImageUrl: (0, pg_core_1.varchar)("profile_image_url"),
     phone: (0, pg_core_1.varchar)("phone"),
+    // 2026-07 (Tony's founder brief): pan-African E.164 phone support.
+    // `phone` remains as the legacy free-form field for backwards compat.
+    // New writes always populate the four canonical fields below.
+    // Migration 0029 backfills these from `phone` for existing users.
+    phoneNumberE164: (0, pg_core_1.varchar)("phone_number_e164"), // "+254712345678"
+    countryIso: (0, pg_core_1.varchar)("country_iso", { length: 2 }), // "KE", "NG", "ZA"
+    dialCode: (0, pg_core_1.varchar)("dial_code", { length: 4 }), // "254", "234", "27"
+    nationalNumber: (0, pg_core_1.varchar)("national_number"), // "712345678"
     country: (0, pg_core_1.varchar)("country"),
     consentAccepted: (0, pg_core_1.boolean)("consent_accepted").default(false),
     referralCode: (0, pg_core_1.varchar)("referral_code").unique(),

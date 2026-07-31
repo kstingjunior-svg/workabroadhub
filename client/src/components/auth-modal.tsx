@@ -13,6 +13,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PhoneInput } from "@/components/phone-input";
 import { Label } from "@/components/ui/label";
 import { useLocation } from "wouter";
 import { queryClient } from "@/lib/queryClient";
@@ -164,6 +165,17 @@ export function AuthModal({
   const [password, setPassword] =
     useState("");
 
+  // 2026-07 (Tony's pan-African phone brief): capture phone at signup so
+  // every user gets OTP + WhatsApp delivery from day one.
+  const [phoneValue, setPhoneValue] =
+    useState<{
+      e164: string;
+      countryIso: string;
+      dialCode: string;
+      national: string;
+      valid: boolean;
+    }>({ e164: "", countryIso: "KE", dialCode: "254", national: "", valid: false });
+
   const [showPassword, setShowPassword] =
     useState(false);
 
@@ -213,6 +225,16 @@ export function AuthModal({
     ) {
       errs.firstName =
         "Please enter your first name";
+    }
+
+    // 2026-07 (pan-African phone): required at signup, must be valid E.164
+    // for the selected country. PhoneInput enforces this live but we
+    // double-check here so a form submitted before phone was typed shows
+    // a clear error instead of a confusing server 400.
+    if (tab === "signup" && !phoneValue.valid) {
+      errs.phone = phoneValue.national
+        ? "Please enter a valid mobile number for the selected country."
+        : "Please enter your mobile number so we can send you an OTP and updates.";
     }
 
     // 2026-07 UX: stricter email validation. Was accepting "a@b" (missing
@@ -295,6 +317,19 @@ export function AuthModal({
                 lastName.trim(),
               email: email.trim(),
               password,
+              // 2026-07 (pan-African phone): send E.164 + structured fields.
+              // Server accepts either full E.164 or the country+national parts
+              // (whichever it can validate) and rejects with a clear message.
+              ...(phoneValue.valid
+                ? {
+                    phoneNumberE164: phoneValue.e164,
+                    countryIso:      phoneValue.countryIso,
+                    dialCode:        phoneValue.dialCode,
+                    nationalNumber:  phoneValue.national,
+                    // Legacy `phone` field also populated for backward compat
+                    phone:           phoneValue.e164,
+                  }
+                : {}),
               ...(referral_code
                 ? { referral_code }
                 : {}),
@@ -818,6 +853,25 @@ export function AuthModal({
                 />
               </div>
             </div>
+          )}
+
+          {/* 2026-07 (pan-African phone): required at signup so every user
+              gets OTP + WhatsApp delivery from day one. Supports all 54
+              African countries via server/shared/african-countries.ts. */}
+          {tab === "signup" && (
+            <PhoneInput
+              onChange={(v) => setPhoneValue({
+                e164:       v.e164,
+                countryIso: v.country.iso,
+                dialCode:   v.country.dialCode,
+                national:   v.national,
+                valid:      v.valid,
+              })}
+              label="Mobile number"
+              required
+              disabled={loading}
+              testId="signup-phone"
+            />
           )}
 
           <div className="space-y-1.5">

@@ -67,9 +67,25 @@ function registerAuthRoutes(app) {
             const password = String(req.body?.password ?? "");
             const firstName = req.body?.firstName ? String(req.body.firstName).trim() : null;
             const lastName = req.body?.lastName ? String(req.body.lastName).trim() : null;
-            // Real-identity email validation: blocks disposable/throwaway providers,
-            // verifies the domain actually accepts mail (MX records), and rejects
-            // obvious test patterns (test@test.com etc.).
+            // 2026-07 (pan-African phone): accept structured phone fields from the
+            // new PhoneInput. Server re-validates using the canonical E.164 helper
+            // so a tampered client can't slip in an invalid number.
+            const { normalizeAndValidateE164 } = await Promise.resolve().then(() => __importStar(require("../../lib/phone-e164")));
+            const phoneInput = {
+                e164: req.body?.phoneNumberE164 ? String(req.body.phoneNumberE164) : null,
+                countryIso: req.body?.countryIso ? String(req.body.countryIso) : null,
+                national: req.body?.nationalNumber ? String(req.body.nationalNumber) : null,
+                raw: req.body?.phone ? String(req.body.phone) : null,
+            };
+            const hasAnyPhone = !!(phoneInput.e164 || phoneInput.countryIso || phoneInput.national || phoneInput.raw);
+            let phoneNormalized = null;
+            if (hasAnyPhone) {
+                phoneNormalized = normalizeAndValidateE164(phoneInput);
+                if (!phoneNormalized.ok) {
+                    return res.status(400).json({ message: phoneNormalized.message, code: phoneNormalized.error });
+                }
+            }
+            // Real-identity email validation
             const emailCheck = await (0, email_validator_1.validateEmail)(rawEmail);
             if (!emailCheck.valid) {
                 return res.status(400).json({ message: emailCheck.message, reason: emailCheck.reason });
@@ -82,6 +98,19 @@ function registerAuthRoutes(app) {
             if (existing) {
                 return res.status(409).json({ message: "An account with that email already exists. Try signing in instead." });
             }
+            // Duplicate phone check — if we have an E.164, refuse a second account on it.
+            if (phoneNormalized?.ok) {
+                const [existingPhone] = await db_1.db
+                    .select({ id: auth_1.users.id })
+                    .from(auth_1.users)
+                    .where((0, drizzle_orm_1.eq)(auth_1.users.phoneNumberE164, phoneNormalized.e164))
+                    .limit(1);
+                if (existingPhone) {
+                    return res.status(409).json({
+                        message: "An account with that mobile number already exists. Try signing in instead.",
+                    });
+                }
+            }
             // 2026-06 PERF: bcrypt cost 10 (was 12). 10 = OWASP minimum + industry
             // standard. Cost 12 took ~500ms on Render Standard CPU; cost 10 is
             // ~120ms — 4× speedup. Existing cost-12 hashes still verify correctly
@@ -89,7 +118,22 @@ function registerAuthRoutes(app) {
             const passwordHash = await bcrypt_1.default.hash(password, 10);
             const [created] = await db_1.db
                 .insert(auth_1.users)
-                .values({ email: cleanEmail, passwordHash, authMethod: "email", firstName, lastName })
+                .values({
+                email: cleanEmail,
+                passwordHash,
+                authMethod: "email",
+                firstName,
+                lastName,
+                // Structured phone fields (populated when the user provided a valid one)
+                ...(phoneNormalized?.ok ? {
+                    phone: phoneNormalized.e164, // legacy column, keep in sync
+                    phoneNumberE164: phoneNormalized.e164,
+                    countryIso: phoneNormalized.countryIso,
+                    dialCode: phoneNormalized.dialCode,
+                    nationalNumber: phoneNormalized.national,
+                    country: phoneNormalized.countryName, // populate the human-readable country too
+                } : {}),
+            })
                 .returning();
             if (!created) {
                 return res.status(500).json({ message: "Could not create your account. Please try again." });

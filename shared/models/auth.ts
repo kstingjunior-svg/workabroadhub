@@ -68,6 +68,14 @@ export const users = pgTable("users", {
   lastName: varchar("last_name"),
   profileImageUrl: varchar("profile_image_url"),
   phone: varchar("phone"),
+  // 2026-07 (Tony's founder brief): pan-African E.164 phone support.
+  // `phone` remains as the legacy free-form field for backwards compat.
+  // New writes always populate the four canonical fields below.
+  // Migration 0029 backfills these from `phone` for existing users.
+  phoneNumberE164: varchar("phone_number_e164"),           // "+254712345678"
+  countryIso:      varchar("country_iso", { length: 2 }),  // "KE", "NG", "ZA"
+  dialCode:        varchar("dial_code", { length: 4 }),    // "254", "234", "27"
+  nationalNumber:  varchar("national_number"),             // "712345678"
   country: varchar("country"),
   consentAccepted: boolean("consent_accepted").default(false),
   referralCode: varchar("referral_code").unique(),
