@@ -261,6 +261,74 @@ async function deliverService(payment, user) {
             }).catch((err) => { console.error('[deliverService] Notification failed:', err?.message); });
             break;
         }
+        // ─── 13. COUNTRY-SPECIFIC CV REWRITE ─────────────────────────────────────
+        case "cv_rewrite": {
+            // 2026-07 (audit FIND-1): dedicated case so users get service-specific
+            // confirmation instead of the generic default handler.
+            await (0, whatsapp_1.sendWhatsApp)(phone, `✅ Country CV Rewrite Confirmed — KES ${amount.toLocaleString()} received!\n\nHi ${name}, your CV is being rewritten to match the format employers in your target country actually expect. We'll message you here the moment it's ready (usually 1-2 minutes).\n\n— WorkAbroad Hub 🌍`).catch((err) => { console.error('[deliverService] WhatsApp failed:', { error: err?.message, timestamp: new Date().toISOString() }); });
+            storage_1.storage.createUserNotification({
+                userId: user.id,
+                type: "info",
+                title: "Country CV Rewrite In Progress",
+                message: "Your country-specific CV rewrite is being prepared. You'll get a WhatsApp + email the moment it's ready.",
+            }).catch((err) => { console.error('[deliverService] Notification failed:', err?.message); });
+            break;
+        }
+        // ─── 14. COVER LETTER ────────────────────────────────────────────────────
+        case "cover_letter": {
+            await (0, whatsapp_1.sendWhatsApp)(phone, `✅ Cover Letter Confirmed — KES ${amount.toLocaleString()} received!\n\nHi ${name}, we're writing a cover letter that opens with a hook and reads like a human wrote it — not a template. Ready in 1-2 minutes on this WhatsApp + your email.\n\n— WorkAbroad Hub 🌍`).catch((err) => { console.error('[deliverService] WhatsApp failed:', { error: err?.message, timestamp: new Date().toISOString() }); });
+            storage_1.storage.createUserNotification({
+                userId: user.id,
+                type: "info",
+                title: "Cover Letter In Progress",
+                message: "Your cover letter is being written. You'll get a WhatsApp + email the moment it's ready.",
+            }).catch((err) => { console.error('[deliverService] Notification failed:', err?.message); });
+            break;
+        }
+        // ─── 15. STATEMENT OF PURPOSE ────────────────────────────────────────────
+        case "sop_writing": {
+            await (0, whatsapp_1.sendWhatsApp)(phone, `✅ SOP Confirmed — KES ${amount.toLocaleString()} received!\n\nHi ${name}, we're writing your Statement of Purpose right now — the kind admissions officers actually finish reading. Ready in a few minutes on this WhatsApp + your email.\n\n— WorkAbroad Hub 🌍`).catch((err) => { console.error('[deliverService] WhatsApp failed:', { error: err?.message, timestamp: new Date().toISOString() }); });
+            storage_1.storage.createUserNotification({
+                userId: user.id,
+                type: "info",
+                title: "Statement of Purpose In Progress",
+                message: "Your SOP is being written. You'll get a WhatsApp + email the moment it's ready.",
+            }).catch((err) => { console.error('[deliverService] Notification failed:', err?.message); });
+            break;
+        }
+        // ─── 16. MOTIVATION LETTER ───────────────────────────────────────────────
+        case "motivation_letter": {
+            await (0, whatsapp_1.sendWhatsApp)(phone, `✅ Motivation Letter Confirmed — KES ${amount.toLocaleString()} received!\n\nHi ${name}, your formal motivation letter (EU / scholarship / work permit standard) is being drafted. Ready in 1-2 minutes on this WhatsApp + your email.\n\n— WorkAbroad Hub 🌍`).catch((err) => { console.error('[deliverService] WhatsApp failed:', { error: err?.message, timestamp: new Date().toISOString() }); });
+            storage_1.storage.createUserNotification({
+                userId: user.id,
+                type: "info",
+                title: "Motivation Letter In Progress",
+                message: "Your motivation letter is being drafted. You'll get a WhatsApp + email the moment it's ready.",
+            }).catch((err) => { console.error('[deliverService] Notification failed:', err?.message); });
+            break;
+        }
+        // ─── 17. ATS + COVER LETTER BUNDLE ───────────────────────────────────────
+        case "ats_cover_bundle": {
+            await (0, whatsapp_1.sendWhatsApp)(phone, `✅ ATS + Cover Letter Bundle Confirmed — KES ${amount.toLocaleString()} received!\n\nHi ${name}, we're preparing BOTH your ATS-optimised CV and a matching cover letter — same role, same country, one clean package. Ready in a few minutes on this WhatsApp + your email.\n\n— WorkAbroad Hub 🌍`).catch((err) => { console.error('[deliverService] WhatsApp failed:', { error: err?.message, timestamp: new Date().toISOString() }); });
+            storage_1.storage.createUserNotification({
+                userId: user.id,
+                type: "info",
+                title: "Bundle In Progress",
+                message: "Your CV + cover letter bundle is being prepared. You'll get a WhatsApp + email the moment it's ready.",
+            }).catch((err) => { console.error('[deliverService] Notification failed:', err?.message); });
+            break;
+        }
+        // ─── 18. LINKEDIN OPTIMIZATION (paid via service-order-flow) ─────────────
+        case "linkedin_optimization": {
+            await (0, whatsapp_1.sendWhatsApp)(phone, `✅ LinkedIn Optimization Confirmed — KES ${amount.toLocaleString()} received!\n\nHi ${name}, we're preparing your LinkedIn optimization guide — headline, About section, skills, and a keyword strategy tuned for recruiters. Ready in a few minutes on this WhatsApp + your email.\n\n— WorkAbroad Hub 🌍`).catch((err) => { console.error('[deliverService] WhatsApp failed:', { error: err?.message, timestamp: new Date().toISOString() }); });
+            storage_1.storage.createUserNotification({
+                userId: user.id,
+                type: "info",
+                title: "LinkedIn Optimization In Progress",
+                message: "Your LinkedIn optimization is being prepared. You'll get a WhatsApp + email the moment it's ready.",
+            }).catch((err) => { console.error('[deliverService] Notification failed:', err?.message); });
+            break;
+        }
         // ─── DEFAULT ─────────────────────────────────────────────────────────────
         default: {
             // Unknown service — send a generic confirmation so the user always

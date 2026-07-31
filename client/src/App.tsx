@@ -18,6 +18,7 @@ import "@/lib/i18n";
 import { AdminQuickPanel } from "@/components/admin-quick-panel";
 import { FirebaseConnectionBanner } from "@/components/firebase-connection-banner";
 import { SessionGuard } from "@/components/session-guard";
+import { ErrorBoundary } from "@/components/error-boundary";
 import { lazy, Suspense, ComponentType, useEffect, useState } from "react";
 import { lazyWithRetry } from "@/lib/lazy-with-retry";
 import { prefetchCriticalData } from "./lib/queryClient";
@@ -401,7 +402,17 @@ const LazyKaziKaribuMyInterests = withSuspense(KaziKaribuMyInterests);
 const LazyEmployerDashboard = withSuspense(EmployerDashboard);
 const LazyEmployerManage = withSuspense(EmployerManage);
 const LazyEmployerRegisterCompany = withSuspense(EmployerRegisterCompany);
-const LazyServiceOrderFlow = withSuspense(ServiceOrderFlow);
+// 2026-07 (audit FIND-3): ServiceOrderFlow wraps the paying user's entire
+// journey (upload → payment → generating → download). If ANY child throws
+// (share modal, delivery banner, photo card, verdict card), the whole page
+// whitescreens and the user thinks their money vanished. Wrap it in an
+// ErrorBoundary so a warm error card renders instead of a blank screen.
+const LazyServiceOrderFlowInner = withSuspense(ServiceOrderFlow);
+const LazyServiceOrderFlow = () => (
+  <ErrorBoundary>
+    <LazyServiceOrderFlowInner />
+  </ErrorBoundary>
+);
 const LazyReferrals = withSuspense(Referrals);
 const LazyReferralTerms = withSuspense(ReferralTerms);
 const LazyCareerMatch = withSuspense(CareerMatch);
