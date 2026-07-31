@@ -150,11 +150,50 @@ export default function Services() {
     "ats_cover_bundle",
   ]);
 
+  // 2026-07 (production fix): free tools have no payment — they navigate
+  // to their own standalone client route. Without this map, clicking "Use
+  // Free" on CV Health Check fell through to /api/pay which requires
+  // amount+service_id and threw "Payment failed" on FREE services.
+  // Any free tile with a slug in this map routes correctly.
+  const FREE_TOOL_ROUTES: Record<string, string> = {
+    cv_check:            "/tools/ats-cv-checker",
+    visa_check:          "/tools/visa-check",
+    offer_check:         "/tools/offer-check",
+    offer_letter_check:  "/tools/offer-check",
+    ielts_verify:        "/tools/ielts-verify",
+    ielts_check:         "/tools/ielts-verify",
+    job_scam_checker:    "/tools/job-scam-checker",
+    scam_check:          "/tools/job-scam-checker",
+    job_match:           "/tools/job-match",
+    interview_practice:  "/tools/interview-practice",
+    job_application_assistant: "/tools/job-application-assistant",
+    visa_sponsorship_jobs: "/tools/visa-sponsorship-jobs",
+    auto_apply:          "/tools/auto-apply",
+    bulk_agency_verify:  "/tools/bulk-agency-verify",
+    cv_templates:        "/tools/cv-templates",
+    write_from_scratch:  "/tools/write-from-scratch",
+  };
+
   async function startPayment(service: Service) {
     trackServerEvent("click_service", { serviceId: service.id });
 
     // Route AI-delivered services through the new unified order flow
     const slug = (service.code ?? service.slug ?? service.id ?? "").toLowerCase();
+
+    // 2026-07 (production fix): FREE tools have no payment — they route to
+    // their standalone client page. Runs BEFORE the paid-flow checks so
+    // "Use Free" never hits /api/pay (which requires amount+service_id
+    // and would return "Payment failed" on any KES-0 service).
+    if (service.price === 0 || FREE_TOOL_ROUTES[slug]) {
+      const dest = FREE_TOOL_ROUTES[slug];
+      if (dest) {
+        navigate(dest);
+        return;
+      }
+      // Free tool without a registered client route — fall back to /tools
+      navigate("/tools");
+      return;
+    }
 
     // 2026-07: LinkedIn Optimization is now a premium Pro-tier LIVE workspace,
     // not a one-shot order. The workspace itself handles the Pro gate (or
