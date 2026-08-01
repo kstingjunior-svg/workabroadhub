@@ -151,7 +151,13 @@ export function PhoneInput({
               <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
             </Button>
           </PopoverTrigger>
-          <PopoverContent align="start" className="w-72 p-0 max-h-96 overflow-hidden flex flex-col">
+          <PopoverContent
+            align="start"
+            side="bottom"
+            avoidCollisions
+            collisionPadding={12}
+            className="w-72 p-0 max-h-[70vh] overflow-hidden flex flex-col"
+          >
             <div className="p-2 border-b border-gray-200 dark:border-gray-800">
               <div className="relative">
                 <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
@@ -165,7 +171,9 @@ export function PhoneInput({
                 />
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto py-1">
+            {/* overscroll-contain stops the touch scroll here from
+                dragging the parent modal on mobile Safari + Chrome. */}
+            <div className="flex-1 overflow-y-auto overscroll-contain py-1" style={{ WebkitOverflowScrolling: "touch" }}>
               {filteredCountries.length === 0 && (
                 <p className="px-3 py-4 text-xs text-center text-muted-foreground">
                   No African country matches "{search}".
