@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams } from "wouter";
+import { triggerDownload } from "@/components/delivery-banner";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -295,20 +297,8 @@ export default function OrderDetail() {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 gap-3 max-w-md">
-                <a
-                  href={`/api/services/order/${order.id}/download/pdf`}
-                  className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold text-sm"
-                  data-testid="button-download-pdf-fallback"
-                >
-                  <Download className="h-4 w-4" /> PDF
-                </a>
-                <a
-                  href={`/api/services/order/${order.id}/download/docx`}
-                  className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm"
-                  data-testid="button-download-docx-fallback"
-                >
-                  <Download className="h-4 w-4" /> Word
-                </a>
+                <FallbackDownloadButton orderId={order.id} kind="pdf" label="PDF" color="red" />
+                <FallbackDownloadButton orderId={order.id} kind="docx" label="Word" color="blue" />
               </div>
               <p className="text-xs text-muted-foreground mt-3">
                 Trouble downloading? Also available on your{" "}
@@ -388,6 +378,49 @@ export default function OrderDetail() {
           </Card>
         )}
       </main>
+    </div>
+  );
+}
+
+/**
+ * Mobile-safe fallback download. Uses fetch → blob → programmatic click
+ * instead of a plain <a href> so mobile Chrome + in-app WebViews save the
+ * file instead of trying to navigate to the API endpoint (which they can
+ * silently fail to do).
+ */
+function FallbackDownloadButton({
+  orderId, kind, label, color,
+}: { orderId: string; kind: "pdf" | "docx"; label: string; color: "red" | "blue" }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const bg = color === "red"
+    ? "bg-red-600 hover:bg-red-700"
+    : "bg-blue-600 hover:bg-blue-700";
+  return (
+    <div className="space-y-1">
+      <button
+        type="button"
+        disabled={busy}
+        onClick={async () => {
+          setErr(null);
+          setBusy(true);
+          try {
+            await triggerDownload(
+              `/api/services/order/${orderId}/download/${kind}`,
+              `workabroadhub-${orderId.slice(0, 8)}.${kind}`,
+            );
+          } catch (e: any) {
+            setErr(e?.message || "Download failed. Please refresh.");
+          } finally {
+            setBusy(false);
+          }
+        }}
+        className={`w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-lg ${bg} disabled:opacity-70 disabled:cursor-wait text-white font-semibold text-sm`}
+        data-testid={`button-download-${kind}-fallback`}
+      >
+        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />} {label}
+      </button>
+      {err && <p className="text-xs text-red-600 dark:text-red-400">{err}</p>}
     </div>
   );
 }

@@ -34,6 +34,40 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Download, CheckCircle2, X, Loader2 } from "lucide-react";
 
+/**
+ * Mobile-safe download helper.
+ *
+ * Why not a plain <a href="…/download/pdf">?
+ *   • Desktop Chrome sees Content-Disposition: attachment and downloads.
+ *   • Mobile Chrome (and every in-app WebView — WhatsApp, FB Messenger,
+ *     Instagram) often ignores the header and just navigates to the URL,
+ *     leaving the user staring at a blank tab or bounced back to the app.
+ *   • Anchor + `download="…"` helps on some browsers but not all — in-app
+ *     WebViews still fail because they open URLs in the parent app.
+ *
+ * Fix: fetch with credentials → blob → programmatic click on an
+ * anchor with the `download` attribute. This forces a save prompt on
+ * every mainstream mobile browser and preserves the file name.
+ */
+export async function triggerDownload(url: string, filename: string): Promise<void> {
+  const res = await fetch(url, { credentials: "include" });
+  if (!res.ok) {
+    throw new Error(`Download failed (${res.status}). Please refresh and try again.`);
+  }
+  const blob = await res.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = objectUrl;
+  a.download = filename;
+  a.rel = "noopener";
+  // Some Chromium mobile builds need the anchor to be in the DOM briefly.
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // Give the browser a beat to start the download before revoking.
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 4000);
+}
+
 export type DeliveryBannerStage = "idle" | "processing" | "done" | "failed";
 
 interface DeliveryBannerProps {
@@ -50,6 +84,8 @@ export function DeliveryBanner({ stage, orderId, serviceName, errorMessage }: De
   const [downloadedPdf, setDownloadedPdf]   = useState(false);
   const [downloadedDocx, setDownloadedDocx] = useState(false);
   const [dismissed, setDismissed]           = useState(false);
+  const [busy, setBusy]                     = useState<"pdf" | "docx" | null>(null);
+  const [downloadError, setDownloadError]   = useState<string | null>(null);
 
   const downloadKey = orderId ? `${DOWNLOADED_KEY_PREFIX}${orderId}` : "";
 
@@ -157,32 +193,66 @@ export function DeliveryBanner({ stage, orderId, serviceName, errorMessage }: De
             </div>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0 w-full sm:w-auto">
-            <a
-              href={`/api/services/order/${orderId}/download/pdf`}
-              onClick={() => { setDownloadedPdf(true); persistState({ pdf: true }); }}
-              className={`inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-md font-bold text-xs sm:text-sm transition ${
+            <button
+              type="button"
+              disabled={busy !== null}
+              onClick={async () => {
+                setDownloadError(null);
+                setBusy("pdf");
+                try {
+                  const svcSlug = service.replace(/\s+/g, "-");
+                  await triggerDownload(
+                    `/api/services/order/${orderId}/download/pdf`,
+                    `workabroadhub-${svcSlug}.pdf`,
+                  );
+                  setDownloadedPdf(true);
+                  persistState({ pdf: true });
+                } catch (e: any) {
+                  setDownloadError(e?.message || "Download failed. Please refresh.");
+                } finally {
+                  setBusy(null);
+                }
+              }}
+              className={`inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-md font-bold text-xs sm:text-sm transition disabled:opacity-70 disabled:cursor-wait ${
                 downloadedPdf
                   ? "bg-white/20 text-emerald-50 hover:bg-white/30"
                   : "bg-white text-emerald-700 hover:bg-emerald-50 shadow-sm"
               }`}
               data-testid="banner-download-pdf"
             >
-              <Download className="h-4 w-4" />
+              {busy === "pdf" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
               {downloadedPdf ? "PDF ✓" : "PDF"}
-            </a>
-            <a
-              href={`/api/services/order/${orderId}/download/docx`}
-              onClick={() => { setDownloadedDocx(true); persistState({ docx: true }); }}
-              className={`inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-md font-bold text-xs sm:text-sm transition ${
+            </button>
+            <button
+              type="button"
+              disabled={busy !== null}
+              onClick={async () => {
+                setDownloadError(null);
+                setBusy("docx");
+                try {
+                  const svcSlug = service.replace(/\s+/g, "-");
+                  await triggerDownload(
+                    `/api/services/order/${orderId}/download/docx`,
+                    `workabroadhub-${svcSlug}.docx`,
+                  );
+                  setDownloadedDocx(true);
+                  persistState({ docx: true });
+                } catch (e: any) {
+                  setDownloadError(e?.message || "Download failed. Please refresh.");
+                } finally {
+                  setBusy(null);
+                }
+              }}
+              className={`inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-md font-bold text-xs sm:text-sm transition disabled:opacity-70 disabled:cursor-wait ${
                 downloadedDocx
                   ? "bg-white/20 text-emerald-50 hover:bg-white/30"
                   : "bg-white text-emerald-700 hover:bg-emerald-50 shadow-sm"
               }`}
               data-testid="banner-download-docx"
             >
-              <Download className="h-4 w-4" />
+              {busy === "docx" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
               {downloadedDocx ? "Word ✓" : "Word"}
-            </a>
+            </button>
             {bothDownloaded && (
               <button
                 type="button"
@@ -196,6 +266,13 @@ export function DeliveryBanner({ stage, orderId, serviceName, errorMessage }: De
             )}
           </div>
         </div>
+        {downloadError && (
+          <div className="max-w-3xl mx-auto px-3 pb-2 -mt-1">
+            <p className="text-[11px] text-emerald-50 bg-red-700/60 rounded px-2 py-1 inline-block">
+              {downloadError} If it keeps failing, go to <a href="/my-documents" className="underline font-semibold">My Documents</a> or refresh this page.
+            </p>
+          </div>
+        )}
       </div>
     );
   }

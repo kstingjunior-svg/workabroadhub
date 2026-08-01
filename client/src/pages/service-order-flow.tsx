@@ -33,7 +33,7 @@ import { ShareSuccessModal } from "@/components/share-success-modal";
 import type { ShareCardProps } from "@/components/share-success-card";
 import { captureRefFromUrl, getStoredRef, clearStoredRef } from "@/lib/referral";
 import { PhotoUploadField } from "@/components/photo-upload-field";
-import { DeliveryBanner, type DeliveryBannerStage } from "@/components/delivery-banner";
+import { DeliveryBanner, triggerDownload, type DeliveryBannerStage } from "@/components/delivery-banner";
 
 interface ServiceMeta {
   name: string;
@@ -151,6 +151,9 @@ export default function ServiceOrderFlow() {
   const [shareOpen, setShareOpen] = useState(false);
   const [autoOpenedShare, setAutoOpenedShare] = useState(false);
   const [deliveredScore, setDeliveredScore] = useState<number | null>(null);
+  // Success-screen download state (mobile-safe fetch → blob → save)
+  const [downloadBusy, setDownloadBusy] = useState<"pdf" | "docx" | null>(null);
+  const [downloadErrorMsg, setDownloadErrorMsg] = useState<string | null>(null);
 
   useEffect(() => () => {
     if (pollRef.current) window.clearInterval(pollRef.current);
@@ -861,19 +864,53 @@ export default function ServiceOrderFlow() {
                 <p className="text-sm text-muted-foreground mt-1">Download in the format that suits you best.</p>
               </div>
               <div className="grid grid-cols-2 gap-3 max-w-sm mx-auto">
-                <a
-                  href={`/api/services/order/${orderId}/download/pdf`}
-                  className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold text-sm"
+                <button
+                  type="button"
+                  disabled={downloadBusy !== null}
+                  onClick={async () => {
+                    setDownloadErrorMsg(null);
+                    setDownloadBusy("pdf");
+                    try {
+                      const slug = (serviceName || meta.name || "document").toLowerCase().replace(/\s+/g, "-");
+                      await triggerDownload(`/api/services/order/${orderId}/download/pdf`, `workabroadhub-${slug}.pdf`);
+                    } catch (e: any) {
+                      setDownloadErrorMsg(e?.message || "Download failed. Please refresh and try again.");
+                    } finally {
+                      setDownloadBusy(null);
+                    }
+                  }}
+                  className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-red-600 hover:bg-red-700 disabled:opacity-70 disabled:cursor-wait text-white font-semibold text-sm"
+                  data-testid="success-download-pdf"
                 >
-                  <Download className="h-4 w-4" /> PDF
-                </a>
-                <a
-                  href={`/api/services/order/${orderId}/download/docx`}
-                  className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm"
+                  {downloadBusy === "pdf" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />} PDF
+                </button>
+                <button
+                  type="button"
+                  disabled={downloadBusy !== null}
+                  onClick={async () => {
+                    setDownloadErrorMsg(null);
+                    setDownloadBusy("docx");
+                    try {
+                      const slug = (serviceName || meta.name || "document").toLowerCase().replace(/\s+/g, "-");
+                      await triggerDownload(`/api/services/order/${orderId}/download/docx`, `workabroadhub-${slug}.docx`);
+                    } catch (e: any) {
+                      setDownloadErrorMsg(e?.message || "Download failed. Please refresh and try again.");
+                    } finally {
+                      setDownloadBusy(null);
+                    }
+                  }}
+                  className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-70 disabled:cursor-wait text-white font-semibold text-sm"
+                  data-testid="success-download-docx"
                 >
-                  <Download className="h-4 w-4" /> Word
-                </a>
+                  {downloadBusy === "docx" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />} Word
+                </button>
               </div>
+              {downloadErrorMsg && (
+                <div className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-md px-3 py-2 max-w-sm mx-auto">
+                  {downloadErrorMsg}{" "}
+                  <a href="/my-documents" className="underline font-semibold">Open My Documents</a> instead.
+                </div>
+              )}
               <div className="pt-3 flex flex-col sm:flex-row items-center justify-center gap-2">
                 <Button
                   onClick={() => setShareOpen(true)}
