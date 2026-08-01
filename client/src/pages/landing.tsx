@@ -523,6 +523,26 @@ export default function Landing() {
                     — John K., Registered Nurse (Mombasa → NHS UK)
                   </p>
                 </div>
+
+                {/* 2026-08 (Tony): big, unmissable "Report an agency" CTA sits
+                    directly under the Verify widget on landing. Verify + Report
+                    are the two sides of the community-fraud loop — one protects
+                    you before you pay, the other protects the next Kenyan
+                    after you got burned. Route: /report-scam (public, no auth). */}
+                <a
+                  href="/report-scam"
+                  className="mt-4 flex items-center justify-center gap-2 w-full py-4 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold text-base shadow-sm transition"
+                  data-testid="link-report-agency-landing"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
+                    <line x1="4" y1="22" x2="4" y2="15"/>
+                  </svg>
+                  Report a fake or fraudulent agency
+                </a>
+                <p className="text-xs text-center text-gray-500 dark:text-gray-400 mt-2 leading-relaxed">
+                  Got scammed or nearly scammed? Your report protects other Kenyans. Anonymous option available.
+                </p>
               </div>
             </div>
 
