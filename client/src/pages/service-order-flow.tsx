@@ -162,6 +162,64 @@ export default function ServiceOrderFlow() {
     if (pollRef.current) window.clearInterval(pollRef.current);
   }, []);
 
+  // ── Auto-save intake draft (2026-08, Tony's Kenyan mobile UX ask) ────────
+  // Kenyans on 3G lose network mid-form all the time. Save every keystroke
+  // to localStorage (throttled to 500ms) so a page refresh or dropped signal
+  // doesn't wipe out target country + job description + extras. Restored on
+  // mount so returning users pick up right where they left off.
+  //
+  // Per-slug key so different services don't stomp each other. Draft is
+  // cleared once the order successfully submits. Never includes the CV file
+  // or photo — those are handled separately and would blow through the
+  // ~5 MB localStorage quota.
+  const DRAFT_KEY = `wah_service_intake_draft:${slug}`;
+  const [draftSaved, setDraftSaved] = useState<boolean>(false);
+
+  // Restore on mount
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (!raw) return;
+      const draft = JSON.parse(raw);
+      if (typeof draft?.jobDescription === "string" && draft.jobDescription) setJobDescription(draft.jobDescription);
+      if (typeof draft?.targetCountry === "string"  && draft.targetCountry)  setTargetCountry(draft.targetCountry);
+      if (typeof draft?.extraInput === "string"     && draft.extraInput)     setExtraInput(draft.extraInput);
+      if (draft?.jobDescription || draft?.targetCountry || draft?.extraInput) {
+        setDraftSaved(true);
+      }
+    } catch { /* corrupted draft — treat as no draft */ }
+    // Only run on mount / slug change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug]);
+
+  // Save with a small debounce so we don't hit localStorage on every keystroke
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      try {
+        const anyContent = !!(jobDescription || targetCountry || extraInput);
+        if (!anyContent) {
+          localStorage.removeItem(DRAFT_KEY);
+          setDraftSaved(false);
+          return;
+        }
+        localStorage.setItem(DRAFT_KEY, JSON.stringify({
+          jobDescription, targetCountry, extraInput, savedAt: Date.now(),
+        }));
+        setDraftSaved(true);
+      } catch { /* quota exceeded / private mode — silent */ }
+    }, 500);
+    return () => window.clearTimeout(t);
+  }, [jobDescription, targetCountry, extraInput, DRAFT_KEY]);
+
+  // Clear draft the moment we successfully move to payment/generating stage —
+  // the intake is already captured server-side by then.
+  useEffect(() => {
+    if (stage === "generating" || stage === "done") {
+      try { localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
+      setDraftSaved(false);
+    }
+  }, [stage, DRAFT_KEY]);
+
   // Resume a returning user (after payment redirect) if URL has ?order=<id>
   useEffect(() => {
     const urlOrder = new URLSearchParams(window.location.search).get("order");
@@ -656,6 +714,15 @@ export default function ServiceOrderFlow() {
 
           {stage === "upload" && (
             <CardContent className="space-y-4">
+              {/* Auto-save indicator — reassures users on flaky Kenyan mobile
+                  networks that their target country / job description survive
+                  a refresh or dropped signal. */}
+              {draftSaved && (
+                <div className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-medium -mt-1 mb-1" data-testid="text-draft-saved">
+                  <CheckCircle2 className="h-3 w-3" />
+                  Draft saved — you can safely close and come back later
+                </div>
+              )}
               {meta.needsCv && (
                 <div>
                   <Label className="block mb-2">Your CV (PDF or Word)</Label>

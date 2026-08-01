@@ -860,8 +860,18 @@ async function notifyOrderCompleted(orderId: string): Promise<void> {
     const serviceName = order.service_name || "document";
     const appOrigin = (process.env.APP_ORIGIN || "https://workabroadhub.tech").replace(/\/$/, "");
     const documentsUrl = `${appOrigin}/my-documents`;
+    // Direct order page — mobile-first, big PDF + Word buttons already there.
+    // /my-documents requires them to hunt for their order among many; the order
+    // page opens straight to their downloads. Better for Kenyan mobile users.
+    const orderUrl = `${appOrigin}/order/${orderId}`;
     // Direct PDF download URL — one-tap on mobile if the user still has a session.
     const directPdfUrl = `${appOrigin}/api/services/order/${orderId}/download/pdf`;
+    // Support contact — reads from env, falls back to Tony's number so users
+    // never feel stranded even if WHATSAPP_SUPPORT_NUMBER isn't set.
+    const supportPhone = (process.env.WHATSAPP_SUPPORT_NUMBER || process.env.ADMIN_PHONE_NUMBER || "").replace(/^\+?/, "");
+    const supportLine = supportPhone
+      ? `\n\nQuestions? Reply here or WhatsApp us on wa.me/${supportPhone} — we read every message.`
+      : `\n\nQuestions? Reply here — we read every message.`;
 
     // ── Email (primary) ───────────────────────────────────────────────────
     if (user.email) {
@@ -898,13 +908,21 @@ async function notifyOrderCompleted(orderId: string): Promise<void> {
     }
 
     // ── WhatsApp (secondary) ──────────────────────────────────────────────
+    // Tony's Aug 2026 note: Kenyans check WhatsApp 20× more than email. Make
+    // this message do the heavy lifting: direct order link (opens straight to
+    // download buttons — no digging through /my-documents), clear PDF+Word
+    // offer, and a support phone so people never feel stranded. Format uses
+    // *bold* which WhatsApp renders natively.
     if (user.phone) {
       try {
         const { sendWhatsApp } = await import("./services/whatsapp");
-        await sendWhatsApp(
-          user.phone,
-          `✅ Your ${serviceName} is ready, ${firstName}!\n\nDownload it here: ${documentsUrl}\n\n(Also sent to your email.)`,
-        );
+        const waMessage =
+          `🎉 *Your ${serviceName} is ready, ${firstName}!*\n\n` +
+          `👉 *Download here:* ${orderUrl}\n\n` +
+          `Both *PDF* and *Word* formats waiting for you. Tap the link, choose your format, and it saves straight to your phone.\n\n` +
+          `_(We also sent this to your email as a backup.)_` +
+          supportLine;
+        await sendWhatsApp(user.phone, waMessage);
       } catch (waErr: any) {
         console.warn(`[ServiceOrder] completion WhatsApp failed for ${orderId}:`, waErr?.message);
       }
