@@ -28,6 +28,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
+import { triggerDownload } from "@/components/delivery-banner";
 import { apiRequest } from "@/lib/queryClient";
 import { SeoHead } from "@/components/seo-head";
 import { AiDisclaimer } from "@/components/ai-disclaimer";
@@ -417,10 +418,23 @@ export default function WriteFromScratchPage() {
     await runGeneration(draftId);
   };
 
-  const downloadFile = (format: "docx" | "pdf") => {
+  const downloadFile = async (format: "docx" | "pdf") => {
     if (!draftId) return;
-    // Trigger a real browser download via window.location so headers are honoured.
-    window.location.href = `/api/write-from-scratch/${draftId}/download.${format}`;
+    // Mobile-safe: fetch → blob → programmatic save. Never navigates away,
+    // so the user keeps their draft on screen after downloading. Works in
+    // WhatsApp / FB in-app browsers where window.location.href fails.
+    try {
+      await triggerDownload(
+        `/api/write-from-scratch/${draftId}/download.${format}`,
+        `workabroadhub-${docType || "document"}.${format}`,
+      );
+    } catch (e: any) {
+      toast({
+        title: "Download failed",
+        description: e?.message || "Please refresh and try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   const startOver = () => {

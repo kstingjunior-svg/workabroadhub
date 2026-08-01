@@ -11,6 +11,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { formatPhone } from "@/lib/phone";
+import { triggerDownload } from "@/components/delivery-banner";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -1766,30 +1767,11 @@ export default function AssistedApply() {
                                 </Button>
                               )}
 
-                              {/* Download buttons — shown when materials are ready */}
+                              {/* Download buttons — shown when materials are ready.
+                                  Mobile-safe: fetch→blob→save via triggerDownload,
+                                  works on every browser including in-app WebViews. */}
                               {hasMaterials && (
-                                <div className="flex gap-2 flex-wrap">
-                                  <a
-                                    href={`/api/user-job-applications/${app.id}/download/cv`}
-                                    download
-                                    data-testid={`button-download-cv-${app.id}`}
-                                  >
-                                    <Button size="sm" className="gap-2">
-                                      <Download className="h-4 w-4" />
-                                      Download CV
-                                    </Button>
-                                  </a>
-                                  <a
-                                    href={`/api/user-job-applications/${app.id}/download/cover-letter`}
-                                    download
-                                    data-testid={`button-download-cl-${app.id}`}
-                                  >
-                                    <Button size="sm" variant="outline" className="gap-2">
-                                      <FileText className="h-4 w-4" />
-                                      Download Cover Letter
-                                    </Button>
-                                  </a>
-                                </div>
+                                <ApplicationDownloadButtons appId={app.id} />
                               )}
                             </CardContent>
                           </Card>
@@ -1816,6 +1798,58 @@ export default function AssistedApply() {
         </Tabs>
       </main>
       )}
+    </div>
+  );
+}
+
+/**
+ * CV + Cover Letter download buttons for a single application.
+ * Uses fetch→blob→save so downloads reliably trigger on mobile Chrome and
+ * inside every in-app WebView (WhatsApp, FB Messenger, Instagram).
+ */
+function ApplicationDownloadButtons({ appId }: { appId: string }) {
+  const { toast } = useToast();
+  const [busy, setBusy] = useState<"cv" | "cover-letter" | null>(null);
+  const handle = async (docType: "cv" | "cover-letter") => {
+    setBusy(docType);
+    try {
+      await triggerDownload(
+        `/api/user-job-applications/${appId}/download/${docType}`,
+        `workabroadhub-${docType}-${appId.slice(0, 8)}.docx`,
+      );
+    } catch (e: any) {
+      toast({
+        title: "Download failed",
+        description: e?.message || "Please refresh and try again, or open My Documents.",
+        variant: "destructive",
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+  return (
+    <div className="flex gap-2 flex-wrap">
+      <Button
+        size="sm"
+        className="gap-2"
+        disabled={busy !== null}
+        onClick={() => handle("cv")}
+        data-testid={`button-download-cv-${appId}`}
+      >
+        {busy === "cv" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+        Download CV
+      </Button>
+      <Button
+        size="sm"
+        variant="outline"
+        className="gap-2"
+        disabled={busy !== null}
+        onClick={() => handle("cover-letter")}
+        data-testid={`button-download-cl-${appId}`}
+      >
+        {busy === "cover-letter" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+        Download Cover Letter
+      </Button>
     </div>
   );
 }
