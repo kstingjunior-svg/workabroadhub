@@ -52,20 +52,34 @@ import { AlertTriangle, Download, CheckCircle2, X, Loader2 } from "lucide-react"
 export async function triggerDownload(url: string, filename: string): Promise<void> {
   const res = await fetch(url, { credentials: "include" });
   if (!res.ok) {
+    if (res.status === 401 || res.status === 403) {
+      throw new Error("You may need to sign in again. Open My Documents in the menu to retry.");
+    }
     throw new Error(`Download failed (${res.status}). Please refresh and try again.`);
   }
   const blob = await res.blob();
   const objectUrl = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = objectUrl;
-  a.download = filename;
-  a.rel = "noopener";
-  // Some Chromium mobile builds need the anchor to be in the DOM briefly.
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
+
+  // Attempt 1 — programmatic click on an in-DOM anchor with `download` attr.
+  // Works on desktop + most mobile Chrome / Safari.
+  try {
+    const a = document.createElement("a");
+    a.href = objectUrl;
+    a.download = filename;
+    a.rel = "noopener";
+    a.target = "_self";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } catch {
+    // Attempt 2 — some older Android Chrome + in-app WebViews swallow the
+    // programmatic click on blob: URLs. Fall back to opening the object
+    // URL directly, which forces the browser's download manager.
+    window.location.assign(objectUrl);
+  }
+
   // Give the browser a beat to start the download before revoking.
-  setTimeout(() => URL.revokeObjectURL(objectUrl), 4000);
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 8000);
 }
 
 export type DeliveryBannerStage = "idle" | "processing" | "done" | "failed";

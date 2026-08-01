@@ -154,6 +154,9 @@ export default function ServiceOrderFlow() {
   // Success-screen download state (mobile-safe fetch → blob → save)
   const [downloadBusy, setDownloadBusy] = useState<"pdf" | "docx" | null>(null);
   const [downloadErrorMsg, setDownloadErrorMsg] = useState<string | null>(null);
+  // Flips true after the FIRST successful download — used to gate the
+  // share modal so we never cover the download buttons pre-download.
+  const [downloadedOnce, setDownloadedOnce] = useState(false);
 
   useEffect(() => () => {
     if (pollRef.current) window.clearInterval(pollRef.current);
@@ -173,17 +176,22 @@ export default function ServiceOrderFlow() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Auto-open share modal ~1.2s after landing on the "done" stage — gives
-  // the user a moment to see the download buttons before we ask them to share.
-  // Fires exactly ONCE per order (autoOpenedShare guard).
+  // 2026-08 (Tony): the share modal used to auto-open ~1.2s after "done".
+  // That was blocking the red/blue download buttons on mobile — users
+  // couldn't reach them, couldn't scroll it away, and left without their
+  // CV. Now the share modal only opens after the user has clicked at
+  // least one download button. `autoOpenedShare` still guards it firing
+  // more than once so we never nag people.
   useEffect(() => {
     if (stage !== "done" || !orderId || autoOpenedShare) return;
+    if (downloadBusy !== null) return;                 // still downloading
+    if (!downloadedOnce) return;                       // haven't downloaded yet
     const t = window.setTimeout(() => {
       setShareOpen(true);
       setAutoOpenedShare(true);
-    }, 1200);
+    }, 900);
     return () => window.clearTimeout(t);
-  }, [stage, orderId, autoOpenedShare]);
+  }, [stage, orderId, autoOpenedShare, downloadedOnce, downloadBusy]);
 
   // Compute the ShareCard variant from the slug so the accent colour + copy
   // fit the actual service the user just paid for.
@@ -873,6 +881,7 @@ export default function ServiceOrderFlow() {
                     try {
                       const slug = (serviceName || meta.name || "document").toLowerCase().replace(/\s+/g, "-");
                       await triggerDownload(`/api/services/order/${orderId}/download/pdf`, `workabroadhub-${slug}.pdf`);
+                      setDownloadedOnce(true);
                     } catch (e: any) {
                       setDownloadErrorMsg(e?.message || "Download failed. Please refresh and try again.");
                     } finally {
@@ -893,6 +902,7 @@ export default function ServiceOrderFlow() {
                     try {
                       const slug = (serviceName || meta.name || "document").toLowerCase().replace(/\s+/g, "-");
                       await triggerDownload(`/api/services/order/${orderId}/download/docx`, `workabroadhub-${slug}.docx`);
+                      setDownloadedOnce(true);
                     } catch (e: any) {
                       setDownloadErrorMsg(e?.message || "Download failed. Please refresh and try again.");
                     } finally {
