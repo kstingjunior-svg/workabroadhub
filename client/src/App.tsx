@@ -829,6 +829,12 @@ function Router() {
       <Route path="/community" component={LazyCommunity} />
         <Route path="/assisted-apply/purchase/:packId" component={LazyAssistedApply} />
         <Route path="/assisted-apply" component={LazyAssistedApply} />
+        {/* 2026-08 (Tony bug report): /apply/:jobId was only in the authed
+            block, so logged-out users clicking "Apply now" on a visa-sponsor
+            job hit 404. Making it public — the prep page renders fine
+            without auth, and the Continue button still hits the paywall gate
+            if the redirect endpoint requires payment. */}
+        <Route path="/apply/:jobId" component={LazyApplyPage} />
         <Route path="/admin/login" component={LazyAdminLogin} />
         <Route path="/admin" component={LazyAdminLogin} />
         <Route path="/referral-terms" component={LazyReferralTerms} />
