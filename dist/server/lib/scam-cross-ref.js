@@ -14,7 +14,7 @@
  *   2. LOOK UP how many OTHER reports share each identifier, and produce
  *      a "cluster" summary the client can render as
  *      "17 reports reference this phone".
- *   3. UPSERT the agency_profiles row so /agencies-reported/:slug always
+ *   3. UPSERT the reported_agency_profiles row so /agencies-reported/:slug always
  *      reflects the freshest state.
  */
 var __importDefault = (this && this.__importDefault) || function (mod) {
@@ -182,7 +182,7 @@ async function persistAndCrossRef(reportId, payload) {
     return { clusters, totalRelatedReports: totalRelated, headline };
 }
 /**
- * Upsert the aggregated agency_profiles row for a report's agency.
+ * Upsert the aggregated reported_agency_profiles row for a report's agency.
  * Called after cross-ref persistence to keep the public page fresh.
  */
 async function upsertAgencyProfile(agencyName, info) {
@@ -190,7 +190,7 @@ async function upsertAgencyProfile(agencyName, info) {
     const contactBuckets = extractContacts(info.contacts);
     const bucket = (k) => contactBuckets.filter((c) => c.kind === k).map((c) => c.normalized);
     try {
-        await db_1.pool.query(`INSERT INTO agency_profiles (
+        await db_1.pool.query(`INSERT INTO reported_agency_profiles (
          slug, display_name, country, office_location,
          known_websites, known_phones, known_emails, known_whatsapp,
          known_bank_accounts, known_mpesa_numbers,
@@ -206,20 +206,20 @@ async function upsertAgencyProfile(agencyName, info) {
          NOW(), NOW()
        )
        ON CONFLICT (slug) DO UPDATE SET
-         known_websites      = array(SELECT DISTINCT unnest(agency_profiles.known_websites      || EXCLUDED.known_websites)),
-         known_phones        = array(SELECT DISTINCT unnest(agency_profiles.known_phones        || EXCLUDED.known_phones)),
-         known_emails        = array(SELECT DISTINCT unnest(agency_profiles.known_emails        || EXCLUDED.known_emails)),
-         known_whatsapp      = array(SELECT DISTINCT unnest(agency_profiles.known_whatsapp      || EXCLUDED.known_whatsapp)),
-         known_bank_accounts = array(SELECT DISTINCT unnest(agency_profiles.known_bank_accounts || EXCLUDED.known_bank_accounts)),
-         known_mpesa_numbers = array(SELECT DISTINCT unnest(agency_profiles.known_mpesa_numbers || EXCLUDED.known_mpesa_numbers)),
-         report_count        = agency_profiles.report_count + 1,
-         total_reported_loss_kes = agency_profiles.total_reported_loss_kes + COALESCE($14, 0),
+         known_websites      = array(SELECT DISTINCT unnest(reported_agency_profiles.known_websites      || EXCLUDED.known_websites)),
+         known_phones        = array(SELECT DISTINCT unnest(reported_agency_profiles.known_phones        || EXCLUDED.known_phones)),
+         known_emails        = array(SELECT DISTINCT unnest(reported_agency_profiles.known_emails        || EXCLUDED.known_emails)),
+         known_whatsapp      = array(SELECT DISTINCT unnest(reported_agency_profiles.known_whatsapp      || EXCLUDED.known_whatsapp)),
+         known_bank_accounts = array(SELECT DISTINCT unnest(reported_agency_profiles.known_bank_accounts || EXCLUDED.known_bank_accounts)),
+         known_mpesa_numbers = array(SELECT DISTINCT unnest(reported_agency_profiles.known_mpesa_numbers || EXCLUDED.known_mpesa_numbers)),
+         report_count        = reported_agency_profiles.report_count + 1,
+         total_reported_loss_kes = reported_agency_profiles.total_reported_loss_kes + COALESCE($14, 0),
          last_report_at      = NOW(),
          updated_at          = NOW(),
-         country             = COALESCE(agency_profiles.country, EXCLUDED.country),
-         office_location     = COALESCE(agency_profiles.office_location, EXCLUDED.office_location),
-         licence_number      = COALESCE(EXCLUDED.licence_number, agency_profiles.licence_number),
-         licence_status      = COALESCE(EXCLUDED.licence_status, agency_profiles.licence_status)`, [
+         country             = COALESCE(reported_agency_profiles.country, EXCLUDED.country),
+         office_location     = COALESCE(reported_agency_profiles.office_location, EXCLUDED.office_location),
+         licence_number      = COALESCE(EXCLUDED.licence_number, reported_agency_profiles.licence_number),
+         licence_status      = COALESCE(EXCLUDED.licence_status, reported_agency_profiles.licence_status)`, [
             slug, agencyName, info.country ?? null, info.officeLocation ?? null,
             bucket("website"), bucket("phone"), bucket("email"), bucket("whatsapp"),
             bucket("bank"), bucket("mpesa"),
@@ -228,7 +228,7 @@ async function upsertAgencyProfile(agencyName, info) {
             info.amountLostKes ?? 0,
         ]);
         // Recompute risk_band based on report count + loss aggregate
-        await db_1.pool.query(`UPDATE agency_profiles SET risk_band = CASE
+        await db_1.pool.query(`UPDATE reported_agency_profiles SET risk_band = CASE
          WHEN approved_report_count >= 5 OR total_reported_loss_kes >= 500000 THEN 'critical'
          WHEN approved_report_count >= 2 OR total_reported_loss_kes >= 100000 THEN 'high'
          WHEN approved_report_count >= 1 OR report_count >= 3               THEN 'medium'
