@@ -16,8 +16,11 @@ import { Button } from "@/components/ui/button";
 import {
   Loader2, ShieldAlert, AlertTriangle, Building2, Globe, Phone, Mail,
   Info, ExternalLink, Calendar, DollarSign, FileWarning, ArrowLeft, Flag,
+  Bell, BellOff, Check,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/use-auth";
+import { fetchCsrfToken } from "@/lib/queryClient";
 
 interface AgencyProfile {
   slug: string;
@@ -95,11 +98,11 @@ export default function AgencyReportedPage() {
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white dark:from-slate-950 dark:to-slate-900 py-6 px-4">
       <div className="max-w-3xl mx-auto space-y-4">
         <button
-          onClick={() => navigate("/agencies")}
+          onClick={() => navigate("/agencies-reported")}
           className="inline-flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
           data-testid="link-back-to-agencies"
         >
-          <ArrowLeft className="h-3.5 w-3.5" /> Back to agency directory
+          <ArrowLeft className="h-3.5 w-3.5" /> Back to reported-agencies directory
         </button>
 
         {state.kind === "loading" && (
@@ -194,6 +197,11 @@ function ProfileView({
               </p>
               <p className="text-[11px] uppercase tracking-wider text-gray-500 dark:text-gray-400 font-semibold">Licence status</p>
             </div>
+          </div>
+
+          {/* Follow — get notified when new reports for this agency are approved */}
+          <div className="pt-3 border-t border-current/10">
+            <FollowButton slug={profile.slug} onNavigate={onNavigate} />
           </div>
         </CardContent>
       </Card>
@@ -323,9 +331,9 @@ function ProfileView({
         </Button>
         <Button
           variant="outline"
-          onClick={() => onNavigate(`/agencies`)}
+          onClick={() => onNavigate(`/agencies-reported`)}
         >
-          Browse other agencies
+          Browse other reports
         </Button>
       </div>
 
@@ -335,5 +343,109 @@ function ProfileView({
         <p className="text-[11px] text-gray-600 dark:text-gray-400 leading-relaxed">{disclaimer}</p>
       </div>
     </div>
+  );
+}
+
+/**
+ * Follow / unfollow toggle. Auth required — logged-out users see a
+ * friendly "sign in to get alerts" nudge instead of an unusable button.
+ * Backend: POST/DELETE/GET /api/agency-profiles/:slug/follow.
+ */
+function FollowButton({ slug, onNavigate }: { slug: string; onNavigate: (path: string) => void }) {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [following, setFollowing] = useState<boolean | null>(null); // null = loading
+  const [busy, setBusy] = useState(false);
+
+  // Load current follow state on mount / user change
+  useEffect(() => {
+    if (!user) { setFollowing(false); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/agency-profiles/${encodeURIComponent(slug)}/follow`, {
+          credentials: "include",
+        });
+        if (cancelled) return;
+        if (res.ok) {
+          const data = await res.json();
+          setFollowing(!!data.following);
+        } else {
+          setFollowing(false);
+        }
+      } catch {
+        if (!cancelled) setFollowing(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [slug, user]);
+
+  const toggle = async () => {
+    if (!user) {
+      // Not logged in — nudge them to sign in, preserving where to return.
+      toast({
+        title: "Sign in to get alerts",
+        description: "We'll email you the moment a new report for this agency is published.",
+      });
+      onNavigate(`/login?redirect=${encodeURIComponent(`/agencies-reported/${slug}`)}`);
+      return;
+    }
+    setBusy(true);
+    try {
+      const csrf = await fetchCsrfToken();
+      const method = following ? "DELETE" : "POST";
+      const res = await fetch(`/api/agency-profiles/${encodeURIComponent(slug)}/follow`, {
+        method,
+        credentials: "include",
+        headers: { "X-CSRF-Token": csrf },
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: "Request failed" }));
+        throw new Error(err.message || "Could not update your subscription.");
+      }
+      setFollowing(!following);
+      toast({
+        title: following ? "Unfollowed" : "You're subscribed",
+        description: following
+          ? "You won't get alerts about this agency anymore."
+          : "We'll email you when a new community report is approved.",
+      });
+    } catch (e: any) {
+      toast({
+        title: "Couldn't update",
+        description: e?.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (following === null) {
+    return (
+      <Button variant="outline" size="sm" disabled className="w-full">
+        <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" /> Loading…
+      </Button>
+    );
+  }
+
+  return (
+    <Button
+      variant={following ? "outline" : "default"}
+      size="sm"
+      onClick={toggle}
+      disabled={busy}
+      className={`w-full ${following ? "border-green-400 text-green-700 hover:bg-green-50 dark:hover:bg-green-950/30" : "bg-teal-600 hover:bg-teal-700 text-white"}`}
+      data-testid="button-follow-agency"
+    >
+      {busy ? (
+        <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" />
+      ) : following ? (
+        <Check className="h-3.5 w-3.5 mr-2" />
+      ) : (
+        <Bell className="h-3.5 w-3.5 mr-2" />
+      )}
+      {following ? "Following — you'll get alerts" : "Get alerts about new reports"}
+    </Button>
   );
 }

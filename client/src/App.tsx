@@ -76,6 +76,10 @@ const LinkedinOptimize = lazyWithRetry(() => import("@/pages/tools/linkedin-opti
 const SharePage = lazyWithRetry(() => import("@/pages/share"));
 // 2026-07: Community Fraud Intelligence — public agency profile page.
 const AgencyReported = lazyWithRetry(() => import("@/pages/agency-reported"));
+// 2026-07: Community Fraud Intelligence — searchable directory of REPORTED
+// agencies (not the licensed NEA agencies list at /agencies). Only publishes
+// agencies with at least one moderator-approved report.
+const AgenciesReportedIndex = lazyWithRetry(() => import("@/pages/agencies-reported-index"));
 const AgencyProfilePage = lazyWithRetry(() => import("@/pages/agency-profile"));
 const Profile = lazyWithRetry(() => import("@/pages/profile"));
 const AgencyPortal = lazyWithRetry(() => import("@/pages/agency-portal"));
@@ -358,6 +362,7 @@ const LazyScoutJobPost      = withSuspense(ScoutJobPost);
 const LazyLinkedinOptimize  = withSuspense(LinkedinOptimize);
 const LazySharePage         = withSuspense(SharePage);
 const LazyAgencyReported    = withSuspense(AgencyReported);
+const LazyAgenciesReportedIndex = withSuspense(AgenciesReportedIndex);
 const LazyProfile = withSuspense(Profile);
 const LazyAgencyPortal = withSuspense(AgencyPortal);
 const LazyServiceOrderPage = withSuspense(ServiceOrderPage);
@@ -557,6 +562,8 @@ function AuthenticatedRoutes() {
       <Route path="/scout-jobs/:id" component={LazyScoutJobDetail} />
       <Route path="/scout-jobs" component={LazyScoutJobsIndex} />
       <Route path="/share/:token" component={LazySharePage} />
+      {/* Fraud Intelligence Directory — order matters: index before /:slug */}
+      <Route path="/agencies-reported" component={LazyAgenciesReportedIndex} />
       <Route path="/agencies-reported/:slug" component={LazyAgencyReported} />
       {/* LinkedIn AI Optimizer — Pro tool, workspace at /tools/linkedin-optimize */}
       <Route path="/tools/linkedin-optimize" component={LazyLinkedinOptimize} />
@@ -808,6 +815,8 @@ function Router() {
         <Route path="/scout-jobs/:id" component={LazyScoutJobDetail} />
         <Route path="/scout-jobs" component={LazyScoutJobsIndex} />
         <Route path="/share/:token" component={LazySharePage} />
+      {/* Fraud Intelligence Directory — public, no auth required. Index before /:slug */}
+      <Route path="/agencies-reported" component={LazyAgenciesReportedIndex} />
       <Route path="/agencies-reported/:slug" component={LazyAgencyReported} />
         {/* LinkedIn Optimizer — page shows a friendly sign-in prompt for guests. */}
         <Route path="/tools/linkedin-optimize" component={LazyLinkedinOptimize} />

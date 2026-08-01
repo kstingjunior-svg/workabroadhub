@@ -1,590 +1,659 @@
-import { useState, useRef } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+/**
+ * /report-scam — Community Fraud Intelligence Platform v2 submission form.
+ *
+ * 6-step wizard:
+ *   1. WHO        agency + destination + socials + contact fingerprints
+ *   2. MONEY      payment method + amount + bank/mpesa/crypto (if applicable)
+ *   3. STORY      description + optional timeline
+ *   4. EVIDENCE   drag-drop / camera / gallery — up to 50 files
+ *   5. YOU        anonymous OR give your email for updates (optional)
+ *   6. REVIEW     recap + legal disclaimer + submit
+ *
+ * Autosaves to localStorage on every field change. Resume from any step
+ * after a page refresh. Fully mobile-friendly.
+ *
+ * Backend: POST /api/scam-reports/v2 (structured) + POST /api/scam-reports/evidence.
+ */
+
+import { useEffect, useRef, useState } from "react";
+import { useLocation, useSearch } from "wouter";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Link } from "wouter";
-import { useAuth } from "@/hooks/use-auth";
 import {
-  AlertTriangle,
-  ArrowLeft,
-  Upload,
-  Search,
-  ChevronLeft,
-  ChevronRight,
-  ImageIcon,
-  X,
-  Loader2,
-  Calendar,
-  MapPin,
-  DollarSign,
-  Phone,
-  Eye,
-  Flag,
-  ShieldAlert,
+  Loader2, ChevronRight, ChevronLeft, Check,
+  Building2, DollarSign, MessageSquare, Camera, User, FileCheck,
+  Info, Upload, Trash2, Flag, AlertTriangle,
 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { fetchCsrfToken } from "@/lib/queryClient";
 
-const COUNTRIES = [
-  "Kenya", "Uganda", "Tanzania", "Nigeria", "Ghana", "South Africa",
-  "UAE", "Saudi Arabia", "Qatar", "Kuwait", "Bahrain", "Oman",
-  "UK", "USA", "Canada", "Australia", "Germany", "Malaysia", "Singapore", "Turkey",
-  "Other",
-];
-
-interface ScamReport {
-  id: string;
-  agencyName: string;
-  country: string | null;
+interface FormData {
+  agencyName: string; country: string; destinationCountry: string; officeLocation: string;
+  website: string; facebookUrl: string; instagramUrl: string; tiktokUrl: string; linkedinUrl: string;
+  whatsappNumber: string; phoneNumbers: string; emailAddresses: string;
+  recruitmentLicence: string; employerName: string; jobApplied: string; incidentDate: string;
+  paymentMethod: string; amountLost: string; currency: string;
+  bankAccount: string; mpesaNumber: string; cryptoWallet: string; transactionReference: string;
   description: string;
-  amountLost: number | null;
-  contactInfo: string | null;
-  evidenceImages: string[];
-  createdAt: string;
+  reporterEmail: string; isAnonymous: boolean;
+  agreedToTerms: boolean;
 }
 
-interface ReportsResponse {
-  reports: ScamReport[];
-  total: number;
-  page: number;
-  limit: number;
-  pages: number;
-}
+const EMPTY_FORM: FormData = {
+  agencyName: "", country: "", destinationCountry: "", officeLocation: "",
+  website: "", facebookUrl: "", instagramUrl: "", tiktokUrl: "", linkedinUrl: "",
+  whatsappNumber: "", phoneNumbers: "", emailAddresses: "",
+  recruitmentLicence: "", employerName: "", jobApplied: "", incidentDate: "",
+  paymentMethod: "", amountLost: "", currency: "KES",
+  bankAccount: "", mpesaNumber: "", cryptoWallet: "", transactionReference: "",
+  description: "",
+  reporterEmail: "", isAnonymous: false,
+  agreedToTerms: false,
+};
+
+const DRAFT_KEY = "wah_scam_report_draft_v2";
+const BATCH_KEY = "wah_scam_report_batch_v2";
+
+const STEPS = [
+  { id: 1, label: "Who",      icon: Building2 },
+  { id: 2, label: "Money",    icon: DollarSign },
+  { id: 3, label: "Story",    icon: MessageSquare },
+  { id: 4, label: "Evidence", icon: Camera },
+  { id: 5, label: "You",      icon: User },
+  { id: 6, label: "Review",   icon: FileCheck },
+] as const;
 
 export default function ReportScamPage() {
-  const { user } = useAuth();
+  const [, navigate] = useLocation();
+  const searchParams = useSearch();
   const { toast } = useToast();
+
+  const [step, setStep] = useState(1);
+  const [form, setForm] = useState<FormData>(EMPTY_FORM);
+  const [files, setFiles] = useState<File[]>([]);
+  const [uploadBatchId, setUploadBatchId] = useState<string | null>(null);
+  const [uploadedFileNames, setUploadedFileNames] = useState<string[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [result, setResult] = useState<{
+    reportId: string; agencySlug: string; headline: string;
+    clusters: Array<{ kind: string; display: string; otherReportCount: number }>;
+    disclaimer: string;
+  } | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Form state
-  const [agencyName, setAgencyName] = useState("");
-  const [country, setCountry] = useState("");
-  const [description, setDescription] = useState("");
-  const [amountLost, setAmountLost] = useState("");
-  const [contactInfo, setContactInfo] = useState("");
-  const [reporterEmail, setReporterEmail] = useState(user ? "" : "");
-  const [uploadedImages, setUploadedImages] = useState<string[]>([]);
-  const [uploadingFiles, setUploadingFiles] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (raw) {
+        const draft = JSON.parse(raw);
+        if (draft?.form) setForm({ ...EMPTY_FORM, ...draft.form });
+        if (draft?.step) setStep(draft.step);
+      }
+      const batch = localStorage.getItem(BATCH_KEY);
+      if (batch) {
+        const b = JSON.parse(batch);
+        if (b?.id) setUploadBatchId(b.id);
+        if (Array.isArray(b?.fileNames)) setUploadedFileNames(b.fileNames);
+      }
+    } catch { /* ignore corrupt draft */ }
+    const params = new URLSearchParams(searchParams);
+    const prefill = params.get("agency");
+    if (prefill) setForm((f) => ({ ...f, agencyName: prefill }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  // Blacklist filter state
-  const [search, setSearch] = useState("");
-  const [filterCountry, setFilterCountry] = useState("all");
-  const [page, setPage] = useState(1);
+  useEffect(() => {
+    if (result) return;
+    try {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify({ form, step, savedAt: Date.now() }));
+    } catch { /* noop */ }
+  }, [form, step, result]);
 
-  // Lightbox state
-  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+  function update<K extends keyof FormData>(key: K, value: FormData[K]) {
+    setForm((f) => ({ ...f, [key]: value }));
+  }
 
-  const { data: reportsData, isLoading: reportsLoading } = useQuery<ReportsResponse>({
-    queryKey: ["/api/scam-reports", { search, country: filterCountry === "all" ? "" : filterCountry, page }],
-    queryFn: async () => {
-      const params = new URLSearchParams({ page: String(page), limit: "10" });
-      if (search.trim()) params.set("search", search.trim());
-      if (filterCountry && filterCountry !== "all") params.set("country", filterCountry);
-      const res = await fetch(`/api/scam-reports?${params}`);
-      if (!res.ok) throw new Error("Failed to fetch");
-      return res.json();
-    },
-  });
-
-  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
-    const validFiles = Array.from(files).filter(f => {
-      if (!["image/jpeg", "image/jpg", "image/png", "image/webp"].includes(f.type)) {
-        toast({ title: "Invalid file type", description: "Only JPG, PNG, and WebP images are allowed.", variant: "destructive" });
+  function handleFilesPicked(picked: FileList | null) {
+    if (!picked) return;
+    const accepted = Array.from(picked).filter((f) => {
+      if (f.size > 8 * 1024 * 1024) {
+        toast({ title: `"${f.name}" is too large`, description: "Each file must be under 8 MB.", variant: "destructive" });
         return false;
       }
-      if (f.size > 5 * 1024 * 1024) {
-        toast({ title: "File too large", description: `${f.name} exceeds 5MB.`, variant: "destructive" });
+      const okMime = f.type.startsWith("image/") || f.type === "application/pdf" ||
+                     f.type === "application/msword" ||
+                     f.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+      if (!okMime) {
+        toast({ title: `"${f.name}" not supported`, description: "Please attach JPG, PNG, WEBP, PDF, DOC or DOCX.", variant: "destructive" });
         return false;
       }
       return true;
     });
-
-    if (validFiles.length === 0) return;
-    if (uploadedImages.length + validFiles.length > 5) {
-      toast({ title: "Too many files", description: "Maximum 5 images allowed.", variant: "destructive" });
+    if (files.length + accepted.length + uploadedFileNames.length > 50) {
+      toast({ title: "Too many files", description: "Up to 50 files per report.", variant: "destructive" });
       return;
     }
+    setFiles((prev) => [...prev, ...accepted]);
+  }
 
-    setUploadingFiles(true);
+  async function uploadEvidence(): Promise<string | null> {
+    if (files.length === 0) return uploadBatchId;
+    setUploading(true);
     try {
-      const formData = new FormData();
-      validFiles.forEach(f => formData.append("files", f));
-
-      // Fetch CSRF token
-      const csrfRes = await fetch("/api/csrf-token", { credentials: "include" });
-      const { csrfToken } = await csrfRes.json();
-
-      const res = await fetch("/api/scam-reports/upload-evidence", {
+      const fd = new FormData();
+      if (uploadBatchId) fd.append("uploadBatchId", uploadBatchId);
+      for (const f of files) fd.append("files", f);
+      const csrf = await fetchCsrfToken();
+      const res = await fetch("/api/scam-reports/evidence", {
         method: "POST",
-        headers: { "X-CSRF-Token": csrfToken },
         credentials: "include",
-        body: formData,
+        headers: { "X-CSRF-Token": csrf },
+        body: fd,
       });
-
-      if (!res.ok) throw new Error("Upload failed");
-      const { urls } = await res.json();
-      setUploadedImages(prev => [...prev, ...urls]);
-      toast({ title: "Images uploaded", description: `${urls.length} image(s) attached to your report.` });
-    } catch {
-      toast({ title: "Upload failed", description: "Could not upload images. Please try again.", variant: "destructive" });
+      const data = await res.json();
+      if (!data?.ok) throw new Error(data?.message || "Upload failed");
+      const newBatchId = data.uploadBatchId || uploadBatchId || null;
+      const names = (data.files ?? []).map((x: any) => x.fileName);
+      setUploadBatchId(newBatchId);
+      setUploadedFileNames((prev) => [...prev, ...names]);
+      setFiles([]);
+      try { localStorage.setItem(BATCH_KEY, JSON.stringify({ id: newBatchId, fileNames: [...uploadedFileNames, ...names] })); } catch { /* noop */ }
+      toast({ title: "Evidence uploaded", description: `${names.length} file${names.length === 1 ? "" : "s"} added.` });
+      return newBatchId;
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err?.message || "Please try again.", variant: "destructive" });
+      return null;
     } finally {
-      setUploadingFiles(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
+      setUploading(false);
     }
   }
 
-  const submitMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/scam-reports", {
-        agencyName: agencyName.trim(),
-        country: country || null,
-        description: description.trim(),
-        amountLost: amountLost ? Number(amountLost) : null,
-        contactInfo: contactInfo.trim() || null,
-        evidenceImages: uploadedImages,
-        reporterEmail: reporterEmail.trim() || null,
+  async function handleSubmit() {
+    if (!form.agencyName.trim() || form.agencyName.trim().length < 2) {
+      toast({ title: "Agency name required", description: "Go back to Step 1 and add the agency name.", variant: "destructive" });
+      return;
+    }
+    if (!form.description.trim() || form.description.trim().length < 30) {
+      toast({ title: "Story too short", description: "Please describe what happened in at least 30 characters.", variant: "destructive" });
+      return;
+    }
+    if (!form.agreedToTerms) {
+      toast({ title: "Please confirm", description: "Check the confirmation box before submitting.", variant: "destructive" });
+      return;
+    }
+    setSubmitting(true);
+    try {
+      let batchId = uploadBatchId;
+      if (files.length > 0) batchId = await uploadEvidence();
+      const csrf = await fetchCsrfToken();
+      const payload: any = {
+        agencyName: form.agencyName.trim(),
+        country: form.country || null,
+        officeLocation: form.officeLocation || null,
+        website: form.website || null,
+        facebookUrl: form.facebookUrl || null,
+        instagramUrl: form.instagramUrl || null,
+        tiktokUrl: form.tiktokUrl || null,
+        linkedinUrl: form.linkedinUrl || null,
+        whatsappNumber: form.whatsappNumber || null,
+        phoneNumbers: form.phoneNumbers || null,
+        emailAddresses: form.emailAddresses || null,
+        recruitmentLicence: form.recruitmentLicence || null,
+        employerName: form.employerName || null,
+        destinationCountry: form.destinationCountry || null,
+        jobApplied: form.jobApplied || null,
+        incidentDate: form.incidentDate || null,
+        amountLostKes: form.amountLost ? Number(form.amountLost) : null,
+        currency: form.currency,
+        paymentMethod: form.paymentMethod || null,
+        bankAccount: form.bankAccount || null,
+        mpesaNumber: form.mpesaNumber || null,
+        cryptoWallet: form.cryptoWallet || null,
+        transactionReference: form.transactionReference || null,
+        description: form.description.trim(),
+        reporterEmail: form.isAnonymous ? null : (form.reporterEmail || null),
+        timelineJson: batchId ? { uploadBatchId: batchId } : null,
+      };
+      const res = await fetch("/api/scam-reports/v2", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Submission failed");
-      return data;
-    },
-    onSuccess: () => {
-      setSubmitted(true);
-      setAgencyName("");
-      setCountry("");
-      setDescription("");
-      setAmountLost("");
-      setContactInfo("");
-      setReporterEmail("");
-      setUploadedImages([]);
-      queryClient.invalidateQueries({ queryKey: ["/api/scam-reports"] });
-    },
-    onError: (error: any) => {
-      toast({ title: "Submission failed", description: error.message || "Could not submit report. Please try again.", variant: "destructive" });
-    },
-  });
+      if (!data?.ok) throw new Error(data?.message || "Submission failed");
+      setResult(data);
+      localStorage.removeItem(DRAFT_KEY);
+      localStorage.removeItem(BATCH_KEY);
+    } catch (err: any) {
+      toast({ title: "Couldn't submit", description: err?.message || "Please try again.", variant: "destructive" });
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!agencyName.trim()) { toast({ title: "Required", description: "Agency name is required.", variant: "destructive" }); return; }
-    if (!description.trim() || description.trim().length < 20) { toast({ title: "Required", description: "Description must be at least 20 characters.", variant: "destructive" }); return; }
-    submitMutation.mutate();
+  if (result) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white dark:from-slate-950 dark:to-slate-900 py-8 px-4">
+        <div className="max-w-2xl mx-auto space-y-4">
+          <Card className="border-2 border-emerald-300 bg-emerald-50/50 dark:bg-emerald-950/20 dark:border-emerald-900">
+            <CardContent className="pt-8 pb-8 text-center space-y-3">
+              <div className="mx-auto h-14 w-14 rounded-full bg-emerald-500 flex items-center justify-center">
+                <Check className="h-7 w-7 text-white" />
+              </div>
+              <h1 className="text-xl font-bold text-gray-900 dark:text-white">Report submitted — thank you.</h1>
+              <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed max-w-md mx-auto">{result.headline}</p>
+              {result.clusters.length > 0 && (
+                <div className="bg-amber-100 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 rounded-md p-3 text-left mt-4">
+                  <p className="text-xs font-bold text-amber-900 dark:text-amber-200 mb-2 flex items-center gap-1">
+                    <AlertTriangle className="h-3.5 w-3.5" /> Contacts you reported also appear in other reports:
+                  </p>
+                  <ul className="text-xs text-amber-900 dark:text-amber-200 space-y-1">
+                    {result.clusters.map((c) => (
+                      <li key={c.display}>
+                        <strong>{c.otherReportCount}</strong> other report{c.otherReportCount === 1 ? "" : "s"} share this {c.kind}: <span className="font-mono">{c.display}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+          <div className="grid grid-cols-2 gap-2">
+            <Button variant="outline" onClick={() => navigate(`/agencies-reported/${result.agencySlug}`)}>View agency profile</Button>
+            <Button onClick={() => navigate("/agencies")}>Browse all reports</Button>
+          </div>
+          <p className="text-[11px] text-center text-gray-500 dark:text-gray-400 leading-relaxed">{result.disclaimer}</p>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="min-h-screen bg-background pb-24">
-      {/* Header */}
-      <div className="sticky top-0 z-10 bg-white/95 dark:bg-gray-900/95 backdrop-blur border-b border-border px-4 py-3 flex items-center gap-3">
-        <Link href="/dashboard">
-          <button className="p-2 hover:bg-muted rounded-lg transition-colors" aria-label="Go back">
-            <ArrowLeft className="h-5 w-5" />
-          </button>
-        </Link>
-        <div>
-          <h1 className="font-bold text-base">Report a Scam Agency</h1>
-          <p className="text-xs text-muted-foreground">Help protect the community</p>
-        </div>
-      </div>
-
-      <div className="max-w-2xl mx-auto px-4 py-6 space-y-8">
-
-        {/* Warning banner */}
-        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 flex gap-3">
-          <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">Reports are user-submitted</p>
-            <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">All reports go through admin review before appearing publicly. These reports are for informational purposes only — always verify before making decisions.</p>
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white dark:from-slate-950 dark:to-slate-900 py-6 px-4">
+      <div className="max-w-2xl mx-auto space-y-4">
+        <div className="text-center space-y-1">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-300 text-xs font-semibold">
+            <Flag className="h-3.5 w-3.5" /> REPORT RECRUITMENT FRAUD
           </div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Help us protect the next job seeker</h1>
+          <p className="text-sm text-gray-600 dark:text-gray-400 max-w-lg mx-auto leading-relaxed">
+            Your report is reviewed by our team and — if approved — published on a warning page other Kenyans see before they send money.
+          </p>
         </div>
 
-        {/* Report Form */}
-        {submitted ? (
-          <Card className="border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20">
-            <CardContent className="pt-6 text-center space-y-3">
-              <div className="w-14 h-14 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center mx-auto">
-                <ShieldAlert className="h-7 w-7 text-green-600 dark:text-green-400" />
-              </div>
-              <h2 className="font-bold text-lg text-green-800 dark:text-green-300">Report Submitted!</h2>
-              <p className="text-sm text-green-700 dark:text-green-400">Thank you for keeping the community safe. Your report will be reviewed by our team before it is published.</p>
-              <Button variant="outline" size="sm" onClick={() => setSubmitted(false)} data-testid="btn-submit-another">
-                Submit Another Report
-              </Button>
-            </CardContent>
-          </Card>
-        ) : (
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Flag className="h-5 w-5 text-red-500" />
-                Report a Scam Agency
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="space-y-1.5">
-                  <Label htmlFor="agency-name">Agency Name <span className="text-red-500">*</span></Label>
-                  <Input
-                    id="agency-name"
-                    placeholder="e.g. XYZ Recruitment Ltd"
-                    value={agencyName}
-                    onChange={e => setAgencyName(e.target.value)}
-                    data-testid="input-agency-name"
-                    required
-                  />
-                </div>
+        <StepIndicator current={step} />
 
-                <div className="space-y-1.5">
-                  <Label htmlFor="country">Country (Optional)</Label>
-                  <Select value={country} onValueChange={setCountry}>
-                    <SelectTrigger id="country" data-testid="select-country">
-                      <SelectValue placeholder="Select country..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {COUNTRIES.map(c => (
-                        <SelectItem key={c} value={c}>{c}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="description">Description of Scam <span className="text-red-500">*</span></Label>
-                  <Textarea
-                    id="description"
-                    placeholder="Describe what happened in detail. How did they scam you? What promises did they make? Minimum 20 characters."
-                    value={description}
-                    onChange={e => setDescription(e.target.value)}
-                    rows={4}
-                    data-testid="textarea-description"
-                    required
-                  />
-                  <p className="text-xs text-muted-foreground">{description.length}/5000 characters (min. 20)</p>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="amount-lost">Amount Lost (KES, Optional)</Label>
-                    <Input
-                      id="amount-lost"
-                      type="number"
-                      placeholder="e.g. 50000"
-                      value={amountLost}
-                      onChange={e => setAmountLost(e.target.value)}
-                      min="0"
-                      data-testid="input-amount-lost"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="contact-info">Agency Contact (Optional)</Label>
-                    <Input
-                      id="contact-info"
-                      placeholder="Phone / Email / Website"
-                      value={contactInfo}
-                      onChange={e => setContactInfo(e.target.value)}
-                      data-testid="input-contact-info"
-                    />
-                  </div>
-                </div>
-
-                {!user && (
-                  <div className="space-y-1.5">
-                    <Label htmlFor="reporter-email">Your Email (Optional)</Label>
-                    <Input
-                      id="reporter-email"
-                      type="email"
-                      placeholder="For follow-up if needed"
-                      value={reporterEmail}
-                      onChange={e => setReporterEmail(e.target.value)}
-                      data-testid="input-reporter-email"
-                    />
-                  </div>
-                )}
-
-                {/* Evidence Upload */}
-                <div className="space-y-2">
-                  <Label>Evidence Screenshots (Optional)</Label>
-                  <div
-                    className="border-2 border-dashed border-border rounded-xl p-4 text-center cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors"
-                    onClick={() => fileInputRef.current?.click()}
-                    data-testid="upload-evidence-area"
-                  >
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/jpeg,image/jpg,image/png,image/webp"
-                      multiple
-                      className="hidden"
-                      onChange={handleFileUpload}
-                      data-testid="input-file-upload"
-                    />
-                    {uploadingFiles ? (
-                      <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Uploading...
-                      </div>
-                    ) : (
-                      <div className="space-y-1">
-                        <Upload className="h-6 w-6 text-muted-foreground mx-auto" />
-                        <p className="text-sm text-muted-foreground">Click to upload screenshots, receipts or chat photos</p>
-                        <p className="text-xs text-muted-foreground">JPG, PNG, WebP • Max 5MB per file • Up to 5 images</p>
-                      </div>
-                    )}
-                  </div>
-
-                  {uploadedImages.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {uploadedImages.map((url, i) => (
-                        <div key={i} className="relative group">
-                          <img
-                            src={url}
-                            alt={`Evidence ${i + 1}`}
-                            className="w-16 h-16 object-cover rounded-lg border border-border cursor-pointer"
-                            onClick={() => setLightboxImage(url)}
-                            loading="lazy"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setUploadedImages(prev => prev.filter((_, j) => j !== i))}
-                            className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                            data-testid={`btn-remove-image-${i}`}
-                          >
-                            <X className="h-2.5 w-2.5" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <Button
-                  type="submit"
-                  className="w-full"
-                  disabled={submitMutation.isPending || !agencyName.trim() || description.trim().length < 20}
-                  data-testid="btn-submit-report"
-                >
-                  {submitMutation.isPending ? (
-                    <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Submitting...</>
-                  ) : (
-                    <><Flag className="h-4 w-4 mr-2" /> Submit Report</>
-                  )}
-                </Button>
-
-                <p className="text-xs text-muted-foreground text-center">
-                  Reports are moderated before appearing publicly. False reports may result in account suspension.
-                </p>
-              </form>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Blacklist Section */}
-        <div className="space-y-4">
-          <div className="flex items-center gap-2">
-            <ShieldAlert className="h-5 w-5 text-red-500" />
-            <h2 className="font-bold text-lg">⚠️ Reported Scam Agencies</h2>
-          </div>
-          <p className="text-sm text-muted-foreground">The following agencies have been reported by community members and verified by our team.</p>
-
-          {/* Search & Filter */}
-          <div className="flex flex-col sm:flex-row gap-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search by agency name..."
-                value={search}
-                onChange={e => { setSearch(e.target.value); setPage(1); }}
-                className="pl-9"
-                data-testid="input-search-blacklist"
+        <Card>
+          <CardContent className="pt-6 pb-6 space-y-4">
+            {step === 1 && <StepWho form={form} update={update} />}
+            {step === 2 && <StepMoney form={form} update={update} />}
+            {step === 3 && <StepStory form={form} update={update} />}
+            {step === 4 && (
+              <StepEvidence
+                files={files}
+                setFiles={setFiles}
+                uploadedFileNames={uploadedFileNames}
+                uploading={uploading}
+                onUpload={uploadEvidence}
+                onPick={() => fileInputRef.current?.click()}
+                inputRef={fileInputRef}
+                onFiles={handleFilesPicked}
               />
-            </div>
-            <Select value={filterCountry} onValueChange={v => { setFilterCountry(v); setPage(1); }}>
-              <SelectTrigger className="w-full sm:w-44" data-testid="select-filter-country">
-                <SelectValue placeholder="All Countries" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Countries</SelectItem>
-                {COUNTRIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
+            )}
+            {step === 5 && <StepYou form={form} update={update} />}
+            {step === 6 && <StepReview form={form} update={update} filesCount={files.length + uploadedFileNames.length} />}
 
-          {/* Report Cards */}
-          {reportsLoading ? (
-            <div className="space-y-3">
-              {[1, 2, 3].map(i => (
-                <Card key={i}>
-                  <CardContent className="pt-4 space-y-2">
-                    <Skeleton className="h-5 w-1/2" />
-                    <Skeleton className="h-4 w-full" />
-                    <Skeleton className="h-4 w-3/4" />
-                  </CardContent>
-                </Card>
-              ))}
+            <div className="flex justify-between pt-4 border-t border-gray-200 dark:border-gray-800">
+              <Button
+                variant="outline"
+                onClick={() => setStep((s) => Math.max(1, s - 1))}
+                disabled={step === 1 || submitting}
+                data-testid="button-back-step"
+              >
+                <ChevronLeft className="h-4 w-4 mr-1" /> Back
+              </Button>
+              {step < 6 ? (
+                <Button onClick={() => setStep((s) => Math.min(6, s + 1))} data-testid="button-next-step">
+                  Next <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
+              ) : (
+                <Button
+                  onClick={handleSubmit}
+                  disabled={submitting || !form.agreedToTerms}
+                  className="bg-red-600 hover:bg-red-700 text-white font-semibold"
+                  data-testid="button-submit-report"
+                >
+                  {submitting ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Submitting…</> : <><Flag className="h-4 w-4 mr-2" /> Submit report</>}
+                </Button>
+              )}
             </div>
-          ) : !reportsData?.reports.length ? (
-            <Card>
-              <CardContent className="pt-8 pb-8 text-center">
-                <ShieldAlert className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-                <p className="text-muted-foreground font-medium">No verified reports found</p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  {search || (filterCountry && filterCountry !== "all") ? "Try different search terms." : "Be the first to report a scam agency."}
-                </p>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="space-y-3">
-              {reportsData.reports.map(report => (
-                <ReportCard key={report.id} report={report} onImageClick={setLightboxImage} />
-              ))}
-            </div>
-          )}
+          </CardContent>
+        </Card>
 
-          {/* Pagination */}
-          {reportsData && reportsData.pages > 1 && (
-            <div className="flex items-center justify-between pt-2">
-              <p className="text-sm text-muted-foreground">
-                Showing {(page - 1) * 10 + 1}–{Math.min(page * 10, reportsData.total)} of {reportsData.total} reports
-              </p>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={page <= 1}
-                  onClick={() => setPage(p => p - 1)}
-                  data-testid="btn-prev-page"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <span className="px-2 py-1 text-sm border rounded-md">{page} / {reportsData.pages}</span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={page >= reportsData.pages}
-                  onClick={() => setPage(p => p + 1)}
-                  data-testid="btn-next-page"
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          )}
+        <div className="bg-gray-100 dark:bg-gray-900 rounded-md p-3 flex items-start gap-2">
+          <Info className="h-3.5 w-3.5 text-gray-500 dark:text-gray-400 flex-shrink-0 mt-0.5" />
+          <p className="text-[11px] text-gray-600 dark:text-gray-400 leading-relaxed">
+            Your report is saved as a draft in this browser as you type — you can safely close this tab and come back. Reports go through moderation before publication. For urgent cases, also report to Kenya DCI at reportscam@dci.go.ke.
+          </p>
         </div>
       </div>
-
-      {/* Lightbox */}
-      <Dialog open={!!lightboxImage} onOpenChange={open => !open && setLightboxImage(null)}>
-        <DialogContent className="max-w-2xl p-2">
-          <DialogHeader className="sr-only">
-            <DialogTitle>Evidence Image</DialogTitle>
-          </DialogHeader>
-          {lightboxImage && (
-            <img src={lightboxImage} alt="Evidence" className="w-full rounded-lg object-contain max-h-[80vh]" />
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
 
-function ReportCard({ report, onImageClick }: { report: ScamReport; onImageClick: (url: string) => void }) {
-  const [expanded, setExpanded] = useState(false);
-
+function StepIndicator({ current }: { current: number }) {
   return (
-    <Card className="border-red-100 dark:border-red-900/30 overflow-hidden">
-      <CardContent className="pt-4 space-y-3">
-        {/* Header */}
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <h3 className="font-semibold text-base flex items-center gap-2" data-testid={`text-agency-name-${report.id}`}>
-              <ShieldAlert className="h-4 w-4 text-red-500 shrink-0" />
-              {report.agencyName}
-            </h3>
-            <div className="flex flex-wrap gap-2 mt-1.5">
-              {report.country && (
-                <Badge variant="secondary" className="text-xs gap-1">
-                  <MapPin className="h-3 w-3" />
-                  {report.country}
-                </Badge>
-              )}
-              {report.amountLost && (
-                <Badge variant="destructive" className="text-xs gap-1">
-                  <DollarSign className="h-3 w-3" />
-                  KES {report.amountLost.toLocaleString()} lost
-                </Badge>
-              )}
-              <Badge variant="outline" className="text-xs gap-1">
-                <Calendar className="h-3 w-3" />
-                {new Date(report.createdAt).toLocaleDateString("en-KE", { year: "numeric", month: "short", day: "numeric" })}
-              </Badge>
+    <div className="flex items-center justify-between overflow-x-auto pb-1">
+      {STEPS.map((s, idx) => {
+        const done = current > s.id;
+        const active = current === s.id;
+        const Icon = s.icon;
+        return (
+          <div key={s.id} className="flex items-center flex-shrink-0">
+            <div className={`flex flex-col items-center gap-1 ${active ? "opacity-100" : done ? "opacity-90" : "opacity-40"}`}>
+              <div className={`h-8 w-8 rounded-full flex items-center justify-center ${done ? "bg-emerald-500" : active ? "bg-teal-500" : "bg-gray-300 dark:bg-gray-700"}`}>
+                {done ? <Check className="h-4 w-4 text-white" /> : <Icon className="h-4 w-4 text-white" />}
+              </div>
+              <span className="text-[10px] font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">{s.label}</span>
             </div>
+            {idx < STEPS.length - 1 && (
+              <div className={`w-6 h-0.5 mx-1 sm:mx-2 ${done ? "bg-emerald-500" : "bg-gray-300 dark:bg-gray-700"}`} />
+            )}
           </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function StepWho({ form, update }: { form: FormData; update: <K extends keyof FormData>(k: K, v: FormData[K]) => void }) {
+  return (
+    <div className="space-y-3">
+      <div>
+        <h2 className="font-bold text-lg text-gray-900 dark:text-white">Who is being reported?</h2>
+        <p className="text-xs text-gray-600 dark:text-gray-400">Fill every field you know — leave blank if unsure.</p>
+      </div>
+      <Field label="Agency or recruiter name *" value={form.agencyName} onChange={(v) => update("agencyName", v)} placeholder="e.g. Kingsway Recruitment Ltd" testId="input-agency-name" />
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Their country" value={form.country} onChange={(v) => update("country", v)} placeholder="Kenya, UAE" testId="input-agency-country" />
+        <Field label="Office location" value={form.officeLocation} onChange={(v) => update("officeLocation", v)} placeholder="Nairobi CBD" testId="input-office-location" />
+      </div>
+      <Field label="Destination country you were promised" value={form.destinationCountry} onChange={(v) => update("destinationCountry", v)} placeholder="e.g. UAE, Saudi Arabia" testId="input-destination-country" />
+      <Field label="Job promised" value={form.jobApplied} onChange={(v) => update("jobApplied", v)} placeholder="e.g. Care worker, Truck driver" testId="input-job-applied" />
+      <Field label="Recruitment licence number (if provided)" value={form.recruitmentLicence} onChange={(v) => update("recruitmentLicence", v)} placeholder="NEA/PLR-XXXXX" testId="input-licence" />
+      <Field label="Employer name (if different from agency)" value={form.employerName} onChange={(v) => update("employerName", v)} placeholder="e.g. Alfardan Group" testId="input-employer-name" />
+      <div className="pt-3 border-t border-gray-200 dark:border-gray-800">
+        <p className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-2">Contact fingerprints</p>
+        <p className="text-[11px] text-gray-600 dark:text-gray-400 mb-3">Most valuable field — helps us catch repeat scammers across many reports.</p>
+        <Field label="WhatsApp number" value={form.whatsappNumber} onChange={(v) => update("whatsappNumber", v)} placeholder="+254 7XX XXX XXX" testId="input-whatsapp" />
+        <Field label="Other phone numbers" value={form.phoneNumbers} onChange={(v) => update("phoneNumbers", v)} placeholder="Comma-separated" testId="input-phones" />
+        <Field label="Email addresses" value={form.emailAddresses} onChange={(v) => update("emailAddresses", v)} placeholder="Comma-separated" testId="input-emails" />
+        <Field label="Website" value={form.website} onChange={(v) => update("website", v)} placeholder="https://..." testId="input-website" />
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Facebook" value={form.facebookUrl} onChange={(v) => update("facebookUrl", v)} placeholder="fb.com/..." testId="input-facebook" />
+          <Field label="Instagram" value={form.instagramUrl} onChange={(v) => update("instagramUrl", v)} placeholder="@handle" testId="input-instagram" />
+          <Field label="TikTok" value={form.tiktokUrl} onChange={(v) => update("tiktokUrl", v)} placeholder="@handle" testId="input-tiktok" />
+          <Field label="LinkedIn" value={form.linkedinUrl} onChange={(v) => update("linkedinUrl", v)} placeholder="linkedin.com/..." testId="input-linkedin" />
         </div>
+      </div>
+      <Field label="Date of incident" value={form.incidentDate} onChange={(v) => update("incidentDate", v)} type="date" testId="input-incident-date" />
+    </div>
+  );
+}
 
-        {/* Description */}
-        <div>
-          <p className={`text-sm text-muted-foreground leading-relaxed ${!expanded && "line-clamp-3"}`}>
-            {report.description}
-          </p>
-          {report.description.length > 180 && (
-            <button
-              className="text-xs text-primary hover:underline mt-1"
-              onClick={() => setExpanded(e => !e)}
-              data-testid={`btn-expand-${report.id}`}
-            >
-              {expanded ? "Show less" : "Read more"}
-            </button>
-          )}
+function StepMoney({ form, update }: { form: FormData; update: <K extends keyof FormData>(k: K, v: FormData[K]) => void }) {
+  return (
+    <div className="space-y-3">
+      <div>
+        <h2 className="font-bold text-lg text-gray-900 dark:text-white">Did money change hands?</h2>
+        <p className="text-xs text-gray-600 dark:text-gray-400">Skip fields that don't apply. Even "they demanded money but I didn't pay" is worth reporting.</p>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Amount lost" value={form.amountLost} onChange={(v) => update("amountLost", v)} type="number" placeholder="0" testId="input-amount" />
+        <div className="space-y-1.5">
+          <Label>Currency</Label>
+          <select
+            value={form.currency}
+            onChange={(e) => update("currency", e.target.value)}
+            className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+            data-testid="select-currency"
+          >
+            {["KES","USD","AED","SAR","QAR","OMR","GBP","EUR","CAD"].map((c) => <option key={c}>{c}</option>)}
+          </select>
         </div>
+      </div>
+      <div className="space-y-1.5">
+        <Label>How did you pay?</Label>
+        <select
+          value={form.paymentMethod}
+          onChange={(e) => update("paymentMethod", e.target.value)}
+          className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+          data-testid="select-payment-method"
+        >
+          <option value="">— Choose —</option>
+          <option value="mpesa">M-Pesa</option>
+          <option value="bank">Bank transfer</option>
+          <option value="cash">Cash</option>
+          <option value="western_union">Western Union / MoneyGram</option>
+          <option value="crypto">Cryptocurrency</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+      {form.paymentMethod === "mpesa" && (
+        <Field label="M-Pesa number they used" value={form.mpesaNumber} onChange={(v) => update("mpesaNumber", v)} placeholder="+254 7XX XXX XXX" testId="input-mpesa" />
+      )}
+      {form.paymentMethod === "bank" && (
+        <Field label="Bank account number" value={form.bankAccount} onChange={(v) => update("bankAccount", v)} placeholder="Account number" testId="input-bank" />
+      )}
+      {form.paymentMethod === "crypto" && (
+        <Field label="Crypto wallet address" value={form.cryptoWallet} onChange={(v) => update("cryptoWallet", v)} placeholder="0x... or bc1..." testId="input-crypto" />
+      )}
+      <Field label="Transaction reference (M-Pesa code, wire ref, etc.)" value={form.transactionReference} onChange={(v) => update("transactionReference", v)} placeholder="e.g. QG5XT2ABCD" testId="input-tx-ref" />
+    </div>
+  );
+}
 
-        {/* Contact info */}
-        {report.contactInfo && (
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Phone className="h-3 w-3" />
-            <span>Contact: {report.contactInfo}</span>
-          </div>
-        )}
+function StepStory({ form, update }: { form: FormData; update: <K extends keyof FormData>(k: K, v: FormData[K]) => void }) {
+  const len = form.description.trim().length;
+  return (
+    <div className="space-y-3">
+      <div>
+        <h2 className="font-bold text-lg text-gray-900 dark:text-white">What happened?</h2>
+        <p className="text-xs text-gray-600 dark:text-gray-400">Specifics help other Kenyans avoid the same trap.</p>
+      </div>
+      <Textarea
+        value={form.description}
+        onChange={(e) => update("description", e.target.value)}
+        rows={10}
+        placeholder="e.g. On 12 July, someone claiming to be from XYZ Recruitment WhatsApp'd me offering a driver job in Dubai for KES 350,000/month. They asked me to send KES 15,000 to a personal M-Pesa number for 'visa processing.' I paid on 14 July but they stopped responding. The phone is now switched off. I never got any offer letter or receipt."
+        className="text-sm"
+        data-testid="input-description"
+      />
+      <p className={`text-xs ${len >= 30 ? "text-emerald-600" : "text-red-500"}`}>
+        {len < 30 ? `${30 - len} more characters needed.` : `✓ ${len} characters — good.`}
+      </p>
+    </div>
+  );
+}
 
-        {/* Evidence images */}
-        {report.evidenceImages && report.evidenceImages.length > 0 && (
-          <div className="space-y-1.5">
-            <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-              <ImageIcon className="h-3 w-3" />
-              Evidence ({report.evidenceImages.length} image{report.evidenceImages.length > 1 ? "s" : ""})
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {report.evidenceImages.map((url, i) => (
-                <div
-                  key={i}
-                  className="relative group cursor-pointer"
-                  onClick={() => onImageClick(url)}
-                  data-testid={`img-evidence-${report.id}-${i}`}
+function StepEvidence({
+  files, setFiles, uploadedFileNames, uploading, onUpload, onPick, inputRef, onFiles,
+}: {
+  files: File[]; setFiles: React.Dispatch<React.SetStateAction<File[]>>;
+  uploadedFileNames: string[]; uploading: boolean; onUpload: () => Promise<string | null>;
+  onPick: () => void; inputRef: React.RefObject<HTMLInputElement>;
+  onFiles: (files: FileList | null) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <div>
+        <h2 className="font-bold text-lg text-gray-900 dark:text-white">Evidence (optional but powerful)</h2>
+        <p className="text-xs text-gray-600 dark:text-gray-400">WhatsApp screenshots, receipts, offer letters, M-Pesa messages. Up to 50 files · 8 MB each · JPG/PNG/PDF/DOC/DOCX.</p>
+      </div>
+      <input
+        ref={inputRef}
+        type="file"
+        multiple
+        accept="image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        onChange={(e) => onFiles(e.target.files)}
+        className="hidden"
+        data-testid="input-evidence-files"
+      />
+      <div
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => { e.preventDefault(); onFiles(e.dataTransfer.files); }}
+        className="border-2 border-dashed border-teal-300 dark:border-teal-800 rounded-lg py-6 text-center cursor-pointer hover:bg-teal-50/50 dark:hover:bg-teal-950/20 transition"
+        onClick={onPick}
+      >
+        <Upload className="h-8 w-8 text-teal-500 mx-auto mb-1" />
+        <p className="text-sm text-gray-900 dark:text-white font-medium">Tap to attach — or drag files here</p>
+        <p className="text-[11px] text-gray-500 dark:text-gray-400">On mobile, tapping opens the camera + gallery.</p>
+      </div>
+      {uploadedFileNames.length > 0 && (
+        <div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900 rounded-md p-3">
+          <p className="text-xs font-semibold text-emerald-900 dark:text-emerald-200 mb-1">✓ {uploadedFileNames.length} already uploaded</p>
+          <ul className="text-[11px] text-emerald-800 dark:text-emerald-300 space-y-0.5 max-h-24 overflow-y-auto">
+            {uploadedFileNames.map((n, i) => <li key={i}>· {n}</li>)}
+          </ul>
+        </div>
+      )}
+      {files.length > 0 && (
+        <>
+          <p className="text-xs text-gray-700 dark:text-gray-300 font-semibold">Ready to upload ({files.length}):</p>
+          <div className="space-y-1 max-h-40 overflow-y-auto pr-1">
+            {files.map((f, i) => (
+              <div key={i} className="flex items-center justify-between bg-gray-50 dark:bg-gray-900 rounded-md px-2 py-1 text-xs">
+                <span className="truncate flex-1">{f.name}</span>
+                <span className="text-gray-500 dark:text-gray-400 flex-shrink-0 ml-2">{Math.round(f.size / 1024)} KB</span>
+                <button
+                  onClick={(e) => { e.stopPropagation(); setFiles((prev) => prev.filter((_, idx) => idx !== i)); }}
+                  className="ml-2 text-red-500 hover:text-red-700"
+                  data-testid={`button-remove-file-${i}`}
+                  type="button"
                 >
-                  <img
-                    src={url}
-                    alt={`Evidence ${i + 1}`}
-                    className="w-16 h-16 object-cover rounded-lg border border-border hover:opacity-90 transition-opacity"
-                    loading="lazy"
-                  />
-                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 rounded-lg transition-colors flex items-center justify-center">
-                    <Eye className="h-4 w-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </div>
-                </div>
-              ))}
-            </div>
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
           </div>
-        )}
-      </CardContent>
-    </Card>
+          <Button
+            onClick={onUpload}
+            disabled={uploading}
+            className="w-full"
+            data-testid="button-upload-evidence"
+          >
+            {uploading ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Uploading…</> : <><Upload className="h-4 w-4 mr-2" /> Upload {files.length} file{files.length === 1 ? "" : "s"}</>}
+          </Button>
+        </>
+      )}
+    </div>
+  );
+}
+
+function StepYou({ form, update }: { form: FormData; update: <K extends keyof FormData>(k: K, v: FormData[K]) => void }) {
+  return (
+    <div className="space-y-3">
+      <div>
+        <h2 className="font-bold text-lg text-gray-900 dark:text-white">About you (optional)</h2>
+        <p className="text-xs text-gray-600 dark:text-gray-400">Anonymous is fine. Giving your email lets us notify you when the report is published or if we need more info.</p>
+      </div>
+      <label className="flex items-start gap-2 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={form.isAnonymous}
+          onChange={(e) => update("isAnonymous", e.target.checked)}
+          className="mt-1"
+          data-testid="checkbox-anonymous"
+        />
+        <div>
+          <p className="text-sm font-semibold text-gray-900 dark:text-white">Submit anonymously</p>
+          <p className="text-[11px] text-gray-500 dark:text-gray-400">No contact info from you.</p>
+        </div>
+      </label>
+      {!form.isAnonymous && (
+        <Field label="Your email (for updates)" value={form.reporterEmail} onChange={(v) => update("reporterEmail", v)} type="email" placeholder="you@example.com" testId="input-reporter-email" />
+      )}
+    </div>
+  );
+}
+
+function StepReview({
+  form, update, filesCount,
+}: {
+  form: FormData;
+  update: <K extends keyof FormData>(k: K, v: FormData[K]) => void;
+  filesCount: number;
+}) {
+  const bits: [string, string | null][] = [
+    ["Agency",         form.agencyName || null],
+    ["Country",        form.country || null],
+    ["Destination",    form.destinationCountry || null],
+    ["Job promised",   form.jobApplied || null],
+    ["WhatsApp",       form.whatsappNumber || null],
+    ["Amount lost",    form.amountLost ? `${form.currency} ${Number(form.amountLost).toLocaleString()}` : null],
+    ["Payment method", form.paymentMethod || null],
+    ["Evidence files", filesCount > 0 ? String(filesCount) : null],
+    ["Submitted by",   form.isAnonymous ? "Anonymous" : (form.reporterEmail || "Anonymous")],
+  ];
+  const populated = bits.filter(([, v]) => v);
+  return (
+    <div className="space-y-3">
+      <div>
+        <h2 className="font-bold text-lg text-gray-900 dark:text-white">Review + submit</h2>
+        <p className="text-xs text-gray-600 dark:text-gray-400">Check everything looks right. Go back to any step to edit.</p>
+      </div>
+      <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 space-y-1.5">
+        {populated.map(([label, value]) => (
+          <div key={label} className="grid grid-cols-3 gap-2 text-sm">
+            <span className="text-gray-500 dark:text-gray-400 font-semibold col-span-1">{label}</span>
+            <span className="text-gray-900 dark:text-white col-span-2 break-words">{value}</span>
+          </div>
+        ))}
+      </div>
+      <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-300 dark:border-amber-800 rounded-md p-3 space-y-2">
+        <p className="text-xs text-amber-900 dark:text-amber-200 leading-relaxed">
+          <strong>Legal notice:</strong> Your submission is an allegation, not a court finding. WorkAbroadHub publishes reports only after evidence review. False or malicious reports may be removed and reporters may be banned.
+        </p>
+        <label className="flex items-start gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={form.agreedToTerms}
+            onChange={(e) => update("agreedToTerms", e.target.checked)}
+            className="mt-1"
+            data-testid="checkbox-agree-terms"
+          />
+          <span className="text-xs text-amber-900 dark:text-amber-200">
+            I confirm the information in this report is truthful to the best of my knowledge, and I understand it may be published after moderation review.
+          </span>
+        </label>
+      </div>
+    </div>
+  );
+}
+
+function Field({
+  label, value, onChange, placeholder, type = "text", testId,
+}: {
+  label: string; value: string; onChange: (v: string) => void;
+  placeholder?: string; type?: string; testId?: string;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label>{label}</Label>
+      <Input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="h-10"
+        data-testid={testId}
+      />
+    </div>
   );
 }

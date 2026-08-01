@@ -83,13 +83,20 @@ CREATE INDEX IF NOT EXISTS scam_report_contacts_normalized_idx ON scam_report_co
 CREATE INDEX IF NOT EXISTS scam_report_contacts_kind_norm_idx  ON scam_report_contacts (kind, normalized);
 
 -- ═══════════════════════════════════════════════════════════════════════
--- 3) agency_profiles — aggregated public view per agency.
+-- 3) reported_agency_profiles — aggregated public view per REPORTED agency.
 --
 -- One row per unique agency_slug. Updated by the cross-ref engine every
 -- time a new report is approved. This powers /agencies-reported/:slug —
 -- the community-warning page.
+--
+-- NAMING NOTE (2026-08): the shorter `agency_profiles` name is already
+-- taken by the premium licensed-agency subscriber pages (see Drizzle
+-- schema `agencyProfiles`). Do NOT rename or drop it — they're two
+-- completely different features (paid subscribers vs. community fraud
+-- reports). Kept the URL `/api/agency-profiles/:slug` unchanged because
+-- it is public-facing; only the DB table name changed.
 -- ═══════════════════════════════════════════════════════════════════════
-CREATE TABLE IF NOT EXISTS agency_profiles (
+CREATE TABLE IF NOT EXISTS reported_agency_profiles (
   slug                    VARCHAR PRIMARY KEY,       -- "kingsway-recruitment"
   display_name            VARCHAR NOT NULL,
   country                 VARCHAR,
@@ -112,9 +119,9 @@ CREATE TABLE IF NOT EXISTS agency_profiles (
   last_report_at          TIMESTAMP,
   updated_at              TIMESTAMP NOT NULL DEFAULT NOW()
 );
-CREATE INDEX IF NOT EXISTS agency_profiles_country_idx    ON agency_profiles (country) WHERE country IS NOT NULL;
-CREATE INDEX IF NOT EXISTS agency_profiles_risk_band_idx  ON agency_profiles (risk_band, last_report_at DESC);
-CREATE INDEX IF NOT EXISTS agency_profiles_report_count_idx ON agency_profiles (report_count DESC);
+CREATE INDEX IF NOT EXISTS reported_agency_profiles_country_idx      ON reported_agency_profiles (country) WHERE country IS NOT NULL;
+CREATE INDEX IF NOT EXISTS reported_agency_profiles_risk_band_idx    ON reported_agency_profiles (risk_band, last_report_at DESC);
+CREATE INDEX IF NOT EXISTS reported_agency_profiles_report_count_idx ON reported_agency_profiles (report_count DESC);
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- 4) scam_report_appeals — controlled response workflow for reported

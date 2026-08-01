@@ -17,8 +17,10 @@
  *   - Public endpoints only return APPROVED aggregated data
  */
 
-import type { Express, Request, Response } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import rateLimit from "express-rate-limit";
+import crypto from "crypto";
+import multer from "multer";
 import { pool } from "../db";
 import {
   slugifyAgency,
@@ -218,7 +220,7 @@ export function registerFraudIntelligenceRoutes(app: Express): void {
     if (!slug) return res.status(400).json({ message: "Missing agency slug." });
     try {
       const { rows } = await pool.query(
-        `SELECT * FROM agency_profiles WHERE slug = $1 LIMIT 1`,
+        `SELECT * FROM reported_agency_profiles WHERE slug = $1 LIMIT 1`,
         [slug],
       );
       const profile = rows[0];
@@ -308,7 +310,7 @@ export function registerFraudIntelligenceRoutes(app: Express): void {
         `SELECT slug, display_name, country, risk_band,
                 report_count, approved_report_count, total_reported_loss_kes,
                 last_report_at
-           FROM agency_profiles
+           FROM reported_agency_profiles
           WHERE ${conditions.join(" AND ")}
           ORDER BY last_report_at DESC NULLS LAST
           LIMIT $${values.length}`,
@@ -380,7 +382,244 @@ export function registerFraudIntelligenceRoutes(app: Express): void {
     }
   });
 
-  console.log("[FraudIntel] Routes registered: POST /api/scam-reports/v2, GET /api/agency-profiles(/:slug), POST /api/agency-appeals");
+  // ═══════════════════════════════════════════════════════════════════════
+  // POST /api/scam-reports/evidence — batch upload of evidence files.
+  //
+  // Two-step upload flow: user uploads evidence with a client-generated
+  // uploadBatchId, then submits the main report which references the batch.
+  // Files >8 MB rejected; up to 50 per batch.
+  // ═══════════════════════════════════════════════════════════════════════
+  const evidenceUpload = multer({
+    storage: multer.memoryStorage(),
+    limits:  { fileSize: 8 * 1024 * 1024, files: 50 },
+    fileFilter: (_req, file, cb) => {
+      const ok =
+        file.mimetype.startsWith("image/") ||
+        file.mimetype === "application/pdf" ||
+        file.mimetype === "application/msword" ||
+        file.mimetype === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+      cb(null, ok);
+    },
+  });
+  const evidenceUploadWithJsonErrors = (req: any, res: Response, next: NextFunction) => {
+    evidenceUpload.array("files", 50)(req, res, (err: any) => {
+      if (!err) return next();
+      const isSize = err?.code === "LIMIT_FILE_SIZE";
+      const isCount = err?.code === "LIMIT_FILE_COUNT";
+      return res.status(400).json({
+        ok: false,
+        message: isSize
+          ? "One or more files are larger than 8 MB. Please compress them and try again."
+          : isCount
+          ? "Please upload up to 50 files per batch. Split larger evidence into multiple submissions."
+          : "Some of the files couldn't be processed. Supported: JPG, PNG, WEBP, PDF, DOC, DOCX (max 8 MB each).",
+      });
+    });
+  };
+
+  app.post("/api/scam-reports/evidence", submitLimiter, evidenceUploadWithJsonErrors, async (req: any, res: Response) => {
+    try {
+      const files = (req.files as Express.Multer.File[]) ?? [];
+      if (files.length === 0) {
+        return res.status(400).json({ ok: false, message: "Please attach at least one evidence file." });
+      }
+      const batchId = (req.body?.uploadBatchId as string) || crypto.randomUUID();
+      const reporterIpHash = hashReporterIp(req.ip, req.headers?.["user-agent"] as string);
+      const userId = req.user?.claims?.sub ?? req.user?.id ?? null;
+
+      const saved: Array<{ id: string; fileName: string; fileSize: number; fileMime: string }> = [];
+      for (const f of files) {
+        const sha = crypto.createHash("sha256").update(f.buffer).digest("hex");
+        const dataUrl = `data:${f.mimetype};base64,${f.buffer.toString("base64")}`;
+        try {
+          const { rows } = await pool.query<{ id: string }>(
+            `INSERT INTO scam_report_evidence (
+               upload_batch, file_name, file_mime, file_size, file_sha256, file_data,
+               uploaded_by, reporter_ip_hash
+             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+             RETURNING id`,
+            [batchId, f.originalname, f.mimetype, f.size, sha, dataUrl, userId, reporterIpHash],
+          );
+          saved.push({ id: rows[0].id, fileName: f.originalname, fileSize: f.size, fileMime: f.mimetype });
+        } catch (err: any) {
+          console.warn(`[FraudIntel/evidence] file insert failed for ${f.originalname}:`, err?.message);
+        }
+      }
+
+      console.log(`[FraudIntel/evidence] batch=${batchId} savedFiles=${saved.length}/${files.length} userId=${userId ?? "anon"}`);
+      res.status(201).json({
+        ok: true,
+        uploadBatchId: batchId,
+        files: saved,
+        message: `${saved.length} file${saved.length === 1 ? "" : "s"} attached. Submit your report to link them to the case.`,
+      });
+    } catch (err: any) {
+      console.error("[FraudIntel/evidence] error:", err?.message);
+      res.status(500).json({ ok: false, message: "Could not save your evidence files. Please try again." });
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // AGENCY FOLLOW / UNFOLLOW
+  // ═══════════════════════════════════════════════════════════════════════
+  app.post("/api/agency-profiles/:slug/follow", async (req: any, res: Response) => {
+    const userId = req.user?.claims?.sub ?? req.user?.id;
+    if (!userId) return res.status(401).json({ ok: false, message: "Please sign in to follow this agency." });
+    const slug = String(req.params.slug || "").toLowerCase().slice(0, 64);
+    if (!slug) return res.status(400).json({ ok: false, message: "Missing agency slug." });
+    try {
+      await pool.query(
+        `INSERT INTO agency_follows (user_id, agency_slug) VALUES ($1, $2)
+         ON CONFLICT (user_id, agency_slug) DO NOTHING`,
+        [userId, slug],
+      );
+      res.json({ ok: true, following: true });
+    } catch (err: any) {
+      console.error("[FraudIntel/follow] error:", err?.message);
+      res.status(500).json({ ok: false, message: "Could not follow the agency." });
+    }
+  });
+  app.delete("/api/agency-profiles/:slug/follow", async (req: any, res: Response) => {
+    const userId = req.user?.claims?.sub ?? req.user?.id;
+    if (!userId) return res.status(401).json({ ok: false, message: "Please sign in." });
+    const slug = String(req.params.slug || "").toLowerCase().slice(0, 64);
+    try {
+      await pool.query(`DELETE FROM agency_follows WHERE user_id = $1 AND agency_slug = $2`, [userId, slug]);
+      res.json({ ok: true, following: false });
+    } catch (err: any) {
+      res.status(500).json({ ok: false, message: "Could not unfollow." });
+    }
+  });
+  app.get("/api/agency-profiles/:slug/following", async (req: any, res: Response) => {
+    const userId = req.user?.claims?.sub ?? req.user?.id;
+    if (!userId) return res.json({ ok: true, following: false });
+    const slug = String(req.params.slug || "").toLowerCase().slice(0, 64);
+    try {
+      const { rows } = await pool.query(
+        `SELECT 1 FROM agency_follows WHERE user_id = $1 AND agency_slug = $2 LIMIT 1`,
+        [userId, slug],
+      );
+      res.json({ ok: true, following: rows.length > 0 });
+    } catch {
+      res.json({ ok: true, following: false });
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // ADMIN — moderation queue + actions
+  //
+  // Every action is written to scam_report_audit_log for legal defensibility.
+  // Requires isAdmin (checked inline via storage.isUserAdmin).
+  // ═══════════════════════════════════════════════════════════════════════
+  async function ensureAdmin(req: any, res: Response): Promise<string | null> {
+    const userId = req.user?.claims?.sub ?? req.user?.id;
+    if (!userId) { res.status(401).json({ message: "Sign in required." }); return null; }
+    try {
+      const { storage } = await import("../storage");
+      const isAdmin = await storage.isUserAdmin(userId);
+      if (!isAdmin) { res.status(403).json({ message: "Admin access required." }); return null; }
+      return userId;
+    } catch {
+      res.status(500).json({ message: "Could not verify admin access." });
+      return null;
+    }
+  }
+
+  app.get("/api/admin/scam-reports", async (req: any, res: Response) => {
+    const adminId = await ensureAdmin(req, res);
+    if (!adminId) return;
+    const status = String(req.query.status ?? "pending").slice(0, 20);
+    const limit = Math.min(200, Math.max(1, Number(req.query.limit ?? 50)));
+    try {
+      const { rows } = await pool.query(
+        `SELECT r.id, r.agency_name, r.agency_slug, r.country, r.destination_country,
+                r.description, r.amount_lost, r.currency, r.risk_band, r.status,
+                r.created_at, r.reporter_email,
+                (SELECT COUNT(*)::int FROM scam_report_evidence e
+                  WHERE e.report_id = r.id OR (r.timeline_json IS NOT NULL AND e.upload_batch = COALESCE(r.timeline_json->>'uploadBatchId', ''))) AS evidence_count,
+                (SELECT COUNT(*)::int FROM scam_report_contacts c WHERE c.report_id = r.id) AS contact_count
+           FROM scam_reports r
+          WHERE r.status = $1
+          ORDER BY r.created_at DESC
+          LIMIT $2`,
+        [status, limit],
+      );
+      res.json({ ok: true, reports: rows, total: rows.length });
+    } catch (err: any) {
+      console.error("[FraudIntel/admin] list error:", err?.message);
+      res.status(500).json({ message: "Could not load report queue." });
+    }
+  });
+
+  app.post("/api/admin/scam-reports/:id/moderate", async (req: any, res: Response) => {
+    const adminId = await ensureAdmin(req, res);
+    if (!adminId) return;
+    const reportId = String(req.params.id);
+    const action = String(req.body?.action ?? "").toLowerCase();
+    const reason = String(req.body?.reason ?? "").slice(0, 2000) || null;
+    const validActions = ["approve", "reject", "blacklist"];
+    if (!validActions.includes(action)) {
+      return res.status(400).json({ message: "Invalid action. Must be approve, reject, or blacklist." });
+    }
+    try {
+      const newStatus =
+        action === "approve"   ? "approved" :
+        action === "reject"    ? "rejected" :
+        /* blacklist */          "blacklisted";
+      const { rows: before } = await pool.query(`SELECT status, agency_slug FROM scam_reports WHERE id = $1`, [reportId]);
+      if (before.length === 0) return res.status(404).json({ message: "Report not found." });
+
+      await pool.query(
+        `UPDATE scam_reports SET status = $1, admin_note = $2, reviewer_user_id = $3, reviewed_at = NOW(),
+                                 published_at = CASE WHEN $1 = 'approved' THEN NOW() ELSE published_at END,
+                                 updated_at = NOW()
+          WHERE id = $4`,
+        [newStatus, reason, adminId, reportId],
+      );
+
+      // If approved: bump the aggregated agency counter
+      if (action === "approve" && before[0].agency_slug) {
+        await pool.query(
+          `UPDATE reported_agency_profiles SET approved_report_count = approved_report_count + 1,
+                                       last_report_at = NOW(),
+                                       updated_at = NOW()
+            WHERE slug = $1`,
+          [before[0].agency_slug],
+        );
+      }
+
+      await pool.query(
+        `INSERT INTO scam_report_audit_log (report_id, agency_slug, actor_user_id, action, before_json, after_json, reason)
+         VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7)`,
+        [reportId, before[0].agency_slug, adminId, action, JSON.stringify({ status: before[0].status }), JSON.stringify({ status: newStatus }), reason],
+      );
+
+      res.json({ ok: true, newStatus, message: `Report ${action}d.` });
+    } catch (err: any) {
+      console.error("[FraudIntel/admin] moderate error:", err?.message);
+      res.status(500).json({ message: "Could not update the report." });
+    }
+  });
+
+  app.get("/api/admin/scam-reports/:id/audit", async (req: any, res: Response) => {
+    const adminId = await ensureAdmin(req, res);
+    if (!adminId) return;
+    const reportId = String(req.params.id);
+    try {
+      const { rows } = await pool.query(
+        `SELECT id, actor_user_id, action, reason, before_json, after_json, created_at
+           FROM scam_report_audit_log
+          WHERE report_id = $1
+          ORDER BY created_at DESC`,
+        [reportId],
+      );
+      res.json({ ok: true, entries: rows });
+    } catch (err: any) {
+      res.status(500).json({ message: "Could not load audit trail." });
+    }
+  });
+
+  console.log("[FraudIntel] Routes registered: POST /api/scam-reports/v2, GET /api/agency-profiles(/:slug), POST /api/agency-appeals, POST /api/scam-reports/evidence, follow/unfollow, admin queue+moderate+audit");
 }
 
 // ── Masking helpers (public view) ─────────────────────────────────────
