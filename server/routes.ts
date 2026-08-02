@@ -3761,19 +3761,41 @@ Crawl-delay: 1`);
   app.get("/api/payments/options", async (req: any, res) => {
     try {
       const { detectCountry } = await import("./middleware/locationDetector");
-      const { getRecommendedPaymentMethod } = await import("./services/paymentRecommender");
+      const { getRecommendedPaymentMethod, isMpesaCountry } = await import("./services/paymentRecommender");
 
       const geo = await detectCountry(req);
       const userId = req.user?.claims?.sub as string | undefined;
 
       let userHistory: any[] = [];
+      let phoneCountryIso: string | null = null;
+      let phoneCountryName: string | null = null;
       if (userId) {
         try {
           userHistory = await storage.getPaymentsByUser(userId);
         } catch {}
+        // 2026-08 (Tony): payer's TRUE country = their phone prefix, not the
+        // IP address of the coffee shop they're sitting in. A Kenyan in
+        // Dubai still pays with M-Pesa. Pull country_iso from the users
+        // row (set on signup from the phone-picker).
+        try {
+          const { rows } = await pool.query<{ country_iso: string | null; country: string | null }>(
+            `SELECT country_iso, country FROM users WHERE id = $1 LIMIT 1`,
+            [userId],
+          );
+          phoneCountryIso  = rows[0]?.country_iso ?? null;
+          phoneCountryName = rows[0]?.country ?? null;
+        } catch { /* non-fatal — fall back to geo */ }
       }
 
-      const recommendation = getRecommendedPaymentMethod(geo.country, userHistory, geo.countryName);
+      // Effective country: phone prefix wins if we have it AND it's an
+      // M-Pesa country (KE/TZ/UG). Otherwise geo IP. This gives diaspora
+      // Kenyans M-Pesa first even when they're browsing from abroad, and
+      // stops US-based tourists from being nudged toward M-Pesa just
+      // because they're on a Kenyan-hosted CDN edge.
+      const effectiveCountry     = isMpesaCountry(phoneCountryIso) ? phoneCountryIso!    : geo.country;
+      const effectiveCountryName = isMpesaCountry(phoneCountryIso) ? (phoneCountryName ?? geo.countryName) : geo.countryName;
+
+      const recommendation = getRecommendedPaymentMethod(effectiveCountry, userHistory, effectiveCountryName);
 
       // Step 7: Analytics — track options viewed with country + recommendation
       if (userId) {
