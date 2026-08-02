@@ -95,11 +95,68 @@ export function PhoneInput({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [country, national]);
 
-  // Filtered country list based on search
+  // Filtered country list based on search.
+  //
+  // 2026-08 (Tony): search was too literal — "+971" didn't strip the "+"
+  // before matching the dial code, and "dubai" didn't find UAE because
+  // Dubai is a city. Now:
+  //   1. Strip leading "+" from the search so "+971" matches dialCode "971".
+  //   2. Include a city/alt-name alias map for common searches (Dubai,
+  //      Abu Dhabi, London, Riyadh, New York, etc.) so people naturally
+  //      find their country.
   const filteredCountries = useMemo(() => {
-    if (!search.trim()) return AFRICAN_COUNTRIES;
-    const needle = search.toLowerCase();
+    const raw = search.trim();
+    if (!raw) return AFRICAN_COUNTRIES;
+    const needle = raw.toLowerCase().replace(/^\+/, ""); // strip leading +
+
+    // City / alternative-name → ISO code aliases. Users often type where
+    // they LIVE, not the sovereign country name.
+    const aliases: Record<string, string> = {
+      "dubai": "AE", "abu dhabi": "AE", "sharjah": "AE", "uae": "AE", "emirates": "AE",
+      "riyadh": "SA", "jeddah": "SA", "mecca": "SA", "medina": "SA", "ksa": "SA",
+      "doha": "QA",
+      "kuwait city": "KW",
+      "manama": "BH",
+      "muscat": "OM",
+      "london": "GB", "uk": "GB", "britain": "GB", "england": "GB", "scotland": "GB", "wales": "GB",
+      "new york": "US", "nyc": "US", "usa": "US", "america": "US", "states": "US",
+      "toronto": "CA", "vancouver": "CA", "montreal": "CA",
+      "sydney": "AU", "melbourne": "AU", "perth": "AU", "brisbane": "AU",
+      "mumbai": "IN", "delhi": "IN", "bangalore": "IN", "bengaluru": "IN", "kolkata": "IN", "chennai": "IN", "hyderabad": "IN",
+      "karachi": "PK", "lahore": "PK", "islamabad": "PK",
+      "dhaka": "BD",
+      "manila": "PH",
+      "jakarta": "ID",
+      "bangkok": "TH",
+      "beijing": "CN", "shanghai": "CN", "shenzhen": "CN", "guangzhou": "CN", "china prc": "CN",
+      "tokyo": "JP",
+      "seoul": "KR", "korea": "KR",
+      "singapore city": "SG",
+      "berlin": "DE", "munich": "DE", "hamburg": "DE", "frankfurt": "DE",
+      "paris": "FR",
+      "amsterdam": "NL", "rotterdam": "NL", "holland": "NL",
+      "madrid": "ES", "barcelona": "ES",
+      "rome": "IT", "milan": "IT",
+      "moscow": "RU",
+      "istanbul": "TR",
+      "kyiv": "UA", "kiev": "UA",
+      "sao paulo": "BR", "rio": "BR", "rio de janeiro": "BR",
+      "buenos aires": "AR",
+      "mexico city": "MX",
+      "nairobi": "KE",
+      "lagos": "NG", "abuja": "NG",
+      "cape town": "ZA", "johannesburg": "ZA", "joburg": "ZA", "jozi": "ZA",
+      "accra": "GH",
+      "cairo": "EG",
+      "casablanca": "MA",
+      "kampala": "UG",
+      "dar es salaam": "TZ", "dodoma": "TZ",
+      "addis ababa": "ET",
+    };
+    const aliasIso = aliases[needle];
+
     return AFRICAN_COUNTRIES.filter((c) =>
+      (aliasIso && c.iso === aliasIso) ||
       c.name.toLowerCase().includes(needle) ||
       c.iso.toLowerCase().includes(needle) ||
       c.dialCode.includes(needle),
