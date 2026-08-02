@@ -83,7 +83,13 @@ export function useHeartbeat(): void {
     track();
   }, [location]);
 
-  // ── Live presence — fires every 5 s, updates live_users table ──────────────
+  // ── Live presence — fires every 30 s, updates live_users table ─────────────
+  // 2026-08 (Tony): reduced from 5 s → 30 s. Presence is a "who's online now"
+  // signal — 30-second freshness is fine. 5-second polling was hammering the
+  // DB (one write per user every 5 s × N users), draining Kenyan mobile
+  // batteries, and wasted M-Pesa/Nano compute for no user benefit. The DB
+  // presence widget already has a 5-minute cutoff, so a slightly stale entry
+  // isn't user-visible.
   useEffect(() => {
     if (!user?.id) return;
 
@@ -102,7 +108,7 @@ export function useHeartbeat(): void {
       } catch {
         // non-fatal
       }
-    }, 5000);
+    }, 30_000);
 
     return () => clearInterval(liveTimer);
   }, [user?.id]);
