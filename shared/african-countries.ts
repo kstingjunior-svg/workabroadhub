@@ -44,8 +44,10 @@ export interface AfricanCountry {
   mobilePrefix: RegExp;
   /** IANA timezone or "UTC±N" hint — used for region inference. */
   timezoneHint: string;
-  /** Broad African region: "north" | "west" | "east" | "central" | "southern". */
-  region: "north" | "west" | "east" | "central" | "southern";
+  /** Broad region — Africa (north/west/east/central/southern) or Gulf
+      (Kenyans already working in UAE, Saudi, Qatar, etc need to register
+      with their local phone number too). */
+  region: "north" | "west" | "east" | "central" | "southern" | "gulf";
 }
 
 /**
@@ -118,6 +120,18 @@ export const AFRICAN_COUNTRIES: AfricanCountry[] = [
   { iso: "ZA", name: "South Africa",         flag: "🇿🇦", dialCode: "27",   minNationalLen: 9,  maxNationalLen: 9,  mobilePrefix: /^[67-8]/,    timezoneHint: "Africa/Johannesburg", region: "southern" },
   { iso: "ZM", name: "Zambia",               flag: "🇿🇲", dialCode: "260",  minNationalLen: 9,  maxNationalLen: 9,  mobilePrefix: /^9[5-7]/,    timezoneHint: "Africa/Lusaka",     region: "southern" },
   { iso: "ZW", name: "Zimbabwe",             flag: "🇿🇼", dialCode: "263",  minNationalLen: 9,  maxNationalLen: 9,  mobilePrefix: /^7[1-8]/,    timezoneHint: "Africa/Harare",     region: "southern" },
+
+  // ── GULF ─────────────────────────────────────────────────────────────
+  // 2026-08 (Tony): Kenyans already working in the Gulf need to register
+  // using their local number. Six-country cluster covers ~95% of
+  // Kenyan overseas placements. E.164 specs cross-checked against ITU-T
+  // and each carrier's mobile prefix ranges.
+  { iso: "AE", name: "United Arab Emirates", flag: "🇦🇪", dialCode: "971",  minNationalLen: 9,  maxNationalLen: 9,  mobilePrefix: /^5[024568]/, timezoneHint: "Asia/Dubai",        region: "gulf" },
+  { iso: "SA", name: "Saudi Arabia",         flag: "🇸🇦", dialCode: "966",  minNationalLen: 9,  maxNationalLen: 9,  mobilePrefix: /^5[0-9]/,    timezoneHint: "Asia/Riyadh",       region: "gulf" },
+  { iso: "QA", name: "Qatar",                flag: "🇶🇦", dialCode: "974",  minNationalLen: 8,  maxNationalLen: 8,  mobilePrefix: /^[3567]/,    timezoneHint: "Asia/Qatar",        region: "gulf" },
+  { iso: "KW", name: "Kuwait",               flag: "🇰🇼", dialCode: "965",  minNationalLen: 8,  maxNationalLen: 8,  mobilePrefix: /^[569]/,     timezoneHint: "Asia/Kuwait",       region: "gulf" },
+  { iso: "BH", name: "Bahrain",              flag: "🇧🇭", dialCode: "973",  minNationalLen: 8,  maxNationalLen: 8,  mobilePrefix: /^[36]/,      timezoneHint: "Asia/Bahrain",      region: "gulf" },
+  { iso: "OM", name: "Oman",                 flag: "🇴🇲", dialCode: "968",  minNationalLen: 8,  maxNationalLen: 8,  mobilePrefix: /^[79]/,      timezoneHint: "Asia/Muscat",       region: "gulf" },
 ];
 
 /** Fast lookup by ISO alpha-2 (case-insensitive). */
