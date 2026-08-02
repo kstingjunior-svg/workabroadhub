@@ -176,7 +176,7 @@ export function PhoneInput({
             <div className="flex-1 overflow-y-auto overscroll-contain py-1" style={{ WebkitOverflowScrolling: "touch" }}>
               {filteredCountries.length === 0 && (
                 <p className="px-3 py-4 text-xs text-center text-muted-foreground">
-                  No country matches "{search}". We currently support all 54 African countries plus UAE, Saudi Arabia, Qatar, Kuwait, Bahrain and Oman.
+                  No country matches "{search}". WorkAbroadHub supports 150+ countries worldwide — try a shorter search or the ISO code (US, GB, IN).
                 </p>
               )}
               {filteredCountries.map((c) => (
@@ -209,16 +209,26 @@ export function PhoneInput({
           onChange={(e) => handleNationalChange(e.target.value)}
           disabled={disabled}
           placeholder={
+            // Africa (top signup regions)
             country.iso === "KE" ? "712345678" :
             country.iso === "NG" ? "8012345678" :
             country.iso === "ZA" ? "821234567" :
             country.iso === "GH" ? "241234567" :
+            // Gulf
             country.iso === "AE" ? "501234567" :
             country.iso === "SA" ? "512345678" :
             country.iso === "QA" ? "33123456"  :
             country.iso === "KW" ? "51234567"  :
             country.iso === "BH" ? "36123456"  :
             country.iso === "OM" ? "91234567"  :
+            // Global top corridors for Kenyan diaspora
+            country.iso === "GB" ? "7700900123" :
+            country.iso === "US" ? "2025550123" :
+            country.iso === "CA" ? "4165550123" :
+            country.iso === "AU" ? "412345678"  :
+            country.iso === "DE" ? "15112345678" :
+            country.iso === "IN" ? "9876543210" :
+            country.iso === "CN" ? "13800138000" :
             `${country.minNationalLen}-digit mobile number`
           }
           autoComplete="tel-national"

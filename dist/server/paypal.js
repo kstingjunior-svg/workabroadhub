@@ -21,6 +21,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.paypalClient = void 0;
+exports.getPayPalFlatFeeKes = getPayPalFlatFeeKes;
 exports.isPayPalConfigured = isPayPalConfigured;
 exports.paypalMode = paypalMode;
 exports.paypalClientId = paypalClientId;
@@ -32,6 +33,22 @@ const checkout_server_sdk_1 = __importDefault(require("@paypal/checkout-server-s
 // ─── Config ──────────────────────────────────────────────────────────────────
 const PAYPAL_MODE = (process.env.PAYPAL_ENV || "sandbox").toLowerCase();
 const KES_TO_USD_RATE = Number(process.env.PAYPAL_KES_RATE) || 130;
+/**
+ * 2026-08 (Tony's founder decision): PayPal payers are non-Kenyan users
+ * (diaspora, international clients). They pay a single flat fee that
+ * unlocks the whole portal + services, instead of paying per-item like
+ * M-Pesa users.
+ *
+ * KES 4,500 ≈ USD 35 at the current rate, roughly equivalent to a
+ * one-year Pro subscription. The exact amount can be tuned by setting
+ * PAYPAL_FLAT_FEE_KES env var.
+ *
+ * This is enforced at the createPayPalOrder() boundary so every code
+ * path (services, subscriptions, scout jobs, write-from-scratch)
+ * automatically applies it — impossible to bypass by adding new callers.
+ */
+const PAYPAL_FLAT_FEE_KES = Number(process.env.PAYPAL_FLAT_FEE_KES) || 4500;
+function getPayPalFlatFeeKes() { return PAYPAL_FLAT_FEE_KES; }
 // ─── Client factory ──────────────────────────────────────────────────────────
 // Never cache the client — tokens expire. Always call this fresh per request.
 function buildClient() {
@@ -67,7 +84,20 @@ function kesToUsd(amountKes) {
 // ─── Order creation ───────────────────────────────────────────────────────────
 async function createPayPalOrder(amountKes, description, internalRef) {
     const client = buildClient();
-    const amountUSD = kesToUsd(amountKes);
+    // ── FLAT-FEE OVERRIDE ──────────────────────────────────────────────
+    // Tony's rule (2026-08): PayPal payers always pay the flat fee for
+    // full-portal access, regardless of which product they clicked.
+    // Log the requested vs. effective amount so we can audit anyone who
+    // was undercharged before this change landed.
+    const requestedKes = amountKes;
+    const effectiveKes = PAYPAL_FLAT_FEE_KES;
+    if (requestedKes !== effectiveKes) {
+        console.log(`[PayPal] Flat-fee override: caller requested KES ${requestedKes} → charged KES ${effectiveKes} for full-portal access.`);
+    }
+    const amountUSD = kesToUsd(effectiveKes);
+    // Rewrite the description so the PayPal checkout page tells the
+    // buyer exactly what they're paying for.
+    const flatFeeDescription = `WorkAbroad Hub — Full portal access (${description})`.slice(0, 127);
     const request = new checkout_server_sdk_1.default.orders.OrdersCreateRequest();
     request.prefer("return=representation");
     request.requestBody({
@@ -80,7 +110,7 @@ async function createPayPalOrder(amountKes, description, internalRef) {
                     currency_code: "USD",
                     value: amountUSD.toFixed(2),
                 },
-                description: description.slice(0, 127),
+                description: flatFeeDescription,
             },
         ],
         application_context: {
@@ -93,7 +123,7 @@ async function createPayPalOrder(amountKes, description, internalRef) {
     const response = await client.execute(request);
     const order = response.result;
     const approvalUrl = order.links?.find((l) => l.rel === "approve")?.href ?? "";
-    console.log(`[PayPal] Order created: ${order.id} | $${amountUSD} | mode: ${PAYPAL_MODE}`);
+    console.log(`[PayPal] Order created: ${order.id} | KES ${effectiveKes} ≈ $${amountUSD} | mode: ${PAYPAL_MODE}`);
     return { id: order.id, status: order.status, approvalUrl };
 }
 // ─── Payment capture ──────────────────────────────────────────────────────────

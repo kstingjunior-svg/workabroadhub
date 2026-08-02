@@ -273,11 +273,18 @@ export default function Payment() {
 
   const paymentAmountRef = { current: paymentAmount };
 
+  // 2026-08 (Tony): PayPal is charged as a flat fee for FULL portal access,
+  // not per-item. Mirrors PAYPAL_FLAT_FEE_KES on the server (server always
+  // wins if these drift). Users see the flat rate up-front so there are no
+  // checkout-page surprises.
+  const PAYPAL_FLAT_FEE_KES = 4500;
+  const PAYPAL_FLAT_FEE_USD = Math.max(1, Math.round(PAYPAL_FLAT_FEE_KES / 130 * 100) / 100);
+
   const METHOD_LABELS: Record<string, { label: string; sublabel: string; icon: React.ReactNode }> = {
     mpesa: makeMpesaLabel(paymentAmount),
     paypal: {
-      label: "Pay with PayPal 🌍",
-      sublabel: `$${Math.max(1, Math.round(paymentAmount / 130 * 100) / 100).toFixed(2)} USD · Cards, PayPal balance`,
+      label: "Pay with PayPal 🌍  ·  Full portal access",
+      sublabel: `Flat KES ${PAYPAL_FLAT_FEE_KES.toLocaleString()} (~$${PAYPAL_FLAT_FEE_USD.toFixed(2)} USD)  ·  Unlocks every service`,
       icon: <span className="text-blue-700 font-bold text-xs tracking-tight">PAY<span className="text-blue-400">PAL</span></span>,
     },
   };
