@@ -144,20 +144,28 @@ export async function syncSubscriptionToSupabase(opts: {
       return;
     }
 
+    // 2026-08 (Tony): explicit onConflict so PostgREST uses the
+    // subscriptions_user_id_unique constraint (added in migration 0035).
+    // Without this, supabase-js can't infer which unique key to merge on
+    // and Postgres 42P10s with "no unique or exclusion constraint matching
+    // the ON CONFLICT specification".
     const { error } = await client
       .from("subscriptions")
-      .upsert([
-        {
-          user_id:        String(opts.user_id),
-          plan_id:        opts.plan_id,
-          provider:       opts.provider,
-          status:         opts.status,
-          auto_renew:     opts.auto_renew,
-          expires_at:     opts.expires_at.toISOString(),
-          purchase_token: opts.purchase_token ?? null,
-          product_id:     opts.product_id ?? null,
-        },
-      ])
+      .upsert(
+        [
+          {
+            user_id:        String(opts.user_id),
+            plan_id:        opts.plan_id,
+            provider:       opts.provider,
+            status:         opts.status,
+            auto_renew:     opts.auto_renew,
+            expires_at:     opts.expires_at.toISOString(),
+            purchase_token: opts.purchase_token ?? null,
+            product_id:     opts.product_id ?? null,
+          },
+        ],
+        { onConflict: "user_id" },
+      )
       .select();
 
     if (error) {
