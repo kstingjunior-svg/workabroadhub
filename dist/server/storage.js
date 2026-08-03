@@ -583,8 +583,29 @@ class DatabaseStorage {
                 return protectivePlan;
             }
         }
+        // 2026-08 (Tony's leak report): if users.plan says paid but there is
+        // NO subscription row at all (or the row is not "active"), that's a
+        // stale plan column — probably from an expired sub that didn't
+        // downgrade cleanly, or from an admin promo that never wrote a sub
+        // row. Free users were leaking into Canada Express Entry + CV Match
+        // Apply because this fallback trusted the column blindly.
+        //
+        // Fix: only honour users.plan when it is "free" OR we have a real
+        // active subscription. Otherwise downgrade the column to "free" and
+        // return "free". Admin bypass is handled at the endpoint level
+        // (/api/user/plan checks isAdmin BEFORE calling this function), so
+        // admins are unaffected.
         if (usersPlan !== "free") {
-            console.info(`[getUserPlan] ${logCtx} → result="${usersPlan}" reason=no_active_sub_fallback_users_plan`);
+            console.warn(`[getUserPlan] ${logCtx} → result="free" reason=STALE_PLAN_COLUMN_no_active_sub_force_downgrade`);
+            db_1.db.update(auth_1.users)
+                .set({ plan: "free", subscriptionStatus: "expired", updatedAt: new Date() })
+                .where((0, drizzle_orm_1.eq)(auth_1.users.id, userId))
+                .catch((err) => {
+                console.warn(`[getUserPlan] Could not sync stale plan reset for userId=${userId}:`, err?.message);
+            });
+            // Mirror to Supabase so the /rest/v1/subscriptions view is consistent.
+            Promise.resolve().then(() => __importStar(require("./supabaseClient"))).then(({ downgradeSupabaseUser }) => downgradeSupabaseUser(userId)).catch(() => { });
+            return "free";
         }
         return usersPlan;
     }

@@ -21360,21 +21360,19 @@ Tone examples:
       const matches = await findMatchesForCv(cvText, VISA_JOBS, limit);
 
       // ── 2026-07 (Tony's report): CRITICAL monetisation gate ─────────────
-      // Previously only ANON users had applyUrl stripped. Signed-in FREE
-      // users got the applyUrl and clicked straight through to the portal
-      // without paying — big revenue leak.
-      // Now: applyUrl is only exposed to PAID tiers. Free users see
-      // applyLocked=true and the client renders an upgrade CTA.
+      // 2026-08 UPDATE: was reading users.plan directly, which is a stale
+      // column when subscriptions expire without a clean downgrade. Now
+      // uses storage.getUserPlan() — the same source of truth as
+      // /api/user/plan and every other paywall on the site. It validates
+      // the active subscription row (not just the plan column) and forces
+      // stale paid columns down to "free".
       const userId = (req.session as any)?.customUserId as string | undefined;
+      const PAID = new Set(["trial", "basic", "monthly", "yearly", "pro", "pro_referral"]);
       let userIsPaid = false;
       if (userId) {
         try {
-          const { rows } = await pool.query<{ plan: string | null }>(
-            `SELECT plan FROM users WHERE id = $1 LIMIT 1`,
-            [userId],
-          );
-          const p = String(rows[0]?.plan ?? "").toLowerCase().trim();
-          userIsPaid = !!p && p !== "free";
+          const planId = await storage.getUserPlan(userId);
+          userIsPaid = !!planId && PAID.has(planId);
         } catch { /* default false is the safe fallback */ }
       }
       const cleaned = matches.map((m) => userIsPaid
