@@ -99,10 +99,22 @@ export default function OfferCheckPage() {
   const [result, setResult] = useState<VerifyResponse | null>(null);
   const [showTechnical, setShowTechnical] = useState(false);
 
+  // 2026-08 (Tony): accept PDF + Word docs too. Many offer letters arrive
+  // as attachments — restricting to images made users take a screenshot
+  // of the PDF first. Server (offer-check-endpoint.ts) already handles
+  // PDF/DOC/DOCX via extractTextFromBuffer, so no server change needed.
+  const ACCEPTED_MIMES = new Set<string>([
+    "image/jpeg", "image/jpg", "image/png", "image/webp",
+    "application/pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/msword",
+  ]);
+
   function handleFile(f: File | null) {
     if (!f) return;
-    if (!f.type.startsWith("image/")) {
-      toast({ title: "Please upload an image", description: "JPG, PNG or WEBP — a clear photo of the offer letter works best.", variant: "destructive" });
+    const isAccepted = ACCEPTED_MIMES.has(f.type) || /\.(pdf|docx?|jpe?g|png|webp)$/i.test(f.name);
+    if (!isAccepted) {
+      toast({ title: "Unsupported file type", description: "Upload a photo (JPG/PNG/WEBP) or the offer letter itself (PDF or Word).", variant: "destructive" });
       return;
     }
     if (f.size > 10 * 1024 * 1024) {
@@ -111,7 +123,9 @@ export default function OfferCheckPage() {
     }
     setFile(f);
     setResult(null);
-    setPreview(URL.createObjectURL(f));
+    // Only images render inline as a preview; PDF/Word show a document
+    // card in the UI below (renders based on file.type).
+    setPreview(f.type.startsWith("image/") ? URL.createObjectURL(f) : null);
   }
 
   async function handleVerify() {
@@ -170,13 +184,13 @@ export default function OfferCheckPage() {
               <input
                 ref={inputRef}
                 type="file"
-                accept="image/jpeg,image/jpg,image/png,image/webp"
+                accept="image/jpeg,image/jpg,image/png,image/webp,application/pdf,.pdf,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                 onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
                 className="hidden"
                 data-testid="input-offer-file"
               />
 
-              {!preview ? (
+              {!file ? (
                 <button
                   type="button"
                   onClick={() => inputRef.current?.click()}
@@ -187,15 +201,33 @@ export default function OfferCheckPage() {
                     <Camera className="h-8 w-8 text-teal-600 dark:text-teal-400" />
                   </div>
                   <div className="text-center">
-                    <p className="font-semibold text-gray-900 dark:text-white">Take or upload a photo</p>
-                    <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">JPG, PNG or WEBP · up to 10 MB · a clear photo of the letter works</p>
+                    <p className="font-semibold text-gray-900 dark:text-white">Upload the offer letter</p>
+                    <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">Photo (JPG/PNG/WEBP) or the file itself (PDF or Word) · up to 10 MB</p>
                   </div>
                 </button>
               ) : (
                 <div className="space-y-3">
-                  <div className="rounded-lg overflow-hidden border border-gray-200 dark:border-gray-800 max-h-80">
-                    <img src={preview} alt="Offer preview" className="w-full h-auto object-contain max-h-80" />
-                  </div>
+                  {preview ? (
+                    // Image preview
+                    <div className="rounded-lg overflow-hidden border border-gray-200 dark:border-gray-800 max-h-80">
+                      <img src={preview} alt="Offer preview" className="w-full h-auto object-contain max-h-80" />
+                    </div>
+                  ) : (
+                    // Document card (PDF / Word)
+                    <div className="rounded-lg border border-gray-200 dark:border-gray-800 p-4 flex items-center gap-3 bg-gray-50 dark:bg-gray-900/50" data-testid="offer-doc-card">
+                      <div className="h-12 w-12 rounded-md bg-teal-100 dark:bg-teal-950/40 flex items-center justify-center flex-shrink-0">
+                        <span className="text-xs font-bold text-teal-700 dark:text-teal-300">
+                          {/\.pdf$/i.test(file.name) ? "PDF" : "DOC"}
+                        </span>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold text-gray-900 dark:text-white truncate text-sm">{file.name}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                          {(file.size / 1024).toFixed(0)} KB · ready to verify
+                        </p>
+                      </div>
+                    </div>
+                  )}
                   <div className="flex gap-2">
                     <Button
                       onClick={handleVerify}

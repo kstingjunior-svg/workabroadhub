@@ -93,10 +93,19 @@ export default function IeltsVerifyPage() {
   const [result, setResult] = useState<VerifyResponse | null>(null);
   const [showTechnical, setShowTechnical] = useState(false);
 
+  // 2026-08 (Tony): accept PDF + Word too — most IELTS TRFs arrive as PDF.
+  const ACCEPTED_MIMES = new Set<string>([
+    "image/jpeg", "image/jpg", "image/png", "image/webp",
+    "application/pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/msword",
+  ]);
+
   function handleFile(f: File | null) {
     if (!f) return;
-    if (!f.type.startsWith("image/")) {
-      toast({ title: "Please upload an image", description: "JPG, PNG or WEBP — a clear photo of the TRF works best.", variant: "destructive" });
+    const isAccepted = ACCEPTED_MIMES.has(f.type) || /\.(pdf|docx?|jpe?g|png|webp)$/i.test(f.name);
+    if (!isAccepted) {
+      toast({ title: "Unsupported file type", description: "Upload a photo (JPG/PNG/WEBP) or the TRF file (PDF or Word).", variant: "destructive" });
       return;
     }
     if (f.size > 8 * 1024 * 1024) {
@@ -105,7 +114,7 @@ export default function IeltsVerifyPage() {
     }
     setFile(f);
     setResult(null);
-    setPreview(URL.createObjectURL(f));
+    setPreview(f.type.startsWith("image/") ? URL.createObjectURL(f) : null);
   }
 
   async function handleVerify() {
@@ -164,12 +173,12 @@ export default function IeltsVerifyPage() {
               <input
                 ref={inputRef}
                 type="file"
-                accept="image/jpeg,image/jpg,image/png,image/webp"
+                accept="image/jpeg,image/jpg,image/png,image/webp,application/pdf,.pdf,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                 onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
                 className="hidden"
                 data-testid="input-ielts-file"
               />
-              {!preview ? (
+              {!file ? (
                 <button
                   type="button"
                   onClick={() => inputRef.current?.click()}
@@ -180,15 +189,31 @@ export default function IeltsVerifyPage() {
                     <Camera className="h-8 w-8 text-teal-600 dark:text-teal-400" />
                   </div>
                   <div className="text-center">
-                    <p className="font-semibold text-gray-900 dark:text-white">Take or upload a photo</p>
-                    <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">JPG, PNG or WEBP · up to 8 MB · a clear photo of the TRF</p>
+                    <p className="font-semibold text-gray-900 dark:text-white">Upload your TRF</p>
+                    <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">Photo (JPG/PNG/WEBP) or the file itself (PDF or Word) · up to 8 MB</p>
                   </div>
                 </button>
               ) : (
                 <div className="space-y-3">
-                  <div className="rounded-lg overflow-hidden border border-gray-200 dark:border-gray-800 max-h-80">
-                    <img src={preview} alt="TRF preview" className="w-full h-auto object-contain max-h-80" />
-                  </div>
+                  {preview ? (
+                    <div className="rounded-lg overflow-hidden border border-gray-200 dark:border-gray-800 max-h-80">
+                      <img src={preview} alt="TRF preview" className="w-full h-auto object-contain max-h-80" />
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-gray-200 dark:border-gray-800 p-4 flex items-center gap-3 bg-gray-50 dark:bg-gray-900/50" data-testid="ielts-doc-card">
+                      <div className="h-12 w-12 rounded-md bg-teal-100 dark:bg-teal-950/40 flex items-center justify-center flex-shrink-0">
+                        <span className="text-xs font-bold text-teal-700 dark:text-teal-300">
+                          {/\.pdf$/i.test(file.name) ? "PDF" : "DOC"}
+                        </span>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold text-gray-900 dark:text-white truncate text-sm">{file.name}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                          {(file.size / 1024).toFixed(0)} KB · ready to verify
+                        </p>
+                      </div>
+                    </div>
+                  )}
                   <div className="flex gap-2">
                     <Button
                       onClick={handleVerify}
