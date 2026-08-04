@@ -97,10 +97,21 @@ export default function JobScamCheckerPage() {
   const [result, setResult] = useState<CheckResponse | null>(null);
   const [showTechnical, setShowTechnical] = useState(false);
 
+  // 2026-08 (Tony): accept PDF + Word forwards too — many scam job ads
+  // arrive as WhatsApp PDF attachments or DOC files. Server extracts text
+  // and merges with any pasted text before analysis.
+  const ACCEPTED_MIMES = new Set<string>([
+    "image/jpeg", "image/jpg", "image/png", "image/webp",
+    "application/pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/msword",
+  ]);
+
   function handleFile(f: File | null) {
     if (!f) return;
-    if (!f.type.startsWith("image/")) {
-      toast({ title: "Please upload an image", description: "JPG, PNG or WEBP.", variant: "destructive" });
+    const isAccepted = ACCEPTED_MIMES.has(f.type) || /\.(pdf|docx?|jpe?g|png|webp)$/i.test(f.name);
+    if (!isAccepted) {
+      toast({ title: "Unsupported file type", description: "Screenshot (JPG/PNG/WEBP) or the file itself (PDF or Word).", variant: "destructive" });
       return;
     }
     if (f.size > 10 * 1024 * 1024) {
@@ -109,7 +120,7 @@ export default function JobScamCheckerPage() {
     }
     setFile(f);
     setResult(null);
-    setPreview(URL.createObjectURL(f));
+    setPreview(f.type.startsWith("image/") ? URL.createObjectURL(f) : null);
   }
 
   async function handleCheck() {
@@ -194,27 +205,43 @@ export default function JobScamCheckerPage() {
                 <input
                   ref={inputRef}
                   type="file"
-                  accept="image/jpeg,image/jpg,image/png,image/webp"
+                  accept="image/jpeg,image/jpg,image/png,image/webp,application/pdf,.pdf,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                   onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
                   className="hidden"
                   data-testid="input-scam-file"
                 />
-                {!preview ? (
+                {!file ? (
                   <button
                     type="button"
                     onClick={() => inputRef.current?.click()}
                     className="w-full py-4 border-2 border-dashed border-teal-300 dark:border-teal-800 rounded-lg hover:bg-teal-50/50 dark:hover:bg-teal-950/20 transition text-sm text-gray-600 dark:text-gray-400"
                     data-testid="button-pick-scam-file"
                   >
-                    Tap to attach a WhatsApp screenshot, email screenshot, or offer letter
+                    Tap to attach a screenshot, PDF, or Word document (WhatsApp / email / offer letter)
                   </button>
                 ) : (
                   <div className="space-y-2">
-                    <div className="rounded-lg overflow-hidden border border-gray-200 dark:border-gray-800 max-h-60">
-                      <img src={preview} alt="Evidence" className="w-full h-auto object-contain max-h-60" />
-                    </div>
+                    {preview ? (
+                      <div className="rounded-lg overflow-hidden border border-gray-200 dark:border-gray-800 max-h-60">
+                        <img src={preview} alt="Evidence" className="w-full h-auto object-contain max-h-60" />
+                      </div>
+                    ) : (
+                      <div className="rounded-lg border border-gray-200 dark:border-gray-800 p-3 flex items-center gap-3 bg-gray-50 dark:bg-gray-900/50" data-testid="scam-doc-card">
+                        <div className="h-10 w-10 rounded-md bg-teal-100 dark:bg-teal-950/40 flex items-center justify-center flex-shrink-0">
+                          <span className="text-[10px] font-bold text-teal-700 dark:text-teal-300">
+                            {/\.pdf$/i.test(file.name) ? "PDF" : "DOC"}
+                          </span>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="font-semibold text-gray-900 dark:text-white truncate text-sm">{file.name}</p>
+                          <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+                            {(file.size / 1024).toFixed(0)} KB · text will be scanned for scam patterns
+                          </p>
+                        </div>
+                      </div>
+                    )}
                     <Button type="button" variant="outline" size="sm" onClick={() => { setFile(null); setPreview(null); if (inputRef.current) inputRef.current.value = ""; }}>
-                      Remove image
+                      Remove file
                     </Button>
                   </div>
                 )}

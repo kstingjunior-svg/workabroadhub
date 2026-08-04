@@ -36,12 +36,21 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.registerScamCheckRoute = registerScamCheckRoute;
 const multer_1 = __importDefault(require("multer"));
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
+// 2026-08 (Tony): accept PDF + Word too — WhatsApp/Facebook job forwards
+// often arrive as PDF attachments (the recruiter's "official offer" that
+// turned out to be a template scam). PDF/Word are extracted to text and
+// merged into the text-analysis path.
+const ACCEPTED_MIMES = new Set([
+    "image/jpeg", "image/jpg", "image/png", "image/webp",
+    "application/pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/msword",
+]);
 const upload = (0, multer_1.default)({
     storage: multer_1.default.memoryStorage(),
     limits: { fileSize: 10 * 1024 * 1024 },
     fileFilter: (_req, file, cb) => {
-        const ok = file.mimetype.startsWith("image/") || file.mimetype === "application/pdf";
-        cb(null, ok);
+        cb(null, ACCEPTED_MIMES.has(file.mimetype));
     },
 });
 const scamLimiter = (0, express_rate_limit_1.default)({
@@ -64,26 +73,42 @@ function registerScamCheckRoute(app) {
     }), async (req, res) => {
         const t0 = Date.now();
         try {
-            const text = String(req.body?.text ?? "").trim();
+            let text = String(req.body?.text ?? "").trim();
             const file = req.file;
             if (!text && !file) {
                 return res.status(400).json({
                     ok: false,
-                    message: "Please paste the chat/email text OR upload a screenshot (or both).",
+                    message: "Please paste the chat/email text OR upload a screenshot / document (or both).",
                 });
             }
-            if (file && file.mimetype === "application/pdf") {
-                return res.status(400).json({
-                    ok: false,
-                    message: "PDFs aren't supported. Please screenshot the PDF as an image (JPG or PNG) and try again.",
-                });
-            }
+            // Route based on file type. Images → vision path. PDF/Word →
+            // extract text and merge with whatever text the user already pasted.
             let imageDataUrl;
             if (file) {
-                if (!file.mimetype.startsWith("image/")) {
-                    return res.status(400).json({ ok: false, message: "Please upload an image (JPG, PNG or WEBP)." });
+                if (file.mimetype.startsWith("image/")) {
+                    imageDataUrl = `data:${file.mimetype};base64,${file.buffer.toString("base64")}`;
                 }
-                imageDataUrl = `data:${file.mimetype};base64,${file.buffer.toString("base64")}`;
+                else if (file.mimetype === "application/pdf" ||
+                    file.mimetype === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+                    file.mimetype === "application/msword") {
+                    // 2026-08 (Tony): pull PDF/Word text and merge into the analysis
+                    // text. The scam analyzer works great on pure text — same
+                    // employer-name checks, salary-vs-benchmark checks, scam-phrase
+                    // scanning as with pasted chat text.
+                    const { extractTextFromBuffer } = await Promise.resolve().then(() => __importStar(require("../utils/extract-text")));
+                    const extracted = await extractTextFromBuffer(file.buffer, file.mimetype, file.originalname);
+                    if (!extracted?.text || extracted.text.trim().length < 20) {
+                        return res.status(400).json({
+                            ok: false,
+                            message: "We couldn't read enough text from that file. If it's a scanned PDF, please upload a clear photo (JPG/PNG) instead — our vision engine handles those.",
+                        });
+                    }
+                    const joiner = text ? "\n\n---FROM UPLOADED DOCUMENT---\n" : "";
+                    text = (text + joiner + extracted.text.trim()).slice(0, 15000);
+                }
+                else {
+                    return res.status(400).json({ ok: false, message: "Please upload an image, PDF, or Word document." });
+                }
             }
             const { analyzeScam } = await Promise.resolve().then(() => __importStar(require("./analyzer")));
             const report = await analyzeScam({ text, imageDataUrl });
