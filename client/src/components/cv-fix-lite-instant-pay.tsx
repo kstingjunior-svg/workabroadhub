@@ -137,6 +137,13 @@ export function CvFixLiteInstantPayModal({ open, onOpenChange, cvFile, score }: 
           phoneNumber: normalisedPhone(),
           serviceId: "cv_fix_lite",
           serviceName: "CV Revamp",
+          // 2026-08 CRITICAL BUGFIX: server reads req.body.serviceOrderId (not orderId)
+          // when building payment.metadata. Previous key "orderId" was silently
+          // dropped, leaving payment.metadata.serviceOrderId undefined, which meant
+          // paymentPipeline Step 3b never triggered CV generation. Root cause of
+          // 100% of stuck cv_fix_lite orders (11 in 7 days incl. 7 retries from
+          // one frustrated customer). Also send both keys for max compat.
+          serviceOrderId: createdOrderId,
           orderId: createdOrderId,
           amount: 99,
         }),
