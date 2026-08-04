@@ -58,7 +58,7 @@ const MESSAGES: Record<ErrorType, { heading: string; message: string; autoRetry:
   },
 };
 
-const SUPPORT_WHATSAPP = "254742619777";
+const SUPPORT_WHATSAPP = "254111467601";
 const SUPPORT_EMAIL = "support@workabroadhub.tech";
 
 function buildRef(code: string | number) {

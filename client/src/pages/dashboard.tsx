@@ -545,7 +545,7 @@ const ADVISORS = [
 ];
 
 function SupportTeamSection({ isPro, onUpgrade }: { isPro: boolean; onUpgrade: () => void }) {
-  const waBase = import.meta.env.VITE_SUPPORT_WHATSAPP || "254742619777";
+  const waBase = import.meta.env.VITE_SUPPORT_WHATSAPP || "254111467601";
   return (
     <div
       className="rounded-2xl border border-[#E2DDD5] dark:border-gray-700 bg-white dark:bg-gray-800 p-5"

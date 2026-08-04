@@ -44,7 +44,7 @@ async function getCredentials() {
     const rawPhone = (process.env.TWILIO_PHONE_NUMBER || '').trim();
     const rawWhatsApp = (process.env.TWILIO_WHATSAPP_NUMBER || '').trim();
     // TWILIO_PHONE_NUMBER = WhatsApp Business sender number (e.g. +15558158771)
-    // TWILIO_WHATSAPP_NUMBER = personal/consultation WhatsApp number (e.g. +254742619777)
+    // TWILIO_WHATSAPP_NUMBER = personal/consultation WhatsApp number (e.g. +254111467601)
     const senderNumber = rawPhone;
     const consultationNumber = rawWhatsApp;
     if (accountSid && authToken && accountSid.startsWith('AC')) {

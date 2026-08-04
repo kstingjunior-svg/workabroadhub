@@ -474,7 +474,7 @@ export default function ServiceOrderFlow() {
       toast({
         title: isNetwork ? "Our server is waking up — one more try" : "Order couldn't be created",
         description: isNetwork
-          ? "This happens on the first request after a quiet period. Wait 30 seconds, then tap Continue to Payment. The next try almost always works. Still stuck? WhatsApp +254 742 619 777."
+          ? "This happens on the first request after a quiet period. Wait 30 seconds, then tap Continue to Payment. The next try almost always works. Still stuck? WhatsApp +254 111 467 601."
           : (err?.message || "Something went wrong. Please try again."),
         variant: isNetwork ? "default" : "destructive",
         duration: 12_000,

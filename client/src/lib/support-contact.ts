@@ -12,9 +12,15 @@
  * so QA / staging can point at a test line without a code change.
  */
 
-const DEFAULT_WHATSAPP_KE = "254742619777";
+// 2026-08 (Tony): switched support line to the correct +254 111 467 601
+// number (previous default carried a typo — extra "4" digit — which made
+// wa.me links 404). Any surface that imports SUPPORT_WHATSAPP updates
+// automatically; hardcoded copies in other files were replaced in the
+// same commit. VITE_SUPPORT_WHATSAPP env var still overrides for QA /
+// staging.
+const DEFAULT_WHATSAPP_KE = "254111467601";           // E.164 without leading +
 const DEFAULT_EMAIL       = "support@workabroadhub.tech";
-const DEFAULT_PHONE_HUMAN = "+254 742 619 777";
+const DEFAULT_PHONE_HUMAN = "+254 111 467 601";
 
 export const SUPPORT_WHATSAPP: string =
   (import.meta.env.VITE_SUPPORT_WHATSAPP as string | undefined) ?? DEFAULT_WHATSAPP_KE;

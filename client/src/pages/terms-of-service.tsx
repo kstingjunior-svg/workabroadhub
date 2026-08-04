@@ -269,7 +269,7 @@ export default function TermsOfService() {
               </p>
               <ul>
                 <li>Email: support@workabroadhub.tech (subject line: "Abuse Report")</li>
-                <li>WhatsApp: +254 742 619777</li>
+                <li>WhatsApp: +254 111 467 601</li>
               </ul>
               <p>
                 All reports are reviewed within 48 business hours. We take user safety seriously and will take appropriate action, including content removal, account suspension, and reporting to relevant authorities where applicable.
@@ -323,7 +323,7 @@ export default function TermsOfService() {
               </p>
               <ul>
                 <li><strong>Email:</strong> <a href="mailto:support@workabroadhub.tech">support@workabroadhub.tech</a></li>
-                <li><strong>Phone/WhatsApp:</strong> +254 742 619777</li>
+                <li><strong>Phone/WhatsApp:</strong> +254 111 467 601</li>
               </ul>
             </CardContent>
           </Card>

@@ -201,8 +201,8 @@ export default function VerifyUsPage() {
                   <Phone className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
                   <div>
                     <div className="text-xs font-semibold text-muted-foreground">Phone / WhatsApp</div>
-                    <a href="tel:+254742619777" className="text-sm font-medium hover:underline">
-                      +254 742 619 777
+                    <a href="tel:+254111467601" className="text-sm font-medium hover:underline">
+                      +254 111 467 601
                     </a>
                   </div>
                 </div>

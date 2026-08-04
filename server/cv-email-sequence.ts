@@ -69,7 +69,7 @@ ${preheader ? `<span style="display:none;font-size:1px;color:#f3f4f6;">${esc(pre
         <p style="margin:0;color:#9ca3af;font-size:11px;line-height:1.8;">
           WorkAbroad Hub Ltd · Nairobi, Kenya<br>
           Questions? <a href="mailto:support@workabroadhub.tech" style="color:${BRAND_COLOR};">support@workabroadhub.tech</a> ·
-          <a href="${BASE_URL}/contact" style="color:${BRAND_COLOR};">WhatsApp: +254 742 619 777</a>
+          <a href="${BASE_URL}/contact" style="color:${BRAND_COLOR};">WhatsApp: +254 111 467 601</a>
         </p>
       </td></tr>
 
@@ -202,7 +202,7 @@ function buildEmail3(
          Priority WhatsApp support · 360 days full access</p>
     </div>
     <p style="color:#6b7280;font-size:13px;">
-      Questions? WhatsApp us at +254 742 619 777 or reply to this email.
+      Questions? WhatsApp us at +254 111 467 601 or reply to this email.
     </p>`;
 
   const subject = "💼 How Your CV Compares to Top Candidates (and How to Close the Gap)";

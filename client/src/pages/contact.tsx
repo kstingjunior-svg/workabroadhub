@@ -79,7 +79,7 @@ export default function ContactPage() {
     onError: () => {
       toast({
         title: "Failed to send message",
-        description: "Please try WhatsApp instead: +254 742 619777",
+        description: "Please try WhatsApp instead: +254 111 467 601",
         variant: "destructive",
       });
     },
@@ -112,7 +112,7 @@ export default function ContactPage() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-10">
           {/* WhatsApp */}
           <a
-            href="https://wa.me/254742619777?text=Hi%20WorkAbroad%20Hub%2C%20I%20need%20help%20with..."
+            href="https://wa.me/254111467601?text=Hi%20WorkAbroad%20Hub%2C%20I%20need%20help%20with..."
             target="_blank"
             rel="noopener noreferrer"
             data-testid="link-contact-whatsapp"
@@ -123,7 +123,7 @@ export default function ContactPage() {
           >
             <div className="w-18 h-18 rounded-full flex items-center justify-center mx-auto mb-5 text-4xl" style={{ width: 72, height: 72, background: "#F9F8F6" }}>💬</div>
             <h3 className="text-2xl font-medium mb-2" style={{ fontFamily: "'Crimson Pro', Georgia, serif", color: "#1A2530" }}>WhatsApp</h3>
-            <p className="font-medium mb-1" style={{ color: "#1A2530" }}>+254 742 619777</p>
+            <p className="font-medium mb-1" style={{ color: "#1A2530" }}>+254 111 467 601</p>
             <p className="text-sm mb-5" style={{ color: "#7A8A9A" }}>Fastest response — typically within 2 hours</p>
             <span className="inline-block rounded-full px-6 py-2.5 text-white font-medium text-sm" style={{ background: "#25D366" }}>
               Chat on WhatsApp →
@@ -384,7 +384,7 @@ export default function ContactPage() {
             </div>
           </div>
           <a
-            href="https://wa.me/254742619777?text=Hi%20Nanjila%2C%20I%20need%20help"
+            href="https://wa.me/254111467601?text=Hi%20Nanjila%2C%20I%20need%20help"
             target="_blank"
             rel="noopener noreferrer"
             data-testid="link-nanjila-banner"
@@ -410,7 +410,7 @@ export default function ContactPage() {
 
         {/* ── Footer Note ── */}
         <div className="text-center mt-10 text-sm" style={{ color: "#9AA8B4" }}>
-          <p>📞 Emergency? Call or WhatsApp <strong style={{ color: "#5A6A7A" }}>+254 742 619777</strong></p>
+          <p>📞 Emergency? Call or WhatsApp <strong style={{ color: "#5A6A7A" }}>+254 111 467 601</strong></p>
           <p className="mt-2">© 2026 WorkAbroad Hub. All rights reserved. · Nairobi, Kenya</p>
         </div>
 

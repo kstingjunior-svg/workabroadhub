@@ -1517,7 +1517,7 @@ export default function Landing() {
                 Professional career consultation service helping Kenyans find verified overseas employment opportunities across USA, Canada, UK, Australia, UAE, and Europe.
               </p>
               <div className="flex items-center gap-4 pt-2">
-                <a href="https://wa.me/254742619777" target="_blank" rel="noopener noreferrer" className="h-9 w-9 rounded-lg bg-slate-800 flex items-center justify-center hover:bg-emerald-600 transition-colors" data-testid="link-whatsapp-footer">
+                <a href="https://wa.me/254111467601" target="_blank" rel="noopener noreferrer" className="h-9 w-9 rounded-lg bg-slate-800 flex items-center justify-center hover:bg-emerald-600 transition-colors" data-testid="link-whatsapp-footer">
                   <MessageCircle className="h-4 w-4" />
                 </a>
                 <a href="mailto:support@workabroadhub.tech" className="h-9 w-9 rounded-lg bg-slate-800 flex items-center justify-center hover:bg-blue-600 transition-colors" data-testid="link-email-footer">
@@ -1562,7 +1562,7 @@ export default function Landing() {
                   <MessageCircle className="h-4 w-4 text-emerald-500 mt-0.5 flex-shrink-0" />
                   <div>
                     <div className="text-slate-400">WhatsApp Support</div>
-                    <a href="https://wa.me/254742619777" target="_blank" rel="noopener noreferrer" className="text-white hover:text-emerald-400 transition-colors" data-testid="link-footer-whatsapp-number">+254 742 619777</a>
+                    <a href="https://wa.me/254111467601" target="_blank" rel="noopener noreferrer" className="text-white hover:text-emerald-400 transition-colors" data-testid="link-footer-whatsapp-number">+254 111 467 601</a>
                   </div>
                 </li>
                 <li className="flex items-start gap-3">

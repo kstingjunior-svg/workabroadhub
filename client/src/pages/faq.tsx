@@ -81,7 +81,7 @@ const categories = [
       },
       {
         q: "I paid but nothing happened — what do I do?",
-        a: "First, check your M-Pesa messages for a payment confirmation from Safaricom. If you received confirmation but your account doesn't show the payment, wait 5 minutes and refresh — our system may be processing. If the issue persists, WhatsApp us at +254 742 619777 with your M-Pesa transaction ID (MPESA code) and we'll resolve it manually within 24 hours."
+        a: "First, check your M-Pesa messages for a payment confirmation from Safaricom. If you received confirmation but your account doesn't show the payment, wait 5 minutes and refresh — our system may be processing. If the issue persists, WhatsApp us at +254 111 467 601 with your M-Pesa transaction ID (MPESA code) and we'll resolve it manually within 24 hours."
       },
       {
         q: "Can I upgrade my plan later?",
@@ -262,7 +262,7 @@ export default function FAQPage() {
             Our team answers every message personally. WhatsApp is the fastest — we typically respond within 24 hours.
           </p>
           <div className="flex flex-wrap justify-center gap-3">
-            <a href="https://wa.me/254742619777" target="_blank" rel="noopener noreferrer" data-testid="link-faq-whatsapp">
+            <a href="https://wa.me/254111467601" target="_blank" rel="noopener noreferrer" data-testid="link-faq-whatsapp">
               <Button className="bg-green-600 hover:bg-green-700">
                 <MessageSquare className="h-4 w-4 mr-2" /> WhatsApp Us
               </Button>

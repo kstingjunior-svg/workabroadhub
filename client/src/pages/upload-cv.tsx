@@ -30,7 +30,7 @@ async function trackFunnelEvent(event: string, meta: Record<string, unknown> = {
 }
 
 const WA_LINK =
-  "https://wa.me/254742619777?text=Hi%20Nanjila%2C%20I%20want%20to%20upload%20my%20CV%20for%20overseas%20job%20matching";
+  "https://wa.me/254111467601?text=Hi%20Nanjila%2C%20I%20want%20to%20upload%20my%20CV%20for%20overseas%20job%20matching";
 
 const MATCH_COUNTRIES = [
   { flag: "🇬🇧", name: "United Kingdom", desc: "NHS · Tier 2 Visa" },
