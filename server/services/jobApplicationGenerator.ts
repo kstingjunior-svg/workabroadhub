@@ -8,6 +8,7 @@
 import OpenAI from "openai";
 import { generateWithRetry } from "../utils/retry";
 import { HUMAN_VOICE_RULES, roleVerticalContext, stripAiTells } from "../ai/human-voice";
+import { MASTER_WRITING_STANDARD } from "../lib/master-writing-standard";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -31,6 +32,7 @@ export async function generateJobApplication(
         {
           role: "system",
           content:
+            MASTER_WRITING_STANDARD +
             "You write cover letters and interview answers that sound like the candidate actually " +
             "wrote them, warm and specific, not templated. The applicant is a Kenyan professional " +
             "targeting overseas employment with visa sponsorship. Every sentence should be tailored " +
@@ -48,14 +50,14 @@ export async function generateJobApplication(
             `${roleVerticalContext(jobTitle)}\n\n` +
             `Return JSON with exactly these fields:\n` +
             `{\n` +
-            `  "coverLetter": "4 short paragraphs. Para 1: warm hook from the candidate's real life that maps to this job. Para 2: two concrete matches to the job needs, with numbers. Para 3: one honest sentence about why THIS company. Para 4: interview request + sign-off.",\n` +
+            `  "coverLetter": "4 substantial paragraphs, 350-550 words total. Para 1: warm hook from the candidate's real life that maps to this job. Para 2: two concrete matches to the job needs, grounded in the CV (use numbers only where the CV supports them). Para 3: honest specific sentence about why THIS company. Para 4: interview request + sign-off. Feel handwritten.",\n` +
             `  "tailoredAnswers": [ 3 objects with 'question' and 'answer', each answer must reference a specific detail from the candidate's CV, not a generic response ],\n` +
             `  "cvSuggestions": [ 3 specific ways this candidate's CV could be strengthened for this role ]\n` +
             `}`,
         },
       ],
       response_format: { type: "json_object" },
-      max_tokens: 1200,
+      max_tokens: 2500,
       temperature: 0.65,
     });
 

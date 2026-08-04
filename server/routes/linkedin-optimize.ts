@@ -67,13 +67,17 @@ async function completeJson(
   user: string,
   opts?: { maxTokens?: number; temperature?: number },
 ): Promise<any> {
+  // 2026-08: prepend the Master Writing Standard to every LinkedIn AI call so
+  // the About / Headline / Experience sections meet the same content-preservation
+  // and human-voice bar as CV Revamp.
+  const { MASTER_WRITING_STANDARD } = await import("../lib/master-writing-standard");
   const res = await openai.chat.completions.create({
     model: "gpt-4o",
     temperature: opts?.temperature ?? 0.55,
-    max_tokens: opts?.maxTokens ?? 2500,
+    max_tokens: opts?.maxTokens ?? 4000,
     response_format: { type: "json_object" },
     messages: [
-      { role: "system", content: system },
+      { role: "system", content: MASTER_WRITING_STANDARD + system },
       { role: "user",   content: user },
     ],
   });

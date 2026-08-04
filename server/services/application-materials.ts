@@ -20,6 +20,7 @@ import { eq } from "drizzle-orm";
 import { sendPushNotification } from "./push-notifications";
 import { trackTokenUsage } from "../lib/aiStats";
 import { HUMAN_VOICE_RULES, roleVerticalContext, stripAiTells } from "../ai/human-voice";
+import { MASTER_WRITING_STANDARD } from "../lib/master-writing-standard";
 import type { User } from "@shared/models/auth";
 
 export interface JobAnalysis {
@@ -74,18 +75,20 @@ export async function generateJobTailoredCV(
     "4. Every experience bullet uses the achievement shape: {verb} + {number} + {what} + {timeframe}. No responsibility-list bullets.",
     isPremium
       ? "5. Premium: include quantified achievements, one memorable line the interviewer will quote back, and a personal brand statement anchored in a real fact from the candidate's life."
-      : "5. Standard: concise, ATS-friendly, plain text, still human.",
-    "6. Under 650 words. No placeholders. No markdown. No asterisks. No em-dashes.",
+      : "5. Standard: ATS-friendly, plain text, still human.",
+    "6. Length: governed by the Master Writing Standard above. Preserve every skill, employer, date, and certification from the candidate's CV, then expand where duties are underdeveloped. Typically 1.3x-1.8x the input CV length. Do not compress.",
+    "7. No placeholders. No markdown. No asterisks. No em-dashes.",
   ].join("\n");
 
   const response = await openai.chat.completions.create({
     model: "gpt-4o",
     temperature: 0.5,
-    max_tokens: 1200,
+    max_tokens: 4000,
     messages: [
       {
         role: "system",
         content:
+          MASTER_WRITING_STANDARD +
           "You are a hiring-manager-turned-CV-writer specialising in East African professionals " +
           "applying overseas. You write CVs that sound like the person actually did the work, not " +
           "like ChatGPT wrote a template. Tailor every sentence to the specific job and company. " +
@@ -126,22 +129,23 @@ export async function generateCoverLetter(
     roleVerticalContext(job.title || jobTitle),
     "",
     "Requirements:",
-    "- 4 short paragraphs. Warm, human, specific to this job at this company.",
+    "- 4 substantial paragraphs. Warm, human, specific to this job at this company.",
     "- Para 1: open with a concrete, personal hook from the candidate's life that maps to this role. NOT 'I am writing to express my interest'.",
-    "- Para 2: connect the candidate's real experience (from their CV) directly to what the job needs. Use numbers.",
-    "- Para 3: one honest sentence about why THIS company, not any company.",
-    "- Para 4: polite call to action, one sentence, then sign off with the candidate's full name.",
-    "- Plain text only. Under 350 words. No em-dashes.",
+    "- Para 2: connect the candidate's real experience (from their CV) directly to what the job needs. Use numbers only where the CV supports them.",
+    "- Para 3: honest, specific reason why THIS company, not any company. Ground it in something the user provided.",
+    "- Para 4: polite call to action, then sign off with the candidate's full name.",
+    "- Plain text only. Length: 350-550 words. No em-dashes. Feel handwritten, not templated.",
   ].join("\n");
 
   const response = await openai.chat.completions.create({
     model: "gpt-4o",
     temperature: 0.6,
-    max_tokens: 700,
+    max_tokens: 1500,
     messages: [
       {
         role: "system",
         content:
+          MASTER_WRITING_STANDARD +
           "You write cover letters that hiring managers actually finish reading. Warm, specific, " +
           "the opposite of a template. You always open with something the reader will remember, and " +
           "you connect the candidate to the specific company, not the industry in general. Never " +
