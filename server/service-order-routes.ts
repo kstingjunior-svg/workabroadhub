@@ -730,25 +730,52 @@ Rules for handling the preferences above:
 
     // 2026-07: CV Revamp + other CV outputs now use gpt-4o (not gpt-4o-mini)
     // and a slightly higher temperature so the output has real warmth. Other
-    // service types keep the cheaper model. Also raised max_tokens to 3000
-    // so the fuller revamp doesn't truncate.
+    // service types keep the cheaper model.
+    //
+    // 2026-08 (Tony's quality audit): dynamic max_tokens based on input
+    // length so long/technical CVs don't get silently summarized. Six
+    // customers in the last 7 days had 30-70% content loss because the
+    // 3000-token cap forced the model to compress. Formula: give the model
+    // enough headroom to output ~1.3x the input.
     const isCvRevamp    = String(order.service_slug ?? "").toLowerCase() === "cv_fix_lite";
     const isCvHeavy     = ["ats_cv_optimization", "cv_rewrite"].includes(String(order.service_slug ?? "").toLowerCase());
     const modelToUse    = (isCvRevamp || isCvHeavy) ? "gpt-4o" : "gpt-4o-mini";
     const tempToUse     = (isCvRevamp || isCvHeavy) ? 0.55 : 0.4;
-    const maxTokensUse  = (isCvRevamp || isCvHeavy) ? 3000 : 2500;
 
-    const completion = await openai.chat.completions.create({
-      model: modelToUse,
-      messages: [
-        { role: "system", content: config.systemPrompt },
-        { role: "user", content: userMessage },
-      ],
-      temperature: tempToUse,
-      max_tokens: maxTokensUse,
-    });
+    // Rough char→token ratio for English is ~4 chars/token. Give the model
+    // 1.3x input tokens as headroom, floor 3000, ceiling 8000 (safety).
+    const inputLen      = (order.cv_text ?? "").length || 0;
+    const dynTokens     = Math.min(8000, Math.max(3000, Math.ceil((inputLen / 4) * 1.3)));
+    const maxTokensUse  = (isCvRevamp || isCvHeavy) ? dynTokens : 2500;
 
-    let output = completion.choices[0]?.message?.content?.trim();
+    // 2026-08: length-preservation instruction appended to the system prompt
+    // for CV services. Without this the model paraphrases away technical
+    // detail on long/specialized CVs (plumbing, engineering, medical). This
+    // is a hard requirement — if the model shrinks the output too much the
+    // guard below rejects it and either retries or flags for human review.
+    const cvLengthGuard = (isCvRevamp || isCvHeavy) && inputLen > 1500 ? `
+
+CRITICAL LENGTH REQUIREMENT (do not violate):
+- Preserve EVERY experience bullet, EVERY skill, EVERY certification, EVERY date, and EVERY technical term from the input CV.
+- Enhance wording only — do not remove content.
+- Your output must be at least 90% of the input length in characters (input is ${inputLen} characters).
+- Do not summarize, do not condense multiple bullets into one, do not omit technical vocabulary you don't recognize (e.g. plumbing terms like PPR/GI/HDPE/UPVC, medical codes, engineering acronyms) — preserve them verbatim.
+` : "";
+
+    const runCompletion = async (extraSystemGuidance = "") => {
+      const completion = await openai.chat.completions.create({
+        model: modelToUse,
+        messages: [
+          { role: "system", content: config.systemPrompt + cvLengthGuard + extraSystemGuidance },
+          { role: "user", content: userMessage },
+        ],
+        temperature: tempToUse,
+        max_tokens: maxTokensUse,
+      });
+      return completion.choices[0]?.message?.content?.trim() ?? "";
+    };
+
+    let output = await runCompletion();
     if (!output) {
       await updateOrderStatus(orderId, "failed", { error_message: "AI returned empty response" });
       return;
@@ -762,11 +789,105 @@ Rules for handling the preferences above:
       output = stripAiTells(output);
     } catch { /* non-critical — output is still usable if the scrubber load fails */ }
 
+    // ── 2026-08 QUALITY GUARDRAIL — CV shrinkage / bloat detection ──────────
+    // Six customers in the last 7 days received CVs that were 30-70% shorter
+    // than what they uploaded (technical CVs got compressed into summaries).
+    // Two others got 150-190% output (AI padded with hallucinated content).
+    // Both cases produce refund complaints. This guard blocks bad output
+    // BEFORE it reaches the customer:
+    //   1. If output < 85% of input → try ONCE more with a stronger prompt
+    //   2. If still bad → save to needs_human_review and don't auto-deliver
+    //   3. If output > 150% of input → same (AI hallucinated content)
+    if ((isCvRevamp || isCvHeavy) && inputLen > 1500) {
+      const MIN_RATIO = 0.85;
+      const MAX_RATIO = 1.50;
+      const ratio = output.length / inputLen;
+
+      if (ratio < MIN_RATIO || ratio > MAX_RATIO) {
+        console.warn(
+          `[quality-guard] orderId=${orderId} ratio=${ratio.toFixed(2)} ` +
+          `(in=${inputLen} out=${output.length}) — retrying with stronger prompt`
+        );
+
+        const retryGuidance = ratio < MIN_RATIO
+          ? `\n\nYOUR PREVIOUS RESPONSE WAS TOO SHORT (${output.length} chars vs ${inputLen} input). You MUST preserve every bullet, every skill, every technical term. Output at least ${Math.ceil(inputLen * 0.95)} characters.`
+          : `\n\nYOUR PREVIOUS RESPONSE WAS TOO LONG (${output.length} chars vs ${inputLen} input). Do NOT invent experience or skills. Stay close to input length. Output no more than ${Math.ceil(inputLen * 1.2)} characters.`;
+
+        try {
+          const retryOutput = await runCompletion(retryGuidance);
+          if (retryOutput) {
+            let cleanedRetry = retryOutput;
+            try {
+              const { stripAiTells } = await import("./ai/human-voice");
+              cleanedRetry = stripAiTells(retryOutput);
+            } catch { /* ignore */ }
+
+            const retryRatio = cleanedRetry.length / inputLen;
+            if (retryRatio >= MIN_RATIO && retryRatio <= MAX_RATIO) {
+              console.warn(
+                `[quality-guard] orderId=${orderId} retry SUCCESS ratio=${retryRatio.toFixed(2)}`
+              );
+              output = cleanedRetry;
+            } else {
+              // Retry also failed — flag for human review, DON'T auto-deliver
+              console.error(
+                `[quality-guard] orderId=${orderId} retry FAILED ratio=${retryRatio.toFixed(2)} — ` +
+                `flagging for human review, not delivering`
+              );
+              await pool.query(
+                `UPDATE service_orders
+                 SET status = 'processing',
+                     output_text = $2,
+                     needs_human_review = true,
+                     human_review_notes = $3,
+                     updated_at = NOW()
+                 WHERE id = $1`,
+                [
+                  orderId,
+                  cleanedRetry,
+                  `auto-flagged: length ratio ${retryRatio.toFixed(2)} outside [${MIN_RATIO}, ${MAX_RATIO}] on retry. Input=${inputLen} Output=${cleanedRetry.length}. Original attempt also failed at ${ratio.toFixed(2)}. Needs manual review before delivery.`
+                ]
+              );
+
+              // Notify user their CV is being personally reviewed (not
+              // delivered as usual). Prevents the "you sent me garbage"
+              // complaint and buys us time to fix or human-rewrite.
+              try {
+                const { notifyOrderNeedsReview } = await import("./service-order-notify");
+                await notifyOrderNeedsReview(orderId).catch(() => {});
+              } catch {
+                // Fallback: at least log so Tony can WhatsApp the user manually
+                console.warn(
+                  `[quality-guard] orderId=${orderId} needs manual outreach — ` +
+                  `notifyOrderNeedsReview module missing`
+                );
+              }
+              return;   // stop here — do NOT mark completed, do NOT deliver
+            }
+          }
+        } catch (retryErr: any) {
+          console.error(`[quality-guard] retry threw: ${retryErr?.message} — keeping original output`);
+        }
+      }
+    }
+
     // Final write — NOW() can't be passed as a bound parameter, so we use a
     // direct SQL update here rather than the generic updateOrderStatus helper.
+    // 2026-08: also stamp quality_score (100 = auto-passed by length guard,
+    // <100 = retry recovered it, NULL = guard didn't run for this service).
+    const passedRatio = inputLen > 1500 && (isCvRevamp || isCvHeavy)
+      ? Math.round(Math.min(1, output.length / inputLen) * 100)
+      : null;
     await pool.query(
-      `UPDATE service_orders SET output_text = $2, status = 'completed', completed_at = NOW(), updated_at = NOW() WHERE id = $1`,
-      [orderId, output],
+      `UPDATE service_orders
+       SET output_text = $2,
+           status = 'completed',
+           completed_at = NOW(),
+           updated_at = NOW(),
+           quality_score = COALESCE($3::int, quality_score),
+           quality_passed = COALESCE($3::int IS NOT NULL AND $3::int >= 85, quality_passed)
+       WHERE id = $1`,
+      [orderId, output, passedRatio],
     );
 
     // ── Notify the user that their document is READY ────────────────────────
