@@ -806,11 +806,60 @@ Rules for handling the preferences above:
       console.warn("[ServiceOrder] CV fingerprint hook failed:", e?.message);
     }
   } catch (err: any) {
-    console.error(`[ServiceOrder] processOrder error for ${orderId}:`, err?.message);
+    // ── 2026-08 (post-OpenAI-outage audit) ────────────────────────────────
+    // Distinguish transient errors (fix themselves — credit top-up, brief
+    // rate-limit burst, OpenAI 5xx, network blip) from permanent errors
+    // (invalid input the AI can't process — bad prompt, unreadable CV,
+    // context length exceeded, auth broken). Transient errors leave the
+    // order in "processing" so the stuck-order sweep retries; permanent
+    // errors mark it "failed" so the user is told promptly.
+    //
+    // Before this change: EVERY error → status='failed', which meant the
+    // OpenAI credit outage killed every in-flight order immediately, and
+    // the sweep couldn't recover them once credits were topped up.
+    const errMsg = String(err?.message ?? "Unknown error");
+    const status = Number(err?.status ?? 0);
+    const code   = String(err?.code ?? "");
+    const lower  = errMsg.toLowerCase();
+
+    const isTransient =
+      status === 429 || status === 503 || status === 502 || status === 500 ||
+      code === "insufficient_quota" ||
+      code === "credit_balance_exhausted" ||
+      code === "rate_limit_exceeded" ||
+      lower.includes("no credits remaining") ||
+      lower.includes("rate limit") ||
+      lower.includes("timeout") ||
+      lower.includes("timed out") ||
+      lower.includes("econnrefused") ||
+      lower.includes("etimedout") ||
+      lower.includes("network") ||
+      lower.includes("temporarily");
+
+    if (isTransient) {
+      // Log warning + THROW. Do NOT mark failed. The sweep will retry (up to
+      // MAX_RETRIES_PER_ORDER=3). If it exhausts retries, sweep marks failed
+      // with a clear "[recovery] Exhausted" message + fires user notification
+      // (see notifyOrderFailed below).
+      console.warn(
+        `[ServiceOrder] processOrder TRANSIENT error for ${orderId}: ` +
+        `status=${status} code=${code} msg="${errMsg}" — leaving order in processing state for sweep retry`,
+      );
+      throw err;
+    }
+
+    console.error(
+      `[ServiceOrder] processOrder PERMANENT error for ${orderId}: ` +
+      `status=${status} code=${code} msg="${errMsg}" — marking failed`,
+    );
     await pool.query(
       `UPDATE service_orders SET status = 'failed', error_message = $2, updated_at = NOW() WHERE id = $1`,
-      [orderId, err?.message ?? "Unknown error"],
+      [orderId, errMsg],
     ).catch(() => {});
+    // Tell the user their order failed (with refund path). Fire and forget.
+    notifyOrderFailed(orderId, errMsg).catch((notifyErr) => {
+      console.warn(`[ServiceOrder] failure notification failed for ${orderId}:`, notifyErr?.message);
+    });
   }
 }
 
@@ -948,6 +997,123 @@ async function notifyOrderCompleted(orderId: string): Promise<void> {
   }
 }
 
+/**
+ * notifyOrderFailed — email + WhatsApp when an order is permanently failed
+ * (either from a permanent processOrder error, or from the sweep exhausting
+ * MAX_RETRIES_PER_ORDER). Users get: an apology, refund info, and next-step
+ * options (retry / contact support). Fire-and-forget — must never throw.
+ *
+ * 2026-08 (post-OpenAI-outage audit): before this function existed, users
+ * whose CV Revamp died in-flight got zero notification. They'd stare at
+ * "Processing…" forever, then eventually email Tony asking where their doc
+ * was. Now we own the "we messed up" moment properly.
+ */
+async function notifyOrderFailed(orderId: string, technicalReason: string): Promise<void> {
+  try {
+    const { rows } = await pool.query<{
+      user_id: string;
+      service_name: string;
+      service_slug: string;
+      amount: number | null;
+    }>(
+      `SELECT user_id, service_name, service_slug, amount FROM service_orders WHERE id = $1`,
+      [orderId],
+    );
+    const order = rows[0];
+    if (!order) return;
+
+    const { rows: userRows } = await pool.query<{
+      email: string | null;
+      phone: string | null;
+      first_name: string | null;
+    }>(
+      `SELECT email, phone, first_name FROM users WHERE id = $1`,
+      [order.user_id],
+    );
+    const user = userRows[0];
+    if (!user) return;
+
+    const firstName    = (user.first_name || "").split(/\s+/)[0] || "there";
+    const serviceName  = order.service_name || "your order";
+    const appOrigin    = (process.env.APP_ORIGIN || "https://workabroadhub.tech").replace(/\/$/, "");
+    const orderUrl     = `${appOrigin}/order/${orderId}`;
+    const supportPhone = (process.env.WHATSAPP_SUPPORT_NUMBER || process.env.ADMIN_PHONE_NUMBER || "").replace(/^\+?/, "");
+    const supportLine  = supportPhone
+      ? `\n\nWe'll process your refund within 24 hours. If you'd rather try again, reply here or WhatsApp us on wa.me/${supportPhone}.`
+      : `\n\nWe'll process your refund within 24 hours. Reply to this email if you'd rather try again.`;
+
+    // ── Email
+    if (user.email) {
+      try {
+        const { sendWithFailover } = await import("./lib/email-providers");
+        const html = `
+          <div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1e293b">
+            <h1 style="font-size:20px;font-weight:700;color:#b91c1c;margin:0 0 8px">We couldn't finish your ${serviceName} — sorry.</h1>
+            <p style="font-size:15px;line-height:1.55;margin:0 0 16px">
+              Hi ${escapeHtml(firstName)}, something went wrong on our side while generating your ${serviceName.toLowerCase()}. Your KES ${order.amount ?? "?"} payment is safe.
+            </p>
+            <p style="font-size:15px;line-height:1.55;margin:0 0 20px">
+              You have two options:
+            </p>
+            <a href="${orderUrl}" style="display:inline-block;background:linear-gradient(90deg,#14b8a6,#06b6d4);color:#fff;font-weight:600;text-decoration:none;padding:12px 22px;border-radius:8px;font-size:14px;margin-right:8px">
+              Retry this order →
+            </a>
+            <p style="font-size:13px;line-height:1.55;margin:24px 0 8px;color:#64748b">
+              Or reply to this email and we'll refund the KES ${order.amount ?? "?"} within 24 hours — no questions asked.
+            </p>
+            <div style="border-top:1px solid #e2e8f0;margin:24px 0 12px"></div>
+            <p style="font-size:11px;line-height:1.5;color:#94a3b8;margin:0">
+              Technical reference: ${escapeHtml(technicalReason.slice(0, 200))}
+            </p>
+          </div>
+        `;
+        const text = `We couldn't finish your ${serviceName}.\n\nHi ${firstName}, something went wrong on our side. Your KES ${order.amount ?? "?"} payment is safe.\n\nOptions:\n1) Retry: ${orderUrl}\n2) Reply to this email for a refund within 24 hours.\n\nReference: ${technicalReason.slice(0, 200)}`;
+        await sendWithFailover({
+          to: user.email,
+          subject: `We couldn't finish your ${serviceName} — full refund available`,
+          html,
+          text,
+        });
+      } catch (emailErr: any) {
+        console.warn(`[ServiceOrder] failure email failed for ${orderId}:`, emailErr?.message);
+      }
+    }
+
+    // ── WhatsApp
+    if (user.phone) {
+      try {
+        const { sendWhatsApp } = await import("./services/whatsapp");
+        const waMessage =
+          `😔 *We couldn't finish your ${serviceName}, ${firstName}.*\n\n` +
+          `Something went wrong on our side. Your KES ${order.amount ?? "?"} payment is safe.\n\n` +
+          `👉 *Retry:* ${orderUrl}\n` +
+          `Or reply to this message for a full refund within 24 hours.`+
+          supportLine;
+        await sendWhatsApp(user.phone, waMessage);
+      } catch (waErr: any) {
+        console.warn(`[ServiceOrder] failure WhatsApp failed for ${orderId}:`, waErr?.message);
+      }
+    }
+
+    // ── In-app notification
+    try {
+      const { storage } = await import("./storage");
+      await storage.createUserNotification({
+        userId: order.user_id,
+        type: "warning",
+        title: `Order didn't complete — refund available`,
+        message: `We couldn't finish your ${serviceName.toLowerCase()}. Retry from your order page or reply for a refund.`,
+      } as any);
+    } catch (notifErr: any) {
+      console.warn(`[ServiceOrder] in-app failure notification failed for ${orderId}:`, notifErr?.message);
+    }
+
+    console.log(`[ServiceOrder] Failure notifications dispatched for order ${orderId} (email=${!!user.email} wa=${!!user.phone})`);
+  } catch (outer: any) {
+    console.error(`[ServiceOrder] notifyOrderFailed outer failure for ${orderId}:`, outer?.message);
+  }
+}
+
 /** Tiny HTML escaper for the completion email — no template engine needed. */
 function escapeHtml(s: string): string {
   return String(s)
@@ -1015,6 +1181,13 @@ export function startStuckOrderSweep(): void {
           ).catch(() => {});
           retries.delete(row.id);
           console.warn(`[ServiceOrder] Recovery: order ${row.id} (${row.service_slug}) failed after ${MAX_RETRIES_PER_ORDER} retries`);
+          // 2026-08 (post-outage audit): tell the user their order gave up.
+          // Otherwise they stare at "processing" forever until manually
+          // emailing support. Fire and forget.
+          notifyOrderFailed(
+            row.id,
+            `Exhausted ${MAX_RETRIES_PER_ORDER} recovery retries — likely upstream AI outage`,
+          ).catch(() => {});
           continue;
         }
         retries.set(row.id, attempts + 1);
