@@ -122,7 +122,15 @@ async function analyzeOffer(input) {
         vision = JSON.parse(raw);
     }
     catch (err) {
-        console.error("[offer-analyzer] Analysis call failed:", err?.message);
+        // 2026-08 (Tony's debug): log EVERYTHING useful about the OpenAI
+        // error so we can tell in Render logs whether it's a real rate
+        // limit, a context-length overflow, an invalid content-type from
+        // our text path, etc. status + code + type are the fields the
+        // OpenAI SDK exposes for programmatic handling.
+        console.error(`[offer-analyzer] Analysis call failed: kind=${normalized.kind} ` +
+            `status=${err?.status ?? "?"} code=${err?.code ?? "?"} type=${err?.type ?? "?"} ` +
+            `msg="${err?.message ?? "?"}" ` +
+            (normalized.kind === "text" ? `textLen=${normalized.text.length}` : ""));
         return {
             ok: false,
             error: "vision_failed",
@@ -535,15 +543,24 @@ function clamp0100(v) {
     return Math.max(0, Math.min(100, Math.round(n)));
 }
 function mapVisionError(msg) {
-    const lower = msg.toLowerCase();
-    if (lower.includes("quota") || lower.includes("insufficient_quota")) {
-        return "Our verification AI is temporarily out of capacity. Please try again in a few minutes — no charge for this attempt.";
+    const lower = (msg || "").toLowerCase();
+    if (lower.includes("insufficient_quota") || (lower.includes("quota") && !lower.includes("rate"))) {
+        return "Our verification AI is temporarily out of capacity — the admin has been notified. Please try again in a few minutes.";
     }
-    if (lower.includes("rate limit") || lower.includes("429")) {
-        return "Our verification AI is handling many requests right now. Please try again in a few minutes.";
+    if (lower.includes("rate limit") || lower.includes("rate_limit") || lower.includes("429")) {
+        return "Our verification AI is handling many requests right now. Please wait 30 seconds and try again.";
+    }
+    if (lower.includes("context_length") || lower.includes("maximum context") || lower.includes("too long")) {
+        return "This document is very long — try uploading just the first 2-3 pages, or a photo of the key page (offer details + salary + signatures).";
+    }
+    if (lower.includes("invalid_image") || lower.includes("could not process image")) {
+        return "We couldn't read that image. Please try a clearer JPG/PNG photo — good lighting, no glare.";
     }
     if (lower.includes("timeout") || lower.includes("timed out")) {
         return "The verification took longer than expected. Please try again with a smaller or clearer image.";
+    }
+    if (lower.includes("connection") || lower.includes("network") || lower.includes("econnrefused")) {
+        return "We couldn't reach the verification service. Please check your connection and try again.";
     }
     return "We couldn't complete verification for this document. Please try again with a clearer photo or scan.";
 }
