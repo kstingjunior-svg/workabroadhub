@@ -481,9 +481,16 @@ function clamp0100(v: any): number {
 }
 
 function mapVisionError(msg: string): string {
-  const lower = msg.toLowerCase();
-  if (lower.includes("quota") || lower.includes("insufficient_quota")) return "Our verification AI is temporarily out of capacity. Please try again in a few minutes — no charge for this attempt.";
-  if (lower.includes("rate limit") || lower.includes("429")) return "Our verification AI is handling many requests right now. Please try again in a few minutes.";
+  const lower = (msg || "").toLowerCase();
+  // Billing / quota first — same 429 as rate limit but different messaging.
+  if (
+    lower.includes("credit_balance_exhausted") ||
+    lower.includes("no credits remaining") ||
+    lower.includes("credits remaining") ||
+    lower.includes("insufficient_quota") ||
+    lower.includes("exceeded your current quota")
+  ) return "Our verification service is temporarily unavailable. Our team has been notified and is topping it up now — please try again in 10-15 minutes.";
+  if (lower.includes("rate limit") || lower.includes("rate_limit") || lower.includes("429")) return "Our verification AI is handling many requests right now. Please wait 30 seconds and try again.";
   if (lower.includes("timeout") || lower.includes("timed out")) return "The verification took longer than expected. Please try again with a smaller or clearer image.";
   return "We couldn't complete verification for this document. Please try again with a clearer photo or scan.";
 }

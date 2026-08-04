@@ -544,8 +544,15 @@ function clamp0100(v) {
 }
 function mapVisionError(msg) {
     const lower = (msg || "").toLowerCase();
-    if (lower.includes("insufficient_quota") || (lower.includes("quota") && !lower.includes("rate"))) {
-        return "Our verification AI is temporarily out of capacity — the admin has been notified. Please try again in a few minutes.";
+    // Billing / quota exhaustion — checked BEFORE the generic "429" branch
+    // because OpenAI billing errors ALSO carry status 429, and the two need
+    // very different user messaging (retry-later vs admin-must-top-up).
+    if (lower.includes("credit_balance_exhausted") ||
+        lower.includes("no credits remaining") ||
+        lower.includes("credits remaining") ||
+        lower.includes("insufficient_quota") ||
+        lower.includes("exceeded your current quota")) {
+        return "Our verification service is temporarily unavailable. Our team has been notified and is topping it up now — please try again in 10-15 minutes.";
     }
     if (lower.includes("rate limit") || lower.includes("rate_limit") || lower.includes("429")) {
         return "Our verification AI is handling many requests right now. Please wait 30 seconds and try again.";
