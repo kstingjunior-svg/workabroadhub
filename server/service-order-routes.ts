@@ -807,6 +807,29 @@ CRITICAL LENGTH REQUIREMENT — READ CAREFULLY (do not violate):
       output = stripAiTells(output);
     } catch { /* non-critical — output is still usable if the scrubber load fails */ }
 
+    // ── 2026-08 v3 SPLIT CAREER ENHANCEMENT REPORT ──────────────────────────
+    // Stage 21 of the Elite Career Intelligence Engine unconditionally appends
+    // a Career Enhancement Report separated by the divider:
+    //   ═══ CAREER ENHANCEMENT REPORT ═══
+    // We split here so:
+    //   - output_text (what becomes the DOCX/PDF the employer sees) contains
+    //     ONLY the document body — never the coaching content.
+    //   - The report is stashed in ai_output.careerReport so the download page
+    //     can render it as a coaching card below the file for the user.
+    // If the AI didn't emit the divider (fallback path), output_text = full
+    // response and no report is stored.
+    let careerReport: string | null = null;
+    const REPORT_DIVIDER_RE = /\n?\s*[═=]{3,}\s*CAREER\s+ENHANCEMENT\s+REPORT\s*[═=]{3,}\s*\n?/i;
+    const dividerMatch = output.match(REPORT_DIVIDER_RE);
+    if (dividerMatch && dividerMatch.index !== undefined) {
+      const body = output.slice(0, dividerMatch.index).trimEnd();
+      const report = output.slice(dividerMatch.index + dividerMatch[0].length).trim();
+      if (body.length > 0) {
+        output = body;
+        careerReport = report.length > 0 ? report : null;
+      }
+    }
+
     // ── 2026-08 QUALITY GUARDRAIL — CV shrinkage / bloat detection ──────────
     // Six customers in the last 7 days received CVs that were 30-70% shorter
     // than what they uploaded (technical CVs got compressed into summaries).
@@ -903,6 +926,14 @@ CRITICAL LENGTH REQUIREMENT — READ CAREFULLY (do not violate):
     const passedRatio = inputLen > 800 && (isCvRevamp || isCvHeavy)
       ? Math.min(100, Math.round((output.length / inputLen) * 100))
       : null;
+
+    // 2026-08 v3: also persist the Career Enhancement Report (Stage 21) into
+    // ai_output.careerReport for the download-page UI to render as a
+    // separate coaching card. NULL when the AI didn't produce a report.
+    const aiOutputPayload = careerReport
+      ? JSON.stringify({ careerReport, generatedAt: new Date().toISOString() })
+      : null;
+
     await pool.query(
       `UPDATE service_orders
        SET output_text = $2,
@@ -910,9 +941,10 @@ CRITICAL LENGTH REQUIREMENT — READ CAREFULLY (do not violate):
            completed_at = NOW(),
            updated_at = NOW(),
            quality_score = COALESCE($3::int, quality_score),
-           quality_passed = COALESCE($3::int IS NOT NULL AND $3::int >= 100, quality_passed)
+           quality_passed = COALESCE($3::int IS NOT NULL AND $3::int >= 100, quality_passed),
+           ai_output = COALESCE($4::jsonb, ai_output)
        WHERE id = $1`,
-      [orderId, output, passedRatio],
+      [orderId, output, passedRatio, aiOutputPayload],
     );
 
     // ── Notify the user that their document is READY ────────────────────────
