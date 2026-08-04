@@ -74,9 +74,29 @@ Rules:
 - forgeryIndicators: only things you actually observed (font mismatch, blurred text over the score field, edited photograph edges, low-res logo, misaligned baseline, colour banding around scores, etc.). Empty is fine.
 - positiveIndicators: crisp official IELTS logo, matching security background pattern, sharp candidate photo edges, professional layout, etc.
 - confidence: how sure you are of your reading (0 = illegible, 100 = crystal clear).`;
-async function analyzeIelts(imageBase64DataUrl) {
+async function analyzeIelts(input) {
+    const normalized = typeof input === "string" ? { kind: "image", imageBase64DataUrl: input } : input;
     let vision;
     try {
+        const userContent = normalized.kind === "image"
+            ? [
+                { type: "text", text: "Analyze this IELTS Test Report Form. Return the JSON only." },
+                { type: "image_url", image_url: { url: normalized.imageBase64DataUrl, detail: "high" } },
+            ]
+            : [
+                {
+                    type: "text",
+                    text: "The user uploaded a document" +
+                        (normalized.sourceFilename ? ` named "${normalized.sourceFilename}"` : "") +
+                        " (PDF or Word). Layout/hologram/photo signals are not available — analyze from the extracted text only. " +
+                        "For forgeryIndicators, ONLY include text-observable signals (wrong TRF-number format, impossible " +
+                        "score combinations, wrong test-centre code, missing required fields). Do NOT fabricate visual " +
+                        "observations like 'edited photograph edges'.\n\n" +
+                        "---BEGIN TRF TEXT---\n" +
+                        normalized.text.slice(0, 12000) +
+                        "\n---END TRF TEXT---\n\nReturn the JSON only.",
+                },
+            ];
         const completion = await openai_1.openai.chat.completions.create({
             model: "gpt-4o",
             response_format: { type: "json_object" },
@@ -84,20 +104,14 @@ async function analyzeIelts(imageBase64DataUrl) {
             max_tokens: 1500,
             messages: [
                 { role: "system", content: SYSTEM_PROMPT },
-                {
-                    role: "user",
-                    content: [
-                        { type: "text", text: "Analyze this IELTS Test Report Form. Return the JSON only." },
-                        { type: "image_url", image_url: { url: imageBase64DataUrl, detail: "high" } },
-                    ],
-                },
+                { role: "user", content: userContent },
             ],
         });
         const raw = completion.choices[0]?.message?.content ?? "{}";
         vision = JSON.parse(raw);
     }
     catch (err) {
-        console.error("[ielts-analyzer] Vision call failed:", err?.message);
+        console.error("[ielts-analyzer] Analysis call failed:", err?.message);
         return { ok: false, error: "vision_failed", message: mapVisionError(err?.message ?? "") };
     }
     const fields = {

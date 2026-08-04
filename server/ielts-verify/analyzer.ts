@@ -117,9 +117,40 @@ Rules:
 - positiveIndicators: crisp official IELTS logo, matching security background pattern, sharp candidate photo edges, professional layout, etc.
 - confidence: how sure you are of your reading (0 = illegible, 100 = crystal clear).`;
 
-export async function analyzeIelts(imageBase64DataUrl: string): Promise<IeltsAnalyzerResult> {
+// 2026-08 (Tony): image OR PDF/Word text. Same pattern as offer/visa.
+export type AnalyzeIeltsInput =
+  | { kind: "image"; imageBase64DataUrl: string }
+  | { kind: "text"; text: string; sourceFilename?: string };
+
+export async function analyzeIelts(
+  input: string | AnalyzeIeltsInput,
+): Promise<IeltsAnalyzerResult> {
+  const normalized: AnalyzeIeltsInput =
+    typeof input === "string" ? { kind: "image", imageBase64DataUrl: input } : input;
+
   let vision: any;
   try {
+    const userContent: any[] = normalized.kind === "image"
+      ? [
+          { type: "text", text: "Analyze this IELTS Test Report Form. Return the JSON only." },
+          { type: "image_url", image_url: { url: normalized.imageBase64DataUrl, detail: "high" } },
+        ]
+      : [
+          {
+            type: "text",
+            text:
+              "The user uploaded a document" +
+              (normalized.sourceFilename ? ` named "${normalized.sourceFilename}"` : "") +
+              " (PDF or Word). Layout/hologram/photo signals are not available — analyze from the extracted text only. " +
+              "For forgeryIndicators, ONLY include text-observable signals (wrong TRF-number format, impossible " +
+              "score combinations, wrong test-centre code, missing required fields). Do NOT fabricate visual " +
+              "observations like 'edited photograph edges'.\n\n" +
+              "---BEGIN TRF TEXT---\n" +
+              normalized.text.slice(0, 12_000) +
+              "\n---END TRF TEXT---\n\nReturn the JSON only.",
+          },
+        ];
+
     const completion = await openai.chat.completions.create({
       model: "gpt-4o",
       response_format: { type: "json_object" },
@@ -127,19 +158,13 @@ export async function analyzeIelts(imageBase64DataUrl: string): Promise<IeltsAna
       max_tokens: 1500,
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
-        {
-          role: "user",
-          content: [
-            { type: "text", text: "Analyze this IELTS Test Report Form. Return the JSON only." },
-            { type: "image_url", image_url: { url: imageBase64DataUrl, detail: "high" } },
-          ],
-        },
+        { role: "user", content: userContent },
       ],
     });
     const raw = completion.choices[0]?.message?.content ?? "{}";
     vision = JSON.parse(raw);
   } catch (err: any) {
-    console.error("[ielts-analyzer] Vision call failed:", err?.message);
+    console.error("[ielts-analyzer] Analysis call failed:", err?.message);
     return { ok: false, error: "vision_failed", message: mapVisionError(err?.message ?? "") };
   }
 

@@ -83,10 +83,31 @@ Rules:
 - forgeryIndicators: only include things you actually observed (font mismatch, misaligned baseline, copy-paste artifact, low-res logo, spelling errors that suggest a template not authored by native English HR, etc). Empty is fine.
 - positiveIndicators: what specifically looks legitimate (crisp corporate letterhead, matching signature block, professional English, reasonable specificity).
 - confidence: how sure you are of your own reading (0 = illegible, 100 = crystal clear).`;
-// ── Main entrypoint ────────────────────────────────────────────────────
-async function analyzeOffer(imageBase64DataUrl) {
+async function analyzeOffer(input) {
+    // Backwards-compat: legacy callers still pass a raw data URL string.
+    const normalized = typeof input === "string" ? { kind: "image", imageBase64DataUrl: input } : input;
     let vision;
     try {
+        // Build the user message differently for image vs. text inputs.
+        const userContent = normalized.kind === "image"
+            ? [
+                { type: "text", text: "Analyze this employment offer letter. Return the JSON only." },
+                { type: "image_url", image_url: { url: normalized.imageBase64DataUrl, detail: "high" } },
+            ]
+            : [
+                {
+                    type: "text",
+                    text: "The user uploaded a document" +
+                        (normalized.sourceFilename ? ` named "${normalized.sourceFilename}"` : "") +
+                        " (PDF or Word). Layout/font signals are not available — analyze from the extracted text only. " +
+                        "For forgeryIndicators and positiveIndicators, ONLY include signals that can be judged from text " +
+                        "(grammar quality, template-y phrasing, contradictions, missing legal boilerplate, unusual monetary demands). " +
+                        "Do NOT invent visual observations like 'pixelated logo' when you can't see the image.\n\n" +
+                        "---BEGIN OFFER LETTER TEXT---\n" +
+                        normalized.text.slice(0, 12000) + // safety cap
+                        "\n---END OFFER LETTER TEXT---\n\nReturn the JSON only.",
+                },
+            ];
         const completion = await openai_1.openai.chat.completions.create({
             model: "gpt-4o",
             response_format: { type: "json_object" },
@@ -94,20 +115,14 @@ async function analyzeOffer(imageBase64DataUrl) {
             max_tokens: 2200,
             messages: [
                 { role: "system", content: SYSTEM_PROMPT },
-                {
-                    role: "user",
-                    content: [
-                        { type: "text", text: "Analyze this employment offer letter. Return the JSON only." },
-                        { type: "image_url", image_url: { url: imageBase64DataUrl, detail: "high" } },
-                    ],
-                },
+                { role: "user", content: userContent },
             ],
         });
         const raw = completion.choices[0]?.message?.content ?? "{}";
         vision = JSON.parse(raw);
     }
     catch (err) {
-        console.error("[offer-analyzer] Vision call failed:", err?.message);
+        console.error("[offer-analyzer] Analysis call failed:", err?.message);
         return {
             ok: false,
             error: "vision_failed",

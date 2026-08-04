@@ -403,25 +403,39 @@ function registerVisaCheckRoute(app) {
         const t0 = Date.now();
         try {
             if (!req.file)
-                return res.status(400).json({ message: "Please attach a visa image or PDF." });
-            if (!req.file.mimetype.startsWith("image/") && req.file.mimetype !== "application/pdf") {
-                return res.status(400).json({ message: "Please upload an image (JPG, PNG, WEBP) or PDF." });
+                return res.status(400).json({ message: "Please attach a visa document." });
+            const mt = req.file.mimetype;
+            const isImage = mt.startsWith("image/");
+            const isPdf = mt === "application/pdf";
+            const isDocx = mt === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+            const isDoc = mt === "application/msword";
+            if (!isImage && !isPdf && !isDocx && !isDoc) {
+                return res.status(400).json({ message: "Please upload an image (JPG, PNG, WEBP), PDF, or Word document." });
             }
-            // Convert buffer → base64 data URL for the vision model.
-            // PDFs: we can't render pages server-side without pdfjs — vision
-            // API accepts image only. For PDFs, fall back to the existing v1
-            // logic (extractText + heuristic screening) instead of crashing.
-            if (req.file.mimetype === "application/pdf") {
-                return res.status(400).json({
-                    message: "PDFs aren't supported in the new AI verifier yet. Please upload a clear photo or scan (JPG, PNG, WEBP).",
-                    fallbackAvailable: true,
-                    fallbackEndpoint: "/api/tools/visa-check",
+            // 2026-08 (Tony): PDF + Word supported via text-extraction path.
+            // Vision remains default for images (seals, fonts, layout matter
+            // for forgery detection). See visa-verify/analyzer.ts.
+            const { analyzeVisa } = await Promise.resolve().then(() => __importStar(require("../visa-verify/analyzer")));
+            let report;
+            if (isImage) {
+                const base64 = req.file.buffer.toString("base64");
+                const dataUrl = `data:${mt};base64,${base64}`;
+                report = await analyzeVisa({ kind: "image", imageBase64DataUrl: dataUrl });
+            }
+            else {
+                const { extractTextFromBuffer } = await Promise.resolve().then(() => __importStar(require("../utils/extract-text")));
+                const extracted = await extractTextFromBuffer(req.file.buffer, mt, req.file.originalname);
+                if (!extracted?.text || extracted.text.trim().length < 50) {
+                    return res.status(400).json({
+                        message: "We couldn't read enough text from that file. If it's a scanned PDF, please upload a clear photo (JPG/PNG) instead — our OCR handles those.",
+                    });
+                }
+                report = await analyzeVisa({
+                    kind: "text",
+                    text: extracted.text,
+                    sourceFilename: req.file.originalname,
                 });
             }
-            const base64 = req.file.buffer.toString("base64");
-            const dataUrl = `data:${req.file.mimetype};base64,${base64}`;
-            const { analyzeVisa } = await Promise.resolve().then(() => __importStar(require("../visa-verify/analyzer")));
-            const report = await analyzeVisa(dataUrl);
             if (!report.ok) {
                 return res.status(502).json({ ok: false, message: report.message });
             }

@@ -145,9 +145,50 @@ Rules:
 
 // ── Main entrypoint ────────────────────────────────────────────────────
 
-export async function analyzeOffer(imageBase64DataUrl: string): Promise<OfferAnalyzerResult> {
+/**
+ * 2026-08 (Tony): accept EITHER an image data URL (vision path) OR raw
+ * extracted text (PDF / Word path). Vision remains the default because
+ * layout signals matter — pixelated logos, misaligned baselines, font
+ * mismatches — but for PDFs and Word docs we skip the image encode and
+ * feed the extracted text directly. Same JSON schema, same downstream
+ * scoring — the analyzer just loses the visual forgery signals when
+ * running on text.
+ */
+export type AnalyzeOfferInput =
+  | { kind: "image"; imageBase64DataUrl: string }
+  | { kind: "text"; text: string; sourceFilename?: string };
+
+export async function analyzeOffer(
+  input: string | AnalyzeOfferInput,
+): Promise<OfferAnalyzerResult> {
+  // Backwards-compat: legacy callers still pass a raw data URL string.
+  const normalized: AnalyzeOfferInput =
+    typeof input === "string" ? { kind: "image", imageBase64DataUrl: input } : input;
+
   let vision: any;
   try {
+    // Build the user message differently for image vs. text inputs.
+    const userContent: any[] = normalized.kind === "image"
+      ? [
+          { type: "text", text: "Analyze this employment offer letter. Return the JSON only." },
+          { type: "image_url", image_url: { url: normalized.imageBase64DataUrl, detail: "high" } },
+        ]
+      : [
+          {
+            type: "text",
+            text:
+              "The user uploaded a document" +
+              (normalized.sourceFilename ? ` named "${normalized.sourceFilename}"` : "") +
+              " (PDF or Word). Layout/font signals are not available — analyze from the extracted text only. " +
+              "For forgeryIndicators and positiveIndicators, ONLY include signals that can be judged from text " +
+              "(grammar quality, template-y phrasing, contradictions, missing legal boilerplate, unusual monetary demands). " +
+              "Do NOT invent visual observations like 'pixelated logo' when you can't see the image.\n\n" +
+              "---BEGIN OFFER LETTER TEXT---\n" +
+              normalized.text.slice(0, 12_000) + // safety cap
+              "\n---END OFFER LETTER TEXT---\n\nReturn the JSON only.",
+          },
+        ];
+
     const completion = await openai.chat.completions.create({
       model: "gpt-4o",
       response_format: { type: "json_object" },
@@ -155,19 +196,13 @@ export async function analyzeOffer(imageBase64DataUrl: string): Promise<OfferAna
       max_tokens: 2200,
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
-        {
-          role: "user",
-          content: [
-            { type: "text", text: "Analyze this employment offer letter. Return the JSON only." },
-            { type: "image_url", image_url: { url: imageBase64DataUrl, detail: "high" } },
-          ],
-        },
+        { role: "user", content: userContent },
       ],
     });
     const raw = completion.choices[0]?.message?.content ?? "{}";
     vision = JSON.parse(raw);
   } catch (err: any) {
-    console.error("[offer-analyzer] Vision call failed:", err?.message);
+    console.error("[offer-analyzer] Analysis call failed:", err?.message);
     return {
       ok: false,
       error: "vision_failed",

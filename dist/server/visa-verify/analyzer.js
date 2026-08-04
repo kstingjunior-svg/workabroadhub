@@ -81,11 +81,30 @@ Rules:
 - positiveIndicators: same — what specifically looks legitimate.
 - confidence: how sure you are of your own reading (0 = illegible, 100 = crystal clear).
 - Every string in indicators arrays must be one short sentence.`;
-// ── Main entrypoint ─────────────────────────────────────────────────────
-async function analyzeVisa(imageBase64DataUrl) {
-    // Step 1: call GPT-4o vision
+async function analyzeVisa(input) {
+    const normalized = typeof input === "string" ? { kind: "image", imageBase64DataUrl: input } : input;
+    // Step 1: call GPT-4o (vision for images, text-only for PDFs/Word)
     let vision;
     try {
+        const userContent = normalized.kind === "image"
+            ? [
+                { type: "text", text: "Analyze this visa document. Return the JSON only." },
+                { type: "image_url", image_url: { url: normalized.imageBase64DataUrl, detail: "high" } },
+            ]
+            : [
+                {
+                    type: "text",
+                    text: "The user uploaded a document" +
+                        (normalized.sourceFilename ? ` named "${normalized.sourceFilename}"` : "") +
+                        " (PDF or Word). Layout/seal/font signals are not available — analyze from the extracted text only. " +
+                        "For forgeryIndicators, ONLY include text-observable signals (misspelled country/agency names, wrong " +
+                        "reference-number format, contradictory dates, missing required fields). Do NOT fabricate visual " +
+                        "observations like 'pixelated MOFA seal'.\n\n" +
+                        "---BEGIN VISA DOCUMENT TEXT---\n" +
+                        normalized.text.slice(0, 12000) +
+                        "\n---END VISA DOCUMENT TEXT---\n\nReturn the JSON only.",
+                },
+            ];
         const completion = await openai_1.openai.chat.completions.create({
             model: "gpt-4o",
             response_format: { type: "json_object" },
@@ -93,20 +112,14 @@ async function analyzeVisa(imageBase64DataUrl) {
             max_tokens: 1400,
             messages: [
                 { role: "system", content: SYSTEM_PROMPT },
-                {
-                    role: "user",
-                    content: [
-                        { type: "text", text: "Analyze this visa document. Return the JSON only." },
-                        { type: "image_url", image_url: { url: imageBase64DataUrl, detail: "high" } },
-                    ],
-                },
+                { role: "user", content: userContent },
             ],
         });
         const raw = completion.choices[0]?.message?.content ?? "{}";
         vision = JSON.parse(raw);
     }
     catch (err) {
-        console.error("[visa-analyzer] Vision call failed:", err?.message);
+        console.error("[visa-analyzer] Analysis call failed:", err?.message);
         return {
             ok: false,
             error: "vision_failed",

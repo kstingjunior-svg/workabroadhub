@@ -409,23 +409,43 @@ export function registerOfferCheckRoute(app: Express): void {
     async (req: any, res: Response) => {
       const t0 = Date.now();
       try {
-        if (!req.file) return res.status(400).json({ message: "Please attach the offer letter (image or PDF)." });
-        if (!req.file.mimetype.startsWith("image/") && req.file.mimetype !== "application/pdf") {
-          return res.status(400).json({ message: "Please upload an image (JPG, PNG, WEBP) or PDF." });
-        }
-        if (req.file.mimetype === "application/pdf") {
-          return res.status(400).json({
-            message: "PDFs aren't supported in the new AI verifier yet. Please upload a clear photo or screenshot (JPG, PNG, WEBP).",
-            fallbackAvailable: true,
-            fallbackEndpoint: "/api/tools/offer-check",
-          });
-        }
+        if (!req.file) return res.status(400).json({ message: "Please attach the offer letter." });
 
-        const base64 = req.file.buffer.toString("base64");
-        const dataUrl = `data:${req.file.mimetype};base64,${base64}`;
+        const mt = req.file.mimetype;
+        const isImage = mt.startsWith("image/");
+        const isPdf   = mt === "application/pdf";
+        const isDocx  = mt === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+        const isDoc   = mt === "application/msword";
+        if (!isImage && !isPdf && !isDocx && !isDoc) {
+          return res.status(400).json({ message: "Please upload an image (JPG, PNG, WEBP), PDF, or Word document." });
+        }
 
         const { analyzeOffer } = await import("../offer-verify/analyzer");
-        const report = await analyzeOffer(dataUrl);
+        let report;
+
+        // 2026-08 (Tony): PDF + Word now supported via text-extraction
+        // path. Vision remains the default for images (layout signals
+        // matter for forgery detection). See analyzer.ts comment for the
+        // trade-offs. extractTextFromBuffer handles both PDF and DOCX
+        // via pdf-parse + mammoth.
+        if (isImage) {
+          const base64 = req.file.buffer.toString("base64");
+          const dataUrl = `data:${mt};base64,${base64}`;
+          report = await analyzeOffer({ kind: "image", imageBase64DataUrl: dataUrl });
+        } else {
+          const { extractTextFromBuffer } = await import("../utils/extract-text");
+          const extracted = await extractTextFromBuffer(req.file.buffer, mt, req.file.originalname);
+          if (!extracted?.text || extracted.text.trim().length < 50) {
+            return res.status(400).json({
+              message: "We couldn't read enough text from that file. If it's a scanned PDF, please upload a clear photo (JPG/PNG) instead — our OCR handles those.",
+            });
+          }
+          report = await analyzeOffer({
+            kind: "text",
+            text: extracted.text,
+            sourceFilename: req.file.originalname,
+          });
+        }
 
         if (!report.ok) {
           return res.status(502).json({ ok: false, message: report.message });

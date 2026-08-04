@@ -130,10 +130,43 @@ Rules:
 
 // ── Main entrypoint ─────────────────────────────────────────────────────
 
-export async function analyzeVisa(imageBase64DataUrl: string): Promise<AnalyzerResult> {
-  // Step 1: call GPT-4o vision
+// 2026-08 (Tony): accept EITHER an image data URL (vision path) or raw
+// extracted text (PDF / Word path). See offer-verify/analyzer.ts for the
+// same pattern + trade-offs.
+export type AnalyzeVisaInput =
+  | { kind: "image"; imageBase64DataUrl: string }
+  | { kind: "text"; text: string; sourceFilename?: string };
+
+export async function analyzeVisa(
+  input: string | AnalyzeVisaInput,
+): Promise<AnalyzerResult> {
+  const normalized: AnalyzeVisaInput =
+    typeof input === "string" ? { kind: "image", imageBase64DataUrl: input } : input;
+
+  // Step 1: call GPT-4o (vision for images, text-only for PDFs/Word)
   let vision: any;
   try {
+    const userContent: any[] = normalized.kind === "image"
+      ? [
+          { type: "text", text: "Analyze this visa document. Return the JSON only." },
+          { type: "image_url", image_url: { url: normalized.imageBase64DataUrl, detail: "high" } },
+        ]
+      : [
+          {
+            type: "text",
+            text:
+              "The user uploaded a document" +
+              (normalized.sourceFilename ? ` named "${normalized.sourceFilename}"` : "") +
+              " (PDF or Word). Layout/seal/font signals are not available — analyze from the extracted text only. " +
+              "For forgeryIndicators, ONLY include text-observable signals (misspelled country/agency names, wrong " +
+              "reference-number format, contradictory dates, missing required fields). Do NOT fabricate visual " +
+              "observations like 'pixelated MOFA seal'.\n\n" +
+              "---BEGIN VISA DOCUMENT TEXT---\n" +
+              normalized.text.slice(0, 12_000) +
+              "\n---END VISA DOCUMENT TEXT---\n\nReturn the JSON only.",
+          },
+        ];
+
     const completion = await openai.chat.completions.create({
       model: "gpt-4o",
       response_format: { type: "json_object" },
@@ -141,19 +174,13 @@ export async function analyzeVisa(imageBase64DataUrl: string): Promise<AnalyzerR
       max_tokens: 1400,
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
-        {
-          role: "user",
-          content: [
-            { type: "text", text: "Analyze this visa document. Return the JSON only." },
-            { type: "image_url", image_url: { url: imageBase64DataUrl, detail: "high" } },
-          ],
-        },
+        { role: "user", content: userContent },
       ],
     });
     const raw = completion.choices[0]?.message?.content ?? "{}";
     vision = JSON.parse(raw);
   } catch (err: any) {
-    console.error("[visa-analyzer] Vision call failed:", err?.message);
+    console.error("[visa-analyzer] Analysis call failed:", err?.message);
     return {
       ok: false,
       error: "vision_failed",
