@@ -10,6 +10,29 @@
  * Returns a plain-text CV (600 words max) ready to be stored in
  * users.generated_cv and delivered via WhatsApp.
  */
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.generateCV = generateCV;
 const openai_1 = require("../lib/openai");
@@ -68,18 +91,22 @@ async function generateCV(user, careerProfile) {
         "3. Every experience bullet uses the achievement shape: {verb} + {number or specific} + {what} + {timeframe or scale}. NO responsibility-list bullets.",
         "4. Professional Summary must open with a concrete, honest fact that a hiring manager will remember. Not 'Dedicated professional with X years of experience'.",
         "5. Include ATS keywords relevant to the target markets and role, but weave them into real sentences, not a keyword-stuffed list.",
-        "6. Keep the total under 650 words. Concise, scannable, no fluff.",
+        "6. Length: governed by the Master Writing Standard above. Preserve everything the user provided, expand where duties are underdeveloped per Master Rule 3. Do not compress.",
         "7. Do NOT include any placeholder text in square brackets in the final CV.",
         "8. Output plain text only. No markdown headers, no asterisks.",
     ].join("\n");
+    // 2026-08: prepend Master Writing Standard so this CV writer inherits the
+    // same content-preservation + expansion + human-voice rules as CV Revamp.
+    const { MASTER_WRITING_STANDARD } = await Promise.resolve().then(() => __importStar(require("../lib/master-writing-standard")));
     const response = await openai_1.openai.chat.completions.create({
         model: "gpt-4o",
         temperature: 0.55,
-        max_tokens: 1200,
+        max_tokens: 4000,
         messages: [
             {
                 role: "system",
-                content: "You are a hiring-manager-turned-CV-writer who has read 10,000 CVs from East African " +
+                content: MASTER_WRITING_STANDARD +
+                    "You are a hiring-manager-turned-CV-writer who has read 10,000 CVs from East African " +
                     "professionals applying overseas. You know the difference between a CV that gets a call " +
                     "and a CV that gets ignored: warmth, specificity, and one memorable line the reader will " +
                     "quote back in the interview. You write real, specific content. If a field is missing, " +

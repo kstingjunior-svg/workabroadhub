@@ -247,6 +247,20 @@ httpServer.listen(PORT, "0.0.0.0", () => {
         catch (err) {
             console.error("[Server] ❌ Paid-but-free reconciler failed to start:", err?.message);
         }
+        // 2026-08: service-order reconciler — every 5 min, find completed payments
+        // for service purchases (cv_fix_lite, offer_verify, etc.) whose service
+        // orders never got flipped to 'paid' or triggered AI generation. Root
+        // cause was a client-side key mismatch (orderId vs serviceOrderId) that
+        // dropped metadata; that bug is fixed, but this belt-and-braces sweep
+        // ensures no future silent gap can strand a paying customer > 5 min.
+        // Idempotent — running against an already-linked payment is a no-op.
+        try {
+            const { startServiceOrderReconciler } = await Promise.resolve().then(() => __importStar(require("./lib/service-order-reconciler")));
+            startServiceOrderReconciler();
+        }
+        catch (err) {
+            console.error("[Server] ❌ Service-order reconciler failed to start:", err?.message);
+        }
     })();
 });
 // ─────────────────────────────────────────────────────────────────────────────

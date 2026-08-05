@@ -15,6 +15,29 @@
  * so we can swap to Anthropic Claude by changing one file when ANTHROPIC_API_KEY
  * is set. See the note in streamJson().
  */
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -45,13 +68,17 @@ function currentUserId(req) {
 // ANTHROPIC_API_KEY, swap the body of this function to Anthropic — the rest
 // of the module is agnostic.
 async function completeJson(system, user, opts) {
+    // 2026-08: prepend the Master Writing Standard to every LinkedIn AI call so
+    // the About / Headline / Experience sections meet the same content-preservation
+    // and human-voice bar as CV Revamp.
+    const { MASTER_WRITING_STANDARD } = await Promise.resolve().then(() => __importStar(require("../lib/master-writing-standard")));
     const res = await openai_1.openai.chat.completions.create({
         model: "gpt-4o",
         temperature: opts?.temperature ?? 0.55,
-        max_tokens: opts?.maxTokens ?? 2500,
+        max_tokens: opts?.maxTokens ?? 4000,
         response_format: { type: "json_object" },
         messages: [
-            { role: "system", content: system },
+            { role: "system", content: MASTER_WRITING_STANDARD + system },
             { role: "user", content: user },
         ],
     });

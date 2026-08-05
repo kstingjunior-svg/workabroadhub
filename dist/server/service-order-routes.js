@@ -272,10 +272,10 @@ MANDATORY QUALITY LIFTS (in this order):
 7. FORMATTING — plain text, "## " for section headers, "**Company Name — Role — YYYY–YYYY**" line for each job. Use "*" for bullet points. Do NOT use tables, columns, images, or code fences.
 
 STRICT RULES:
-- Never fabricate employers, dates, credentials, or achievements.
-- Never add fictional experience.
+- Never fabricate employers, dates, credentials, degrees, hard metrics, or measurable achievements.
+- Never add fictional experience or employment.
 - Keep every real fact intact — company names, dates, degrees, certifications.
-- Length: ~600-800 words (1-2 pages when rendered).
+- Length: governed by the Master Writing Standard above. Preserve everything from the input, then expand where responsibilities are underdeveloped. Typically 1.3x–1.8x the input length. Do not compress or summarise.
 
 8. USER PREFERENCES ARE NOT FABRICATION. If the user provides preferences in the "USER-SUPPLIED PREFERENCES" block (target salary, availability, languages, willingness to relocate, certifications, achievements, must-mention experiences), you MUST include every one of them in the appropriate section of the final CV. These are the user's own truthful additions, not invented facts. Ignoring them is a defect.
 
@@ -288,13 +288,13 @@ Return ONLY the revamped CV body — no commentary, no markdown code fences, no 
         needsCv: true,
         filename: "ATS_Optimized_CV",
         estSeconds: 60,
-        systemPrompt: `You are an ATS optimization expert. Rewrite the user's CV to maximize Applicant Tracking System compatibility:
+        systemPrompt: `You are an ATS optimization expert. Rewrite the user's CV to maximise Applicant Tracking System compatibility:
 - Use standard section headers (Summary, Experience, Education, Skills, Certifications)
-- Add quantifiable achievements (use metrics where reasonable based on the CV)
-- Inject industry-relevant keywords naturally
-- Remove any tables, columns, graphics, fancy formatting
+- Add quantifiable achievements only where the input already supports them; never invent hard metrics
+- Inject industry-relevant keywords naturally (Master Rule 6 — Tailor to Career)
+- Remove any tables, columns, graphics, fancy formatting (they break ATS parsing)
 - Use bullet points for achievements (each starting with a strong action verb)
-- Keep to 2 pages worth (~800 words)
+- Length: governed by the Master Writing Standard above. Preserve everything, expand where underdeveloped. Do not compress.
 - Output as plain text with ## headings and * bullets
 CRITICAL: Do NOT include any title, header, or label like "ATS CV Optimization", "Optimized CV", "CV", "Resume", or any service / product name at the top. Start directly with the candidate's name (or Summary section). The recruiter must see a clean CV, not branded content.
 Return ONLY the rewritten CV body.`,
@@ -318,12 +318,14 @@ Output as plain text with ## section headings.`,
         needsCv: true,
         filename: "Cover_Letter",
         estSeconds: 25,
-        systemPrompt: `You are a professional cover-letter writer. Using the CV provided + any job details in the user message, produce a 250-350 word cover letter:
+        systemPrompt: `You are a professional cover-letter writer. Using the CV provided + any job details in the user message, produce a cover letter that follows the Master Writing Standard above:
+- Personalise it — mention the employer where the user has told you the company name
 - Address it to "Dear Hiring Manager," unless a name is provided
-- Opening: state the role + 1-line hook
-- Middle: 2 short paragraphs connecting CV experience to the job's requirements
-- Close: state availability + thank
+- Opening: state the role + a memorable 1-2 line hook that connects the candidate to the role emotionally
+- Middle: 2-3 substantial paragraphs connecting real CV experience to the job's requirements, showing genuine motivation
+- Close: state availability, express confident enthusiasm, and thank the reader
 - Sign off with the candidate's name from the CV
+- Length: 350-550 words. Feel like a thoughtful letter written personally by the applicant, not a template.
 Output as plain text. No markdown headings.`,
     },
     sop_writing: {
@@ -331,13 +333,14 @@ Output as plain text. No markdown headings.`,
         needsCv: false,
         filename: "Statement_of_Purpose",
         estSeconds: 90,
-        systemPrompt: `You are a university admissions essay writer. Using the user's details, produce an 800-1000 word Statement of Purpose:
-- Hook opening tied to a personal experience
+        systemPrompt: `You are a university admissions essay writer. Follow the Master Writing Standard above. Using the user's details, produce a Statement of Purpose that reads as if written by the applicant themselves:
+- Hook opening tied to a real personal experience (draw only from what the user provided)
 - Academic background paragraph (degree, key courses, GPA if shared)
-- Research/professional interests paragraph
-- Why this university, why this program
-- Career goals (short and long term)
-- Closing: alignment with the program's strengths
+- Research / professional interests paragraph
+- Why this university, why this program — grounded in specifics the user mentioned
+- Career goals (short and long term) demonstrating clear direction and authentic reflection
+- Closing that aligns the applicant with the program's strengths
+- Length: 900-1200 words. Substantial but never padded. Every sentence should earn its place.
 Output as plain text. Use ## for section headers if it helps flow.`,
     },
     motivation_letter: {
@@ -345,11 +348,12 @@ Output as plain text. Use ## for section headers if it helps flow.`,
         needsCv: false,
         filename: "Motivation_Letter",
         estSeconds: 60,
-        systemPrompt: `You are a scholarship/EU motivation letter expert. Produce a 500-700 word motivation letter using the user's details:
-- Formal but warm tone
-- Specific reasons WHY this program/job/scholarship
-- Concrete examples from background
-- Future contribution / goals
+        systemPrompt: `You are a scholarship / EU motivation letter expert. Follow the Master Writing Standard above. Produce a motivation letter that tells a compelling story and feels handcrafted for the applicant:
+- Formal but warm tone (Master Rule 10 — Human Emotion Matters)
+- Specific, personal reasons why this program / job / scholarship
+- Concrete examples drawn from the applicant's real background
+- Future contribution and goals that connect the applicant to the opportunity
+- Length: 600-900 words. Detailed and memorable, never generic.
 Output as plain text. No markdown.`,
     },
     linkedin_optimization: {
@@ -657,23 +661,61 @@ Rules for handling the preferences above:
             userMessage = "Please generate the document with reasonable defaults.";
         // 2026-07: CV Revamp + other CV outputs now use gpt-4o (not gpt-4o-mini)
         // and a slightly higher temperature so the output has real warmth. Other
-        // service types keep the cheaper model. Also raised max_tokens to 3000
-        // so the fuller revamp doesn't truncate.
+        // service types keep the cheaper model.
+        //
+        // 2026-08 (Tony's quality audit): dynamic max_tokens based on input
+        // length so long/technical CVs don't get silently summarized. Six
+        // customers in the last 7 days had 30-70% content loss because the
+        // 3000-token cap forced the model to compress. Formula: give the model
+        // enough headroom to output ~1.3x the input.
         const isCvRevamp = String(order.service_slug ?? "").toLowerCase() === "cv_fix_lite";
         const isCvHeavy = ["ats_cv_optimization", "cv_rewrite"].includes(String(order.service_slug ?? "").toLowerCase());
         const modelToUse = (isCvRevamp || isCvHeavy) ? "gpt-4o" : "gpt-4o-mini";
         const tempToUse = (isCvRevamp || isCvHeavy) ? 0.55 : 0.4;
-        const maxTokensUse = (isCvRevamp || isCvHeavy) ? 3000 : 2500;
-        const completion = await openai_1.openai.chat.completions.create({
-            model: modelToUse,
-            messages: [
-                { role: "system", content: config.systemPrompt },
-                { role: "user", content: userMessage },
-            ],
-            temperature: tempToUse,
-            max_tokens: maxTokensUse,
-        });
-        let output = completion.choices[0]?.message?.content?.trim();
+        // 2026-08 Master Writing Standard mandates EXPANSION (Rule 1: "the final
+        // document should almost always be LONGER"). Give the model enough
+        // headroom to output ~2.2x the input in tokens. Rough char→token ratio
+        // for English is ~4 chars/token. Floor 4000, ceiling 12000 (gpt-4o max
+        // is 16k output but we hold headroom for system prompt).
+        const inputLen = (order.cv_text ?? "").length || 0;
+        const dynTokens = Math.min(12000, Math.max(4000, Math.ceil((inputLen / 4) * 2.2)));
+        const maxTokensUse = (isCvRevamp || isCvHeavy) ? dynTokens : 3500;
+        // 2026-08: length-preservation + expansion instruction. Under the Master
+        // Writing Standard, output should be LONGER than input (never shorter,
+        // unless the user asked for a shorter version). Guard below rejects any
+        // output below 100% and retries once.
+        const cvLengthGuard = (isCvRevamp || isCvHeavy) && inputLen > 800 ? `
+
+CRITICAL LENGTH REQUIREMENT — READ CAREFULLY (do not violate):
+- Preserve EVERY experience bullet, EVERY skill, EVERY certification, EVERY date, EVERY employer, and EVERY technical term from the input CV.
+- Enhance wording — do not remove content. Do not summarise.
+- Your output MUST be at least as long as the input, and should typically be 1.3x–1.8x the input length. The input is ${inputLen} characters. Aim for ${Math.ceil(inputLen * 1.4)}–${Math.ceil(inputLen * 1.8)} characters of output.
+- Fill gaps intelligently per Master Rule 3 — where a role's responsibilities are underdeveloped, expand with role-appropriate duties and competencies that any professional in that job would naturally have.
+- Do not condense multiple bullets into one. Do not omit technical vocabulary you don't recognise (e.g. plumbing terms like PPR / GI / HDPE / UPVC, medical codes, engineering acronyms, industry-specific tools) — preserve them verbatim and, where helpful, add one line of context.
+` : "";
+        // 2026-08 (Tony's mandate after CV Revamp quality crisis): every
+        // document-generation prompt is prefixed with the Master Writing Standard.
+        // This is the single source of truth for content-preservation, human
+        // voice, expansion-not-compression, and per-profession tailoring. Applies
+        // to every service — CV Revamp, Cover Letter, Motivation, SoP, LinkedIn,
+        // Interview Prep, etc.
+        const { MASTER_WRITING_STANDARD } = await Promise.resolve().then(() => __importStar(require("./lib/master-writing-standard")));
+        const runCompletion = async (extraSystemGuidance = "") => {
+            const completion = await openai_1.openai.chat.completions.create({
+                model: modelToUse,
+                messages: [
+                    {
+                        role: "system",
+                        content: MASTER_WRITING_STANDARD + config.systemPrompt + cvLengthGuard + extraSystemGuidance,
+                    },
+                    { role: "user", content: userMessage },
+                ],
+                temperature: tempToUse,
+                max_tokens: maxTokensUse,
+            });
+            return completion.choices[0]?.message?.content?.trim() ?? "";
+        };
+        let output = await runCompletion();
         if (!output) {
             await updateOrderStatus(orderId, "failed", { error_message: "AI returned empty response" });
             return;
@@ -686,9 +728,126 @@ Rules for handling the preferences above:
             output = stripAiTells(output);
         }
         catch { /* non-critical — output is still usable if the scrubber load fails */ }
+        // ── 2026-08 v3 SPLIT CAREER ENHANCEMENT REPORT ──────────────────────────
+        // Stage 21 of the Elite Career Intelligence Engine unconditionally appends
+        // a Career Enhancement Report separated by the divider:
+        //   ═══ CAREER ENHANCEMENT REPORT ═══
+        // We split here so:
+        //   - output_text (what becomes the DOCX/PDF the employer sees) contains
+        //     ONLY the document body — never the coaching content.
+        //   - The report is stashed in ai_output.careerReport so the download page
+        //     can render it as a coaching card below the file for the user.
+        // If the AI didn't emit the divider (fallback path), output_text = full
+        // response and no report is stored.
+        let careerReport = null;
+        const REPORT_DIVIDER_RE = /\n?\s*[═=]{3,}\s*CAREER\s+ENHANCEMENT\s+REPORT\s*[═=]{3,}\s*\n?/i;
+        const dividerMatch = output.match(REPORT_DIVIDER_RE);
+        if (dividerMatch && dividerMatch.index !== undefined) {
+            const body = output.slice(0, dividerMatch.index).trimEnd();
+            const report = output.slice(dividerMatch.index + dividerMatch[0].length).trim();
+            if (body.length > 0) {
+                output = body;
+                careerReport = report.length > 0 ? report : null;
+            }
+        }
+        // ── 2026-08 QUALITY GUARDRAIL — CV shrinkage / bloat detection ──────────
+        // Six customers in the last 7 days received CVs that were 30-70% shorter
+        // than what they uploaded (technical CVs got compressed into summaries).
+        // Two others got 150-190% output (AI padded with hallucinated content).
+        // Both cases produce refund complaints. This guard blocks bad output
+        // BEFORE it reaches the customer:
+        //   1. If output < 85% of input → try ONCE more with a stronger prompt
+        //   2. If still bad → save to needs_human_review and don't auto-deliver
+        //   3. If output > 150% of input → same (AI hallucinated content)
+        if ((isCvRevamp || isCvHeavy) && inputLen > 800) {
+            // 2026-08 Master Writing Standard: output must be at least as long as
+            // input (Rule 1 — never reduce). Expansion up to 2x is expected and
+            // encouraged (Rule 2 — add value). Anything shorter than input OR more
+            // than 2.2x input triggers a retry with a stronger prompt.
+            const MIN_RATIO = 1.00;
+            const MAX_RATIO = 2.20;
+            const ratio = output.length / inputLen;
+            if (ratio < MIN_RATIO || ratio > MAX_RATIO) {
+                console.warn(`[quality-guard] orderId=${orderId} ratio=${ratio.toFixed(2)} ` +
+                    `(in=${inputLen} out=${output.length}) — retrying with stronger prompt`);
+                const retryGuidance = ratio < MIN_RATIO
+                    ? `\n\nRETRY INSTRUCTION — your previous response was SHORTER than the input (${output.length} chars vs ${inputLen} input). This violates Master Rule 1 (Never Reduce Content). You MUST:\n- Preserve every bullet, skill, certification, employer, date, and technical term\n- Expand underdeveloped bullets with role-appropriate responsibilities (Master Rule 3 — Fill the Gaps)\n- Output between ${Math.ceil(inputLen * 1.3)} and ${Math.ceil(inputLen * 1.8)} characters\nDo not invent employers, dates, degrees, or hard metrics — but DO enrich duties, competencies, and voice.`
+                    : `\n\nRETRY INSTRUCTION — your previous response was TOO LONG (${output.length} chars vs ${inputLen} input, more than 2.2x). You are padding with content that isn't grounded in the input. Cut invented experience, invented employers, or invented achievements. Keep only what the input supports. Aim for ${Math.ceil(inputLen * 1.4)}–${Math.ceil(inputLen * 1.8)} characters.`;
+                try {
+                    const retryOutput = await runCompletion(retryGuidance);
+                    if (retryOutput) {
+                        let cleanedRetry = retryOutput;
+                        try {
+                            const { stripAiTells } = await Promise.resolve().then(() => __importStar(require("./ai/human-voice")));
+                            cleanedRetry = stripAiTells(retryOutput);
+                        }
+                        catch { /* ignore */ }
+                        const retryRatio = cleanedRetry.length / inputLen;
+                        if (retryRatio >= MIN_RATIO && retryRatio <= MAX_RATIO) {
+                            console.warn(`[quality-guard] orderId=${orderId} retry SUCCESS ratio=${retryRatio.toFixed(2)}`);
+                            output = cleanedRetry;
+                        }
+                        else {
+                            // Retry also failed — flag for human review, DON'T auto-deliver
+                            console.error(`[quality-guard] orderId=${orderId} retry FAILED ratio=${retryRatio.toFixed(2)} — ` +
+                                `flagging for human review, not delivering`);
+                            await db_1.pool.query(`UPDATE service_orders
+                 SET status = 'processing',
+                     output_text = $2,
+                     needs_human_review = true,
+                     human_review_notes = $3,
+                     updated_at = NOW()
+                 WHERE id = $1`, [
+                                orderId,
+                                cleanedRetry,
+                                `auto-flagged: length ratio ${retryRatio.toFixed(2)} outside [${MIN_RATIO}, ${MAX_RATIO}] on retry. Input=${inputLen} Output=${cleanedRetry.length}. Original attempt also failed at ${ratio.toFixed(2)}. Needs manual review before delivery.`
+                            ]);
+                            // Notify user their CV is being personally reviewed (not
+                            // delivered as usual). Prevents the "you sent me garbage"
+                            // complaint and buys us time to fix or human-rewrite.
+                            try {
+                                const { notifyOrderNeedsReview } = await Promise.resolve().then(() => __importStar(require("./service-order-notify")));
+                                await notifyOrderNeedsReview(orderId).catch(() => { });
+                            }
+                            catch {
+                                // Fallback: at least log so Tony can WhatsApp the user manually
+                                console.warn(`[quality-guard] orderId=${orderId} needs manual outreach — ` +
+                                    `notifyOrderNeedsReview module missing`);
+                            }
+                            return; // stop here — do NOT mark completed, do NOT deliver
+                        }
+                    }
+                }
+                catch (retryErr) {
+                    console.error(`[quality-guard] retry threw: ${retryErr?.message} — keeping original output`);
+                }
+            }
+        }
         // Final write — NOW() can't be passed as a bound parameter, so we use a
         // direct SQL update here rather than the generic updateOrderStatus helper.
-        await db_1.pool.query(`UPDATE service_orders SET output_text = $2, status = 'completed', completed_at = NOW(), updated_at = NOW() WHERE id = $1`, [orderId, output]);
+        // 2026-08 Master Writing Standard: quality_score is a 0-100 index where
+        // 100 means output is at or above input length (Rule 1 satisfied), and
+        // anything below 100 means we couldn't get expansion (retry recovered it
+        // to ≥100% or we'd have gone to human-review above). NULL for services
+        // where the guard doesn't apply.
+        const passedRatio = inputLen > 800 && (isCvRevamp || isCvHeavy)
+            ? Math.min(100, Math.round((output.length / inputLen) * 100))
+            : null;
+        // 2026-08 v3: also persist the Career Enhancement Report (Stage 21) into
+        // ai_output.careerReport for the download-page UI to render as a
+        // separate coaching card. NULL when the AI didn't produce a report.
+        const aiOutputPayload = careerReport
+            ? JSON.stringify({ careerReport, generatedAt: new Date().toISOString() })
+            : null;
+        await db_1.pool.query(`UPDATE service_orders
+       SET output_text = $2,
+           status = 'completed',
+           completed_at = NOW(),
+           updated_at = NOW(),
+           quality_score = COALESCE($3::int, quality_score),
+           quality_passed = COALESCE($3::int IS NOT NULL AND $3::int >= 100, quality_passed),
+           ai_output = COALESCE($4::jsonb, ai_output)
+       WHERE id = $1`, [orderId, output, passedRatio, aiOutputPayload]);
         // ── Notify the user that their document is READY ────────────────────────
         // 2026-07 (Tony's audit): previously nothing ran after status=completed.
         // Users who closed the tab never knew their CV was ready — the earlier
