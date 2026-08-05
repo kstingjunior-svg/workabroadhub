@@ -16,7 +16,7 @@ import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import {
   ArrowLeft, BadgeCheck, Loader2, ShieldCheck, ShieldAlert, Building2, Briefcase,
-  Inbox, ExternalLink, RefreshCcw, Plus, X, Sparkles,
+  Inbox, ExternalLink, RefreshCcw, Plus, X, Sparkles, Trash2,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -113,6 +113,58 @@ export default function KenyaCareersAdmin() {
       await load();
     } catch (err: any) {
       toast({ variant: "destructive", title: "Update failed", description: err?.message });
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  // 2026-08 (Tony): reject + hard-delete a fake/joke company registration.
+  // Cascades away every job, branch, application, and claim tied to it.
+  // Server also fires a formal warning email to the registrant. Requires
+  // typed confirmation of the company name to guard against misclicks —
+  // deletion is permanent and cascades to real applicant data if the
+  // company happens to have any (unlikely for the fake ones).
+  async function deleteCompany(id: string, name: string) {
+    const confirmed = window.confirm(
+      `PERMANENTLY DELETE "${name}"?\n\n` +
+      `This will:\n` +
+      `  • Remove the company from the site\n` +
+      `  • Delete every job, branch, application, and claim tied to it\n` +
+      `  • Send a formal warning email to the registrant\n\n` +
+      `This cannot be undone. Type OK / Cancel to confirm.`
+    );
+    if (!confirmed) return;
+
+    const reason = window.prompt(
+      `Optional: reason for removal (included in the warning email).\n` +
+      `Leave blank to skip. Examples:\n` +
+      `  "Joke / spam registration"\n` +
+      `  "Impersonation of a real business"\n` +
+      `  "Inappropriate content"`,
+      "Joke / spam registration",
+    );
+
+    setSavingId(id);
+    try {
+      const res = await fetch(`/api/admin/local-jobs/companies/${id}`, {
+        method: "DELETE",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: reason ?? null }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(body?.message || `HTTP ${res.status}`);
+      }
+      toast({
+        title: `"${name}" deleted`,
+        description: body?.emailedWarning
+          ? "Warning email sent to registrant."
+          : "No contact email on file — no warning sent.",
+      });
+      await load();
+    } catch (err: any) {
+      toast({ variant: "destructive", title: "Delete failed", description: err?.message });
     } finally {
       setSavingId(null);
     }
@@ -233,20 +285,33 @@ export default function KenyaCareersAdmin() {
                       {[c.industry, c.county].filter(Boolean).join(" · ")} · {c.job_count} job{c.job_count === 1 ? "" : "s"}
                     </p>
                   </div>
-                  <div className="flex gap-1.5 shrink-0">
+                  <div className="flex gap-1.5 shrink-0 flex-wrap justify-end">
                     {c.status !== "approved" && (
                       <Button size="sm" variant="outline" disabled={savingId === c.id}
-                        onClick={() => updateCompany(c.id, "approved")}>
+                        onClick={() => updateCompany(c.id, "approved")}
+                        data-testid={`btn-approve-${c.id}`}>
                         <ShieldCheck className="h-3.5 w-3.5 mr-1" /> Approve
                       </Button>
                     )}
                     {c.status !== "suspended" && (
                       <Button size="sm" variant="outline" className="text-rose-700 border-rose-300 hover:bg-rose-50"
                         disabled={savingId === c.id}
-                        onClick={() => updateCompany(c.id, "suspended")}>
+                        onClick={() => updateCompany(c.id, "suspended")}
+                        data-testid={`btn-suspend-${c.id}`}>
                         <ShieldAlert className="h-3.5 w-3.5 mr-1" /> Suspend
                       </Button>
                     )}
+                    <Button size="sm" variant="outline"
+                      className="text-rose-800 border-rose-400 bg-rose-50 hover:bg-rose-100 hover:text-rose-900"
+                      disabled={savingId === c.id}
+                      onClick={() => deleteCompany(c.id, c.name)}
+                      title="Permanently delete + warn registrant (for fake / joke / spam listings)"
+                      data-testid={`btn-reject-delete-${c.id}`}>
+                      {savingId === c.id
+                        ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                        : <Trash2 className="h-3.5 w-3.5 mr-1" />}
+                      Reject &amp; Delete
+                    </Button>
                   </div>
                 </CardContent>
               </Card>

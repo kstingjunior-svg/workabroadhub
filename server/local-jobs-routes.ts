@@ -2007,8 +2007,160 @@ export function registerLocalJobsRoutes(app: Express): void {
       console.log(`[admin] adminId=${adminId} set company=${id} status=${newStatus}`);
       res.json({ success: true, status: newStatus });
     } catch (err: any) {
-      console.error("[PATCH /api/admin/local-jobs/companies/:id]", err?.message);
-      res.status(500).json({ message: "Could not update company." });
+      // 2026-08: surface the real Postgres error to admin toast — the old
+      // generic "Could not update company." message hid constraint / column
+      // failures and made debugging impossible. Admin panel is admin-only so
+      // it's safe to include the error detail here.
+      console.error("[PATCH /api/admin/local-jobs/companies/:id]", {
+        message: err?.message, code: err?.code, detail: err?.detail,
+      });
+      res.status(500).json({
+        message: `Update failed: ${err?.message ?? "unknown error"}`,
+        code: err?.code ?? null,
+      });
+    }
+  });
+
+  // ── DELETE /api/admin/local-jobs/companies/:id — reject + purge fake company ─
+  // 2026-08 (Tony's request after "Jumanji plumbers" / "matako massage" joke
+  // registrations): admins need a single button that (a) hard-deletes the
+  // fake company row, (b) cascades away every associated job, branch,
+  // application, and claim (all have ON DELETE CASCADE), and (c) sends a
+  // firm warning email to the registrant so they don't try again. All in
+  // one atomic action.
+  //
+  // Safety:
+  //   - Admin-only (requireAdminInline)
+  //   - Confirms the row exists before delete
+  //   - Snapshots email + name BEFORE deleting so we can email the
+  //     registrant even after the row is gone
+  //   - Warning email is fire-and-forget (must not block the delete)
+  //   - Logs the admin who did it + a short reason (if provided)
+  app.delete("/api/admin/local-jobs/companies/:id", async (req: any, res: Response) => {
+    const adminId = await requireAdminInline(req, res);
+    if (!adminId) return;
+    try {
+      const { id } = req.params;
+      if (!/^[0-9a-f-]{8,}$/i.test(id)) {
+        return res.status(400).json({ message: "Invalid company id." });
+      }
+      const reason = String(req.body?.reason ?? "").trim().slice(0, 500) || null;
+
+      // Snapshot before delete — we need these for the warning email
+      const { rows: [company] } = await pool.query<{
+        id: string; name: string; email: string | null; contact_name: string | null;
+        phone: string | null; status: string;
+      }>(
+        `SELECT id, name, email, contact_name, phone, status
+         FROM companies WHERE id = $1 LIMIT 1`,
+        [id],
+      );
+      if (!company) return res.status(404).json({ message: "Company not found." });
+
+      // Hard delete — cascades to branches, local_jobs, local_job_applications,
+      // and company_claims (all wired ON DELETE CASCADE at bootstrap time).
+      const { rowCount } = await pool.query(
+        `DELETE FROM companies WHERE id = $1`,
+        [id],
+      );
+      if (!rowCount) {
+        // Race — someone else deleted it between our snapshot and delete
+        return res.status(404).json({ message: "Company already removed." });
+      }
+
+      console.warn(
+        `[admin] adminId=${adminId} REJECTED+DELETED company="${company.name}" ` +
+        `id=${id} email=${company.email ?? "none"} reason=${reason ?? "none"}`,
+      );
+
+      // Fire-and-forget warning email — never blocks the API response
+      if (company.email) {
+        (async () => {
+          try {
+            const { sendEmail } = await import("./email");
+            const firstName = (company.contact_name || "").trim().split(/\s+/)[0] || "there";
+            const reasonLine = reason
+              ? `\n\nReason for removal: ${reason}`
+              : "";
+            await sendEmail({
+              to: company.email!,
+              subject: `[WorkAbroad Hub] Your "${company.name}" listing has been removed`,
+              html: `
+                <div style="font-family:-apple-system,Segoe UI,sans-serif;max-width:560px;margin:auto;padding:24px;color:#1a2530;">
+                  <h2 style="margin:0 0 12px;color:#dc2626;">Listing removed — official notice</h2>
+                  <p>Hi ${escapeHtmlSafe(firstName)},</p>
+                  <p>
+                    The company listing you registered on WorkAbroad Hub —
+                    <strong>${escapeHtmlSafe(company.name)}</strong> — has been
+                    permanently removed by our moderation team because it does
+                    not meet our authenticity and content standards.
+                  </p>
+                  ${reason ? `<p><strong>Reason:</strong> ${escapeHtmlSafe(reason)}</p>` : ""}
+                  <p style="margin-top:20px;padding:14px;background:#fef2f2;border-left:4px solid #dc2626;border-radius:4px;">
+                    <strong>Formal warning:</strong> WorkAbroad Hub is a real jobs
+                    platform serving genuine job seekers. Submitting fake, joke,
+                    fraudulent, or misleading business listings — including
+                    attempts to impersonate real companies or register listings
+                    for entertainment purposes — is a violation of our Terms of
+                    Service and Kenyan Computer Misuse and Cybercrimes Act
+                    (2018). Any further attempts from this email, phone number,
+                    or IP address will be reported to the Directorate of
+                    Criminal Investigations (DCI) and may result in criminal
+                    prosecution and civil damages.
+                  </p>
+                  <p style="margin-top:20px;">
+                    If you believe this removal was made in error and you
+                    represent a genuine business, reply to this email
+                    (hello@workabroadhub.tech) with supporting documentation
+                    (business registration certificate, KRA PIN, verifiable
+                    contact) within 7 days and we will review.
+                  </p>
+                  <p style="margin-top:24px;font-size:13px;color:#64748b;">
+                    — WorkAbroad Hub Trust &amp; Safety Team<br/>
+                    hello@workabroadhub.tech
+                  </p>
+                </div>`,
+              text:
+                `Hi ${firstName},\n\n` +
+                `The company listing you registered on WorkAbroad Hub — "${company.name}" — ` +
+                `has been permanently removed by our moderation team because it does not meet ` +
+                `our authenticity and content standards.${reasonLine}\n\n` +
+                `FORMAL WARNING: WorkAbroad Hub is a real jobs platform serving genuine job ` +
+                `seekers. Submitting fake, joke, fraudulent, or misleading business listings ` +
+                `is a violation of our Terms of Service and Kenyan Computer Misuse and ` +
+                `Cybercrimes Act (2018). Any further attempts from this email, phone number, ` +
+                `or IP address will be reported to the Directorate of Criminal Investigations ` +
+                `(DCI) and may result in criminal prosecution and civil damages.\n\n` +
+                `If you believe this removal was made in error and you represent a genuine ` +
+                `business, reply to this email with supporting documentation (business ` +
+                `registration certificate, KRA PIN, verifiable contact) within 7 days and we ` +
+                `will review.\n\n` +
+                `— WorkAbroad Hub Trust & Safety Team\n` +
+                `hello@workabroadhub.tech`,
+            });
+            console.log(`[admin/reject-delete] warning email sent to ${company.email}`);
+          } catch (mailErr: any) {
+            console.warn(
+              `[admin/reject-delete] warning email FAILED to ${company.email}: ${mailErr?.message}`,
+            );
+          }
+        })();
+      }
+
+      res.json({
+        success:        true,
+        deleted:        true,
+        emailedWarning: !!company.email,
+        company: { id: company.id, name: company.name },
+      });
+    } catch (err: any) {
+      console.error("[DELETE /api/admin/local-jobs/companies/:id]", {
+        message: err?.message, code: err?.code, detail: err?.detail,
+      });
+      res.status(500).json({
+        message: `Delete failed: ${err?.message ?? "unknown error"}`,
+        code: err?.code ?? null,
+      });
     }
   });
 
