@@ -1678,8 +1678,9 @@ function registerLocalJobsRoutes(app) {
     });
     // ─── POST /api/admin/local-jobs/claims/:id/reject ─────────────────────────
     // 2026-08 (Tony): admin needs a one-click reject for obvious fake / junk
-    // claims (e.g. gmail account trying to claim KFC). Marks the claim rejected,
-    // clears any pending verification code, and stamps who did it.
+    // claims. Behavior updated 2026-08: reject = hard DELETE from company_claims.
+    // Audit is preserved via console.warn (searchable in Render logs) — no need
+    // to keep rejected rows cluttering the admin queue.
     app.post("/api/admin/local-jobs/claims/:id/reject", async (req, res) => {
         const adminId = await requireAdminInline(req, res);
         if (!adminId)
@@ -1691,21 +1692,19 @@ function registerLocalJobsRoutes(app) {
             }
             const reason = String(req.body?.reason ?? "").trim().slice(0, 500)
                 || "Rejected by admin. Details not disclosed.";
-            const { rowCount, rows } = await db_1.pool.query(`UPDATE company_claims
-         SET status = 'rejected',
-             reviewed_at = NOW(),
-             reviewed_by = $2,
-             review_note = $3,
-             verification_code = NULL,
-             verification_code_expires_at = NULL
-         WHERE id = $1 AND status <> 'rejected'
-         RETURNING id, company_id, claimant_email, claimant_name`, [id, adminId, `[${new Date().toISOString().slice(0, 10)}] ${reason}`]);
-            if (!rowCount) {
-                return res.status(404).json({ message: "Claim not found or already rejected." });
+            // Snapshot first for the audit log (row about to disappear)
+            const { rows: [snap] } = await db_1.pool.query(`SELECT company_id, claimant_email, claimant_name, trust_score
+         FROM company_claims WHERE id = $1 LIMIT 1`, [id]);
+            if (!snap) {
+                return res.status(404).json({ message: "Claim not found." });
             }
-            const claim = rows[0];
-            console.warn(`[admin] adminId=${adminId} REJECTED claim=${id} claimant=${claim.claimant_email} reason=${reason}`);
-            res.json({ success: true, id, status: "rejected" });
+            const { rowCount } = await db_1.pool.query(`DELETE FROM company_claims WHERE id = $1`, [id]);
+            if (!rowCount) {
+                return res.status(404).json({ message: "Claim already removed." });
+            }
+            console.warn(`[admin] adminId=${adminId} REJECTED+DELETED claim=${id} claimant=${snap.claimant_email} ` +
+                `trust=${snap.trust_score} company=${snap.company_id} reason=${reason}`);
+            res.json({ success: true, id, deleted: true });
         }
         catch (err) {
             console.error("[POST /api/admin/local-jobs/claims/:id/reject]", {
@@ -1715,32 +1714,43 @@ function registerLocalJobsRoutes(app) {
         }
     });
     // ─── POST /api/admin/local-jobs/claims/bulk-reject-junk ───────────────────
-    // 2026-08 (Tony): one-click bulk-reject for the common infiltration pattern
-    // — LOW trust + no domain match. Safe because it explicitly requires both
-    // signals to be true. High-trust or domain-matching claims are never
-    // touched.
+    // 2026-08 (Tony): one-click bulk-reject-and-DELETE for the classic
+    // infiltration pattern — LOW trust + no domain match. Safe: explicitly
+    // requires BOTH signals. Rows are hard-deleted so they don't clutter the
+    // admin queue. Aggregate audit line logged.
     app.post("/api/admin/local-jobs/claims/bulk-reject-junk", async (req, res) => {
         const adminId = await requireAdminInline(req, res);
         if (!adminId)
             return;
         try {
-            const { rowCount } = await db_1.pool.query(`UPDATE company_claims
-         SET status = 'rejected',
-             reviewed_at = NOW(),
-             reviewed_by = $1,
-             review_note = COALESCE(review_note, '') ||
-               E'\n[${new Date().toISOString().slice(0, 10)}] Bulk-rejected: LOW trust + no domain match. Personal email trying to claim corporate brand.',
-             verification_code = NULL,
-             verification_code_expires_at = NULL
+            const { rowCount } = await db_1.pool.query(`DELETE FROM company_claims
          WHERE status = 'pending'
            AND trust_score = 'low'
-           AND domain_match = false`, [adminId]);
-            console.warn(`[admin] adminId=${adminId} BULK-REJECTED ${rowCount} junk claims`);
-            res.json({ success: true, rejected: rowCount ?? 0 });
+           AND domain_match = false`);
+            console.warn(`[admin] adminId=${adminId} BULK-REJECTED+DELETED ${rowCount} junk claims ` +
+                `(LOW trust + no domain match)`);
+            res.json({ success: true, deleted: rowCount ?? 0 });
         }
         catch (err) {
             console.error("[POST /api/admin/local-jobs/claims/bulk-reject-junk]", err?.message);
             res.status(500).json({ message: `Bulk reject failed: ${err?.message ?? "unknown"}` });
+        }
+    });
+    // ─── POST /api/admin/local-jobs/claims/clear-rejected ─────────────────────
+    // 2026-08 (Tony): clean up any lingering rows still marked status='rejected'
+    // from the old flow (before reject became hard-delete). One-click purge.
+    app.post("/api/admin/local-jobs/claims/clear-rejected", async (req, res) => {
+        const adminId = await requireAdminInline(req, res);
+        if (!adminId)
+            return;
+        try {
+            const { rowCount } = await db_1.pool.query(`DELETE FROM company_claims WHERE status = 'rejected'`);
+            console.warn(`[admin] adminId=${adminId} CLEARED ${rowCount} already-rejected claims`);
+            res.json({ success: true, deleted: rowCount ?? 0 });
+        }
+        catch (err) {
+            console.error("[POST /api/admin/local-jobs/claims/clear-rejected]", err?.message);
+            res.status(500).json({ message: `Clear failed: ${err?.message ?? "unknown"}` });
         }
     });
     // ─── POST /api/admin/local-jobs/grant-admin ───────────────────────────────

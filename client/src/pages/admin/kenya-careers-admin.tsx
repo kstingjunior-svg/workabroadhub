@@ -448,47 +448,86 @@ export default function KenyaCareersAdmin() {
             the claimant company-admin access automatically. */}
         {!loading && !error && tab === "claims" && (
           <div className="space-y-2">
-            {/* 2026-08: bulk-reject button — clears the pending queue of all
-                LOW trust + no domain match claims in one shot. The classic
-                infiltration pattern (personal email trying to claim a big
-                brand). Safe: never touches HIGH trust or domain-matching. */}
-            {claims.filter((cl) => cl.status === "pending" && cl.trust_score === "low" && !cl.domain_match).length > 0 && (
-              <div className="flex justify-end mb-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="text-rose-800 border-rose-400 bg-rose-50 hover:bg-rose-100 hover:text-rose-900"
-                  onClick={async () => {
-                    const count = claims.filter((cl) => cl.status === "pending" && cl.trust_score === "low" && !cl.domain_match).length;
-                    if (!confirm(
-                      `Bulk-reject ${count} LOW-trust + no-domain-match claims?\n\n` +
-                      `These are almost always fake / joke registrations (personal email trying to claim a corporate brand). ` +
-                      `HIGH-trust and domain-matching claims will NOT be touched.\n\n` +
-                      `This cannot be undone.`,
-                    )) return;
-                    try {
-                      const csrf = await fetchCsrfToken();
-                      const res = await fetch("/api/admin/local-jobs/claims/bulk-reject-junk", {
-                        method: "POST",
-                        credentials: "include",
-                        headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
-                      });
-                      const body = await res.json().catch(() => ({}));
-                      if (!res.ok) {
-                        toast({ variant: "destructive", title: "Bulk reject failed", description: body?.message });
-                      } else {
-                        toast({ title: "Junk claims cleared", description: `${body?.rejected ?? 0} claim${body?.rejected === 1 ? "" : "s"} rejected.` });
-                        await load();
+            {/* 2026-08: two bulk actions at the top of Claims tab —
+                (1) Reject & Delete all LOW trust + no domain match pending claims
+                (2) Clear all already-rejected rows (leftover from old flow)
+                Both are hard deletes. Audit trail preserved server-side. */}
+            {(claims.filter((cl) => cl.status === "pending" && cl.trust_score === "low" && !cl.domain_match).length > 0
+              || claims.filter((cl) => cl.status === "rejected").length > 0) && (
+              <div className="flex justify-end gap-2 mb-2 flex-wrap">
+                {claims.filter((cl) => cl.status === "pending" && cl.trust_score === "low" && !cl.domain_match).length > 0 && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-rose-800 border-rose-400 bg-rose-50 hover:bg-rose-100 hover:text-rose-900"
+                    onClick={async () => {
+                      const count = claims.filter((cl) => cl.status === "pending" && cl.trust_score === "low" && !cl.domain_match).length;
+                      if (!confirm(
+                        `Reject & DELETE ${count} LOW-trust + no-domain-match claim${count === 1 ? "" : "s"}?\n\n` +
+                        `These are almost always fake / joke registrations (personal email trying to claim a corporate brand). ` +
+                        `HIGH-trust and domain-matching claims will NOT be touched.\n\n` +
+                        `Rows will be permanently deleted from the queue. Audit is logged server-side.`,
+                      )) return;
+                      try {
+                        const csrf = await fetchCsrfToken();
+                        const res = await fetch("/api/admin/local-jobs/claims/bulk-reject-junk", {
+                          method: "POST",
+                          credentials: "include",
+                          headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
+                        });
+                        const body = await res.json().catch(() => ({}));
+                        if (!res.ok) {
+                          toast({ variant: "destructive", title: "Bulk reject failed", description: body?.message });
+                        } else {
+                          toast({ title: "Junk claims deleted", description: `${body?.deleted ?? 0} claim${body?.deleted === 1 ? "" : "s"} removed.` });
+                          await load();
+                        }
+                      } catch (err: any) {
+                        toast({ variant: "destructive", title: "Bulk reject failed", description: err?.message });
                       }
-                    } catch (err: any) {
-                      toast({ variant: "destructive", title: "Bulk reject failed", description: err?.message });
-                    }
-                  }}
-                  data-testid="btn-bulk-reject-junk-claims"
-                >
-                  <Trash2 className="h-3.5 w-3.5 mr-1" />
-                  Bulk reject all junk (LOW + no domain match)
-                </Button>
+                    }}
+                    data-testid="btn-bulk-reject-junk-claims"
+                  >
+                    <Trash2 className="h-3.5 w-3.5 mr-1" />
+                    Reject &amp; Delete all junk (LOW + no domain match)
+                  </Button>
+                )}
+                {claims.filter((cl) => cl.status === "rejected").length > 0 && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-rose-800 border-rose-400 bg-rose-50 hover:bg-rose-100 hover:text-rose-900"
+                    onClick={async () => {
+                      const count = claims.filter((cl) => cl.status === "rejected").length;
+                      if (!confirm(
+                        `Clear ${count} already-rejected claim${count === 1 ? "" : "s"} from the queue?\n\n` +
+                        `These have already been marked rejected. This permanently removes them from the DB so they stop cluttering the list.\n\n` +
+                        `Cannot be undone.`,
+                      )) return;
+                      try {
+                        const csrf = await fetchCsrfToken();
+                        const res = await fetch("/api/admin/local-jobs/claims/clear-rejected", {
+                          method: "POST",
+                          credentials: "include",
+                          headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
+                        });
+                        const body = await res.json().catch(() => ({}));
+                        if (!res.ok) {
+                          toast({ variant: "destructive", title: "Clear failed", description: body?.message });
+                        } else {
+                          toast({ title: "Queue cleared", description: `${body?.deleted ?? 0} rejected claim${body?.deleted === 1 ? "" : "s"} removed.` });
+                          await load();
+                        }
+                      } catch (err: any) {
+                        toast({ variant: "destructive", title: "Clear failed", description: err?.message });
+                      }
+                    }}
+                    data-testid="btn-clear-rejected-claims"
+                  >
+                    <Trash2 className="h-3.5 w-3.5 mr-1" />
+                    Clear all rejected ({claims.filter((cl) => cl.status === "rejected").length})
+                  </Button>
+                )}
               </div>
             )}
             {claims.length === 0 && (
@@ -606,8 +645,9 @@ export default function KenyaCareersAdmin() {
                           disabled={savingId === cl.id}
                           onClick={async () => {
                             const reason = window.prompt(
-                              `Reject claim from ${cl.claimant_name} (${cl.claimant_email}) for "${cl.company_name}"?\n\n` +
-                              `Optional: reason for rejection (kept in the audit trail).\n` +
+                              `Reject & DELETE claim from ${cl.claimant_name} (${cl.claimant_email}) for "${cl.company_name}"?\n\n` +
+                              `This permanently removes the row (audit is logged server-side).\n\n` +
+                              `Optional: reason for rejection.\n` +
                               `Examples:\n` +
                               `  "Personal email trying to claim corporate brand"\n` +
                               `  "Nonsense role field / joke registration"\n` +
@@ -628,7 +668,7 @@ export default function KenyaCareersAdmin() {
                               if (!res.ok) {
                                 toast({ variant: "destructive", title: "Reject failed", description: body?.message });
                               } else {
-                                toast({ title: "Claim rejected", description: `${cl.claimant_email} can no longer proceed with this claim.` });
+                                toast({ title: "Claim deleted", description: `${cl.claimant_email}'s claim removed from the queue.` });
                                 await load();
                               }
                             } finally { setSavingId(null); }
@@ -636,7 +676,7 @@ export default function KenyaCareersAdmin() {
                           data-testid={`btn-reject-claim-${cl.id}`}
                         >
                           <Trash2 className="h-3.5 w-3.5 mr-1" />
-                          Reject
+                          Reject &amp; Delete
                         </Button>
                       )}
                     </div>
