@@ -72,7 +72,7 @@ async function generateJobTailoredCV(user, careerProfile, job, packType) {
         "Instructions:",
         `1. Tailor the Professional Summary directly to ${job.company} and this ${job.title} role. Open with a concrete, warm hook. NOT "Dedicated professional with X years".`,
         "2. Highlight skills from the candidate's profile that match the job description keywords. Use the actual language the job posting uses.",
-        "3. Sections: Professional Summary, Key Skills, Work Experience, Education, Certifications, Languages.",
+        "3. Sections (in this exact order): Candidate Name, Contact line (email · phone · location — preserve verbatim from the input CV, including country codes like +254 or +974), Professional Summary, Key Skills, Work Experience, Education, Certifications, Languages. NEVER drop the contact block — it's the only way the recruiter can reach the candidate.",
         "4. Every experience bullet uses the achievement shape: {verb} + {number} + {what} + {timeframe}. No responsibility-list bullets.",
         isPremium
             ? "5. Premium: include quantified achievements, one memorable line the interviewer will quote back, and a personal brand statement anchored in a real fact from the candidate's life."

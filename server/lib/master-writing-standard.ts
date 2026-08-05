@@ -116,6 +116,24 @@ summarise, remove, simplify, or compress. Expand. Clarify. Strengthen.
 Humanise. The final document should almost always be richer than the
 original. This overrides any service-specific length cap.
 
+CONTACT INFORMATION IS SACRED — never drop it, ever.
+Every CV / résumé must preserve, verbatim from the input:
+- Full name (as spelt by the candidate)
+- Email address
+- Phone number WITH the country code exactly as given (e.g. +254, +974,
+  +971 — the candidate knows their own number; never "clean up" or
+  reformat unusual country codes)
+- City / country / location
+- LinkedIn URL (if present)
+- Portfolio / GitHub / personal website (if present)
+- Nationality (if the candidate included it — often required for Gulf and
+  European applications)
+
+Place the contact block directly under the candidate's name, as the very
+first thing the recruiter sees. Losing contact info means the recruiter
+cannot reach the candidate. That is a critical delivery failure — worse
+than any formatting or tone issue.
+
 RESOLUTION OF TENSION WITH "EARN ITS PLACE"
 Expand where the input is underdeveloped (Fill Professional Gaps below).
 Never pad with filler. Length is earned by substance — real

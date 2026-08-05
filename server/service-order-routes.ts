@@ -268,12 +268,23 @@ MANDATORY QUALITY LIFTS (in this order):
 
 1. STRUCTURE — restructure into the exact ATS-favoured section order:
    ## [Candidate Name]
+   Contact line: email · phone · location  (one line directly under the name,
+     e.g. "marthakimathi45@gmail.com · +254 712 345 678 · Nairobi, Kenya")
    ## Professional Summary       (3-4 sentences, tailored to their most recent role and any target country mentioned)
    ## Key Skills                 (8-12 recruiter-searchable skills — hard skills first, tools + certifications, not "hardworking")
    ## Work Experience            (chronological, most recent first)
    ## Education
    ## Certifications             (if any exist in the input)
    ## Languages                  (if any exist in the input)
+
+   CRITICAL CONTACT RULE: You MUST preserve every piece of contact
+   information from the input CV — email, phone number (with country code
+   exactly as given, even if unusual like +974 for Qatar), city / country,
+   LinkedIn URL if present, and any professional links (portfolio, GitHub,
+   etc.). Never drop, hide, "clean up", or reformat these. If the phone
+   number looks unusual, keep it verbatim — the candidate knows their own
+   number. Losing contact info means the recruiter cannot reach the
+   candidate. This is a critical delivery failure.
 
 2. ACHIEVEMENT BULLETS — every experience bullet uses this shape:
      {strong action verb} + {what} + {measurable outcome or scale}
@@ -310,14 +321,15 @@ Return ONLY the revamped CV body — no commentary, no markdown code fences, no 
     filename: "ATS_Optimized_CV",
     estSeconds: 60,
     systemPrompt: `You are an ATS optimization expert. Rewrite the user's CV to maximise Applicant Tracking System compatibility:
-- Use standard section headers (Summary, Experience, Education, Skills, Certifications)
-- Add quantifiable achievements only where the input already supports them; never invent hard metrics
-- Inject industry-relevant keywords naturally (Master Rule 6 — Tailor to Career)
-- Remove any tables, columns, graphics, fancy formatting (they break ATS parsing)
-- Use bullet points for achievements (each starting with a strong action verb)
+- Structure: start with the candidate's Name, then a contact line directly under it (email · phone · location — verbatim from the input), then standard section headers (Summary, Experience, Education, Skills, Certifications).
+- CRITICAL CONTACT RULE: preserve email, phone (with the exact country code from the input, even if unusual like +974 Qatar), city / country, LinkedIn URL, and any portfolio / GitHub links. Never drop, hide, or reformat these. Losing contact info means the recruiter cannot reach the candidate — this is a delivery failure.
+- Add quantifiable achievements only where the input already supports them; never invent hard metrics.
+- Inject industry-relevant keywords naturally (Master Rule 6 — Tailor to Career).
+- Remove any tables, columns, graphics, fancy formatting (they break ATS parsing).
+- Use bullet points for achievements (each starting with a strong action verb).
 - Length: governed by the Master Writing Standard above. Preserve everything, expand where underdeveloped. Do not compress.
-- Output as plain text with ## headings and * bullets
-CRITICAL: Do NOT include any title, header, or label like "ATS CV Optimization", "Optimized CV", "CV", "Resume", or any service / product name at the top. Start directly with the candidate's name (or Summary section). The recruiter must see a clean CV, not branded content.
+- Output as plain text with ## headings and * bullets.
+CRITICAL: Do NOT include any title, header, or label like "ATS CV Optimization", "Optimized CV", "CV", "Resume", or any service / product name at the top. Start directly with the candidate's name (followed by the contact line). The recruiter must see a clean CV, not branded content.
 Return ONLY the rewritten CV body.`,
   },
   cv_rewrite: {
@@ -332,6 +344,7 @@ Return ONLY the rewritten CV body.`,
 - Australia: 2-3 pages, achievement-based, Australian spelling
 - Germany/EU: include Europass-style headers, German if applying within DE
 - UAE/Gulf: include photo OK, nationality OK, 2 pages
+CRITICAL CONTACT RULE: preserve email, phone (with the exact country code from the input, even if unusual like +974 Qatar), city / country, LinkedIn URL, portfolio / GitHub links. Never drop, hide, or reformat these. The contact line goes on the second line, directly under the candidate's name. Losing contact info means the recruiter cannot reach the candidate — this is a delivery failure.
 Output as plain text with ## section headings.`,
   },
   cover_letter: {

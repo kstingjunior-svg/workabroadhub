@@ -86,7 +86,7 @@ export async function generateCV(
     "",
     "Instructions:",
     `1. Target hiring standards for: ${targetMarkets}.`,
-    "2. Sections required: Professional Summary, Key Skills, Work Experience, Education, Certifications (if any), Languages (if any).",
+    "2. Sections required (in this order): Candidate Name, Contact line (email · phone · location — preserve verbatim from input, especially country codes like +254 or +974), Professional Summary, Key Skills, Work Experience, Education, Certifications (if any), Languages (if any). NEVER drop contact info — it's how the recruiter reaches the candidate.",
     "3. Every experience bullet uses the achievement shape: {verb} + {number or specific} + {what} + {timeframe or scale}. NO responsibility-list bullets.",
     "4. Professional Summary must open with a concrete, honest fact that a hiring manager will remember. Not 'Dedicated professional with X years of experience'.",
     "5. Include ATS keywords relevant to the target markets and role, but weave them into real sentences, not a keyword-stuffed list.",
