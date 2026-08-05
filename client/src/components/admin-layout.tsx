@@ -82,6 +82,7 @@ const navItems = [
   { href: "/admin/services", label: "Services", icon: FileText },
   { href: "/admin/service-orders", label: "Service Orders", icon: Package },
   { href: "/admin/job-applications", label: "Job Applications", icon: Briefcase },
+  { href: "/admin/kenya-careers", label: "Kenya Careers", icon: Briefcase },
   { href: "/admin/alerts", label: "Scam Alerts", icon: AlertTriangle },
   { href: "/admin/agencies", label: "Recruitment Agencies", icon: Building2 },
   { href: "/admin/agency-claims", label: "Agency Claims", icon: ShieldCheck },
