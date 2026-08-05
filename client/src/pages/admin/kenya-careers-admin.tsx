@@ -24,6 +24,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { fetchCsrfToken } from "@/lib/queryClient";
 
 interface CompanyRow {
   id: string; name: string; industry: string | null; county: string | null;
@@ -146,10 +147,17 @@ export default function KenyaCareersAdmin() {
 
     setSavingId(id);
     try {
+      // 2026-08 (Tony's site): DELETE is CSRF-gated, so we must include the
+      // X-CSRF-Token header. PATCH endpoints in this same file get through
+      // by history (older middleware config) but DELETE is enforced.
+      const csrf = await fetchCsrfToken();
       const res = await fetch(`/api/admin/local-jobs/companies/${id}`, {
         method: "DELETE",
         credentials: "include",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": csrf,
+        },
         body: JSON.stringify({ reason: reason ?? null }),
       });
       const body = await res.json().catch(() => ({}));
