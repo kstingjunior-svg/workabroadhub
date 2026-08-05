@@ -35,6 +35,7 @@ import {
 } from "@/components/wrong-document-card";
 import { AskNanjilaButton } from "@/components/ask-nanjila-button";
 import { AiDisclaimer } from "@/components/ai-disclaimer";
+import { ATSFullReport } from "@/components/ats-full-report";
 
 const ATS_FAQS = [
   { q: "What is an ATS and why does it matter for overseas jobs?", a: "ATS (Applicant Tracking System) is software used by 99% of large employers in the UK, Canada, UAE, and Australia to filter CVs before a human reads them. A CV that fails ATS parsing is rejected automatically, even if you are qualified. Our checker analyses your CV against ATS criteria so you can fix issues before applying." },
@@ -62,6 +63,10 @@ interface ATSResult {
     at:    string;     // ISO datetime
     slug:  string;     // e.g. "cv_fix_lite"
   };
+  // 2026-08 ATS Engine 3.0: full deep-analysis report (18 sections).
+  // Rendered by <ATSFullReport /> for paid users. Null on free tier or
+  // when parse failed.
+  report?: import("@/components/ats-full-report").ATSFullReportData | null;
 }
 
 function ScoreRing({ score, grade }: { score: number; grade: string }) {
@@ -617,6 +622,15 @@ export default function ATSCVChecker() {
                         </CardContent>
                       </Card>
                     )}
+
+                    {/* 2026-08: Full Report from ATS Career Intelligence Engine 3.0.
+                        Renders 14+ deep sections (Executive Summary, Employability
+                        breakdown, Recruiter Review, First Impression, Career Story,
+                        Risk Report, Interview Readiness with likely questions,
+                        Career Enhancement Recommendations, Action Plan, One-Click
+                        Improvements, Final Verdict). Renders nothing when
+                        result.report is null (free tier / parse failure). */}
+                    {result.report && <ATSFullReport report={result.report} />}
                   </>
                 ) : (
                   <FreemiumGate
