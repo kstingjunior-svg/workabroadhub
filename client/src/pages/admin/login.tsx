@@ -80,13 +80,13 @@ export default function AdminLogin() {
           Sign in with your admin account to access the management dashboard.
         </p>
         
-        <Button 
+        <Button
           onClick={handleLogin}
           className="w-full bg-blue-900 hover:bg-blue-800"
           data-testid="button-admin-login"
         >
           <LogIn className="h-4 w-4 mr-2" />
-          Sign in with Replit
+          Sign in to WorkAbroad Hub
         </Button>
 
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-6">
