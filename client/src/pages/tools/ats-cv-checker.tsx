@@ -115,6 +115,11 @@ export default function ATSCVChecker() {
   const [reportId, setReportId] = useState<string | null>(null);
   const [returnedFromLogin, setReturnedFromLogin] = useState(false);
   const [instantPayOpen, setInstantPayOpen] = useState(false);
+  // 2026-08 Phase 2 optional inputs — power the deep report.jobMatch and
+  // report.countryReadiness sections. Empty strings = general scan.
+  const [jobDescription, setJobDescription] = useState<string>("");
+  const [targetCountry, setTargetCountry]   = useState<string>("");
+  const [advancedOpen, setAdvancedOpen]     = useState(false);
 
   useEffect(() => {
     trackPageView("ats_cv_checker");
@@ -150,6 +155,10 @@ export default function ATSCVChecker() {
       const form = new FormData();
       form.append("cv", file);
       if (forceAnalyze) form.append("forceAnalyze", "true");
+      // 2026-08 Phase 2 — pass through the optional deep-report inputs.
+      // Both are ignored server-side when blank / too short.
+      if (jobDescription.trim().length >= 40) form.append("jobDescription", jobDescription.trim());
+      if (targetCountry) form.append("targetCountry", targetCountry);
       const csrfToken = await fetchCsrfToken();
       const res = await fetch("/api/tools/ats-check", {
         method: "POST",
@@ -315,6 +324,83 @@ export default function ATSCVChecker() {
               data-testid="input-file"
               onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
             />
+
+            {/* 2026-08 Phase 2 — optional deep-report inputs.
+                Collapsed by default so casual users get the same simple UX,
+                but pros can paste a JD + pick a country for job-specific
+                match analysis + country-specific readiness scoring. Both
+                are optional; blank = general scan. */}
+            <div className="border rounded-lg bg-muted/20">
+              <button
+                type="button"
+                onClick={() => setAdvancedOpen(!advancedOpen)}
+                className="w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium hover:bg-muted/40 rounded-lg transition-colors"
+                data-testid="button-toggle-advanced"
+              >
+                <span className="flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-blue-600" />
+                  Advanced (optional)
+                  {(jobDescription.trim().length >= 40 || targetCountry) && (
+                    <Badge variant="outline" className="border-blue-300 text-blue-700 bg-blue-50 text-[10px] ml-1">
+                      {[jobDescription.trim().length >= 40 && "JD", targetCountry].filter(Boolean).join(" + ")}
+                    </Badge>
+                  )}
+                </span>
+                <ChevronRight className={`h-4 w-4 transition-transform ${advancedOpen ? "rotate-90" : ""}`} />
+              </button>
+
+              {advancedOpen && (
+                <div className="px-3 pb-3 pt-1 space-y-3">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium flex items-center justify-between" htmlFor="ats-target-country">
+                      <span>Target country <span className="text-muted-foreground">(for country-specific advice)</span></span>
+                    </label>
+                    <select
+                      id="ats-target-country"
+                      value={targetCountry}
+                      onChange={(e) => setTargetCountry(e.target.value)}
+                      className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      data-testid="select-target-country"
+                    >
+                      <option value="">— No specific country —</option>
+                      <option value="Canada">Canada</option>
+                      <option value="USA">USA</option>
+                      <option value="United Kingdom">United Kingdom</option>
+                      <option value="Australia">Australia</option>
+                      <option value="Germany">Germany</option>
+                      <option value="Netherlands">Netherlands</option>
+                      <option value="Ireland">Ireland</option>
+                      <option value="New Zealand">New Zealand</option>
+                      <option value="Saudi Arabia">Saudi Arabia</option>
+                      <option value="UAE">UAE</option>
+                      <option value="Qatar">Qatar</option>
+                      <option value="Europe">Europe (general)</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium flex items-center justify-between" htmlFor="ats-job-desc">
+                      <span>Paste the job description <span className="text-muted-foreground">(for job-specific match)</span></span>
+                      <span className={`text-[10px] ${jobDescription.length > 8000 ? "text-rose-600" : "text-muted-foreground"}`}>
+                        {jobDescription.length} / 8000
+                      </span>
+                    </label>
+                    <textarea
+                      id="ats-job-desc"
+                      value={jobDescription}
+                      onChange={(e) => setJobDescription(e.target.value.slice(0, 8000))}
+                      rows={5}
+                      placeholder="Paste the full job description here (title, requirements, responsibilities). Leave blank for a general CV scan."
+                      className="w-full rounded-md border border-input bg-background p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[100px]"
+                      data-testid="textarea-job-description"
+                    />
+                    <p className="text-[10px] text-muted-foreground">
+                      When provided, the report includes a full 8-dimension Job Match section with missing qualifications and suggested improvements.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
 
             <Button
               className="w-full"

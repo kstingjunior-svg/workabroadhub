@@ -325,6 +325,11 @@ Deep analysis lives inside \`report\`.
     ],
     "interviewReadiness": {
       "likelihood": <"High"|"Medium"|"Low">,
+      "probability": <integer 0-100 — your best honest estimate of the
+                      probability this candidate gets an interview based on
+                      the CV quality + job match (if a JD was provided).
+                      Never inflate. 90+ requires clear strong signals;
+                      70-89 solid; 50-69 borderline; below 50 unlikely.>,
       "likelyQuestions": [
         { "question": <string>, "prepHint": <one line> }, ...
       ],

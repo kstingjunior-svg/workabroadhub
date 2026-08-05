@@ -160,6 +160,7 @@ export interface ATSFullReportData {
 
   interviewReadiness?: {
     likelihood: "High" | "Medium" | "Low";
+    probability?: number;   // 0-100 — Phase 2 addition
     likelyQuestions: Array<{ question: string; prepHint: string }>;
     areasNeedingClarification: string[];
     preparationRecommendations: string[];
@@ -566,6 +567,49 @@ export function ATSFullReport({ report }: { report: ATSFullReportData | null | u
               </AccordionItem>
             )}
 
+            {/* Job Match — only rendered when user pasted a JD */}
+            {report.jobMatch && (
+              <AccordionItem value="job-match">
+                <AccordionTrigger className="text-sm hover:no-underline">
+                  <span className="flex items-center gap-2">
+                    <Target className="h-4 w-4 text-emerald-600" />
+                    Job Match &mdash; {report.jobMatch.overall}% overall
+                  </span>
+                </AccordionTrigger>
+                <AccordionContent className="space-y-3 pt-2 text-sm">
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      { label: "Skills",         score: report.jobMatch.skills },
+                      { label: "Experience",     score: report.jobMatch.experience },
+                      { label: "Education",      score: report.jobMatch.education },
+                      { label: "Industry",       score: report.jobMatch.industry },
+                      { label: "Keyword",        score: report.jobMatch.keyword },
+                      { label: "Responsibility", score: report.jobMatch.responsibility },
+                      { label: "Culture",        score: report.jobMatch.culture },
+                    ].map((d) => (
+                      <SubScoreRow key={d.label} label={d.label} sub={{ score: d.score, note: "" }} />
+                    ))}
+                  </div>
+                  {report.jobMatch.missingQualifications?.length > 0 && (
+                    <div className="pt-2 border-t border-border">
+                      <strong className="text-rose-700">Missing qualifications:</strong>
+                      <ul className="list-disc pl-5 mt-1 space-y-1">
+                        {report.jobMatch.missingQualifications.map((q, i) => <li key={i}>{q}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                  {report.jobMatch.suggestedImprovements?.length > 0 && (
+                    <div>
+                      <strong>Suggested improvements:</strong>
+                      <ul className="list-disc pl-5 mt-1 space-y-1">
+                        {report.jobMatch.suggestedImprovements.map((q, i) => <li key={i}>{q}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                </AccordionContent>
+              </AccordionItem>
+            )}
+
             {/* Industry Alignment */}
             {report.industryAlignment && (
               <AccordionItem value="industry">
@@ -688,10 +732,36 @@ export function ATSFullReport({ report }: { report: ATSFullReportData | null | u
                 <AccordionTrigger className="text-sm hover:no-underline">
                   <span className="flex items-center gap-2">
                     <MessageSquare className="h-4 w-4 text-violet-600" />
-                    Interview Readiness &mdash; {report.interviewReadiness.likelihood} likelihood
+                    Interview Readiness
+                    {typeof report.interviewReadiness.probability === "number" ? (
+                      <span className={`font-mono font-bold ml-1 ${scoreColor(report.interviewReadiness.probability)}`}>
+                        {report.interviewReadiness.probability}%
+                      </span>
+                    ) : (
+                      <span className="ml-1">&mdash; {report.interviewReadiness.likelihood} likelihood</span>
+                    )}
                   </span>
                 </AccordionTrigger>
                 <AccordionContent className="space-y-3 pt-2 text-sm">
+                  {typeof report.interviewReadiness.probability === "number" && (
+                    <div className="p-3 rounded-md bg-violet-50 dark:bg-violet-950/20 border border-violet-200 dark:border-violet-800">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-semibold">Predicted interview chance</span>
+                        <span className={`text-2xl font-black ${scoreColor(report.interviewReadiness.probability)}`}>
+                          {report.interviewReadiness.probability}%
+                        </span>
+                      </div>
+                      <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
+                        <div
+                          className={`h-full ${scoreBar(report.interviewReadiness.probability)} transition-all duration-500`}
+                          style={{ width: `${report.interviewReadiness.probability}%` }}
+                        />
+                      </div>
+                      <p className="text-[11px] text-muted-foreground mt-1.5">
+                        Based on CV quality {report.jobMatch ? "+ how well it matches the job you provided" : "(paste a job description above for job-specific probability)"}.
+                      </p>
+                    </div>
+                  )}
                   {report.interviewReadiness.likelyQuestions?.length > 0 && (
                     <div className="space-y-2">
                       <strong>Likely recruiter questions:</strong>

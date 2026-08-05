@@ -407,9 +407,33 @@ export function registerToolsRoutes(
           // CVs (e.g. David Gathoni's 5081-char plumbing CV) used to lose
           // content mid-analysis. 12k covers ~99th percentile of real CVs.
           const truncated = cvText.slice(0, 12_000);
+
+          // ── 2026-08 Phase 2 optional inputs — Job Match + Country Readiness ─
+          // Accept two optional form fields from the client:
+          //   jobDescription: pastes a full JD → engine returns rich report.jobMatch
+          //   targetCountry:  ISO name (e.g. "Canada") → engine returns report.countryReadiness
+          // Both are OPTIONAL — falls back to the existing general-scan behaviour.
+          const jobDescription = String((req.body as any)?.jobDescription ?? "")
+            .trim()
+            .slice(0, 8000);   // JDs longer than 8k chars are outliers; truncate
+          const targetCountry = String((req.body as any)?.targetCountry ?? "")
+            .trim()
+            .slice(0, 40) || null;
+
+          let userPromptParts = [`Analyse the following CV. Emit the full JSON report per the schema.`];
+          if (targetCountry) {
+            userPromptParts.push(`\nTARGET COUNTRY: ${targetCountry}\n(Populate report.countryReadiness with a real readinessScore and country-specific improvements. Country conventions live in your systemPrompt.)`);
+          }
+          if (jobDescription.length >= 40) {
+            userPromptParts.push(`\nJOB DESCRIPTION (compare CV against this):\n${jobDescription}\n(Populate report.jobMatch — set to null only if the pasted text is not actually a job description.)`);
+          } else {
+            userPromptParts.push(`\n(No job description provided — set report.jobMatch to null.)`);
+          }
+          userPromptParts.push(`\nCV TEXT:\n\n${truncated}`);
+
           aiMessages = [
             { role: "system", content: ATS_ANALYSIS_ENGINE },
-            { role: "user",   content: `Analyse the following CV. Emit the full JSON report per the schema.\n\nCV TEXT:\n\n${truncated}` },
+            { role: "user",   content: userPromptParts.join("\n") },
           ];
         } else {
           // ── All local extraction methods exhausted ───────────────────────
