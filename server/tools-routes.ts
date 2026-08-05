@@ -390,35 +390,26 @@ export function registerToolsRoutes(
         // ── Determine if user is logged in for full results gating ────────────
         const isLoggedIn = !!req.user?.id;
 
-        // ── Build the AI message payload ──────────────────────────────────────
-        // Primary path: extracted text is readable — send as plain text to gpt-4o-mini.
-        // Fallback path: extraction failed (compressed / unusual PDF) — send the
-        //   raw PDF as a base64 file directly to gpt-4o which can read PDFs natively.
+        // 2026-08 v3.0 (Tony's ATS Career Intelligence Engine spec): replaced
+        // the earlier 12-line recruiter prompt with a comprehensive 20-phase
+        // analysis emitting an 18-section report. Uses gpt-4o (not mini) for
+        // depth. Response shape is backward-compatible — top-level fields
+        // stay identical so the existing UI keeps working; new deep analysis
+        // lives under `report.*` and is rendered progressively as UI ships.
+        const { ATS_ANALYSIS_ENGINE } = await import("./lib/ats-analysis-engine");
+
         let aiMessages: any[];
-        let modelToUse = "gpt-4o-mini";
-
-        const ATS_SYSTEM_PROMPT = `You are a professional recruiter reviewing a CV for international overseas jobs.
-Analyze the CV and return a JSON object with exactly these fields:
-{
-  "score": <integer 0-100>,
-  "grade": <"Excellent"|"Good"|"Average"|"Poor">,
-  "strengths": [<string>, ...],
-  "weaknesses": [<string>, ...],
-  "missingKeywords": [<string>, ...],
-  "suggestions": [<string>, ...],
-  "summary": <one sentence overall assessment>
-}
-Return ONLY the JSON object, no markdown, no extra text.`;
-
-        const isPdf = req.file.mimetype === "application/pdf" ||
-                      req.file.originalname?.toLowerCase().endsWith(".pdf");
+        let modelToUse = "gpt-4o";
 
         if (cvText.trim().length >= MIN_CV_LENGTH) {
           // ── Happy path: extracted readable text ───────────────────────────
-          const truncated = cvText.slice(0, 4000);
+          // 2026-08: raised truncation cap 4000 → 12000 chars. Long / technical
+          // CVs (e.g. David Gathoni's 5081-char plumbing CV) used to lose
+          // content mid-analysis. 12k covers ~99th percentile of real CVs.
+          const truncated = cvText.slice(0, 12_000);
           aiMessages = [
-            { role: "system", content: ATS_SYSTEM_PROMPT },
-            { role: "user",   content: `Here is the CV text:\n\n${truncated}` },
+            { role: "system", content: ATS_ANALYSIS_ENGINE },
+            { role: "user",   content: `Analyse the following CV. Emit the full JSON report per the schema.\n\nCV TEXT:\n\n${truncated}` },
           ];
         } else {
           // ── All local extraction methods exhausted ───────────────────────
@@ -433,11 +424,12 @@ Return ONLY the JSON object, no markdown, no extra text.`;
         }
 
         // Force JSON output on the text path so we never have to strip markdown fences.
+        // 2026-08: raised max_tokens 800 → 6000 to fit the 18-section report.
         const completionOptions: any = {
           model: modelToUse,
           messages: aiMessages,
           temperature: 0.3,
-          max_tokens: 800,
+          max_tokens: 6000,
           response_format: { type: "json_object" },
         };
 
@@ -483,6 +475,7 @@ Return ONLY the JSON object, no markdown, no extra text.`;
             missingKeywords: [],
             suggestions: ["Upload a text-based PDF or DOCX for best results"],
             summary: "CV parsing encountered issues.",
+            report: null,  // 2026-08 v3.0: no deep report available when parse failed
           };
         }
 
