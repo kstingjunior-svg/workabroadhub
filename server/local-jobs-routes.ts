@@ -1843,6 +1843,81 @@ export function registerLocalJobsRoutes(app: Express): void {
     }
   });
 
+  // ─── POST /api/admin/local-jobs/claims/:id/reject ─────────────────────────
+  // 2026-08 (Tony): admin needs a one-click reject for obvious fake / junk
+  // claims (e.g. gmail account trying to claim KFC). Marks the claim rejected,
+  // clears any pending verification code, and stamps who did it.
+  app.post("/api/admin/local-jobs/claims/:id/reject", async (req: any, res: Response) => {
+    const adminId = await requireAdminInline(req, res);
+    if (!adminId) return;
+    try {
+      const { id } = req.params;
+      if (!/^[0-9a-f-]{8,}$/i.test(id)) {
+        return res.status(400).json({ message: "Invalid claim id." });
+      }
+      const reason = String(req.body?.reason ?? "").trim().slice(0, 500)
+        || "Rejected by admin. Details not disclosed.";
+      const { rowCount, rows } = await pool.query<{
+        id: string; company_id: string; claimant_email: string; claimant_name: string;
+      }>(
+        `UPDATE company_claims
+         SET status = 'rejected',
+             reviewed_at = NOW(),
+             reviewed_by = $2,
+             review_note = $3,
+             verification_code = NULL,
+             verification_code_expires_at = NULL
+         WHERE id = $1 AND status <> 'rejected'
+         RETURNING id, company_id, claimant_email, claimant_name`,
+        [id, adminId, `[${new Date().toISOString().slice(0,10)}] ${reason}`],
+      );
+      if (!rowCount) {
+        return res.status(404).json({ message: "Claim not found or already rejected." });
+      }
+      const claim = rows[0];
+      console.warn(
+        `[admin] adminId=${adminId} REJECTED claim=${id} claimant=${claim.claimant_email} reason=${reason}`,
+      );
+      res.json({ success: true, id, status: "rejected" });
+    } catch (err: any) {
+      console.error("[POST /api/admin/local-jobs/claims/:id/reject]", {
+        message: err?.message, code: err?.code,
+      });
+      res.status(500).json({ message: `Reject failed: ${err?.message ?? "unknown"}` });
+    }
+  });
+
+  // ─── POST /api/admin/local-jobs/claims/bulk-reject-junk ───────────────────
+  // 2026-08 (Tony): one-click bulk-reject for the common infiltration pattern
+  // — LOW trust + no domain match. Safe because it explicitly requires both
+  // signals to be true. High-trust or domain-matching claims are never
+  // touched.
+  app.post("/api/admin/local-jobs/claims/bulk-reject-junk", async (req: any, res: Response) => {
+    const adminId = await requireAdminInline(req, res);
+    if (!adminId) return;
+    try {
+      const { rowCount } = await pool.query(
+        `UPDATE company_claims
+         SET status = 'rejected',
+             reviewed_at = NOW(),
+             reviewed_by = $1,
+             review_note = COALESCE(review_note, '') ||
+               E'\n[${new Date().toISOString().slice(0,10)}] Bulk-rejected: LOW trust + no domain match. Personal email trying to claim corporate brand.',
+             verification_code = NULL,
+             verification_code_expires_at = NULL
+         WHERE status = 'pending'
+           AND trust_score = 'low'
+           AND domain_match = false`,
+        [adminId],
+      );
+      console.warn(`[admin] adminId=${adminId} BULK-REJECTED ${rowCount} junk claims`);
+      res.json({ success: true, rejected: rowCount ?? 0 });
+    } catch (err: any) {
+      console.error("[POST /api/admin/local-jobs/claims/bulk-reject-junk]", err?.message);
+      res.status(500).json({ message: `Bulk reject failed: ${err?.message ?? "unknown"}` });
+    }
+  });
+
   // ─── POST /api/admin/local-jobs/grant-admin ───────────────────────────────
   // Tony's shortcut to grant himself or any user direct employer-admin
   // access to a company — useful for QA, demos, or when a claim came in via

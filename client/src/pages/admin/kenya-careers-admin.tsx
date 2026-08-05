@@ -448,6 +448,49 @@ export default function KenyaCareersAdmin() {
             the claimant company-admin access automatically. */}
         {!loading && !error && tab === "claims" && (
           <div className="space-y-2">
+            {/* 2026-08: bulk-reject button — clears the pending queue of all
+                LOW trust + no domain match claims in one shot. The classic
+                infiltration pattern (personal email trying to claim a big
+                brand). Safe: never touches HIGH trust or domain-matching. */}
+            {claims.filter((cl) => cl.status === "pending" && cl.trust_score === "low" && !cl.domain_match).length > 0 && (
+              <div className="flex justify-end mb-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-rose-800 border-rose-400 bg-rose-50 hover:bg-rose-100 hover:text-rose-900"
+                  onClick={async () => {
+                    const count = claims.filter((cl) => cl.status === "pending" && cl.trust_score === "low" && !cl.domain_match).length;
+                    if (!confirm(
+                      `Bulk-reject ${count} LOW-trust + no-domain-match claims?\n\n` +
+                      `These are almost always fake / joke registrations (personal email trying to claim a corporate brand). ` +
+                      `HIGH-trust and domain-matching claims will NOT be touched.\n\n` +
+                      `This cannot be undone.`,
+                    )) return;
+                    try {
+                      const csrf = await fetchCsrfToken();
+                      const res = await fetch("/api/admin/local-jobs/claims/bulk-reject-junk", {
+                        method: "POST",
+                        credentials: "include",
+                        headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
+                      });
+                      const body = await res.json().catch(() => ({}));
+                      if (!res.ok) {
+                        toast({ variant: "destructive", title: "Bulk reject failed", description: body?.message });
+                      } else {
+                        toast({ title: "Junk claims cleared", description: `${body?.rejected ?? 0} claim${body?.rejected === 1 ? "" : "s"} rejected.` });
+                        await load();
+                      }
+                    } catch (err: any) {
+                      toast({ variant: "destructive", title: "Bulk reject failed", description: err?.message });
+                    }
+                  }}
+                  data-testid="btn-bulk-reject-junk-claims"
+                >
+                  <Trash2 className="h-3.5 w-3.5 mr-1" />
+                  Bulk reject all junk (LOW + no domain match)
+                </Button>
+              </div>
+            )}
             {claims.length === 0 && (
               <Card><CardContent className="p-8 text-center text-muted-foreground">No claims yet.</CardContent></Card>
             )}
@@ -536,8 +579,10 @@ export default function KenyaCareersAdmin() {
                             }
                             setSavingId(cl.id);
                             try {
+                              const csrf = await fetchCsrfToken();
                               const res = await fetch(`/api/admin/local-jobs/claims/${cl.id}/approve`, {
                                 method: "POST", credentials: "include",
+                                headers: { "X-CSRF-Token": csrf },
                               });
                               const body = await res.json().catch(() => ({}));
                               if (!res.ok) {
@@ -551,6 +596,47 @@ export default function KenyaCareersAdmin() {
                         >
                           <ShieldCheck className="h-3.5 w-3.5 mr-1" />
                           {canSafeApprove ? "Approve + grant access" : isVerified ? "Approve (lower trust)" : "Awaiting verification"}
+                        </Button>
+                      )}
+                      {cl.status === "pending" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-rose-800 border-rose-400 bg-rose-50 hover:bg-rose-100 hover:text-rose-900"
+                          disabled={savingId === cl.id}
+                          onClick={async () => {
+                            const reason = window.prompt(
+                              `Reject claim from ${cl.claimant_name} (${cl.claimant_email}) for "${cl.company_name}"?\n\n` +
+                              `Optional: reason for rejection (kept in the audit trail).\n` +
+                              `Examples:\n` +
+                              `  "Personal email trying to claim corporate brand"\n` +
+                              `  "Nonsense role field / joke registration"\n` +
+                              `  "No proof of employment"`,
+                              "Personal email trying to claim corporate brand",
+                            );
+                            if (reason === null) return; // user cancelled
+                            setSavingId(cl.id);
+                            try {
+                              const csrf = await fetchCsrfToken();
+                              const res = await fetch(`/api/admin/local-jobs/claims/${cl.id}/reject`, {
+                                method: "POST",
+                                credentials: "include",
+                                headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
+                                body: JSON.stringify({ reason }),
+                              });
+                              const body = await res.json().catch(() => ({}));
+                              if (!res.ok) {
+                                toast({ variant: "destructive", title: "Reject failed", description: body?.message });
+                              } else {
+                                toast({ title: "Claim rejected", description: `${cl.claimant_email} can no longer proceed with this claim.` });
+                                await load();
+                              }
+                            } finally { setSavingId(null); }
+                          }}
+                          data-testid={`btn-reject-claim-${cl.id}`}
+                        >
+                          <Trash2 className="h-3.5 w-3.5 mr-1" />
+                          Reject
                         </Button>
                       )}
                     </div>
