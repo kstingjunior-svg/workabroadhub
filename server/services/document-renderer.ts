@@ -239,12 +239,22 @@ export function renderPdf(input: RenderInput): Promise<Buffer> {
         doc.y = photoY + photoSize + 10;
       }
 
+      // 2026-08 (Tony's "ugly CV" complaint): brand palette — dark navy for
+      // section headers reads as premium + professional across every ATS.
+      // Body stays near-black for max readability. Muted grey for subtle
+      // dividers under H2s. All ATS-safe (renders as plain text on parse).
+      const COLOR_HEADING = "#0f172a";     // slate-900 — deep navy
+      const COLOR_BODY    = "#1e293b";     // slate-800 — near-black, softer than pure #000
+      const COLOR_ACCENT  = "#0f766e";     // teal-700 — for H2 section headers
+      const COLOR_RULE    = "#cbd5e1";     // slate-300 — subtle divider under H2s
+
       if (input.title) {
         doc
           .font("Helvetica-Bold")
-          .fontSize(20)
+          .fontSize(22)
+          .fillColor(COLOR_HEADING)
           .text(input.title, { align: "center" });
-        doc.moveDown(1);
+        doc.moveDown(0.8);
       }
 
       const lines = input.body.replace(/\r\n/g, "\n").split("\n");
@@ -257,19 +267,43 @@ export function renderPdf(input: RenderInput): Promise<Buffer> {
         // Headings — each one explicitly closes any previous text run by
         // setting continued:false (defensive against pdfkit state leak).
         if (line.startsWith("### ")) {
-          doc.font("Helvetica-Bold").fontSize(12).text(line.slice(4), { continued: false });
           doc.moveDown(0.3);
+          doc.font("Helvetica-Bold").fontSize(11.5)
+             .fillColor(COLOR_HEADING)
+             .text(line.slice(4), { continued: false });
+          doc.moveDown(0.2);
         } else if (line.startsWith("## ")) {
-          doc.font("Helvetica-Bold").fontSize(14).text(line.slice(3), { continued: false });
-          doc.moveDown(0.3);
+          // 2026-08: section headers now get colored + a subtle underline
+          // rule. Elevates the visual quality without adding any binary
+          // dependency (still pure pdfkit, still ATS-parseable).
+          doc.moveDown(0.5);
+          doc.font("Helvetica-Bold").fontSize(13.5)
+             .fillColor(COLOR_ACCENT)
+             .text(line.slice(3).toUpperCase(), { continued: false });
+          // Underline rule across the content width
+          const ruleY = doc.y + 1;
+          doc.strokeColor(COLOR_RULE).lineWidth(0.5)
+             .moveTo(doc.page.margins.left, ruleY)
+             .lineTo(doc.page.width - doc.page.margins.right, ruleY)
+             .stroke();
+          doc.moveDown(0.4);
+          doc.fillColor(COLOR_BODY);
         } else if (line.startsWith("# ")) {
-          doc.font("Helvetica-Bold").fontSize(16).text(line.slice(2), { continued: false });
+          doc.font("Helvetica-Bold").fontSize(18)
+             .fillColor(COLOR_HEADING)
+             .text(line.slice(2), { continued: false });
           doc.moveDown(0.5);
         } else if (/^[*-]\s/.test(line)) {
+          // Slight left-indent for bullets so they visually distinguish
+          // from paragraph text. Bullet char uses en-space for tighter
+          // alignment than double-space.
           doc
-            .font("Helvetica")
-            .fontSize(11)
-            .text("•  " + line.replace(/^[*-]\s/, ""), { continued: false });
+            .font("Helvetica").fontSize(10.5)
+            .fillColor(COLOR_BODY)
+            .text("• " + line.replace(/^[*-]\s/, ""), {
+              continued: false,
+              indent: 12,
+            });
         } else {
           // Render inline bold spans (**bold**). Filter empty fragments first,
           // then use index-based iteration to set continued correctly on the
@@ -291,7 +325,8 @@ export function renderPdf(input: RenderInput): Promise<Buffer> {
             const isLastPart = idx === parts.length - 1;
             doc
               .font(isBold ? "Helvetica-Bold" : "Helvetica")
-              .fontSize(11)
+              .fontSize(10.5)
+              .fillColor(isBold ? COLOR_HEADING : COLOR_BODY)
               .text(text, { continued: !isLastPart });
           });
         }

@@ -22,7 +22,7 @@
  * Token savings ≈ 40% per request. Attention gains from less noise.
  *
  * ARCHITECTURE UNCHANGED: Career Enhancement Report separated by
- *   ═══ CAREER ENHANCEMENT REPORT ═══
+ *   === CAREER ENHANCEMENT REPORT ===
  * and split at storage time (server/service-order-routes.ts).
  *
  * This is the frozen final spec. Further edits should be measurement-
@@ -361,7 +361,7 @@ After the document body passes all four gates, generate a Career
 Enhancement Report separated by this EXACT divider on its own line
 (WorkAbroadHub's renderers split on this string):
 
-═══ CAREER ENHANCEMENT REPORT ═══
+=== CAREER ENHANCEMENT REPORT ===
 
 Include two sections:
 

@@ -308,6 +308,18 @@ STRICT RULES:
 - Never add fictional experience or employment.
 - Keep every real fact intact — company names, dates, degrees, certifications.
 - Length: governed by the Master Writing Standard above. Preserve everything from the input, then expand where responsibilities are underdeveloped. Typically 1.3x–1.8x the input length. Do not compress or summarise.
+- NEVER emit bracketed placeholders like "[Add your education details here]",
+  "[Add your certifications here]", "[Add your languages here]", "[insert X]",
+  "[add Y]", or "[TBD]". These reach recruiters and destroy the candidate's
+  chance. Two hard rules:
+    (a) If the input CV contains data for a section, USE that data verbatim
+        or enhanced — never replace real data with a placeholder.
+    (b) If the input CV has NO data for an optional section (Certifications,
+        Languages, Awards, References), OMIT the entire section — do not
+        emit an empty header with a placeholder underneath.
+  The only exception is a metric where the user genuinely didn't provide a
+  number (e.g. "Managed [add number] client accounts") — that placeholder
+  is allowed because the user is expected to fill it in before submitting.
 
 8. USER PREFERENCES ARE NOT FABRICATION. If the user provides preferences in the "USER-SUPPLIED PREFERENCES" block (target salary, availability, languages, willingness to relocate, certifications, achievements, must-mention experiences), you MUST include every one of them in the appropriate section of the final CV. These are the user's own truthful additions, not invented facts. Ignoring them is a defect.
 
@@ -832,7 +844,13 @@ CRITICAL LENGTH REQUIREMENT — READ CAREFULLY (do not violate):
     // If the AI didn't emit the divider (fallback path), output_text = full
     // response and no report is stored.
     let careerReport: string | null = null;
-    const REPORT_DIVIDER_RE = /\n?\s*[═=]{3,}\s*CAREER\s+ENHANCEMENT\s+REPORT\s*[═=]{3,}\s*\n?/i;
+    // 2026-08 (Tony bug fix): Unicode box-drawing chars ═══ get mangled by
+    // the PDF renderer (Helvetica WinAnsi encoding) → become %P%P%P. The
+    // regex must catch BOTH the original chars AND their mangled form, or
+    // the coaching content leaks into the recruiter-facing CV. Also
+    // tolerates any repeat char (═/=/%P/*/-) around the divider text.
+    const REPORT_DIVIDER_RE =
+      /\n?\s*(?:[═=%P*\-–—]{2,}|%P%P%P?)\s*CAREER\s+ENHANCEMENT\s+REPORT\s*(?:[═=%P*\-–—]{2,}|%P%P%P?)\s*\n?/i;
     const dividerMatch = output.match(REPORT_DIVIDER_RE);
     if (dividerMatch && dividerMatch.index !== undefined) {
       const body = output.slice(0, dividerMatch.index).trimEnd();
@@ -938,6 +956,53 @@ CRITICAL LENGTH REQUIREMENT — READ CAREFULLY (do not violate):
         } catch (retryErr: any) {
           console.error(`[quality-guard] retry threw: ${retryErr?.message} — keeping original output`);
         }
+      }
+    }
+
+    // ── 2026-08 ATS PREFLIGHT — Tony's 70+ floor mandate ──────────────────
+    // Before we commit output_text and mark the order completed, run a
+    // lightweight ATS score check on the AI output. If it scores below 70,
+    // kick the order to awaiting_review so a human handles it — better to
+    // delay 4 hours than deliver a <70 CV that a customer will screenshot
+    // and complain about publicly. Only runs for CV services (skip cover
+    // letter / SoP / motivation which have different scoring criteria).
+    if (isCvRevamp || isCvHeavy) {
+      try {
+        const { preflightScoreCV } = await import("./lib/ats-preflight");
+        const pre = await preflightScoreCV(output, 70);
+        if (pre.ok && !pre.passed) {
+          console.warn(
+            `[ats-preflight] orderId=${orderId} FAILED — score=${pre.score} < 70. ` +
+            `Kicking to awaiting_review. Weaknesses: ${pre.weaknesses.join(" | ")}`,
+          );
+          await pool.query(
+            `UPDATE service_orders
+             SET status = 'awaiting_review',
+                 output_text = $2,
+                 needs_human_review = true,
+                 human_review_notes = $3,
+                 refund_requested = true,
+                 updated_at = NOW()
+             WHERE id = $1`,
+            [
+              orderId,
+              output,
+              `auto-flagged: ATS preflight score ${pre.score} < 70. Weaknesses: ${pre.weaknesses.join("; ")}. Suggestion: ${pre.suggestion}. Needs manual review before delivery.`,
+            ],
+          );
+          try {
+            const { notifyOrderNeedsReview } = await import("./service-order-notify");
+            await notifyOrderNeedsReview(orderId).catch(() => {});
+          } catch {}
+          return;
+        }
+        if (pre.ok) {
+          console.log(`[ats-preflight] orderId=${orderId} PASSED — score=${pre.score}`);
+        }
+      } catch (preErr: any) {
+        // Never block delivery on a preflight infra error — deliver the
+        // output as-is and log for investigation. Belt-and-suspenders.
+        console.warn(`[ats-preflight] orderId=${orderId} scorer errored, delivering anyway: ${preErr?.message}`);
       }
     }
 
