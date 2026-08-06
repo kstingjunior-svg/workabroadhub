@@ -72,8 +72,11 @@ interface ATSResult {
 function ScoreRing({ score, grade }: { score: number; grade: string }) {
   const circumference = 2 * Math.PI * 54;
   const offset = circumference * (1 - score / 100);
-  const color =
-    score >= 70 ? "#10b981" : score >= 45 ? "#f59e0b" : "#ef4444";
+  // 2026-08 (Tony): unified threshold — green ≥ 68 (ATS-safe), amber below.
+  // Matches the label logic + FAQ ("70+ is ATS-safe" — slight buffer to 68).
+  // Removed red tier: alarming red rings scare users off improving; amber
+  // still signals "needs work" without doom.
+  const color = score >= 68 ? "#10b981" : "#f59e0b";
 
   return (
     <div className="relative h-36 w-36 mx-auto">
@@ -446,7 +449,7 @@ export default function ATSCVChecker() {
               <CardContent className="p-6 text-center">
                 <ScoreRing score={result.score} grade={result.grade} />
                 <p className={`text-sm font-semibold mt-3 ${scoreColor}`}>
-                  {result.score >= 90 ? "Excellent — recruiter-ready" : result.score >= 80 ? "Solid — minor fixes lift you to top 10%" : result.score >= 60 ? "Below ATS pass mark — needs work" : "Weak — most overseas ATS will auto-reject"}
+                  {result.score >= 90 ? "Excellent — recruiter-ready" : result.score >= 68 ? "ATS-safe — small tweaks lift you to top 10%" : "Below ATS-safe — several fixes needed"}
                 </p>
                 {result.summary && (
                   <p className="text-xs text-muted-foreground mt-2 max-w-xs mx-auto">{result.summary}</p>
