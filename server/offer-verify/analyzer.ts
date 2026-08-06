@@ -165,10 +165,15 @@ export async function analyzeOffer(
   const normalized: AnalyzeOfferInput =
     typeof input === "string" ? { kind: "image", imageBase64DataUrl: input } : input;
 
-  let vision: any;
-  try {
-    // Build the user message differently for image vs. text inputs.
-    const userContent: any[] = normalized.kind === "image"
+  // 2026-08 (Tony's Christopher NYAGA fix): retry-with-cleanup layer.
+  // Mixed-script offers (Arabic/English MOHRE, Chinese contracts, French
+  // Canadian) frequently trip up gpt-4o's JSON mode — the model returns
+  // prose or malformed JSON despite response_format: json_object. First
+  // attempt uses raw text; if it throws (including JSON.parse errors), we
+  // retry once with Latin-only text stripped of RTL / CJK characters and
+  // a bumped max_tokens ceiling.
+  const buildUserContent = (textInput: string): any[] =>
+    normalized.kind === "image"
       ? [
           { type: "text", text: "Analyze this employment offer letter. Return the JSON only." },
           { type: "image_url", image_url: { url: normalized.imageBase64DataUrl, detail: "high" } },
@@ -184,40 +189,101 @@ export async function analyzeOffer(
               "(grammar quality, template-y phrasing, contradictions, missing legal boilerplate, unusual monetary demands). " +
               "Do NOT invent visual observations like 'pixelated logo' when you can't see the image.\n\n" +
               "---BEGIN OFFER LETTER TEXT---\n" +
-              normalized.text.slice(0, 12_000) + // safety cap
+              textInput.slice(0, 12_000) + // safety cap
               "\n---END OFFER LETTER TEXT---\n\nReturn the JSON only.",
           },
         ];
 
+  const callOpenAi = async (userContent: any[], maxTokens = 2200): Promise<any> => {
     const completion = await openai.chat.completions.create({
       model: "gpt-4o",
       response_format: { type: "json_object" },
       temperature: 0.1,
-      max_tokens: 2200,
+      max_tokens: maxTokens,
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: userContent },
       ],
     });
     const raw = completion.choices[0]?.message?.content ?? "{}";
-    vision = JSON.parse(raw);
+    return JSON.parse(raw);
+  };
+
+  // Strip RTL (Arabic, Hebrew), CJK, and other non-Latin scripts that
+  // frequently break JSON emission. Keeps Latin, digits, punctuation,
+  // whitespace. Also collapses multiple blank lines.
+  const stripNonLatin = (t: string): string =>
+    t
+      .replace(/[֐-ࣿ一-鿿぀-ヿ가-힯]+/g, " ")
+      .replace(/[ \t]{2,}/g, " ")
+      .replace(/\n{3,}/g, "\n\n");
+
+  let vision: any;
+  let attempt = 1;
+  try {
+    vision = await callOpenAi(
+      buildUserContent(normalized.kind === "text" ? normalized.text : ""),
+    );
   } catch (err: any) {
-    // 2026-08 (Tony's debug): log EVERYTHING useful about the OpenAI
-    // error so we can tell in Render logs whether it's a real rate
-    // limit, a context-length overflow, an invalid content-type from
-    // our text path, etc. status + code + type are the fields the
-    // OpenAI SDK exposes for programmatic handling.
-    console.error(
-      `[offer-analyzer] Analysis call failed: kind=${normalized.kind} ` +
+    console.warn(
+      `[offer-analyzer] Attempt 1 failed: kind=${normalized.kind} ` +
       `status=${err?.status ?? "?"} code=${err?.code ?? "?"} type=${err?.type ?? "?"} ` +
       `msg="${err?.message ?? "?"}" ` +
       (normalized.kind === "text" ? `textLen=${normalized.text.length}` : ""),
     );
-    return {
-      ok: false,
-      error: "vision_failed",
-      message: mapVisionError(err?.message ?? "", normalized.kind),
-    };
+
+    // Second attempt: only useful for text path with mixed-script content
+    // or JSON parse errors. For image errors (rate limit, invalid image,
+    // quota) retrying with the same input won't help — surface immediately.
+    const errStr = String(err?.message ?? "").toLowerCase();
+    const looksLikeJsonParse =
+      errStr.includes("unexpected token") ||
+      errStr.includes("json") && errStr.includes("parse") ||
+      errStr.includes("unexpected end of json");
+    const isFatal =
+      errStr.includes("credit_balance_exhausted") ||
+      errStr.includes("insufficient_quota") ||
+      errStr.includes("rate limit") ||
+      errStr.includes("429");
+
+    if (normalized.kind === "text" && looksLikeJsonParse && !isFatal) {
+      try {
+        attempt = 2;
+        const cleaned = stripNonLatin(normalized.text);
+        console.warn(
+          `[offer-analyzer] Retrying with non-Latin stripped: ` +
+          `origLen=${normalized.text.length} cleanedLen=${cleaned.length}`,
+        );
+        vision = await callOpenAi(buildUserContent(cleaned), 3000);
+      } catch (err2: any) {
+        console.error(
+          `[offer-analyzer] Analysis call failed on retry: kind=${normalized.kind} ` +
+          `status=${err2?.status ?? "?"} code=${err2?.code ?? "?"} type=${err2?.type ?? "?"} ` +
+          `msg="${err2?.message ?? "?"}"`,
+        );
+        return {
+          ok: false,
+          error: "vision_failed",
+          message: mapVisionError(err2?.message ?? "", normalized.kind),
+        };
+      }
+    } else {
+      console.error(
+        `[offer-analyzer] Analysis call failed: kind=${normalized.kind} ` +
+        `status=${err?.status ?? "?"} code=${err?.code ?? "?"} type=${err?.type ?? "?"} ` +
+        `msg="${err?.message ?? "?"}" ` +
+        (normalized.kind === "text" ? `textLen=${normalized.text.length}` : ""),
+      );
+      return {
+        ok: false,
+        error: "vision_failed",
+        message: mapVisionError(err?.message ?? "", normalized.kind),
+      };
+    }
+  }
+
+  if (attempt === 2) {
+    console.log(`[offer-analyzer] Retry succeeded after Latin-only cleanup`);
   }
 
   // Map vision output to structured fields
