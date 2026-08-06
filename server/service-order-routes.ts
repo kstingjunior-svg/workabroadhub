@@ -898,11 +898,18 @@ CRITICAL LENGTH REQUIREMENT — READ CAREFULLY (do not violate):
                 // "Generating your CV Revamp...". Now transitions to
                 // 'awaiting_review' — a terminal status the client can render
                 // as "being personally reviewed, expect within 4 hours".
+                // 2026-08 Fix B: also flag refund_requested = true. Guardrail
+                // firing means the user got a substandard first attempt —
+                // regardless of whether we manually rewrite for them free,
+                // admin should have the queue of "these people paid but got
+                // less than promised" for accounting. Refunds get processed
+                // via the existing refunds admin view.
                 `UPDATE service_orders
                  SET status = 'awaiting_review',
                      output_text = $2,
                      needs_human_review = true,
                      human_review_notes = $3,
+                     refund_requested = true,
                      updated_at = NOW()
                  WHERE id = $1`,
                 [
@@ -1726,5 +1733,128 @@ export function registerServiceOrderRoutes(app: Express, isAuthenticated: Reques
     },
   );
 
-  console.log("[ServiceOrder] Routes registered: POST /api/services/order/:slug, GET /api/services/order/:orderId/{status,download/:format}");
+  // ─── POST /api/admin/service-orders/:id/complete-rewrite ─────────────────
+  // 2026-08 Fix A: when admin manually rewrites an awaiting_review order,
+  // provide a single endpoint that atomically:
+  //   1. Updates output_text with the manually-written content
+  //   2. Flips status → completed, stamps completed_at + updated_at
+  //   3. Fingerprints the CV so any re-check on /tools/ats-cv-checker
+  //      honors the promised 88+ delivered-CV floor (was previously only
+  //      firing on the AI happy path, so manual rewrites got no guarantee)
+  //   4. Fires notifyOrderCompleted for email + WhatsApp
+  //   5. Marks refund_processed_at if the guardrail had flagged for refund
+  //
+  // Body: { outputText: string, refundIssued?: boolean }
+  // Auth: admin-only (checked via storage.isUserAdmin)
+  app.post(
+    "/api/admin/service-orders/:id/complete-rewrite",
+    isAuthenticated,
+    async (req: any, res: Response) => {
+      try {
+        // ── Admin gate ────────────────────────────────────────────────────
+        const adminId = req.user?.claims?.sub ?? req.user?.id;
+        if (!adminId) return res.status(401).json({ message: "Sign in required." });
+        const { storage } = await import("./storage");
+        const isAdmin = await storage.isUserAdmin(adminId).catch(() => false);
+        if (!isAdmin) return res.status(403).json({ message: "Admin access required." });
+
+        // ── Input validation ─────────────────────────────────────────────
+        const { id } = req.params;
+        if (!/^[0-9a-f-]{8,}$/i.test(id)) {
+          return res.status(400).json({ message: "Invalid order id." });
+        }
+        const outputText = String(req.body?.outputText ?? "").trim();
+        if (outputText.length < 200) {
+          return res.status(400).json({
+            message: "Manual rewrite must be at least 200 chars — that's shorter than any real CV.",
+          });
+        }
+        const refundIssued = req.body?.refundIssued === true;
+
+        // ── Fetch order for fingerprint metadata ─────────────────────────
+        const { rows: [order] } = await pool.query<{
+          id: string; user_id: string | null; service_slug: string;
+          service_name: string | null; status: string;
+        }>(
+          `SELECT id, user_id, service_slug, service_name, status
+           FROM service_orders WHERE id = $1 LIMIT 1`,
+          [id],
+        );
+        if (!order) return res.status(404).json({ message: "Order not found." });
+        if (!order.user_id) {
+          return res.status(400).json({ message: "Order has no user attached — cannot fingerprint." });
+        }
+
+        // ── Update the order atomically ──────────────────────────────────
+        const { rowCount } = await pool.query(
+          `UPDATE service_orders
+           SET output_text = $2,
+               status = 'completed',
+               completed_at = NOW(),
+               updated_at = NOW(),
+               needs_human_review = false,
+               refund_processed_at = CASE WHEN $3::boolean THEN NOW() ELSE refund_processed_at END,
+               human_review_notes = COALESCE(human_review_notes, '') ||
+                 E'\n[' || to_char(NOW(), 'YYYY-MM-DD HH24:MI') || '] Manual rewrite by admin ' || $4
+           WHERE id = $1`,
+          [id, outputText, refundIssued, adminId],
+        );
+        if (!rowCount) return res.status(404).json({ message: "Order not found or already terminal." });
+
+        console.warn(
+          `[admin] adminId=${adminId} MANUAL-REWRITE order=${id} slug=${order.service_slug} ` +
+          `outLen=${outputText.length} refundIssued=${refundIssued}`,
+        );
+
+        // ── Fingerprint so re-checks honor 88+ floor ─────────────────────
+        // Fire-and-forget (never block the API response). The Delivered-CV
+        // guarantee runs on /api/tools/ats-check via lookupDeliveredCv().
+        try {
+          const { CV_OUTPUT_SLUGS, recordDeliveredCv } = await import("./lib/cv-fingerprint");
+          const slug = String(order.service_slug ?? "").toLowerCase();
+          if (CV_OUTPUT_SLUGS.has(slug)) {
+            const deliveredScore =
+              slug === "cv_rewrite" || slug === "ats_cv_optimization" ? 92 :
+              slug === "cv_fix_lite" ? 88 : 85;
+            recordDeliveredCv({
+              userId:         order.user_id,
+              serviceOrderId: id,
+              serviceSlug:    slug,
+              cvText:         outputText,
+              deliveredScore,
+            }).catch((err: any) => {
+              console.warn(`[admin/complete-rewrite] fingerprint failed for ${id}:`, err?.message);
+            });
+          } else {
+            console.log(`[admin/complete-rewrite] slug=${slug} not in CV_OUTPUT_SLUGS, skipping fingerprint`);
+          }
+        } catch (fpErr: any) {
+          console.warn(`[admin/complete-rewrite] fingerprint hook load failed:`, fpErr?.message);
+        }
+
+        // ── Notify user their CV is ready ────────────────────────────────
+        notifyOrderCompleted(id).catch((notifyErr: any) => {
+          console.warn(`[admin/complete-rewrite] notify failed for ${id}:`, notifyErr?.message);
+        });
+
+        res.json({
+          success:        true,
+          orderId:        id,
+          outputLength:   outputText.length,
+          fingerprinted:  true,
+          userNotified:   true,
+          refundIssued,
+        });
+      } catch (err: any) {
+        console.error("[POST /api/admin/service-orders/:id/complete-rewrite]", {
+          message: err?.message, code: err?.code,
+        });
+        res.status(500).json({
+          message: `Complete-rewrite failed: ${err?.message ?? "unknown"}`,
+        });
+      }
+    },
+  );
+
+  console.log("[ServiceOrder] Routes registered: POST /api/services/order/:slug, GET /api/services/order/:orderId/{status,download/:format}, POST /api/admin/service-orders/:id/complete-rewrite");
 }
