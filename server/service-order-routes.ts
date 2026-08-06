@@ -893,8 +893,13 @@ CRITICAL LENGTH REQUIREMENT — READ CAREFULLY (do not violate):
                 `flagging for human review, not delivering`
               );
               await pool.query(
+                // 2026-08 (Tony bug fix): was leaving status='processing' which
+                // caused the client polling loop to hang forever showing
+                // "Generating your CV Revamp...". Now transitions to
+                // 'awaiting_review' — a terminal status the client can render
+                // as "being personally reviewed, expect within 4 hours".
                 `UPDATE service_orders
-                 SET status = 'processing',
+                 SET status = 'awaiting_review',
                      output_text = $2,
                      needs_human_review = true,
                      human_review_notes = $3,

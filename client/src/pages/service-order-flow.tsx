@@ -109,7 +109,7 @@ const SERVICE_META: Record<string, ServiceMeta> = {
   },
 };
 
-type Stage = "upload" | "paying" | "processing" | "done" | "failed";
+type Stage = "upload" | "paying" | "processing" | "done" | "failed" | "awaiting_review";
 
 export default function ServiceOrderFlow() {
   const [match, params] = useRoute<{ slug: string }>("/services/order/:slug");
@@ -326,6 +326,14 @@ export default function ServiceOrderFlow() {
           if (pollRef.current) window.clearInterval(pollRef.current);
           setErrorMsg(data.error ?? "Processing failed. We'll keep retrying and email you when it's ready — or contact support and we'll regenerate it immediately.");
           setStage("failed");
+        } else if (data.status === "awaiting_review") {
+          // 2026-08 (Tony bug fix): quality guardrail caught the AI producing
+          // a substandard output (usually input too complex — heavy technical
+          // content, long CV, or mixed script). Terminal state — stop polling,
+          // show the friendly "under review" screen. Team follow-up within 4h.
+          if (pollRef.current) window.clearInterval(pollRef.current);
+          setServiceName(data.serviceName || meta.name);
+          setStage("awaiting_review");
         } else {
           // Still pending or processing — surface a softer message after 2 min
           // so the user knows we haven't forgotten them.
@@ -927,6 +935,45 @@ export default function ServiceOrderFlow() {
                   My Documents
                 </button>{" "}
                 page the moment it's ready.
+              </p>
+            </CardContent>
+          )}
+
+          {/* 2026-08 (Tony bug fix): quality guardrail terminal state.
+              AI's output failed the length-preservation check even after
+              retry (usually because the input CV is long / technical /
+              mixed-language). Backend flipped needs_human_review=true and
+              status='awaiting_review'; a WorkAbroad Hub team member will
+              personally handle it within 4 hours. No refund needed — the
+              user still gets a delivered CV. */}
+          {stage === "awaiting_review" && (
+            <CardContent className="text-center py-10 space-y-4">
+              <div className="inline-flex h-14 w-14 rounded-full bg-amber-100 dark:bg-amber-900/30 items-center justify-center mx-auto">
+                <Clock className="h-7 w-7 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div>
+                <h3 className="font-bold text-lg">Being personally reviewed</h3>
+                <p className="text-sm text-muted-foreground max-w-md mx-auto mt-2 leading-relaxed">
+                  Our AI produced a first draft but the quality wasn't up to the
+                  standard we promise you. Rather than send you something less
+                  than perfect, our team is personally handling your{" "}
+                  {serviceName || meta.name} right now.
+                </p>
+              </div>
+              <div className="max-w-md mx-auto p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-sm text-amber-900 dark:text-amber-200">
+                <strong>Expected delivery:</strong> within 4 hours. Same day, no
+                extra charge.
+              </div>
+              <p className="text-xs text-muted-foreground max-w-md mx-auto">
+                We'll email + WhatsApp you the moment it's ready. Safe to close
+                this tab — your polished{" "}
+                {serviceName || meta.name} will also appear in{" "}
+                <button
+                  onClick={() => navigate("/my-documents")}
+                  className="underline underline-offset-2 hover:text-foreground"
+                >
+                  My Documents
+                </button>.
               </p>
             </CardContent>
           )}
