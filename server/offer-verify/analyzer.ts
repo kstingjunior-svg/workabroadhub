@@ -216,7 +216,7 @@ export async function analyzeOffer(
     return {
       ok: false,
       error: "vision_failed",
-      message: mapVisionError(err?.message ?? ""),
+      message: mapVisionError(err?.message ?? "", normalized.kind),
     };
   }
 
@@ -626,7 +626,7 @@ function clamp0100(v: any): number {
   return Math.max(0, Math.min(100, Math.round(n)));
 }
 
-function mapVisionError(msg: string): string {
+function mapVisionError(msg: string, kind: "image" | "text" = "image"): string {
   const lower = (msg || "").toLowerCase();
   // Billing / quota exhaustion — checked BEFORE the generic "429" branch
   // because OpenAI billing errors ALSO carry status 429, and the two need
@@ -644,16 +644,42 @@ function mapVisionError(msg: string): string {
     return "Our verification AI is handling many requests right now. Please wait 30 seconds and try again.";
   }
   if (lower.includes("context_length") || lower.includes("maximum context") || lower.includes("too long")) {
-    return "This document is very long — try uploading just the first 2-3 pages, or a photo of the key page (offer details + salary + signatures).";
+    return kind === "text"
+      ? "This offer letter is longer than we can analyse in one go. Please upload just the offer details page (skip the T&Cs and appendices)."
+      : "This document is very long — try uploading just the first 2-3 pages, or a photo of the key page (offer details + salary + signatures).";
   }
   if (lower.includes("invalid_image") || lower.includes("could not process image")) {
     return "We couldn't read that image. Please try a clearer JPG/PNG photo — good lighting, no glare.";
   }
   if (lower.includes("timeout") || lower.includes("timed out")) {
-    return "The verification took longer than expected. Please try again with a smaller or clearer image.";
+    return kind === "text"
+      ? "The verification took longer than expected. Please try again."
+      : "The verification took longer than expected. Please try again with a smaller or clearer image.";
   }
   if (lower.includes("connection") || lower.includes("network") || lower.includes("econnrefused")) {
     return "We couldn't reach the verification service. Please check your connection and try again.";
   }
-  return "We couldn't complete verification for this document. Please try again with a clearer photo or scan.";
+  // 2026-08 (Tony): JSON parse failure — model returned prose instead of
+  // JSON despite response_format: json_object. Rare but happens on mixed-
+  // language content (e.g. Arabic/English MOHRE offers) or when the model
+  // refuses. Guide the user without falsely blaming a "clearer scan".
+  if (
+    lower.includes("unexpected token") ||
+    lower.includes("json") && lower.includes("parse") ||
+    lower.includes("unexpected end of json")
+  ) {
+    return kind === "text"
+      ? "Our AI struggled to structure this offer letter. If it contains mixed languages or an unusual layout, try uploading a photo of the English page only, or paste just the key details (employer, role, salary, dates) into the classic verifier."
+      : "Our AI struggled to structure this document. Please try a clearer photo of just the offer details page.";
+  }
+  // 2026-08 (Tony): OpenAI content-policy refusal (rare for offer letters,
+  // but possible if the offer contains sensitive personal data).
+  if (lower.includes("content_policy") || lower.includes("safety_policy") || lower.includes("filtered")) {
+    return "Our AI flagged this content for manual review. Please contact us via WhatsApp and we'll verify it personally.";
+  }
+  // 2026-08: context-aware fallback so we don't tell a PDF user "try a
+  // clearer scan" when they never uploaded a scan.
+  return kind === "text"
+    ? "We couldn't complete verification for this document. Please try again in a minute, or paste just the offer details (employer, role, salary, dates) into the classic verifier."
+    : "We couldn't complete verification for this document. Please try again with a clearer photo or scan.";
 }
