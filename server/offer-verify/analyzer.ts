@@ -236,10 +236,17 @@ export async function analyzeOffer(
     // or JSON parse errors. For image errors (rate limit, invalid image,
     // quota) retrying with the same input won't help — surface immediately.
     const errStr = String(err?.message ?? "").toLowerCase();
+    // 2026-08 (Chris NYAGA fix): broaden JSON detection — previous regex
+    // missed "Unterminated string in JSON at position X" which is exactly
+    // what mixed-script MOHRE offers trigger. Now catches every V8 JSON
+    // parse error variant.
     const looksLikeJsonParse =
       errStr.includes("unexpected token") ||
-      errStr.includes("json") && errStr.includes("parse") ||
-      errStr.includes("unexpected end of json");
+      errStr.includes("unexpected end of json") ||
+      errStr.includes("unterminated string") ||
+      errStr.includes("in json at position") ||
+      errStr.includes("json.parse") ||
+      (errStr.includes("json") && errStr.includes("parse"));
     const isFatal =
       errStr.includes("credit_balance_exhausted") ||
       errStr.includes("insufficient_quota") ||
@@ -254,7 +261,21 @@ export async function analyzeOffer(
           `[offer-analyzer] Retrying with non-Latin stripped: ` +
           `origLen=${normalized.text.length} cleanedLen=${cleaned.length}`,
         );
-        vision = await callOpenAi(buildUserContent(cleaned), 3000);
+        // 2026-08 (Chris NYAGA fix): also add an explicit instruction on
+        // retry that the JSON output values must be plain ASCII English —
+        // this prevents the model from including problematic control chars
+        // (RTL marks, unescaped newlines inside strings) that break parsing.
+        // Bumped max_tokens to 4000 to give the model plenty of room to
+        // finish valid JSON.
+        const retryContent = buildUserContent(cleaned);
+        retryContent[0].text +=
+          "\n\nCRITICAL: Emit VALID JSON only. All string values must contain " +
+          "plain ASCII English only (no Arabic, Hebrew, Chinese, or other " +
+          "non-Latin scripts inside strings). No literal newlines or unescaped " +
+          "quotes inside string values. If the input contains untranslated " +
+          "non-Latin text you MUST NOT include it in the output — translate " +
+          "or transliterate to English.";
+        vision = await callOpenAi(retryContent, 4000);
       } catch (err2: any) {
         console.error(
           `[offer-analyzer] Analysis call failed on retry: kind=${normalized.kind} ` +
