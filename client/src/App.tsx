@@ -133,6 +133,9 @@ const MyPayments = lazyWithRetry(() => import("@/pages/my-payments"));
 const PayPage = lazyWithRetry(() => import("@/pages/pay"));
 const MyDocuments = lazyWithRetry(() => import("@/pages/my-documents"));
 const MyOverview = lazyWithRetry(() => import("@/pages/my-overview"));
+// 2026-08 Phase 3: MY CAREER dashboard — consolidates applications, CV scores,
+// interviews, offers, countries applied to.
+const MyCareer = lazyWithRetry(() => import("@/pages/my-career"));
 const AccountVerify = lazyWithRetry(() => import("@/pages/account-verify"));
 // 2026-06: self-service payment + plan diagnostic — recovers paid-but-free users
 const AccountPaymentStatus = lazyWithRetry(() => import("@/pages/account-payment-status"));
@@ -392,6 +395,7 @@ const LazyFAQPage = withSuspense(FAQPage);
 const LazyMyOverview  = withSuspense(MyOverview);
 const LazyMyPayments  = withSuspense(MyPayments);
 const LazyMyDocuments = withSuspense(MyDocuments);
+const LazyMyCareer    = withSuspense(MyCareer);
 const LazyAccountVerify = withSuspense(AccountVerify);
 const LazyAccountPaymentStatus = withSuspense(AccountPaymentStatus);
 const LazyKenyaCareers    = withSuspense(KenyaCareers);
@@ -585,6 +589,7 @@ function AuthenticatedRoutes() {
       <Route path="/payments" component={LazyMyPayments} />
       <Route path="/my-documents" component={LazyMyDocuments} />
       <Route path="/my-overview" component={LazyMyOverview} />
+      <Route path="/my-career" component={LazyMyCareer} />
       <Route path="/account/verify" component={LazyAccountVerify} />
       <Route path="/account/payment-status" component={LazyAccountPaymentStatus} />
       {/* Kazi Karibu — individual employer postings (docs/kazi-karibu/STRATEGY.md) */}

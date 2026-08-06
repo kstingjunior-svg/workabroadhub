@@ -1503,6 +1503,15 @@ export default function Dashboard() {
               My Overview →
             </button>
           </Link>
+          {/* 2026-08 Phase 3: MY CAREER dashboard shortcut */}
+          <Link href="/my-career">
+            <button
+              className="bg-white/15 hover:bg-white/25 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap"
+              data-testid="link-my-career"
+            >
+              🏆 My Career →
+            </button>
+          </Link>
         </div>
 
 
