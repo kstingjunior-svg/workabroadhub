@@ -227,8 +227,10 @@ export default function ATSCVChecker() {
     if (f) handleFile(f);
   };
 
+  // 2026-08 (Tony): unified with ring + label thresholds. Green ≥ 68, amber
+  // otherwise. No red — see ScoreRing comment.
   const scoreColor = result
-    ? result.score >= 80 ? "text-green-600" : result.score >= 60 ? "text-amber-600" : "text-red-600"
+    ? result.score >= 68 ? "text-green-600" : "text-amber-600"
     : "";
 
   const seoSchemas = [
