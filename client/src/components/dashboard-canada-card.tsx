@@ -55,13 +55,31 @@ export function DashboardCanadaCard() {
   const { user } = useAuth();
   // Read the plan from the same cache the rest of the app uses. No extra
   // request — if React Query already has it the badge shows immediately.
-  const { data: plan } = useQuery<{ planId: string } | null>({
+  //
+  // 2026-08 (Tony's report of "paid users having hard time to access"):
+  // enable retry on transient failures + track isLoading separately so we
+  // don't wrongly downgrade a paid user's badge while the plan query is
+  // still in flight. Previously (`plan?.planId || "free"`) treated
+  // undefined-during-load as free, which briefly showed the paywall + sent
+  // paying users to /pricing when they tapped the card.
+  const { data: plan, isLoading: planLoading, isError: planError } = useQuery<{ planId: string } | null>({
     queryKey: ["/api/user/plan"],
     enabled: !!user,
     staleTime: 30_000,
-    retry: false,
+    retry: 2,
   });
-  const isPaid = PAID_TIERS.has((plan?.planId || "free").toLowerCase());
+  // Only decide paid/free when we actually have a definitive answer. While
+  // the query is loading, we don't know yet — hold off on badge/CTA state
+  // rather than flashing "free" and wrongly sending a paying user to
+  // /pricing. If the query errored (transient network blip on Kenyan 3G),
+  // still default to free so we never accidentally let a free user in via
+  // the client — the server-side requireAnyPaidPlan is the source of truth
+  // regardless, so at worst a paid user with a network blip sees the
+  // upgrade CTA for a second until their plan re-loads.
+  const planKnown = !!user && !planLoading && (!!plan || planError);
+  const isPaid = planKnown
+    ? PAID_TIERS.has((plan?.planId || "free").toLowerCase())
+    : false;
 
   // Rotate based on day-of-year for a stable but daily-changing pick
   const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400_000);
@@ -75,7 +93,15 @@ export function DashboardCanadaCard() {
   // makes the gate explicit at the point-of-click and gives us defence in
   // depth if the destination page's gate ever regresses. Paid users still go
   // straight to the destination as before.
-  const target = isPaid ? angle.href : `/pricing?return=${encodeURIComponent(angle.href)}`;
+  //
+  // 2026-08 (Tony's "paid users blocked" report): while the plan query is
+  // still loading, avoid navigating anywhere. If we sent them optimistically
+  // to /canada/crs and they were free, they'd see the paywall (fine but
+  // confusing); if we sent them to /pricing and they were paid, they'd be
+  // annoyed. Best: hold navigation until we know, then be accurate.
+  const target = !planKnown
+    ? "#"
+    : isPaid ? angle.href : `/pricing?return=${encodeURIComponent(angle.href)}`;
 
   return (
     <Link href={target}>
