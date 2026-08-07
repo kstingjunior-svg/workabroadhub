@@ -51,6 +51,48 @@ export class ErrorBoundary extends Component<Props, State> {
     console.error("stack:   ", error.stack);
     console.error("componentStack: ", errorInfo.componentStack);
     console.groupEnd();
+
+    // 2026-08 (Tony's "Just a small detour" mobile screenshots): log every
+    // caught error to the server so we can see what's actually failing in
+    // production. Mobile users can't open dev-tools; without this we're
+    // blind to the real cause. Fire-and-forget — never let the logger
+    // itself throw and cause a loop.
+    try {
+      fetch("/api/log/client-error", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type:      "react-error-boundary",
+          message:   error?.message ?? "unknown",
+          stack:     error?.stack?.slice(0, 3000) ?? null,
+          componentStack: errorInfo?.componentStack?.slice(0, 3000) ?? null,
+          url:       window.location.href,
+          userAgent: navigator.userAgent,
+          timestamp: new Date().toISOString(),
+        }),
+      }).catch(() => {}); // swallow silently
+    } catch {}
+
+    // 2026-08: auto-retry ONCE silently before showing the fallback. Many
+    // render errors are transient (query race condition, in-app browser
+    // hiccup, one-off fetch failure). If retry also fails, the boundary
+    // remains in error state and shows the friendly fallback as before.
+    // Uses a sessionStorage flag scoped to this pathname so we don't
+    // infinite-loop on genuinely-broken routes.
+    try {
+      const key = `wah:eb-retried:${window.location.pathname}`;
+      const lastRetry = Number(sessionStorage.getItem(key) || 0);
+      if (Date.now() - lastRetry > 30_000) {
+        sessionStorage.setItem(key, String(Date.now()));
+        // Give React a beat to finish this error render, then reset state.
+        // If the underlying issue was transient, the next render succeeds
+        // and the user never sees the fallback.
+        setTimeout(() => {
+          this.setState({ hasError: false, error: null, errorInfo: null });
+        }, 400);
+      }
+    } catch {}
   }
 
   handleRetry = () => {
