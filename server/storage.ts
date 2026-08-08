@@ -1569,6 +1569,21 @@ export class DatabaseStorage implements IStorage {
           ? new Date(currentExpiry.getTime() + duration)                   // EXTEND
           : freshExpiry;                                                   // no existing time → fresh start anyway
 
+      // 2026-08 (Tony's Supabase log flood — 23505 duplicate active): two
+      // parallel payment callbacks could both find no existing active row
+      // (the SELECT FOR UPDATE above locks nothing when there IS nothing),
+      // both proceed to INSERT, and the second one hits the partial unique
+      // index user_subscriptions_one_active_per_user_idx. The idempotency
+      // flags at the callback layer usually catch this, but retries + admin
+      // grants + webhook races can still slip through.
+      //
+      // Fix: take an advisory lock keyed on user_id so only one activation
+      // per user runs at a time app-wide. Advisory locks are transaction-
+      // scoped when acquired via pg_advisory_xact_lock — they release at
+      // COMMIT/ROLLBACK automatically. The bigint arg is a stable hash of
+      // the userId string so different users don't contend.
+      await client.query(`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, [userId]);
+
       // Expire all currently-active rows for this user (keeps the table tidy)
       await client.query(
         `UPDATE user_subscriptions
