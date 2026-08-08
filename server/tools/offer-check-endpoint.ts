@@ -436,10 +436,12 @@ export function registerOfferCheckRoute(app: Express): void {
           const { extractTextFromBuffer } = await import("../utils/extract-text");
           const extracted = await extractTextFromBuffer(req.file.buffer, mt, req.file.originalname);
           if (!extracted?.text || extracted.text.trim().length < 50) {
+            console.warn(`[OfferVerify] extraction failed method=${extracted?.method ?? "none"} chars=${extracted?.text?.length ?? 0} file=${req.file.originalname} (${req.file.size} bytes)`);
             return res.status(400).json({
-              message: "We couldn't read enough text from that file. If it's a scanned PDF, please upload a clear photo (JPG/PNG) instead — our OCR handles those.",
+              message: "We couldn't read this document. Please screenshot each page as a clear JPG/PNG and upload the images one at a time — our vision engine will read them directly.",
             });
           }
+          console.log(`[OfferVerify] extraction OK method=${extracted.method} chars=${extracted.text.length} file=${req.file.originalname}`);
           report = await analyzeOffer({
             kind: "text",
             text: extracted.text,

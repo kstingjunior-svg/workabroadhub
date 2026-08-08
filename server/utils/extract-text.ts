@@ -184,6 +184,69 @@ async function tryPdfJs(buf: Buffer): Promise<string> {
 }
 
 /**
+ * OpenAI file-upload fallback for scanned / image-only PDFs.
+ * Uploads the PDF to OpenAI Files, asks gpt-4o to extract all text (native
+ * document understanding — handles scans, mixed scripts, complex layouts).
+ * Costs a few cents per call but is the most reliable fallback when
+ * pdfjs / Tesseract both fail.
+ *
+ * 2026-08 (Tony's SUSSAN NYABOKE contract): Tesseract failed silently on
+ * a scanned PDF; user saw the generic "couldn't read enough text" error.
+ * This path makes that scenario recover instead of hard-failing.
+ */
+async function tryOpenAIPdfExtract(buf: Buffer, filename?: string): Promise<string> {
+  try {
+    if (!process.env.OPENAI_API_KEY) return "";
+    const OpenAI = (await import("openai")).default;
+    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const safeName = filename || "document.pdf";
+
+    console.log(`[extractText] Attempting OpenAI file-upload PDF extract (${buf.length} bytes)…`);
+
+    // Upload the PDF buffer to OpenAI Files
+    const uploaded = await client.files.create({
+      // openai v6 accepts a Node Buffer wrapped in File (available as global in Node 20+)
+      file: new File([new Uint8Array(buf)], safeName, { type: "application/pdf" }),
+      purpose: "user_data",
+    });
+
+    try {
+      const resp = await client.chat.completions.create({
+        model: "gpt-4o",
+        temperature: 0,
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "file", file: { file_id: uploaded.id } } as any,
+              {
+                type: "text",
+                text:
+                  "Extract ALL readable text from this document verbatim. " +
+                  "Preserve line breaks. Include headers, tables, signatures, " +
+                  "stamps, and any handwritten notes if legible. " +
+                  "Return ONLY the extracted text — no commentary, no summary.",
+              },
+            ],
+          },
+        ],
+        max_tokens: 4000,
+      });
+
+      const text = (resp.choices?.[0]?.message?.content ?? "").toString().trim();
+      console.log(`[extractText] OpenAI PDF extract returned ${text.length} chars`);
+      return text;
+    } finally {
+      // Best-effort cleanup — don't let a delete failure block the extract
+      client.files.delete(uploaded.id).catch(() => {});
+    }
+  } catch (err) {
+    console.warn("[extractText] OpenAI PDF extract failed:", err instanceof Error ? err.message : err);
+    return "";
+  }
+}
+
+/**
  * OCR fallback using Tesseract.js.
  * Works on scanned image-PDFs and plain image files.
  * Tesseract v5 internally uses pdfjs to render the first page of a PDF,
@@ -258,12 +321,26 @@ export async function extractTextFromBuffer(
       return { text: ocrText, method: "tesseract-ocr" };
     }
 
-    // Attempt 4: Return the best text we have even if it failed the
+    // Attempt 4: OpenAI file-upload native PDF extract — the reliable
+    // fallback for scanned contracts / mixed-script docs where Tesseract
+    // struggles. Costs ~2-5¢ per call so only fires when everything else
+    // failed — worth it for a paid user's document.
+    const openaiText = await tryOpenAIPdfExtract(buffer, filename);
+    if (openaiText.length >= MIN_CV_LENGTH && isReadableText(openaiText)) {
+      return { text: openaiText, method: "openai-pdf-extract" };
+    }
+    // Even if it failed our readability heuristic, keep it as a fallback
+    // if it's substantially longer than what pdfjs got.
+    if (openaiText.length > lowQualityFallback.length && openaiText.length >= MIN_CV_LENGTH) {
+      lowQualityFallback = openaiText;
+    }
+
+    // Attempt 5: Return the best text we have even if it failed the
     // readability heuristic — better to send imperfect text to the AI than
-    // nothing. Sourced from the pdfjs-dist attempt above.
+    // nothing. Sourced from the pdfjs-dist / openai attempts above.
     if (lowQualityFallback.length >= MIN_CV_LENGTH) {
-      console.warn("[extractText] Using low-quality pdfjs-dist text as last resort");
-      return { text: lowQualityFallback, method: "pdfjs-fallback" };
+      console.warn("[extractText] Using low-quality text as last resort");
+      return { text: lowQualityFallback, method: "low-quality-fallback" };
     }
 
     // All local extraction methods exhausted.
