@@ -83,11 +83,21 @@ async function handleSuccess(payment: any, receipt: string): Promise<void> {
         recovered: true, receipt: receiptStr,
       }).catch((err: any) => console.warn(`[StkRecovery] unlockService failed: ${err?.message}`));
     }
+    // 2026-08 (audit gap): stamp deliveryStatus so the payment doesn't show
+    // up forever in "processed but never delivered" audit queries. The
+    // service IS delivered at this point — unlockService just ran.
+    await storage.updatePayment(payment.id, { deliveryStatus: "delivered" } as any)
+      .catch((err: any) => console.warn(`[StkRecovery] deliveryStatus stamp (service) failed: ${err?.message}`));
     return;
   }
 
   const expiresAt = planExpiry(resolvedTier);
   await storage.activateUserPlan(payment.userId, resolvedTier, payment.id, expiresAt);
+  // 2026-08 (audit gap): stamp deliveryStatus so the payment doesn't show
+  // up forever in "processed but never delivered" audit queries. The plan
+  // was just activated — that IS delivery for a subscription purchase.
+  await storage.updatePayment(payment.id, { deliveryStatus: "delivered" } as any)
+    .catch((err: any) => console.warn(`[StkRecovery] deliveryStatus stamp (plan) failed: ${err?.message}`));
   await storage.updateUserStage(payment.userId, "paid").catch((err: any) => {
     console.error("[StkRecovery] updateUserStage failed:", {
       error: err?.message, paymentId: payment?.id, userId: payment?.userId,
