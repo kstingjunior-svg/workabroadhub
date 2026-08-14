@@ -19930,18 +19930,62 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
       }
 
       // 4. Handle referral if one was stored
+      // 2026-08 SECURITY (Phase 3 audit): previously trusted metadata.refCode
+      // directly and paid 10% commission. Since the client sets metadata.refCode
+      // at /api/paypal/init time, a user could send their OWN referral code and
+      // pocket 10% cashback on every PayPal payment. Fixed by:
+      //   (a) refusing to create a commission if the refCode belongs to the
+      //       paying user themselves (self-referral)
+      //   (b) requiring the refCode match a real user in the DB (unknown codes
+      //       are silently dropped instead of paying a fake influencer)
+      //   (c) requiring the payer's users.referred_by matches this refCode —
+      //       so a user can only ever generate commission for the referrer
+      //       they SIGNED UP under, never for a random code they inject later
+      // M-Pesa callback at line 5551 already does (c) correctly by reading
+      // users.referred_by from the DB instead of trusting request metadata.
       if (payment.metadata) {
         try {
           const meta = typeof payment.metadata === "string" ? JSON.parse(payment.metadata) : payment.metadata;
-          if (meta?.refCode) {
-            const commission = Math.round(payment.amount * 0.10);
-            storage.createReferral({
-              refCode: meta.refCode,
-              referredPhone: capture.payerEmail || "",
-              paymentAmount: payment.amount,
-              commission,
-              status: "pending",
-            }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+          const clientRefCode: string | undefined = meta?.refCode;
+          if (clientRefCode && userId) {
+            const normCode = String(clientRefCode).trim().toUpperCase();
+            // Read the payer's ACTUAL referral chain from the DB (source of truth)
+            const { rows: [payerRow] } = await pool.query<{ referred_by: string | null; referral_code: string | null }>(
+              `SELECT referred_by, referral_code FROM users WHERE id = $1 LIMIT 1`,
+              [userId],
+            );
+            const authoritativeCode = String(payerRow?.referred_by ?? "").trim().toUpperCase();
+            // Self-referral guard — payer's own code cannot pay them commission
+            const payerOwnCode = String(payerRow?.referral_code ?? "").trim().toUpperCase();
+            if (!authoritativeCode) {
+              console.log(`[PayPal][Referral] Payer ${userId} has no referred_by — commission skipped (client sent "${normCode}")`);
+            } else if (normCode === payerOwnCode) {
+              console.warn(`[PayPal][Referral][Security] Self-referral blocked for user=${userId} — client sent their own code`);
+            } else if (normCode !== authoritativeCode) {
+              console.warn(`[PayPal][Referral][Security] refCode mismatch for user=${userId} — client="${normCode}" authoritative="${authoritativeCode}" — using authoritative`);
+            }
+            const effectiveCode = authoritativeCode; // always use DB value
+            if (effectiveCode && effectiveCode !== payerOwnCode) {
+              // Confirm the referrer code actually resolves to a real user
+              const { rows: [refUser] } = await pool.query<{ id: string }>(
+                `SELECT id FROM users WHERE UPPER(referral_code) = $1 LIMIT 1`,
+                [effectiveCode],
+              );
+              if (!refUser) {
+                console.warn(`[PayPal][Referral] refCode "${effectiveCode}" doesn't match any user — commission skipped`);
+              } else if (refUser.id === userId) {
+                console.warn(`[PayPal][Referral][Security] Self-referral (referrer.id === payer.id) blocked for user=${userId}`);
+              } else {
+                const commission = Math.round(payment.amount * 0.10);
+                storage.createReferral({
+                  refCode: effectiveCode,
+                  referredPhone: capture.payerEmail || "",
+                  paymentAmount: payment.amount,
+                  commission,
+                  status: "pending",
+                }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+              }
+            }
           }
         } catch (_e) { /* non-fatal */ }
       }
