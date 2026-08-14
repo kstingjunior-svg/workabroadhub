@@ -13644,13 +13644,87 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
     }
   });
 
+  // 2026-08 SECURITY: whitelist sanitizer for agency-portal job payloads.
+  // The DB schema has isFeatured (admin-only editorial flag) and viewCount
+  // (server-tracked metric). Spreading req.body into the insert let any
+  // claimed-agency owner promote themselves for free by adding isFeatured
+  // to the payload. This helper accepts only the fields an agency owner
+  // should legitimately set; everything else is silently dropped.
+  //
+  // Fields kept from user input:
+  //   title, country, salary, jobCategory, description, requirements,
+  //   visaSponsorship, applicationDeadline, applyLink, applyEmail
+  //
+  // Fields the user MUST NOT set (silently stripped):
+  //   agencyId       — controlled by session, set by the route
+  //   isFeatured     — editorial promotion, admin-only
+  //   isActive       — server default true; publish/unpublish will get its
+  //                    own endpoint if needed
+  //   viewCount      — server tracks impressions, not the owner
+  //   id, createdAt, updatedAt — schema defaults, never user-writable
+  function sanitizeAgencyJobInput(input: any): any {
+    if (!input || typeof input !== "object") {
+      return { __error: "Request body must be an object." };
+    }
+    const clean: any = {};
+    // Required-ish string fields (schema requires title + country on insert;
+    // partial updates may omit them, which is fine — DB keeps existing).
+    if (input.title != null) {
+      const t = String(input.title).trim().slice(0, 200);
+      if (t.length < 3) return { __error: "Title must be at least 3 characters." };
+      clean.title = t;
+    }
+    if (input.country != null) {
+      const c = String(input.country).trim().slice(0, 100);
+      if (c.length < 2) return { __error: "Country is required." };
+      clean.country = c;
+    }
+    if (input.salary != null) clean.salary = String(input.salary).trim().slice(0, 100);
+    if (input.jobCategory != null) clean.jobCategory = String(input.jobCategory).trim().slice(0, 100);
+    if (input.description != null) clean.description = String(input.description).slice(0, 20_000);
+    if (input.requirements != null) clean.requirements = String(input.requirements).slice(0, 10_000);
+    if (input.visaSponsorship != null) clean.visaSponsorship = !!input.visaSponsorship;
+    if (input.applicationDeadline != null) {
+      const d = new Date(input.applicationDeadline);
+      if (!Number.isNaN(d.getTime())) clean.applicationDeadline = d;
+    }
+    if (input.applyLink != null) {
+      const link = String(input.applyLink).trim().slice(0, 500);
+      // Basic URL sanity — reject javascript:, data:, and other non-http schemes
+      if (link && !/^https?:\/\//i.test(link)) {
+        return { __error: "Apply link must start with http:// or https://" };
+      }
+      clean.applyLink = link || null;
+    }
+    if (input.applyEmail != null) {
+      const email = String(input.applyEmail).trim().slice(0, 200);
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return { __error: "Apply email is not a valid email address." };
+      }
+      clean.applyEmail = email || null;
+    }
+    return clean;
+  }
+
   // Portal: create job listing
   app.post("/api/agency-portal/jobs", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user?.claims?.sub;
       const agency = await storage.getAgencyByClaimedUser(userId);
       if (!agency) return res.status(403).json({ message: "No agency claimed" });
-      const job = await storage.createAgencyJob({ ...req.body, agencyId: agency.id });
+      // 2026-08 SECURITY (mass-assignment fix): previously spread req.body
+      // straight into the DB insert, which let any claimed-agency user set
+      // isFeatured / isActive / viewCount by injecting those fields into
+      // their POST body — free promotion + fake engagement metrics.
+      // Whitelist only the fields an agency owner should legitimately set;
+      // isFeatured stays admin-only, viewCount is server-tracked, isActive
+      // uses the schema default (true) unless we later add a "publish" toggle.
+      const b = req.body ?? {};
+      const cleanBody = sanitizeAgencyJobInput(b);
+      if (cleanBody.__error) {
+        return res.status(400).json({ message: cleanBody.__error });
+      }
+      const job = await storage.createAgencyJob({ ...cleanBody, agencyId: agency.id });
       res.status(201).json(job);
     } catch (error) {
       console.error("Error creating job:", error);
@@ -13666,7 +13740,14 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
       if (!agency) return res.status(403).json({ message: "No agency claimed" });
       const job = await storage.getAgencyJobById(req.params.jobId);
       if (!job || job.agencyId !== agency.id) return res.status(403).json({ message: "Access denied" });
-      const updated = await storage.updateAgencyJob(req.params.jobId, req.body);
+      // 2026-08 SECURITY (mass-assignment fix): same whitelist for updates.
+      // Also strip agencyId so the owner can't reassign the job to another
+      // agency they don't own.
+      const cleanBody = sanitizeAgencyJobInput(req.body ?? {});
+      if (cleanBody.__error) {
+        return res.status(400).json({ message: cleanBody.__error });
+      }
+      const updated = await storage.updateAgencyJob(req.params.jobId, cleanBody);
       res.json(updated);
     } catch (error) {
       console.error("Error updating job:", error);
