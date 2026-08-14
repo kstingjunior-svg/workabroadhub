@@ -1694,6 +1694,32 @@ Crawl-delay: 1`);
     }
   });
 
+  // 2026-08 (Tony's "free tools broken" report): quick OpenAI liveness probe.
+  // Public GET so we can hit it from a browser tab to confirm the key is live
+  // end-to-end after a billing/rotation event. Doesn't burn any AI tokens —
+  // uses the cheap models.list() call under the hood.
+  app.get("/api/health/openai", async (_req, res) => {
+    try {
+      const { openAIHealthProbe } = await import("./lib/openai");
+      const result = await openAIHealthProbe();
+      res.status(result.ok ? 200 : 503).json({
+        ...result,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err: any) {
+      res.status(503).json({ ok: false, reason: err?.message ?? "probe_crashed" });
+    }
+  });
+
+  // 2026-08: admin-only hot-reload of the OpenAI client so a rotated key
+  // (Render env var update) takes effect immediately, no full restart.
+  app.post("/api/admin/openai/reload", isAuthenticated, isAdmin, async (_req: any, res) => {
+    const { resetOpenAIClient, openAIHealthProbe } = await import("./lib/openai");
+    resetOpenAIClient();
+    const probe = await openAIHealthProbe();
+    res.json({ success: true, probe });
+  });
+
   // Circuit breaker status
   app.get("/api/health/circuits", (req, res) => {
     const stats = getAllCircuitBreakerStats();

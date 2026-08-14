@@ -601,7 +601,22 @@ export function registerToolsRoutes(
           ...(deliveryMatch ? { deliveredCv: { score: deliveryMatch.deliveredScore, at: deliveryMatch.deliveredAt, slug: deliveryMatch.serviceSlug } } : {}),
         });
       } catch (err: any) {
-        console.error("[ATS Check]", err.message);
+        // 2026-08 (Tony's "free tools broken" report): categorise the failure
+        // so users see a useful message instead of a generic "please try again"
+        // when the real problem is our OpenAI key/billing.
+        const status = err?.status ?? err?.response?.status;
+        const code = err?.code ?? err?.error?.code;
+        console.error(`[ATS Check] status=${status} code=${code} msg=${err?.message}`);
+        if (status === 401 || status === 403) {
+          return res.status(503).json({
+            message: "Our AI service is temporarily offline. Our team has been alerted — please try again in a few minutes.",
+          });
+        }
+        if (status === 429) {
+          return res.status(503).json({
+            message: "Our AI service is at capacity right now. Please wait a minute and try again.",
+          });
+        }
         res.status(500).json({ message: "ATS check failed. Please try again." });
       }
     }
