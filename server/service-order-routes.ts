@@ -1123,6 +1123,20 @@ CRITICAL LENGTH REQUIREMENT — READ CAREFULLY (do not violate):
       // MAX_RETRIES_PER_ORDER=3). If it exhausts retries, sweep marks failed
       // with a clear "[recovery] Exhausted" message + fires user notification
       // (see notifyOrderFailed below).
+      //
+      // 2026-08 (Tony's "users paid but not receiving" audit): stamp the
+      // original error into error_message BEFORE throwing so we can diagnose
+      // OpenAI failures. Previously only the recovery-layer's "Exhausted 3
+      // retries" line survived — we were flying blind on what actually
+      // failed. Append (COALESCE) so we don't overwrite prior attempts.
+      await pool.query(
+        `UPDATE service_orders
+         SET error_message = COALESCE(error_message,'') ||
+             E'\n[processOrder ' || to_char(NOW(),'YYYY-MM-DD HH24:MI:SS') || '] ' || $2,
+             updated_at = NOW()
+         WHERE id = $1`,
+        [orderId, `TRANSIENT status=${status} code=${code} msg="${errMsg.slice(0, 500)}"`],
+      ).catch(() => { /* best-effort — never let logging block the throw */ });
       console.warn(
         `[ServiceOrder] processOrder TRANSIENT error for ${orderId}: ` +
         `status=${status} code=${code} msg="${errMsg}" — leaving order in processing state for sweep retry`,
@@ -1436,6 +1450,38 @@ export function startStuckOrderSweep(): void {
 
   setInterval(async () => {
     try {
+      // 2026-08 (Tony's "users paid but not receiving" audit): first pass —
+      // reconcile any pending_payment orders whose payment actually completed.
+      // Root cause: paymentPipeline Step 3b sometimes misses linking (metadata
+      // parse race, orphan-recovered payment, PayPal webhook arriving before
+      // the client-driven capture-order finishes). Rather than diagnose every
+      // edge case, sweep every minute and self-heal: any pending_payment order
+      // that has a matching completed payment gets promoted to 'paid' so the
+      // AI generation kicks in.
+      const { rows: promoted } = await pool.query<{ id: string }>(
+        `UPDATE service_orders o
+            SET status = 'paid',
+                paid_at = COALESCE(o.paid_at, NOW()),
+                updated_at = NOW(),
+                error_message = COALESCE(o.error_message,'') ||
+                  E'\n[reconciler ' || to_char(NOW(),'YYYY-MM-DD HH24:MI:SS') ||
+                  '] Payment completed but pipeline missed linking — self-healed.'
+          WHERE o.status = 'pending_payment'
+            AND EXISTS (
+              SELECT 1 FROM payments p
+              WHERE p.status IN ('success','completed')
+                AND p.metadata::text LIKE '%"serviceOrderId":"' || o.id || '"%'
+            )
+            AND o.created_at > NOW() - INTERVAL '7 days'
+          RETURNING id`,
+      );
+      if (promoted.length > 0) {
+        console.warn(
+          `[ServiceOrder] Reconciler: self-healed ${promoted.length} pending_payment order(s) ` +
+          `whose payments had completed: ${promoted.map(r => r.id).join(", ")}`,
+        );
+      }
+
       const { rows } = await pool.query<{ id: string; status: string; service_slug: string }>(
         `SELECT id, status, service_slug
            FROM service_orders
