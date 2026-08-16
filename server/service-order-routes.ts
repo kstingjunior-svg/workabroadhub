@@ -875,7 +875,14 @@ CRITICAL LENGTH REQUIREMENT — READ CAREFULLY (do not violate):
       // input (Rule 1 — never reduce). Expansion up to 2x is expected and
       // encouraged (Rule 2 — add value). Anything shorter than input OR more
       // than 2.2x input triggers a retry with a stronger prompt.
-      const MIN_RATIO = 1.00;
+      //
+      // 2026-08 (Tony's "users paid but not receiving" report): loosened
+      // MIN_RATIO from 1.00 to 0.85. The 1.00 floor was kicking many
+      // legitimate outputs to awaiting_review — the model normally produces
+      // 0.9–1.5x, and rejecting anything <100% created a backlog admin
+      // couldn't clear fast enough. 0.85 still catches genuine compression
+      // (30-70% content loss cases) but lets normal-length rewrites through.
+      const MIN_RATIO = 0.85;
       const MAX_RATIO = 2.20;
       const ratio = output.length / inputLen;
 
@@ -969,10 +976,17 @@ CRITICAL LENGTH REQUIREMENT — READ CAREFULLY (do not violate):
     if (isCvRevamp || isCvHeavy) {
       try {
         const { preflightScoreCV } = await import("./lib/ats-preflight");
-        const pre = await preflightScoreCV(output, 70);
+        // 2026-08 (Tony's "users paid but not receiving" report): lowered
+        // preflight floor 70 → 55 because too many legitimate rewrites were
+        // scoring 60-69 and getting kicked to awaiting_review, creating a
+        // backlog admin couldn't clear. Below 55 still catches genuinely
+        // broken output (missing sections, blank paragraphs, garbled text)
+        // but doesn't hold up perfectly usable CVs waiting for a human
+        // touch-up we don't have bandwidth to do at scale.
+        const pre = await preflightScoreCV(output, 55);
         if (pre.ok && !pre.passed) {
           console.warn(
-            `[ats-preflight] orderId=${orderId} FAILED — score=${pre.score} < 70. ` +
+            `[ats-preflight] orderId=${orderId} FAILED — score=${pre.score} < 55. ` +
             `Kicking to awaiting_review. Weaknesses: ${pre.weaknesses.join(" | ")}`,
           );
           await pool.query(
@@ -987,7 +1001,7 @@ CRITICAL LENGTH REQUIREMENT — READ CAREFULLY (do not violate):
             [
               orderId,
               output,
-              `auto-flagged: ATS preflight score ${pre.score} < 70. Weaknesses: ${pre.weaknesses.join("; ")}. Suggestion: ${pre.suggestion}. Needs manual review before delivery.`,
+              `auto-flagged: ATS preflight score ${pre.score} < 55. Weaknesses: ${pre.weaknesses.join("; ")}. Suggestion: ${pre.suggestion}. Needs manual review before delivery.`,
             ],
           );
           try {
