@@ -31,8 +31,19 @@ const COUNTRIES: Record<CountryKey, {
   ZA: { flag: "🇿🇦", prefix: "27",  name: "South Africa", subscriberLength: 9, regex: SA_RE,    placeholder: "82 123 4567" },
 };
 
-// Only suppress on the admin panel; /profile stays blocked (user can update there)
-const SUPPRESSED_PATHS = ["/admin"];
+// Only suppress on the admin panel; /profile stays blocked (user can update there).
+// 2026-08 (Tony's "verify stuck on phone modal" report): also suppress on the
+// email-verification pages. Order of operations is: verify email → then add
+// phone. If we block the verify page with this modal, unverified users get
+// trapped: they can't verify email because the modal is in the way, AND they
+// can't add a phone because they haven't confirmed identity yet. The banner
+// on every other page will still push them to complete phone after they
+// finish email verification.
+const SUPPRESSED_PATHS = [
+  "/admin",
+  "/account/verify",   // email OTP flow
+  "/verify",           // legacy verify page
+];
 
 export function PhoneCompletionModal() {
   const { user, isLoading: authLoading, logout } = useAuth();
@@ -83,6 +94,15 @@ export function PhoneCompletionModal() {
   if (authLoading || profileLoading || !user) return null;
   if (profile?.phone) return null;
   if (isSuppressed) return null;
+
+  // 2026-08 (Tony's "users stuck at phone modal" report): don't force phone
+  // entry until email is verified. Order of operations is email → then phone.
+  // Otherwise users get trapped behind this modal, unable to reach
+  // /account/verify because this dialog blocks the whole app.
+  // The EmailVerifyBanner (sticky red bar) handles email-verify prompting
+  // in the meantime; once emailVerified flips true, this modal takes over
+  // to collect the phone.
+  if ((user as any).emailVerified !== true) return null;
 
   /** digits after stripping the country prefix / leading 0 */
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
