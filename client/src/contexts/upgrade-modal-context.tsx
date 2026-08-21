@@ -75,6 +75,32 @@ export function UpgradeModalProvider({ children }: { children: React.ReactNode }
         return;
       }
 
+      // 2026-08 (Tony's "no pricing until verified" mandate): never show the
+      // KES 99 / 1000 / 4500 tiers to an unverified account. Users signing up
+      // with fake emails should never see prices — they must verify first,
+      // then get offered plans. Applies to every trigger source (exit-intent
+      // popup, jobs-locked banner, freemium gate, country-locked card, etc).
+      //
+      // Anonymous users (no session) still see the pricing modal — that's
+      // required so first-time visitors browsing landing pages can see
+      // pricing and decide whether to sign up.
+      const isAnonymous = !authUser?.id;
+      const isVerified = authUser?.emailVerified === true;
+      if (!isAnonymous && !isVerified) {
+        toast({
+          title: "Please verify your email first",
+          description: "You'll see pricing and can pay once your account is verified. Check the red banner at the top of the page for your code.",
+          duration: 8000,
+        });
+        // Nudge them straight to the verify page so they can act on it now.
+        setTimeout(() => {
+          if (typeof window !== "undefined" && !window.location.pathname.startsWith("/account/verify")) {
+            window.location.href = "/account/verify";
+          }
+        }, 600);
+        return;
+      }
+
       setState({ open: true, trigger, featureName, defaultPlan });
     },
     [queryClient, toast]
