@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Mail, CheckCircle2, Loader2, ShieldCheck, AlertTriangle, Trash2 } from "lucide-react";
 import { fetchCsrfToken } from "@/lib/queryClient";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Dialog,
   DialogContent,
@@ -47,6 +48,7 @@ async function jsonPost(path: string, body: any): Promise<any> {
 export default function AccountVerifyPage() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [status, setStatus] = useState<VerificationStatus | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -172,6 +174,14 @@ export default function AccountVerifyPage() {
     setEmailVerifying(true);
     try {
       await jsonPost("/api/auth/verify-email", { code: emailCode });
+      // 2026-08 (Tony's "verify not responsive" report): force the user
+      // object to re-fetch so the banner + Pro gates + Nav all see
+      // emailVerified=true immediately. Without this, react-query's 2 min
+      // staleTime kept the cached (unverified) user around and the banner
+      // stayed visible even after a successful verify — users hit the
+      // button again thinking nothing happened.
+      await queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      await queryClient.refetchQueries({ queryKey: ["/api/auth/user"] });
       toast({ title: "Email verified ✓", description: "Your email is confirmed." });
       setEmailCode("");
       await loadStatus();

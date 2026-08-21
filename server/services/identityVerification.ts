@@ -246,6 +246,17 @@ export async function verifyCode(
     );
   }
 
+  // 2026-08 (Tony's "verify not responsive" report): drop the server-side
+  // /api/auth/user cache for this user so the very next request returns the
+  // fresh email_verified=true state instead of a stale unverified one.
+  // Without this, the banner + Pro gates kept showing as unverified for
+  // up to 5 s after a successful verify — users thought nothing happened
+  // and hit Verify repeatedly, each time overwriting the same result.
+  try {
+    const { invalidateAuthUserCache } = await import("../lib/auth-user-cache");
+    invalidateAuthUserCache(userId);
+  } catch { /* non-fatal */ }
+
   return { ok: true, message: "Verified ✓" };
 }
 
