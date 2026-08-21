@@ -31,6 +31,7 @@ import { LiveActivityFeed } from "@/components/live-activity-feed";
 import { InstallAppPrompt } from "@/components/install-app-prompt";
 import { GlobalBackButton } from "@/components/global-back-button";
 import GlobalPlanListener from "@/components/global-plan-listener";
+import { EmailVerifyBanner } from "@/components/email-verify-banner";
 
 // =============================================================================
 // PERFORMANCE: Lazy load ALL pages for code splitting
@@ -929,6 +930,12 @@ function App() {
           <UpgradeModalProvider>
             <AgeVerificationGate>
               <SkipLink />
+              {/* 2026-08 SECURITY (Tony's fake-email report): sticky banner
+                  for authenticated users with email_verified=false. Server
+                  wall (requireEmailVerifiedApi) already blocks their API
+                  calls; this ensures they see a clear message + one-tap
+                  resend instead of confusing 403 toasts everywhere. */}
+              <EmailVerifyBanner />
               <NetworkStatus />
               <Toaster />
               <AdminQuickPanel />

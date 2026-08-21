@@ -1389,6 +1389,16 @@ export async function registerRoutes(
   await setupAuth(app);
   registerAuthRoutes(app);
 
+  // 2026-08 SECURITY (Tony's fake-email report): global wall — every /api/*
+  // request from an authenticated but unverified user gets 403 with a
+  // verificationRequired flag the client turns into a persistent banner.
+  // Session is now attached (setupAuth ran above), so req.user is available.
+  // The middleware has its own allowlist for auth + verify + health endpoints
+  // so users can still complete verification. Admins bypass.
+  const { requireEmailVerifiedApi } = await import("./middleware/requireEmailVerifiedApi");
+  app.use(requireEmailVerifiedApi);
+  console.log("✅ [setupRoutes] Email-verification wall installed globally");
+
   // 2026-06 retention #1: country journey checklist endpoints
   const { registerJourneyRoutes } = await import("./routes/journey");
   registerJourneyRoutes(app);
@@ -2700,7 +2710,11 @@ Crawl-delay: 1`);
   });
 
   // POST /api/subscriptions/upgrade — M-Pesa STK Push for plan upgrade
-  app.post("/api/subscriptions/upgrade", isAuthenticated, async (req: any, res) => {
+  // 2026-08 SECURITY (Tony's report): this was the main leak. Users were
+  // registering with fake emails, skipping verification, and paying here
+  // to gain portal access. Every other STK/PayPal init already gates on
+  // requireVerifiedForPayment — this endpoint was the missing wall.
+  app.post("/api/subscriptions/upgrade", isAuthenticated, requireVerifiedForPayment, async (req: any, res) => {
     try {
       const userId = req.user?.claims?.sub;
       if (!userId) return res.status(401).json({ message: "Unauthorized" });
@@ -2723,6 +2737,38 @@ Crawl-delay: 1`);
       const plan = await storage.getPlanById(basePlanId);
       if (!plan) return res.status(404).json({ message: "Plan not found" });
 
+      const normalizedPhone = normalizePhone(phoneNumber, "KE") ?? phoneNumber;
+      if (!/^254[71]\d{8}$/.test(normalizedPhone)) {
+        return res.status(400).json({ message: "Invalid phone number. Use format: 0712345678, 0115364029, or +254712345678" });
+      }
+
+      // 2026-08 SECURITY (Phase 3 audit): one KES 99 trial per user + phone.
+      // Previously ANY user could buy the trial repeatedly, or spin up new
+      // accounts (email aliases) and pay KES 99 forever instead of KES 4,500
+      // yearly. Gate against BOTH userId and normalizedPhone so at minimum
+      // an attacker has to buy a new SIM to abuse it. Doesn't catch a
+      // sufficiently determined attacker with new email + new phone, but
+      // raises the cost from "free" to "SIM card + reg fee" per re-trial.
+      if (basePlanId === "trial") {
+        const { rows: trialCheck } = await pool.query<{ has_trial: boolean }>(
+          `SELECT EXISTS(
+             SELECT 1 FROM payments
+             WHERE (user_id = $1 OR phone = $2)
+               AND status IN ('success','completed')
+               AND (plan_id = 'trial' OR service_id = 'plan_trial')
+           ) AS has_trial`,
+          [userId, normalizedPhone],
+        );
+        if (trialCheck[0]?.has_trial) {
+          console.warn(`[Trial][Security] Repeat trial blocked userId=${userId} phone=${normalizedPhone}`);
+          return res.status(403).json({
+            message: "The KES 99 trial is a one-time offer per user. Please upgrade to Monthly (KES 1,000) or Yearly (KES 4,500) to continue.",
+            code:    "TRIAL_ALREADY_USED",
+            upgradeUrl: "/pricing",
+          });
+        }
+      }
+
       // Resolve canonical price via the pricing engine — the backend is the single
       // source of truth. Client-supplied amounts are never used. Passing userId and
       // promoCode enables per-user discounts and active promo codes.
@@ -2733,11 +2779,6 @@ Crawl-delay: 1`);
       });
       if (!resolvedPrice) return res.status(404).json({ message: "Plan price not configured" });
       const chargeAmount = resolvedPrice.finalPrice;
-
-      const normalizedPhone = normalizePhone(phoneNumber, "KE") ?? phoneNumber;
-      if (!/^254[71]\d{8}$/.test(normalizedPhone)) {
-        return res.status(400).json({ message: "Invalid phone number. Use format: 0712345678, 0115364029, or +254712345678" });
-      }
 
       const clientIp = req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket?.remoteAddress || "unknown";
       if (!checkStkPushRateLimit(userId) || !checkStkPushIpRateLimit(clientIp)) {
