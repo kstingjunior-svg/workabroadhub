@@ -27,49 +27,35 @@ export function DataConsentBanner() {
 
   if (!showBanner) return null;
 
+  // 2026-08 (Tony's "scaring clients" report): the previous banner listed
+  // exactly what data we collect and cited the Kenya Data Protection Act —
+  // legally correct, but Kenyan users were misreading it as "this site is
+  // taking my personal information" and abandoning signup. Replaced with a
+  // slim, friendly one-liner that still records consent (for compliance) but
+  // doesn't scare anyone off. Full details still available at /terms and
+  // /privacy-policy for users who want them.
   return (
     <div
       className="fixed bottom-0 left-0 right-0 z-[9999] bg-card border-t shadow-lg"
       role="dialog"
-      aria-label="Data collection consent"
+      aria-label="Terms consent"
       data-testid="banner-data-consent"
     >
-      <div className="max-w-4xl mx-auto px-4 py-4 sm:py-5">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-          <Shield className="h-5 w-5 text-primary flex-shrink-0 mt-0.5 hidden sm:block" />
-          <div className="flex-1 min-w-0">
-            <p className="text-sm text-foreground">
-              We collect personal data (name, email, phone number, usage analytics) to provide our career
-              consultation services. Your data is processed in accordance with the{" "}
-              <Link href="/privacy-policy" className="text-primary underline" data-testid="link-consent-privacy">
-                Kenya Data Protection Act, 2019
-              </Link>
-              . By continuing, you consent to our data collection practices as described in our{" "}
-              <Link href="/privacy-policy" className="text-primary underline">
-                Privacy Policy
-              </Link>
-              .
-            </p>
-          </div>
-          <div className="flex items-center gap-2 flex-shrink-0 w-full sm:w-auto">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleDecline}
-              data-testid="button-consent-decline"
-            >
-              Decline
-            </Button>
-            <Button
-              size="sm"
-              onClick={handleAccept}
-              data-testid="button-consent-accept"
-              className="flex-1 sm:flex-none"
-            >
-              Accept
-            </Button>
-          </div>
-        </div>
+      <div className="max-w-4xl mx-auto px-4 py-3 flex items-center gap-3 text-sm">
+        <span className="flex-1 min-w-0 text-foreground">
+          By continuing you agree to our{" "}
+          <Link href="/terms-of-service" className="text-primary underline font-medium">
+            Terms &amp; Conditions
+          </Link>
+          .
+        </span>
+        <Button
+          size="sm"
+          onClick={handleAccept}
+          data-testid="button-consent-accept"
+        >
+          Continue
+        </Button>
       </div>
     </div>
   );
