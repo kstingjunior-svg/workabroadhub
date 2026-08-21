@@ -45,6 +45,7 @@ const ALLOWED_PREFIXES: readonly string[] = [
   // ── Verification flow itself ────────────────────────────────────────────
   "/api/auth/verify-email",
   "/api/auth/verify-phone",
+  "/api/auth/verification-status",  // GET — /account/verify page reads status
   "/api/auth/send-email-code",
   "/api/auth/send-phone-code",
   "/api/auth/forgot-password",
@@ -109,7 +110,7 @@ export const requireEmailVerifiedApi: RequestHandler = async (req: any, res, nex
         message: "Please verify your email address to continue using WorkAbroadHub. Check your inbox and spam folder for the verification code.",
         verificationRequired: true,
         verificationStep: "email",
-        actionUrl: "/verify-email",
+        actionUrl: "/account/verify",
       });
     }
     return next();

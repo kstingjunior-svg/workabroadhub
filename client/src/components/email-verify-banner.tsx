@@ -4,7 +4,7 @@
  * 2026-08 (Tony's fake-email report): a persistent sticky banner shown at
  * the top of every page for authenticated users whose email_verified=false.
  * Tells them what to do (check inbox + spam folder), lets them resend the
- * code with one tap, and links to /verify-email to enter the code.
+ * code with one tap, and links to /account/verify to enter the code.
  *
  * The server-side wall (server/middleware/requireEmailVerifiedApi.ts)
  * already blocks every non-allowlisted /api/* call for unverified users;
@@ -14,7 +14,7 @@
  * Rendering rules
  * ───────────────
  *   • Hidden entirely for anonymous / not-loaded / verified / admin users.
- *   • Hidden on the /verify-email page itself (would be annoying to have a
+ *   • Hidden on the /account/verify page itself (would be annoying to have a
  *     "please verify" banner on the page telling you exactly how to verify).
  *   • Hidden on auth pages (login/register/forgot-password) so first-time
  *     load isn't visually noisy.
@@ -29,8 +29,8 @@ import { useToast } from "@/hooks/use-toast";
 import { AlertTriangle, Mail, RefreshCw, X } from "lucide-react";
 
 const HIDE_ON_PATHS = new Set<string>([
-  "/verify-email",
-  "/verify-phone",
+  "/account/verify",   // real email OTP page
+  "/verify-phone",     // legacy phone OTP page
   "/login",
   "/signup",
   "/register",
@@ -157,7 +157,7 @@ export function EmailVerifyBanner() {
           }
         </button>
         <Link
-          href="/verify-email"
+          href="/account/verify"
           className="inline-flex items-center gap-1 rounded-md bg-white text-amber-950 px-2.5 py-1 text-xs font-semibold hover:bg-amber-100 transition"
           data-testid="btn-verify-now"
         >

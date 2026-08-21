@@ -77,7 +77,7 @@ function buildEmail(opts: {
   urgency: "gentle" | "reminder" | "warning" | "final";
 }) {
   const { name, email, hoursLeftLabel, urgency } = opts;
-  const verifyUrl = `https://workabroadhub.tech/verify-email?email=${encodeURIComponent(email)}`;
+  const verifyUrl = `https://workabroadhub.tech/account/verify?email=${encodeURIComponent(email)}`;
 
   const bannerColor =
     urgency === "final"   ? "#B91C1C" :
@@ -203,8 +203,8 @@ export async function runVerificationLifecycleSweep(): Promise<SweepResult> {
                 const { sendWhatsApp } = await import("../services/whatsapp");
                 const msg =
                   tier.urgency === "final"
-                    ? `⚠ WorkAbroadHub: Final reminder. Your unverified account will be deleted in about ${tier.hoursLeftLabel}. Verify at workabroadhub.tech/verify-email or check spam for the code.`
-                    : `WorkAbroadHub: Please verify your email — ${tier.hoursLeftLabel} left before your unverified account is deleted. Check inbox or spam for the code, or verify at workabroadhub.tech/verify-email`;
+                    ? `⚠ WorkAbroadHub: Final reminder. Your unverified account will be deleted in about ${tier.hoursLeftLabel}. Verify at workabroadhub.tech/account/verify or check spam for the code.`
+                    : `WorkAbroadHub: Please verify your email — ${tier.hoursLeftLabel} left before your unverified account is deleted. Check inbox or spam for the code, or verify at workabroadhub.tech/account/verify`;
                 await sendWhatsApp(user.phone, msg).catch(() => {});
               } catch { /* whatsapp module optional */ }
             }
@@ -230,25 +230,39 @@ export async function runVerificationLifecycleSweep(): Promise<SweepResult> {
     // Note: DB has ON DELETE CASCADE on child rows (payments etc.), so the
     // paying-user guard is CRITICAL — without it, we'd delete their payment
     // history too. Test the guard by dry-running the SELECT first.
+    //
+    // 2026-08 (post-purge backlog): batch cap of 500 per sweep. Supabase's
+    // statement timeout kills large one-shot deletes when child-row cascades
+    // are heavy (referrals, sessions, activity_logs, etc.). Cap keeps each
+    // sweep well under 30 s so it always finishes. A 19K-user backlog clears
+    // in ~40 sweeps = ~20 hours at the current 30-min cadence, without any
+    // manual intervention or SMTP burst.
+    const DELETE_BATCH_CAP = 500;
     try {
       const { rows: doomed } = await pool.query<{ id: string; email: string }>(`
+        WITH targets AS (
+          SELECT id FROM users
+           WHERE email_verified = false
+             AND is_active = true
+             AND (is_admin IS NOT TRUE)
+             AND (role IS NULL OR role NOT IN ('ADMIN','SUPER_ADMIN'))
+             AND created_at <= NOW() - INTERVAL '${DELETION_GRACE_HOURS} hours'
+             AND NOT EXISTS (
+               SELECT 1 FROM payments p
+                WHERE p.user_id = users.id
+                  AND p.status IN ('success','completed')
+             )
+           ORDER BY created_at ASC
+           LIMIT ${DELETE_BATCH_CAP}
+        )
         DELETE FROM users
-         WHERE email_verified = false
-           AND is_active = true
-           AND (is_admin IS NOT TRUE)
-           AND (role IS NULL OR role NOT IN ('ADMIN','SUPER_ADMIN'))
-           AND created_at <= NOW() - INTERVAL '${DELETION_GRACE_HOURS} hours'
-           AND NOT EXISTS (
-             SELECT 1 FROM payments p
-              WHERE p.user_id = users.id
-                AND p.status IN ('success','completed')
-           )
+         WHERE id IN (SELECT id FROM targets)
          RETURNING id, email
       `);
       deletions = doomed.length;
       if (deletions > 0) {
         console.warn(
-          `[verification-reminder] Auto-deleted ${deletions} unverified account(s) past ${DELETION_GRACE_HOURS}h grace: ` +
+          `[verification-reminder] Auto-deleted ${deletions} unverified account(s) past ${DELETION_GRACE_HOURS}h grace (batch cap ${DELETE_BATCH_CAP}): ` +
           doomed.slice(0, 20).map((r) => r.email).join(", ") + (doomed.length > 20 ? `… (+${doomed.length - 20} more)` : ""),
         );
       }
