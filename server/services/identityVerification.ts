@@ -12,7 +12,12 @@ import crypto from "crypto";
 import { pool } from "../db";
 import { sendEmail } from "../email";
 
-const CODE_TTL_MS = 10 * 60 * 1000;          // 10 minutes
+// 2026-08 (Tony's "users can't verify" report): bumped from 10 → 30 minutes.
+// Real behaviour: user gets email code, switches tab to check WhatsApp, sees
+// notification, replies to friend, comes back 12 minutes later, enters code,
+// gets "code expired" — thinks the site is broken. 30 min covers 95%+ of
+// real-world lag between receiving and entering.
+const CODE_TTL_MS = 30 * 60 * 1000;          // 30 minutes
 const MAX_ATTEMPTS = 5;
 // 2026-06: bumped from 3 to 6. Three was too aggressive — users hitting "resend"
 // twice while panicking (one for "didn't arrive", one for spam-folder thinking)
@@ -206,10 +211,18 @@ export async function verifyCode(
   );
   const row = rows[0];
   if (!row) {
-    return { ok: false, reason: "no_code", message: "No active verification code. Please request a new one." };
+    return { ok: false, reason: "no_code", message: "No active verification code. Please tap Resend to get a fresh code." };
   }
   if (new Date(row.expires_at) < new Date()) {
-    return { ok: false, reason: "expired", message: "This code has expired. Please request a new one." };
+    return { ok: false, reason: "expired", message: "This code has expired (30 min limit). Please tap Resend to get a fresh one." };
+  }
+  // 2026-08: helpful message when user is entering an OLD code from an
+  // earlier email — every Resend invalidates prior codes, so if they
+  // grabbed the code from an older email in their inbox it won't match
+  // the current active hash. Guide them explicitly.
+  if (row.attempts === 0) {
+    // Log the first attempt so support can see who's hitting each failure mode.
+    console.log(`[verify] first-attempt userId=${userId} channel=${channel} code_len=${clean.length}`);
   }
   if (row.attempts >= MAX_ATTEMPTS) {
     return {
@@ -222,12 +235,20 @@ export async function verifyCode(
   if (sha256(clean) !== row.code_hash) {
     await pool.query(`UPDATE verification_codes SET attempts = attempts + 1 WHERE id = $1`, [row.id]);
     const left = MAX_ATTEMPTS - (row.attempts + 1);
+    // 2026-08 (Tony's "can't verify" report): if this is the FIRST wrong
+    // attempt, the user probably grabbed an OLD code from a previous email
+    // (every Resend invalidates prior codes, so old email codes silently
+    // become dead). Guide them to use the NEWEST email.
+    const hint = row.attempts === 0
+      ? " Tip: use the code from your MOST RECENT email — earlier codes stop working when you tap Resend."
+      : "";
+    console.warn(`[verify] wrong_code userId=${userId} channel=${channel} attempts=${row.attempts + 1}/${MAX_ATTEMPTS} left=${left}`);
     return {
       ok: false,
       reason: "wrong_code",
       message: left > 0
-        ? `Incorrect code. ${left} attempt${left === 1 ? "" : "s"} left.`
-        : "Too many failed attempts. Please request a new code.",
+        ? `Incorrect code.${hint} ${left} attempt${left === 1 ? "" : "s"} left.`
+        : "Too many failed attempts. Please tap Resend for a fresh code.",
     };
   }
 
