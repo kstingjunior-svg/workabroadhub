@@ -272,6 +272,63 @@ async function tryOCR(buf: Buffer, filename?: string): Promise<string> {
   }
 }
 
+/**
+ * FAST-ONLY extraction — pdfjs + BT/ET + mammoth + plain-text only.
+ * Never runs Tesseract OCR or OpenAI PDF file-upload (both can take 30-90 s).
+ * Guaranteed to return in under ~2 s for any input.
+ *
+ * 2026-08 (Tony's "Creating order..." infinite spinner long-term fix):
+ * used by /api/services/order/:slug to keep order creation snappy. When
+ * this returns empty, the caller stores the raw file for background
+ * extraction after payment confirms.
+ */
+export async function extractTextFast(
+  buffer:    Buffer,
+  mimeType:  string,
+  filename?: string,
+): Promise<ExtractionResult> {
+  const mime = (mimeType  ?? "").toLowerCase();
+  const name = (filename  ?? "").toLowerCase();
+
+  const isPdf  = mime.includes("pdf")  || name.endsWith(".pdf");
+  const isDocx = mime.includes("word") || mime.includes("officedocument") ||
+                 name.endsWith(".docx") || name.endsWith(".doc");
+  const isTxt  = mime.includes("text") || name.endsWith(".txt") || name.endsWith(".rtf");
+
+  if (isPdf) {
+    // Only try the two fast paths; skip Tesseract + OpenAI.
+    try {
+      const pdfjsText = await tryPdfJs(buffer);
+      if (pdfjsText.length >= MIN_CV_LENGTH && isReadableText(pdfjsText)) {
+        return { text: pdfjsText, method: "pdfjs-fast" };
+      }
+      const raw = extractRawPdfText(buffer);
+      if (raw.length >= MIN_CV_LENGTH) {
+        return { text: raw, method: "pdf-raw-fast" };
+      }
+      // Return low-quality pdfjs text if any, else empty
+      if (pdfjsText.length >= MIN_CV_LENGTH) {
+        return { text: pdfjsText, method: "pdfjs-fast-lowquality" };
+      }
+      return { text: "", method: "pdf-fast-empty" };
+    } catch {
+      return { text: "", method: "pdf-fast-error" };
+    }
+  }
+  if (isDocx) {
+    try {
+      const text = await tryMammoth(buffer);
+      return { text, method: "mammoth-fast" };
+    } catch {
+      return { text: "", method: "mammoth-fast-error" };
+    }
+  }
+  if (isTxt) {
+    return { text: buffer.toString("utf-8"), method: "utf8-fast" };
+  }
+  return { text: "", method: "unknown-fast-empty" };
+}
+
 export async function extractTextFromBuffer(
   buffer:    Buffer,
   mimeType:  string,

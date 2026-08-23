@@ -17,7 +17,7 @@ import crypto from "crypto";
 import { pool, db } from "./db";
 import { storage } from "./storage";
 import { openai } from "./lib/openai";
-import { extractTextFromBuffer, MIN_CV_LENGTH } from "./utils/extract-text";
+import { extractTextFromBuffer, extractTextFast, MIN_CV_LENGTH } from "./utils/extract-text";
 import { renderDocx, renderPdf } from "./services/document-renderer";
 import { requireVerifiedForPayment as requireVerifiedForPaymentGate } from "./services/identityVerification";
 
@@ -590,39 +590,35 @@ function getConfig(slug: string): ServiceConfig | null {
   return SERVICE_CONFIGS[slug.toLowerCase()] ?? null;
 }
 
-// ── Helper: extract CV text or return null with a friendly error ────────────
+// ── Helper: extract CV text ─────────────────────────────────────────────────
 //
-// 2026-08 (Tony's "stuck at Creating order..." report): the extraction
-// cascade (pdfjs → BT/ET → Tesseract → OpenAI PDF file-upload) can take
-// 30-90 s for scanned PDFs. Mobile networks drop idle TCP after ~30 s
-// so the client's fetch throws, the retry kicks in, and the user sees
-// the "Warming up..." spinner forever while the server keeps chewing
-// through OCR. Cap extraction at 22 s (safely under all mobile idle
-// timeouts) — if it times out we return a clear actionable error so
-// the user knows to paste the text or use a different file.
-const EXTRACT_TIMEOUT_MS = 22_000;
+// 2026-08 LONG-TERM (Tony's "stuck at Creating order..." fix): tiered flow.
+//   1. Try FAST extraction first (pdfjs + BT/ET + mammoth). Always <2s.
+//   2. If fast returns enough text → treat as complete, save cv_text.
+//   3. If fast returns empty → tell caller to defer (store raw file bytes,
+//      background extraction runs after payment confirms).
+//
+// The old inline slow path (Tesseract OCR + OpenAI PDF file-upload) has been
+// moved to a background step (see maybeBackfillCvText in processOrder). This
+// keeps POST /api/services/order/:slug snappy (<1s response) even for scanned
+// PDFs — the user gets an orderId immediately and pays; the OCR runs while
+// their M-Pesa STK PIN is being entered.
+type ExtractResult =
+  | { ok: true; text: string; needsBackfill: false }
+  | { ok: true; text: "";      needsBackfill: true }
+  | { ok: false; error: string };
 
-async function extractCvOrError(req: Request): Promise<{ ok: true; text: string } | { ok: false; error: string }> {
+async function extractCvOrError(req: Request): Promise<ExtractResult> {
   const file = (req as any).file;
   if (!file) return { ok: false, error: "Please upload your CV (PDF or Word document)." };
   try {
-    const extraction = extractTextFromBuffer(file.buffer, file.mimetype, file.originalname);
-    const timeout = new Promise<{ text: string; timedOut: true }>((resolve) =>
-      setTimeout(() => resolve({ text: "", timedOut: true } as any), EXTRACT_TIMEOUT_MS),
-    );
-    const result = await Promise.race([extraction, timeout]) as any;
-    if (result?.timedOut) {
-      console.warn(`[ServiceOrder] extractCvOrError timeout after ${EXTRACT_TIMEOUT_MS}ms for ${file.originalname ?? "cv"} (${file.size} bytes, ${file.mimetype})`);
-      return {
-        ok: false,
-        error: "Your CV is taking too long to read (likely a scanned PDF). Please upload a text-based PDF or a .docx file, OR paste the CV text into the form.",
-      };
+    const { text, method } = await extractTextFast(file.buffer, file.mimetype, file.originalname);
+    if (text.trim().length >= MIN_CV_LENGTH) {
+      console.log(`[ServiceOrder] fast extract OK method=${method} chars=${text.length} file=${file.originalname ?? "cv"}`);
+      return { ok: true, text, needsBackfill: false };
     }
-    const { text } = result;
-    if (text.trim().length < MIN_CV_LENGTH) {
-      return { ok: false, error: "Couldn't extract enough text from your CV. Try a text-based PDF or .docx file." };
-    }
-    return { ok: true, text };
+    console.log(`[ServiceOrder] fast extract empty method=${method} — deferring to background OCR for ${file.originalname ?? "cv"}`);
+    return { ok: true, text: "", needsBackfill: true };
   } catch (err: any) {
     return { ok: false, error: "Could not read your CV file. Please try a different format." };
   }
@@ -653,6 +649,12 @@ async function createOrder(args: {
    * new photo argument. Null when the user chose to skip.
    */
   photoDataUrl?: string | null;
+  /**
+   * 2026-08 deferred-extraction: raw CV file bytes for background OCR.
+   * Present when fast extraction returned empty (scanned PDF / image).
+   * processOrder runs the slow extraction after payment confirms.
+   */
+  cvRawFile?: { base64: string; mime: string; filename: string } | null;
 }): Promise<string> {
   const id = crypto.randomUUID();
 
@@ -674,6 +676,14 @@ async function createOrder(args: {
     }
   }
 
+  // 2026-08 deferred-extraction: if cvText is empty AND we have raw file
+  // bytes, mark the row 'pending' so processOrder runs OCR before AI gen.
+  const extractionStatus = args.cvText && args.cvText.trim().length > 0
+    ? "complete"
+    : args.cvRawFile
+      ? "pending"
+      : null;
+
   // We fill BOTH service_id (old schema, NOT NULL) and service_slug (new
   // columns added for the unified flow) with the same slug — so both old
   // Drizzle-based code paths AND new service-order-routes work cleanly.
@@ -681,8 +691,12 @@ async function createOrder(args: {
     `INSERT INTO service_orders
        (id, user_id, service_id, service_slug, service_name, amount, currency, status,
         cv_text, job_description, target_country, extra_input, referrer_order_id, photo_data,
+        cv_raw_base64, cv_raw_mime, cv_raw_filename, cv_extraction_status,
         created_at, updated_at)
-     VALUES ($1, $2, $3, $3, $4, $5, 'KES', 'pending_payment', $6, $7, $8, $9, $10, $11, NOW(), NOW())
+     VALUES ($1, $2, $3, $3, $4, $5, 'KES', 'pending_payment',
+             $6, $7, $8, $9, $10, $11,
+             $12, $13, $14, $15,
+             NOW(), NOW())
      ON CONFLICT (id) DO NOTHING`,
     [
       id,
@@ -696,9 +710,84 @@ async function createOrder(args: {
       args.extraInput,
       referrer,
       args.photoDataUrl ?? null,
+      args.cvRawFile?.base64 ?? null,
+      args.cvRawFile?.mime ?? null,
+      args.cvRawFile?.filename ?? null,
+      extractionStatus,
     ],
   );
   return id;
+}
+
+// 2026-08 deferred-extraction: run the slow extraction cascade (Tesseract,
+// OpenAI PDF file-upload) for orders where fast extraction returned empty.
+// Called from processOrder BEFORE AI generation. Idempotent — safe to call
+// twice; skips if cv_text is already populated or cv_extraction_status is
+// not 'pending'.
+async function maybeBackfillCvText(orderId: string): Promise<void> {
+  const { rows } = await pool.query<{
+    cv_text: string | null;
+    cv_raw_base64: string | null;
+    cv_raw_mime: string | null;
+    cv_raw_filename: string | null;
+    cv_extraction_status: string | null;
+  }>(
+    `SELECT cv_text, cv_raw_base64, cv_raw_mime, cv_raw_filename, cv_extraction_status
+       FROM service_orders WHERE id = $1`,
+    [orderId],
+  );
+  const row = rows[0];
+  if (!row) return;
+  // Already have text OR nothing was stored for us — nothing to do.
+  if ((row.cv_text ?? "").trim().length >= MIN_CV_LENGTH) return;
+  if (row.cv_extraction_status !== "pending") return;
+  if (!row.cv_raw_base64 || !row.cv_raw_mime) return;
+
+  console.log(`[ServiceOrder] Background CV extraction starting for orderId=${orderId} file=${row.cv_raw_filename ?? "unknown"} (${row.cv_raw_base64.length} b64 chars)`);
+  try {
+    const buffer = Buffer.from(row.cv_raw_base64, "base64");
+    const { text, method } = await extractTextFromBuffer(
+      buffer,
+      row.cv_raw_mime,
+      row.cv_raw_filename ?? undefined,
+    );
+    if (text.trim().length >= MIN_CV_LENGTH) {
+      // Save text + clear the raw file bytes to reclaim row space.
+      await pool.query(
+        `UPDATE service_orders
+            SET cv_text = $2,
+                cv_extraction_status = 'complete',
+                cv_raw_base64 = NULL,
+                updated_at = NOW()
+          WHERE id = $1`,
+        [orderId, text],
+      );
+      console.log(`[ServiceOrder] Background extraction SUCCESS orderId=${orderId} method=${method} chars=${text.length}`);
+    } else {
+      // Extraction ran but got nothing usable — mark failed, keep raw for admin review.
+      await pool.query(
+        `UPDATE service_orders
+            SET cv_extraction_status = 'failed',
+                error_message = COALESCE(error_message,'') ||
+                  E'\n[extract] Background OCR completed but returned no readable text (method=' || $2 || ').',
+                updated_at = NOW()
+          WHERE id = $1`,
+        [orderId, method],
+      );
+      console.warn(`[ServiceOrder] Background extraction returned empty text orderId=${orderId} method=${method}`);
+    }
+  } catch (err: any) {
+    await pool.query(
+      `UPDATE service_orders
+          SET cv_extraction_status = 'failed',
+              error_message = COALESCE(error_message,'') ||
+                E'\n[extract] Background OCR threw: ' || $2,
+              updated_at = NOW()
+        WHERE id = $1`,
+      [orderId, String(err?.message ?? err).slice(0, 300)],
+    ).catch(() => {});
+    console.error(`[ServiceOrder] Background extraction failed orderId=${orderId}:`, err?.message);
+  }
 }
 
 async function updateOrderStatus(orderId: string, status: string, fields: Record<string, any> = {}): Promise<void> {
@@ -713,6 +802,16 @@ async function updateOrderStatus(orderId: string, status: string, fields: Record
 // ── AI processing — async, fired after payment confirms ─────────────────────
 async function processOrder(orderId: string): Promise<void> {
   try {
+    // 2026-08 deferred-extraction: if the order was created with a scanned
+    // PDF (cv_extraction_status='pending'), run the slow OCR / OpenAI PDF
+    // extraction NOW — after payment confirmed, before AI generation. This
+    // was moved out of the sync order-creation path so the client's initial
+    // POST returns in <1s regardless of the CV format. Safe no-op if the
+    // order already has cv_text.
+    await maybeBackfillCvText(orderId).catch((err: any) => {
+      console.warn(`[ServiceOrder] maybeBackfillCvText warned for ${orderId}: ${err?.message}`);
+    });
+
     const { rows } = await pool.query<{
       service_slug: string;
       cv_text: string | null;
@@ -1589,12 +1688,41 @@ export function registerServiceOrderRoutes(app: Express, isAuthenticated: Reques
           return res.status(404).json({ message: `Unknown service: ${slug}` });
         }
 
-        // CV extraction if required
+        // CV extraction if required — fast path only (pdfjs / mammoth).
+        // 2026-08 (long-term fix): if fast returns empty (scanned PDF), we
+        // stash the raw file bytes for background OCR. processOrder runs
+        // the slow extraction after payment confirms, before AI generation.
+        // Endpoint returns in <1s regardless of file format.
         let cvText: string | null = null;
+        let cvRawFile: { base64: string; mime: string; filename: string } | null = null;
         if (config.needsCv) {
           const extracted = await extractCvOrError(req);
           if (!extracted.ok) return res.status(400).json({ message: extracted.error });
-          cvText = extracted.text;
+          if (extracted.needsBackfill) {
+            // Fast extraction returned empty → stash raw file for background OCR.
+            const file = (req as any).file as Express.Multer.File | undefined;
+            if (file?.buffer) {
+              // Sanity cap: 4 MB compressed base64 (raw file ≤ ~3 MB).
+              // Files above this shouldn't reach here — multer's 10 MB cap
+              // is on the file itself; b64 encoding inflates ~1.33x.
+              const b64 = file.buffer.toString("base64");
+              if (b64.length > 4_500_000) {
+                return res.status(400).json({
+                  message: "Your CV is too large to process. Please compress it (under 3 MB) or upload a text-based PDF / .docx.",
+                });
+              }
+              cvRawFile = {
+                base64:   b64,
+                mime:     file.mimetype || "application/octet-stream",
+                filename: file.originalname || "cv",
+              };
+              console.log(`[ServiceOrder] Deferring OCR for ${cvRawFile.filename} (${b64.length} b64 chars) — will run after payment`);
+            } else {
+              return res.status(400).json({ message: "Please upload your CV file." });
+            }
+          } else {
+            cvText = extracted.text;
+          }
         }
 
         const jobDescription = String(req.body?.jobDescription ?? "").trim() || null;
@@ -1643,9 +1771,10 @@ export function registerServiceOrderRoutes(app: Express, isAuthenticated: Reques
           extraInput,
           referrerOrderId,
           photoDataUrl,
+          cvRawFile,
         });
 
-        console.log(`[ServiceOrder] Created orderId=${orderId} slug=${slug} price=${price} cvLen=${cvText?.length ?? 0} in ${Date.now() - t0}ms`);
+        console.log(`[ServiceOrder] Created orderId=${orderId} slug=${slug} price=${price} cvLen=${cvText?.length ?? 0} deferred=${cvRawFile ? "yes" : "no"} in ${Date.now() - t0}ms`);
         res.json({
           orderId,
           serviceName: config.name,
