@@ -19,6 +19,7 @@ import { storage } from "./storage";
 import { openai } from "./lib/openai";
 import { extractTextFromBuffer, MIN_CV_LENGTH } from "./utils/extract-text";
 import { renderDocx, renderPdf } from "./services/document-renderer";
+import { requireVerifiedForPayment as requireVerifiedForPaymentGate } from "./services/identityVerification";
 
 // ── Multer (memory storage, 10 MB cap) ───────────────────────────────────────
 // 2026-07 (Tony's users report "can't upload CV"): loosened previously-strict
@@ -590,11 +591,34 @@ function getConfig(slug: string): ServiceConfig | null {
 }
 
 // ── Helper: extract CV text or return null with a friendly error ────────────
+//
+// 2026-08 (Tony's "stuck at Creating order..." report): the extraction
+// cascade (pdfjs → BT/ET → Tesseract → OpenAI PDF file-upload) can take
+// 30-90 s for scanned PDFs. Mobile networks drop idle TCP after ~30 s
+// so the client's fetch throws, the retry kicks in, and the user sees
+// the "Warming up..." spinner forever while the server keeps chewing
+// through OCR. Cap extraction at 22 s (safely under all mobile idle
+// timeouts) — if it times out we return a clear actionable error so
+// the user knows to paste the text or use a different file.
+const EXTRACT_TIMEOUT_MS = 22_000;
+
 async function extractCvOrError(req: Request): Promise<{ ok: true; text: string } | { ok: false; error: string }> {
   const file = (req as any).file;
   if (!file) return { ok: false, error: "Please upload your CV (PDF or Word document)." };
   try {
-    const { text } = await extractTextFromBuffer(file.buffer, file.mimetype, file.originalname);
+    const extraction = extractTextFromBuffer(file.buffer, file.mimetype, file.originalname);
+    const timeout = new Promise<{ text: string; timedOut: true }>((resolve) =>
+      setTimeout(() => resolve({ text: "", timedOut: true } as any), EXTRACT_TIMEOUT_MS),
+    );
+    const result = await Promise.race([extraction, timeout]) as any;
+    if (result?.timedOut) {
+      console.warn(`[ServiceOrder] extractCvOrError timeout after ${EXTRACT_TIMEOUT_MS}ms for ${file.originalname ?? "cv"} (${file.size} bytes, ${file.mimetype})`);
+      return {
+        ok: false,
+        error: "Your CV is taking too long to read (likely a scanned PDF). Please upload a text-based PDF or a .docx file, OR paste the CV text into the form.",
+      };
+    }
+    const { text } = result;
     if (text.trim().length < MIN_CV_LENGTH) {
       return { ok: false, error: "Couldn't extract enough text from your CV. Try a text-based PDF or .docx file." };
     }
@@ -1537,9 +1561,15 @@ export function registerServiceOrderRoutes(app: Express, isAuthenticated: Reques
   // POST /api/services/order/:slug
   // Body: multipart/form-data { cv: File, jobDescription?, targetCountry?, extraInput? }
   // Response: { orderId, serviceName, price, needsPayment: true }
+  //
+  // 2026-08 SECURITY: gated on email verification. All paid CV / cover
+  // letter / SoP services flow through this endpoint — fake-email accounts
+  // must not be able to initiate an order (which creates a payment row
+  // and STK push). Same policy applied to /api/subscriptions/upgrade.
   app.post(
     "/api/services/order/:slug",
     isAuthenticated,
+    requireVerifiedForPaymentGate,
     cvUploadWithJsonErrors("cv"),
     async (req: any, res: Response) => {
       const t0 = Date.now();
