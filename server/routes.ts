@@ -16332,6 +16332,45 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
   });
 
   // Broadcast message to multiple users (admin only)
+  // 2026-08 (Tony's Resend outage recovery): return the phone numbers of
+  // users who still haven't verified their email. Used by the admin
+  // /admin/broadcast page to fire a one-tap WhatsApp reminder. Filters:
+  //   - authenticated user with a phone
+  //   - email_verified = false
+  //   - not admin
+  //   - signed up within the last N hours (default 72 so we don't spam
+  //     ancient dead accounts that are about to be auto-deleted anyway)
+  app.get("/api/admin/unverified-users", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const hours = Math.min(720, Math.max(1, Number(req.query.hours) || 72));
+      const { rows } = await pool.query<{ id: string; email: string; phone: string; first_name: string | null; created_at: Date }>(
+        `SELECT id, email, phone, first_name, created_at
+           FROM users
+          WHERE email_verified = false
+            AND is_admin = false
+            AND (role IS NULL OR role NOT IN ('ADMIN','SUPER_ADMIN'))
+            AND phone IS NOT NULL AND phone <> ''
+            AND created_at > NOW() - (INTERVAL '1 hour' * $1)
+          ORDER BY created_at DESC`,
+        [hours],
+      );
+      res.json({
+        total: rows.length,
+        users: rows.map(r => ({
+          id: r.id,
+          email: r.email,
+          phone: r.phone,
+          firstName: r.first_name ?? null,
+          createdAt: r.created_at,
+        })),
+        phones: rows.map(r => r.phone),
+      });
+    } catch (err: any) {
+      console.error("[admin/unverified-users] error:", err?.message);
+      res.status(500).json({ message: "Could not load unverified users." });
+    }
+  });
+
   app.post("/api/admin/broadcast-sms", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const { phones, message, channel } = req.body;
