@@ -22,8 +22,9 @@
  *     modals all sit below it.
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { AlertTriangle, Mail, RefreshCw, X } from "lucide-react";
@@ -42,8 +43,25 @@ export function EmailVerifyBanner() {
   const { user, isLoading } = useAuth();
   const [location] = useLocation();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [resending, setResending] = useState(false);
   const [dismissed, setDismissed] = useState(false);
+
+  // 2026-08 (Tony's "banner scares verified users" fix): if the auth payload
+  // is missing the emailVerified field entirely (i.e. `undefined`, not
+  // `false`), the response came from the OLD buggy server that dropped
+  // verification flags. In that case, don't render the banner AND kick off
+  // an auth-cache invalidation so the browser refetches the corrected
+  // payload. Treating undefined as "unverified" was the exact bug that
+  // kept the red "Final warning" stuck on fully-verified accounts.
+  const emailVerifiedRaw = (user as any)?.emailVerified;
+  const emailVerifiedFieldMissing = user != null && emailVerifiedRaw === undefined;
+
+  useEffect(() => {
+    if (emailVerifiedFieldMissing) {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+    }
+  }, [emailVerifiedFieldMissing, queryClient]);
 
   const shouldHide = useMemo(() => {
     if (isLoading) return true;
@@ -51,11 +69,16 @@ export function EmailVerifyBanner() {
     // Admins bypass everywhere.
     if ((user as any).isAdmin || (user as any).role === "ADMIN" || (user as any).role === "SUPER_ADMIN") return true;
     // Verified users don't need the nag.
-    if ((user as any).emailVerified === true) return true;
+    if (emailVerifiedRaw === true) return true;
+    // 2026-08: field missing = old cached payload from buggy server. Don't
+    // show the alarming red banner until we know for sure the user is
+    // unverified. The useEffect above triggers a refetch — next render
+    // will have the truth.
+    if (emailVerifiedFieldMissing) return true;
     // Don't nag on the verify page itself.
     if (HIDE_ON_PATHS.has(location)) return true;
     return false;
-  }, [user, isLoading, location]);
+  }, [user, isLoading, location, emailVerifiedRaw, emailVerifiedFieldMissing]);
 
   // 2026-08 (Tony's 72h auto-delete policy): compute remaining time from
   // users.created_at so the banner escalates urgency as the deadline nears.

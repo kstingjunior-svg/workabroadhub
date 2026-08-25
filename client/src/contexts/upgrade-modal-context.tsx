@@ -85,7 +85,19 @@ export function UpgradeModalProvider({ children }: { children: React.ReactNode }
       // required so first-time visitors browsing landing pages can see
       // pricing and decide whether to sign up.
       const isAnonymous = !authUser?.id;
-      const isVerified = authUser?.emailVerified === true;
+      const emailVerifiedRaw = (authUser as any)?.emailVerified;
+      // 2026-08 (Tony's "banner scares verified users" fix): if the auth
+      // payload was built by the old server (before emailVerified was added
+      // to the users schema), this field is `undefined` — NOT `false`. In
+      // that case, refetch the user rather than falsely bouncing verified
+      // users to /account/verify.
+      if (!isAnonymous && emailVerifiedRaw === undefined) {
+        try { queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] }); } catch {}
+        // Fail OPEN — assume verified, let them see pricing. Worst case:
+        // they can't complete payment and get a clear error at that step.
+        // Far better than blocking a paying user.
+      }
+      const isVerified = emailVerifiedRaw === true || emailVerifiedRaw === undefined;
       if (!isAnonymous && !isVerified) {
         toast({
           title: "Please verify your email first",

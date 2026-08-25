@@ -85,6 +85,18 @@ export const users = pgTable("users", {
   isActive: boolean("is_active").notNull().default(true),
   userStage: varchar("user_stage").notNull().default("new"), // "new" | "active" | "paid" | "inactive"
 
+  // ── Verification flags ──────────────────────────────────────────────────────
+  // 2026-08 (Tony's "banner scares verified users" report): these DB columns
+  // existed via migration but were NEVER declared in the Drizzle schema,
+  // which meant db.select().from(users) silently DROPPED them from every
+  // response. That in turn meant /api/auth/user never returned emailVerified
+  // for regular users — the client saw `undefined` and kept showing the red
+  // "Final warning" banner FOREVER, even on fully-verified accounts. The
+  // banner check is `emailVerified === true`, and `undefined === true` is
+  // false. Adding the columns here makes them ship in every user response.
+  emailVerified: boolean("email_verified").notNull().default(false),
+  phoneVerified: boolean("phone_verified").notNull().default(false),
+
   // ── Timestamps ───────────────────────────────────────────────────────────────
   createdAt: timestamp("created_at").defaultNow(),  // NOT NULL via defaultNow()
   updatedAt: timestamp("updated_at").defaultNow(),
