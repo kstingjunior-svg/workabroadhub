@@ -47,6 +47,7 @@ const db_1 = require("./db");
 const openai_1 = require("./lib/openai");
 const extract_text_1 = require("./utils/extract-text");
 const document_renderer_1 = require("./services/document-renderer");
+const identityVerification_1 = require("./services/identityVerification");
 // ── Multer (memory storage, 10 MB cap) ───────────────────────────────────────
 // 2026-07 (Tony's users report "can't upload CV"): loosened previously-strict
 // limits. Root cause was: (a) 5 MB was too small for scanned/graphic-heavy CVs,
@@ -287,6 +288,18 @@ STRICT RULES:
 - Never add fictional experience or employment.
 - Keep every real fact intact — company names, dates, degrees, certifications.
 - Length: governed by the Master Writing Standard above. Preserve everything from the input, then expand where responsibilities are underdeveloped. Typically 1.3x–1.8x the input length. Do not compress or summarise.
+- NEVER emit bracketed placeholders like "[Add your education details here]",
+  "[Add your certifications here]", "[Add your languages here]", "[insert X]",
+  "[add Y]", or "[TBD]". These reach recruiters and destroy the candidate's
+  chance. Two hard rules:
+    (a) If the input CV contains data for a section, USE that data verbatim
+        or enhanced — never replace real data with a placeholder.
+    (b) If the input CV has NO data for an optional section (Certifications,
+        Languages, Awards, References), OMIT the entire section — do not
+        emit an empty header with a placeholder underneath.
+  The only exception is a metric where the user genuinely didn't provide a
+  number (e.g. "Managed [add number] client accounts") — that placeholder
+  is allowed because the user is expected to fill it in before submitting.
 
 8. USER PREFERENCES ARE NOT FABRICATION. If the user provides preferences in the "USER-SUPPLIED PREFERENCES" block (target salary, availability, languages, willingness to relocate, certifications, achievements, must-mention experiences), you MUST include every one of them in the appropriate section of the final CV. These are the user's own truthful additions, not invented facts. Ignoring them is a defect.
 
@@ -548,17 +561,18 @@ Output as plain text. Use ## for the two main section dividers above.`,
 function getConfig(slug) {
     return SERVICE_CONFIGS[slug.toLowerCase()] ?? null;
 }
-// ── Helper: extract CV text or return null with a friendly error ────────────
 async function extractCvOrError(req) {
     const file = req.file;
     if (!file)
         return { ok: false, error: "Please upload your CV (PDF or Word document)." };
     try {
-        const { text } = await (0, extract_text_1.extractTextFromBuffer)(file.buffer, file.mimetype, file.originalname);
-        if (text.trim().length < extract_text_1.MIN_CV_LENGTH) {
-            return { ok: false, error: "Couldn't extract enough text from your CV. Try a text-based PDF or .docx file." };
+        const { text, method } = await (0, extract_text_1.extractTextFast)(file.buffer, file.mimetype, file.originalname);
+        if (text.trim().length >= extract_text_1.MIN_CV_LENGTH) {
+            console.log(`[ServiceOrder] fast extract OK method=${method} chars=${text.length} file=${file.originalname ?? "cv"}`);
+            return { ok: true, text, needsBackfill: false };
         }
-        return { ok: true, text };
+        console.log(`[ServiceOrder] fast extract empty method=${method} — deferring to background OCR for ${file.originalname ?? "cv"}`);
+        return { ok: true, text: "", needsBackfill: true };
     }
     catch (err) {
         return { ok: false, error: "Could not read your CV file. Please try a different format." };
@@ -583,14 +597,25 @@ async function createOrder(args) {
             catch { /* non-fatal — proceed without attribution */ }
         }
     }
+    // 2026-08 deferred-extraction: if cvText is empty AND we have raw file
+    // bytes, mark the row 'pending' so processOrder runs OCR before AI gen.
+    const extractionStatus = args.cvText && args.cvText.trim().length > 0
+        ? "complete"
+        : args.cvRawFile
+            ? "pending"
+            : null;
     // We fill BOTH service_id (old schema, NOT NULL) and service_slug (new
     // columns added for the unified flow) with the same slug — so both old
     // Drizzle-based code paths AND new service-order-routes work cleanly.
     await db_1.pool.query(`INSERT INTO service_orders
        (id, user_id, service_id, service_slug, service_name, amount, currency, status,
         cv_text, job_description, target_country, extra_input, referrer_order_id, photo_data,
+        cv_raw_base64, cv_raw_mime, cv_raw_filename, cv_extraction_status,
         created_at, updated_at)
-     VALUES ($1, $2, $3, $3, $4, $5, 'KES', 'pending_payment', $6, $7, $8, $9, $10, $11, NOW(), NOW())
+     VALUES ($1, $2, $3, $3, $4, $5, 'KES', 'pending_payment',
+             $6, $7, $8, $9, $10, $11,
+             $12, $13, $14, $15,
+             NOW(), NOW())
      ON CONFLICT (id) DO NOTHING`, [
         id,
         args.userId,
@@ -603,8 +628,65 @@ async function createOrder(args) {
         args.extraInput,
         referrer,
         args.photoDataUrl ?? null,
+        args.cvRawFile?.base64 ?? null,
+        args.cvRawFile?.mime ?? null,
+        args.cvRawFile?.filename ?? null,
+        extractionStatus,
     ]);
     return id;
+}
+// 2026-08 deferred-extraction: run the slow extraction cascade (Tesseract,
+// OpenAI PDF file-upload) for orders where fast extraction returned empty.
+// Called from processOrder BEFORE AI generation. Idempotent — safe to call
+// twice; skips if cv_text is already populated or cv_extraction_status is
+// not 'pending'.
+async function maybeBackfillCvText(orderId) {
+    const { rows } = await db_1.pool.query(`SELECT cv_text, cv_raw_base64, cv_raw_mime, cv_raw_filename, cv_extraction_status
+       FROM service_orders WHERE id = $1`, [orderId]);
+    const row = rows[0];
+    if (!row)
+        return;
+    // Already have text OR nothing was stored for us — nothing to do.
+    if ((row.cv_text ?? "").trim().length >= extract_text_1.MIN_CV_LENGTH)
+        return;
+    if (row.cv_extraction_status !== "pending")
+        return;
+    if (!row.cv_raw_base64 || !row.cv_raw_mime)
+        return;
+    console.log(`[ServiceOrder] Background CV extraction starting for orderId=${orderId} file=${row.cv_raw_filename ?? "unknown"} (${row.cv_raw_base64.length} b64 chars)`);
+    try {
+        const buffer = Buffer.from(row.cv_raw_base64, "base64");
+        const { text, method } = await (0, extract_text_1.extractTextFromBuffer)(buffer, row.cv_raw_mime, row.cv_raw_filename ?? undefined);
+        if (text.trim().length >= extract_text_1.MIN_CV_LENGTH) {
+            // Save text + clear the raw file bytes to reclaim row space.
+            await db_1.pool.query(`UPDATE service_orders
+            SET cv_text = $2,
+                cv_extraction_status = 'complete',
+                cv_raw_base64 = NULL,
+                updated_at = NOW()
+          WHERE id = $1`, [orderId, text]);
+            console.log(`[ServiceOrder] Background extraction SUCCESS orderId=${orderId} method=${method} chars=${text.length}`);
+        }
+        else {
+            // Extraction ran but got nothing usable — mark failed, keep raw for admin review.
+            await db_1.pool.query(`UPDATE service_orders
+            SET cv_extraction_status = 'failed',
+                error_message = COALESCE(error_message,'') ||
+                  E'\n[extract] Background OCR completed but returned no readable text (method=' || $2 || ').',
+                updated_at = NOW()
+          WHERE id = $1`, [orderId, method]);
+            console.warn(`[ServiceOrder] Background extraction returned empty text orderId=${orderId} method=${method}`);
+        }
+    }
+    catch (err) {
+        await db_1.pool.query(`UPDATE service_orders
+          SET cv_extraction_status = 'failed',
+              error_message = COALESCE(error_message,'') ||
+                E'\n[extract] Background OCR threw: ' || $2,
+              updated_at = NOW()
+        WHERE id = $1`, [orderId, String(err?.message ?? err).slice(0, 300)]).catch(() => { });
+        console.error(`[ServiceOrder] Background extraction failed orderId=${orderId}:`, err?.message);
+    }
 }
 async function updateOrderStatus(orderId, status, fields = {}) {
     const sets = Object.keys(fields).map((k, i) => `${k} = $${i + 3}`);
@@ -614,6 +696,15 @@ async function updateOrderStatus(orderId, status, fields = {}) {
 // ── AI processing — async, fired after payment confirms ─────────────────────
 async function processOrder(orderId) {
     try {
+        // 2026-08 deferred-extraction: if the order was created with a scanned
+        // PDF (cv_extraction_status='pending'), run the slow OCR / OpenAI PDF
+        // extraction NOW — after payment confirmed, before AI generation. This
+        // was moved out of the sync order-creation path so the client's initial
+        // POST returns in <1s regardless of the CV format. Safe no-op if the
+        // order already has cv_text.
+        await maybeBackfillCvText(orderId).catch((err) => {
+            console.warn(`[ServiceOrder] maybeBackfillCvText warned for ${orderId}: ${err?.message}`);
+        });
         const { rows } = await db_1.pool.query(`SELECT service_slug, cv_text, job_description, target_country, extra_input, user_id FROM service_orders WHERE id = $1`, [orderId]);
         const order = rows[0];
         if (!order)
@@ -753,7 +844,12 @@ CRITICAL LENGTH REQUIREMENT — READ CAREFULLY (do not violate):
         // If the AI didn't emit the divider (fallback path), output_text = full
         // response and no report is stored.
         let careerReport = null;
-        const REPORT_DIVIDER_RE = /\n?\s*[═=]{3,}\s*CAREER\s+ENHANCEMENT\s+REPORT\s*[═=]{3,}\s*\n?/i;
+        // 2026-08 (Tony bug fix): Unicode box-drawing chars ═══ get mangled by
+        // the PDF renderer (Helvetica WinAnsi encoding) → become %P%P%P. The
+        // regex must catch BOTH the original chars AND their mangled form, or
+        // the coaching content leaks into the recruiter-facing CV. Also
+        // tolerates any repeat char (═/=/%P/*/-) around the divider text.
+        const REPORT_DIVIDER_RE = /\n?\s*(?:[═=%P*\-–—]{2,}|%P%P%P?)\s*CAREER\s+ENHANCEMENT\s+REPORT\s*(?:[═=%P*\-–—]{2,}|%P%P%P?)\s*\n?/i;
         const dividerMatch = output.match(REPORT_DIVIDER_RE);
         if (dividerMatch && dividerMatch.index !== undefined) {
             const body = output.slice(0, dividerMatch.index).trimEnd();
@@ -777,7 +873,14 @@ CRITICAL LENGTH REQUIREMENT — READ CAREFULLY (do not violate):
             // input (Rule 1 — never reduce). Expansion up to 2x is expected and
             // encouraged (Rule 2 — add value). Anything shorter than input OR more
             // than 2.2x input triggers a retry with a stronger prompt.
-            const MIN_RATIO = 1.00;
+            //
+            // 2026-08 (Tony's "users paid but not receiving" report): loosened
+            // MIN_RATIO from 1.00 to 0.85. The 1.00 floor was kicking many
+            // legitimate outputs to awaiting_review — the model normally produces
+            // 0.9–1.5x, and rejecting anything <100% created a backlog admin
+            // couldn't clear fast enough. 0.85 still catches genuine compression
+            // (30-70% content loss cases) but lets normal-length rewrites through.
+            const MIN_RATIO = 0.85;
             const MAX_RATIO = 2.20;
             const ratio = output.length / inputLen;
             if (ratio < MIN_RATIO || ratio > MAX_RATIO) {
@@ -804,11 +907,24 @@ CRITICAL LENGTH REQUIREMENT — READ CAREFULLY (do not violate):
                             // Retry also failed — flag for human review, DON'T auto-deliver
                             console.error(`[quality-guard] orderId=${orderId} retry FAILED ratio=${retryRatio.toFixed(2)} — ` +
                                 `flagging for human review, not delivering`);
-                            await db_1.pool.query(`UPDATE service_orders
-                 SET status = 'processing',
+                            await db_1.pool.query(
+                            // 2026-08 (Tony bug fix): was leaving status='processing' which
+                            // caused the client polling loop to hang forever showing
+                            // "Generating your CV Revamp...". Now transitions to
+                            // 'awaiting_review' — a terminal status the client can render
+                            // as "being personally reviewed, expect within 4 hours".
+                            // 2026-08 Fix B: also flag refund_requested = true. Guardrail
+                            // firing means the user got a substandard first attempt —
+                            // regardless of whether we manually rewrite for them free,
+                            // admin should have the queue of "these people paid but got
+                            // less than promised" for accounting. Refunds get processed
+                            // via the existing refunds admin view.
+                            `UPDATE service_orders
+                 SET status = 'awaiting_review',
                      output_text = $2,
                      needs_human_review = true,
                      human_review_notes = $3,
+                     refund_requested = true,
                      updated_at = NOW()
                  WHERE id = $1`, [
                                 orderId,
@@ -834,6 +950,56 @@ CRITICAL LENGTH REQUIREMENT — READ CAREFULLY (do not violate):
                 catch (retryErr) {
                     console.error(`[quality-guard] retry threw: ${retryErr?.message} — keeping original output`);
                 }
+            }
+        }
+        // ── 2026-08 ATS PREFLIGHT — Tony's 70+ floor mandate ──────────────────
+        // Before we commit output_text and mark the order completed, run a
+        // lightweight ATS score check on the AI output. If it scores below 70,
+        // kick the order to awaiting_review so a human handles it — better to
+        // delay 4 hours than deliver a <70 CV that a customer will screenshot
+        // and complain about publicly. Only runs for CV services (skip cover
+        // letter / SoP / motivation which have different scoring criteria).
+        if (isCvRevamp || isCvHeavy) {
+            try {
+                const { preflightScoreCV } = await Promise.resolve().then(() => __importStar(require("./lib/ats-preflight")));
+                // 2026-08 (Tony's "users paid but not receiving" report): lowered
+                // preflight floor 70 → 55 because too many legitimate rewrites were
+                // scoring 60-69 and getting kicked to awaiting_review, creating a
+                // backlog admin couldn't clear. Below 55 still catches genuinely
+                // broken output (missing sections, blank paragraphs, garbled text)
+                // but doesn't hold up perfectly usable CVs waiting for a human
+                // touch-up we don't have bandwidth to do at scale.
+                const pre = await preflightScoreCV(output, 55);
+                if (pre.ok && !pre.passed) {
+                    console.warn(`[ats-preflight] orderId=${orderId} FAILED — score=${pre.score} < 55. ` +
+                        `Kicking to awaiting_review. Weaknesses: ${pre.weaknesses.join(" | ")}`);
+                    await db_1.pool.query(`UPDATE service_orders
+             SET status = 'awaiting_review',
+                 output_text = $2,
+                 needs_human_review = true,
+                 human_review_notes = $3,
+                 refund_requested = true,
+                 updated_at = NOW()
+             WHERE id = $1`, [
+                        orderId,
+                        output,
+                        `auto-flagged: ATS preflight score ${pre.score} < 55. Weaknesses: ${pre.weaknesses.join("; ")}. Suggestion: ${pre.suggestion}. Needs manual review before delivery.`,
+                    ]);
+                    try {
+                        const { notifyOrderNeedsReview } = await Promise.resolve().then(() => __importStar(require("./service-order-notify")));
+                        await notifyOrderNeedsReview(orderId).catch(() => { });
+                    }
+                    catch { }
+                    return;
+                }
+                if (pre.ok) {
+                    console.log(`[ats-preflight] orderId=${orderId} PASSED — score=${pre.score}`);
+                }
+            }
+            catch (preErr) {
+                // Never block delivery on a preflight infra error — deliver the
+                // output as-is and log for investigation. Belt-and-suspenders.
+                console.warn(`[ats-preflight] orderId=${orderId} scorer errored, delivering anyway: ${preErr?.message}`);
             }
         }
         // Final write — NOW() can't be passed as a bound parameter, so we use a
@@ -931,6 +1097,17 @@ CRITICAL LENGTH REQUIREMENT — READ CAREFULLY (do not violate):
             // MAX_RETRIES_PER_ORDER=3). If it exhausts retries, sweep marks failed
             // with a clear "[recovery] Exhausted" message + fires user notification
             // (see notifyOrderFailed below).
+            //
+            // 2026-08 (Tony's "users paid but not receiving" audit): stamp the
+            // original error into error_message BEFORE throwing so we can diagnose
+            // OpenAI failures. Previously only the recovery-layer's "Exhausted 3
+            // retries" line survived — we were flying blind on what actually
+            // failed. Append (COALESCE) so we don't overwrite prior attempts.
+            await db_1.pool.query(`UPDATE service_orders
+         SET error_message = COALESCE(error_message,'') ||
+             E'\n[processOrder ' || to_char(NOW(),'YYYY-MM-DD HH24:MI:SS') || '] ' || $2,
+             updated_at = NOW()
+         WHERE id = $1`, [orderId, `TRANSIENT status=${status} code=${code} msg="${errMsg.slice(0, 500)}"`]).catch(() => { });
             console.warn(`[ServiceOrder] processOrder TRANSIENT error for ${orderId}: ` +
                 `status=${status} code=${code} msg="${errMsg}" — leaving order in processing state for sweep retry`);
             throw err;
@@ -1199,6 +1376,33 @@ function startStuckOrderSweep() {
     const retries = new Map();
     setInterval(async () => {
         try {
+            // 2026-08 (Tony's "users paid but not receiving" audit): first pass —
+            // reconcile any pending_payment orders whose payment actually completed.
+            // Root cause: paymentPipeline Step 3b sometimes misses linking (metadata
+            // parse race, orphan-recovered payment, PayPal webhook arriving before
+            // the client-driven capture-order finishes). Rather than diagnose every
+            // edge case, sweep every minute and self-heal: any pending_payment order
+            // that has a matching completed payment gets promoted to 'paid' so the
+            // AI generation kicks in.
+            const { rows: promoted } = await db_1.pool.query(`UPDATE service_orders o
+            SET status = 'paid',
+                paid_at = COALESCE(o.paid_at, NOW()),
+                updated_at = NOW(),
+                error_message = COALESCE(o.error_message,'') ||
+                  E'\n[reconciler ' || to_char(NOW(),'YYYY-MM-DD HH24:MI:SS') ||
+                  '] Payment completed but pipeline missed linking — self-healed.'
+          WHERE o.status = 'pending_payment'
+            AND EXISTS (
+              SELECT 1 FROM payments p
+              WHERE p.status IN ('success','completed')
+                AND p.metadata::text LIKE '%"serviceOrderId":"' || o.id || '"%'
+            )
+            AND o.created_at > NOW() - INTERVAL '7 days'
+          RETURNING id`);
+            if (promoted.length > 0) {
+                console.warn(`[ServiceOrder] Reconciler: self-healed ${promoted.length} pending_payment order(s) ` +
+                    `whose payments had completed: ${promoted.map(r => r.id).join(", ")}`);
+            }
             const { rows } = await db_1.pool.query(`SELECT id, status, service_slug
            FROM service_orders
           WHERE status IN ('paid', 'processing')
@@ -1243,7 +1447,12 @@ function registerServiceOrderRoutes(app, isAuthenticated) {
     // POST /api/services/order/:slug
     // Body: multipart/form-data { cv: File, jobDescription?, targetCountry?, extraInput? }
     // Response: { orderId, serviceName, price, needsPayment: true }
-    app.post("/api/services/order/:slug", isAuthenticated, cvUploadWithJsonErrors("cv"), async (req, res) => {
+    //
+    // 2026-08 SECURITY: gated on email verification. All paid CV / cover
+    // letter / SoP services flow through this endpoint — fake-email accounts
+    // must not be able to initiate an order (which creates a payment row
+    // and STK push). Same policy applied to /api/subscriptions/upgrade.
+    app.post("/api/services/order/:slug", isAuthenticated, identityVerification_1.requireVerifiedForPayment, cvUploadWithJsonErrors("cv"), async (req, res) => {
         const t0 = Date.now();
         const slug = String(req.params.slug || "").toLowerCase();
         console.log(`[ServiceOrder] POST /api/services/order/${slug} | userId=${req.user?.claims?.sub ?? req.user?.id ?? "??"} hasFile=${!!req.file}`);
@@ -1258,13 +1467,44 @@ function registerServiceOrderRoutes(app, isAuthenticated) {
                 console.warn(`[ServiceOrder] Unknown service slug: "${slug}"`);
                 return res.status(404).json({ message: `Unknown service: ${slug}` });
             }
-            // CV extraction if required
+            // CV extraction if required — fast path only (pdfjs / mammoth).
+            // 2026-08 (long-term fix): if fast returns empty (scanned PDF), we
+            // stash the raw file bytes for background OCR. processOrder runs
+            // the slow extraction after payment confirms, before AI generation.
+            // Endpoint returns in <1s regardless of file format.
             let cvText = null;
+            let cvRawFile = null;
             if (config.needsCv) {
                 const extracted = await extractCvOrError(req);
                 if (!extracted.ok)
                     return res.status(400).json({ message: extracted.error });
-                cvText = extracted.text;
+                if (extracted.needsBackfill) {
+                    // Fast extraction returned empty → stash raw file for background OCR.
+                    const file = req.file;
+                    if (file?.buffer) {
+                        // Sanity cap: 4 MB compressed base64 (raw file ≤ ~3 MB).
+                        // Files above this shouldn't reach here — multer's 10 MB cap
+                        // is on the file itself; b64 encoding inflates ~1.33x.
+                        const b64 = file.buffer.toString("base64");
+                        if (b64.length > 4500000) {
+                            return res.status(400).json({
+                                message: "Your CV is too large to process. Please compress it (under 3 MB) or upload a text-based PDF / .docx.",
+                            });
+                        }
+                        cvRawFile = {
+                            base64: b64,
+                            mime: file.mimetype || "application/octet-stream",
+                            filename: file.originalname || "cv",
+                        };
+                        console.log(`[ServiceOrder] Deferring OCR for ${cvRawFile.filename} (${b64.length} b64 chars) — will run after payment`);
+                    }
+                    else {
+                        return res.status(400).json({ message: "Please upload your CV file." });
+                    }
+                }
+                else {
+                    cvText = extracted.text;
+                }
             }
             const jobDescription = String(req.body?.jobDescription ?? "").trim() || null;
             const targetCountry = String(req.body?.targetCountry ?? "").trim() || null;
@@ -1306,8 +1546,9 @@ function registerServiceOrderRoutes(app, isAuthenticated) {
                 extraInput,
                 referrerOrderId,
                 photoDataUrl,
+                cvRawFile,
             });
-            console.log(`[ServiceOrder] Created orderId=${orderId} slug=${slug} price=${price} cvLen=${cvText?.length ?? 0} in ${Date.now() - t0}ms`);
+            console.log(`[ServiceOrder] Created orderId=${orderId} slug=${slug} price=${price} cvLen=${cvText?.length ?? 0} deferred=${cvRawFile ? "yes" : "no"} in ${Date.now() - t0}ms`);
             res.json({
                 orderId,
                 serviceName: config.name,
@@ -1511,5 +1752,111 @@ function registerServiceOrderRoutes(app, isAuthenticated) {
             res.status(500).json({ message: "Could not generate the document. Please try again." });
         }
     });
-    console.log("[ServiceOrder] Routes registered: POST /api/services/order/:slug, GET /api/services/order/:orderId/{status,download/:format}");
+    // ─── POST /api/admin/service-orders/:id/complete-rewrite ─────────────────
+    // 2026-08 Fix A: when admin manually rewrites an awaiting_review order,
+    // provide a single endpoint that atomically:
+    //   1. Updates output_text with the manually-written content
+    //   2. Flips status → completed, stamps completed_at + updated_at
+    //   3. Fingerprints the CV so any re-check on /tools/ats-cv-checker
+    //      honors the promised 88+ delivered-CV floor (was previously only
+    //      firing on the AI happy path, so manual rewrites got no guarantee)
+    //   4. Fires notifyOrderCompleted for email + WhatsApp
+    //   5. Marks refund_processed_at if the guardrail had flagged for refund
+    //
+    // Body: { outputText: string, refundIssued?: boolean }
+    // Auth: admin-only (checked via storage.isUserAdmin)
+    app.post("/api/admin/service-orders/:id/complete-rewrite", isAuthenticated, async (req, res) => {
+        try {
+            // ── Admin gate ────────────────────────────────────────────────────
+            const adminId = req.user?.claims?.sub ?? req.user?.id;
+            if (!adminId)
+                return res.status(401).json({ message: "Sign in required." });
+            const { storage } = await Promise.resolve().then(() => __importStar(require("./storage")));
+            const isAdmin = await storage.isUserAdmin(adminId).catch(() => false);
+            if (!isAdmin)
+                return res.status(403).json({ message: "Admin access required." });
+            // ── Input validation ─────────────────────────────────────────────
+            const { id } = req.params;
+            if (!/^[0-9a-f-]{8,}$/i.test(id)) {
+                return res.status(400).json({ message: "Invalid order id." });
+            }
+            const outputText = String(req.body?.outputText ?? "").trim();
+            if (outputText.length < 200) {
+                return res.status(400).json({
+                    message: "Manual rewrite must be at least 200 chars — that's shorter than any real CV.",
+                });
+            }
+            const refundIssued = req.body?.refundIssued === true;
+            // ── Fetch order for fingerprint metadata ─────────────────────────
+            const { rows: [order] } = await db_1.pool.query(`SELECT id, user_id, service_slug, service_name, status
+           FROM service_orders WHERE id = $1 LIMIT 1`, [id]);
+            if (!order)
+                return res.status(404).json({ message: "Order not found." });
+            if (!order.user_id) {
+                return res.status(400).json({ message: "Order has no user attached — cannot fingerprint." });
+            }
+            // ── Update the order atomically ──────────────────────────────────
+            const { rowCount } = await db_1.pool.query(`UPDATE service_orders
+           SET output_text = $2,
+               status = 'completed',
+               completed_at = NOW(),
+               updated_at = NOW(),
+               needs_human_review = false,
+               refund_processed_at = CASE WHEN $3::boolean THEN NOW() ELSE refund_processed_at END,
+               human_review_notes = COALESCE(human_review_notes, '') ||
+                 E'\n[' || to_char(NOW(), 'YYYY-MM-DD HH24:MI') || '] Manual rewrite by admin ' || $4
+           WHERE id = $1`, [id, outputText, refundIssued, adminId]);
+            if (!rowCount)
+                return res.status(404).json({ message: "Order not found or already terminal." });
+            console.warn(`[admin] adminId=${adminId} MANUAL-REWRITE order=${id} slug=${order.service_slug} ` +
+                `outLen=${outputText.length} refundIssued=${refundIssued}`);
+            // ── Fingerprint so re-checks honor 88+ floor ─────────────────────
+            // Fire-and-forget (never block the API response). The Delivered-CV
+            // guarantee runs on /api/tools/ats-check via lookupDeliveredCv().
+            try {
+                const { CV_OUTPUT_SLUGS, recordDeliveredCv } = await Promise.resolve().then(() => __importStar(require("./lib/cv-fingerprint")));
+                const slug = String(order.service_slug ?? "").toLowerCase();
+                if (CV_OUTPUT_SLUGS.has(slug)) {
+                    const deliveredScore = slug === "cv_rewrite" || slug === "ats_cv_optimization" ? 92 :
+                        slug === "cv_fix_lite" ? 88 : 85;
+                    recordDeliveredCv({
+                        userId: order.user_id,
+                        serviceOrderId: id,
+                        serviceSlug: slug,
+                        cvText: outputText,
+                        deliveredScore,
+                    }).catch((err) => {
+                        console.warn(`[admin/complete-rewrite] fingerprint failed for ${id}:`, err?.message);
+                    });
+                }
+                else {
+                    console.log(`[admin/complete-rewrite] slug=${slug} not in CV_OUTPUT_SLUGS, skipping fingerprint`);
+                }
+            }
+            catch (fpErr) {
+                console.warn(`[admin/complete-rewrite] fingerprint hook load failed:`, fpErr?.message);
+            }
+            // ── Notify user their CV is ready ────────────────────────────────
+            notifyOrderCompleted(id).catch((notifyErr) => {
+                console.warn(`[admin/complete-rewrite] notify failed for ${id}:`, notifyErr?.message);
+            });
+            res.json({
+                success: true,
+                orderId: id,
+                outputLength: outputText.length,
+                fingerprinted: true,
+                userNotified: true,
+                refundIssued,
+            });
+        }
+        catch (err) {
+            console.error("[POST /api/admin/service-orders/:id/complete-rewrite]", {
+                message: err?.message, code: err?.code,
+            });
+            res.status(500).json({
+                message: `Complete-rewrite failed: ${err?.message ?? "unknown"}`,
+            });
+        }
+    });
+    console.log("[ServiceOrder] Routes registered: POST /api/services/order/:slug, GET /api/services/order/:orderId/{status,download/:format}, POST /api/admin/service-orders/:id/complete-rewrite");
 }

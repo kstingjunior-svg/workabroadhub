@@ -41,6 +41,40 @@ const storage_1 = require("../storage");
 const mpesa_1 = require("../mpesa");
 const paypal_1 = require("../paypal");
 const document_renderer_1 = require("../services/document-renderer");
+// 2026-08 SECURITY (Tony's fake-email report): every payment initiator
+// must confirm the caller's users.email_verified = true. Signed-in users
+// with fake unverified emails now get 403; guest (unauthenticated) users
+// were already blocked upstream.
+async function assertEmailVerified(res, userId) {
+    if (!userId) {
+        res.status(401).json({ error: "Please sign in and verify your email first." });
+        return false;
+    }
+    try {
+        const { rows } = await db_1.pool.query(`SELECT email_verified, is_admin, role FROM users WHERE id = $1`, [userId]);
+        const u = rows[0];
+        if (!u) {
+            res.status(401).json({ error: "User not found" });
+            return false;
+        }
+        if (u.is_admin || u.role === "ADMIN" || u.role === "SUPER_ADMIN")
+            return true;
+        if (!u.email_verified) {
+            res.status(403).json({
+                error: "Please verify your email before paying.",
+                verificationRequired: true,
+                verificationStep: "email",
+            });
+            return false;
+        }
+        return true;
+    }
+    catch (err) {
+        console.error("[write-from-scratch] verify check failed:", err?.message);
+        res.status(500).json({ error: "Verification check failed." });
+        return false;
+    }
+}
 const generator_1 = require("../services/writeFromScratch/generator");
 const PRICE_KES = 300;
 const VALID_DOC_TYPES = [
@@ -147,6 +181,8 @@ function registerWriteFromScratchRoutes(app) {
                 return res.status(400).json({ error: validationError });
             }
             const userId = currentUserId(req);
+            if (!(await assertEmailVerified(res, userId)))
+                return;
             // Everyone pays KES 300 — no Pro bypass. Kept the isPro helper around in
             // case we want to add it back later, but the current policy is: uniform
             // per-generation pricing so we don't confuse users about what's "free."
@@ -312,6 +348,8 @@ function registerWriteFromScratchRoutes(app) {
                 });
             }
             const userId = currentUserId(req);
+            if (!(await assertEmailVerified(res, userId)))
+                return;
             // Pro users get the tool for free — reuse the same fast path as /init.
             if (userId) {
                 const plan = await storage_1.storage.getUserPlan(userId);

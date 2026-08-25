@@ -1220,6 +1220,15 @@ async function registerRoutes(httpServer, app) {
     console.log("✅ [setupRoutes] /api/early-ping registered");
     await (0, auth_1.setupAuth)(app);
     (0, auth_1.registerAuthRoutes)(app);
+    // 2026-08 SECURITY (Tony's fake-email report): global wall — every /api/*
+    // request from an authenticated but unverified user gets 403 with a
+    // verificationRequired flag the client turns into a persistent banner.
+    // Session is now attached (setupAuth ran above), so req.user is available.
+    // The middleware has its own allowlist for auth + verify + health endpoints
+    // so users can still complete verification. Admins bypass.
+    const { requireEmailVerifiedApi } = await Promise.resolve().then(() => __importStar(require("./middleware/requireEmailVerifiedApi")));
+    app.use(requireEmailVerifiedApi);
+    console.log("✅ [setupRoutes] Email-verification wall installed globally");
     // 2026-06 retention #1: country journey checklist endpoints
     const { registerJourneyRoutes } = await Promise.resolve().then(() => __importStar(require("./routes/journey")));
     registerJourneyRoutes(app);
@@ -1487,6 +1496,31 @@ Crawl-delay: 1`);
                 timestamp: new Date().toISOString()
             });
         }
+    });
+    // 2026-08 (Tony's "free tools broken" report): quick OpenAI liveness probe.
+    // Public GET so we can hit it from a browser tab to confirm the key is live
+    // end-to-end after a billing/rotation event. Doesn't burn any AI tokens —
+    // uses the cheap models.list() call under the hood.
+    app.get("/api/health/openai", async (_req, res) => {
+        try {
+            const { openAIHealthProbe } = await Promise.resolve().then(() => __importStar(require("./lib/openai")));
+            const result = await openAIHealthProbe();
+            res.status(result.ok ? 200 : 503).json({
+                ...result,
+                timestamp: new Date().toISOString(),
+            });
+        }
+        catch (err) {
+            res.status(503).json({ ok: false, reason: err?.message ?? "probe_crashed" });
+        }
+    });
+    // 2026-08: admin-only hot-reload of the OpenAI client so a rotated key
+    // (Render env var update) takes effect immediately, no full restart.
+    app.post("/api/admin/openai/reload", auth_1.isAuthenticated, isAdmin, async (_req, res) => {
+        const { resetOpenAIClient, openAIHealthProbe } = await Promise.resolve().then(() => __importStar(require("./lib/openai")));
+        resetOpenAIClient();
+        const probe = await openAIHealthProbe();
+        res.json({ success: true, probe });
     });
     // Circuit breaker status
     app.get("/api/health/circuits", (req, res) => {
@@ -2396,7 +2430,11 @@ Crawl-delay: 1`);
         }
     });
     // POST /api/subscriptions/upgrade — M-Pesa STK Push for plan upgrade
-    app.post("/api/subscriptions/upgrade", auth_1.isAuthenticated, async (req, res) => {
+    // 2026-08 SECURITY (Tony's report): this was the main leak. Users were
+    // registering with fake emails, skipping verification, and paying here
+    // to gain portal access. Every other STK/PayPal init already gates on
+    // requireVerifiedForPayment — this endpoint was the missing wall.
+    app.post("/api/subscriptions/upgrade", auth_1.isAuthenticated, identityVerification_1.requireVerifiedForPayment, async (req, res) => {
         try {
             const userId = req.user?.claims?.sub;
             if (!userId)
@@ -2417,6 +2455,33 @@ Crawl-delay: 1`);
             const plan = await storage_1.storage.getPlanById(basePlanId);
             if (!plan)
                 return res.status(404).json({ message: "Plan not found" });
+            const normalizedPhone = normalizePhone(phoneNumber, "KE") ?? phoneNumber;
+            if (!/^254[71]\d{8}$/.test(normalizedPhone)) {
+                return res.status(400).json({ message: "Invalid phone number. Use format: 0712345678, 0115364029, or +254712345678" });
+            }
+            // 2026-08 SECURITY (Phase 3 audit): one KES 99 trial per user + phone.
+            // Previously ANY user could buy the trial repeatedly, or spin up new
+            // accounts (email aliases) and pay KES 99 forever instead of KES 4,500
+            // yearly. Gate against BOTH userId and normalizedPhone so at minimum
+            // an attacker has to buy a new SIM to abuse it. Doesn't catch a
+            // sufficiently determined attacker with new email + new phone, but
+            // raises the cost from "free" to "SIM card + reg fee" per re-trial.
+            if (basePlanId === "trial") {
+                const { rows: trialCheck } = await db_1.pool.query(`SELECT EXISTS(
+             SELECT 1 FROM payments
+             WHERE (user_id = $1 OR phone = $2)
+               AND status IN ('success','completed')
+               AND (plan_id = 'trial' OR service_id = 'plan_trial')
+           ) AS has_trial`, [userId, normalizedPhone]);
+                if (trialCheck[0]?.has_trial) {
+                    console.warn(`[Trial][Security] Repeat trial blocked userId=${userId} phone=${normalizedPhone}`);
+                    return res.status(403).json({
+                        message: "The KES 99 trial is a one-time offer per user. Please upgrade to Monthly (KES 1,000) or Yearly (KES 4,500) to continue.",
+                        code: "TRIAL_ALREADY_USED",
+                        upgradeUrl: "/pricing",
+                    });
+                }
+            }
             // Resolve canonical price via the pricing engine — the backend is the single
             // source of truth. Client-supplied amounts are never used. Passing userId and
             // promoCode enables per-user discounts and active promo codes.
@@ -2428,10 +2493,6 @@ Crawl-delay: 1`);
             if (!resolvedPrice)
                 return res.status(404).json({ message: "Plan price not configured" });
             const chargeAmount = resolvedPrice.finalPrice;
-            const normalizedPhone = normalizePhone(phoneNumber, "KE") ?? phoneNumber;
-            if (!/^254[71]\d{8}$/.test(normalizedPhone)) {
-                return res.status(400).json({ message: "Invalid phone number. Use format: 0712345678, 0115364029, or +254712345678" });
-            }
             const clientIp = req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket?.remoteAddress || "unknown";
             if (!checkStkPushRateLimit(userId) || !checkStkPushIpRateLimit(clientIp)) {
                 return res.status(429).json({ message: "Too many payment attempts. Please wait a few minutes." });
@@ -12527,6 +12588,75 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
             res.status(500).json({ message: "Failed to fetch jobs" });
         }
     });
+    // 2026-08 SECURITY: whitelist sanitizer for agency-portal job payloads.
+    // The DB schema has isFeatured (admin-only editorial flag) and viewCount
+    // (server-tracked metric). Spreading req.body into the insert let any
+    // claimed-agency owner promote themselves for free by adding isFeatured
+    // to the payload. This helper accepts only the fields an agency owner
+    // should legitimately set; everything else is silently dropped.
+    //
+    // Fields kept from user input:
+    //   title, country, salary, jobCategory, description, requirements,
+    //   visaSponsorship, applicationDeadline, applyLink, applyEmail
+    //
+    // Fields the user MUST NOT set (silently stripped):
+    //   agencyId       — controlled by session, set by the route
+    //   isFeatured     — editorial promotion, admin-only
+    //   isActive       — server default true; publish/unpublish will get its
+    //                    own endpoint if needed
+    //   viewCount      — server tracks impressions, not the owner
+    //   id, createdAt, updatedAt — schema defaults, never user-writable
+    function sanitizeAgencyJobInput(input) {
+        if (!input || typeof input !== "object") {
+            return { __error: "Request body must be an object." };
+        }
+        const clean = {};
+        // Required-ish string fields (schema requires title + country on insert;
+        // partial updates may omit them, which is fine — DB keeps existing).
+        if (input.title != null) {
+            const t = String(input.title).trim().slice(0, 200);
+            if (t.length < 3)
+                return { __error: "Title must be at least 3 characters." };
+            clean.title = t;
+        }
+        if (input.country != null) {
+            const c = String(input.country).trim().slice(0, 100);
+            if (c.length < 2)
+                return { __error: "Country is required." };
+            clean.country = c;
+        }
+        if (input.salary != null)
+            clean.salary = String(input.salary).trim().slice(0, 100);
+        if (input.jobCategory != null)
+            clean.jobCategory = String(input.jobCategory).trim().slice(0, 100);
+        if (input.description != null)
+            clean.description = String(input.description).slice(0, 20000);
+        if (input.requirements != null)
+            clean.requirements = String(input.requirements).slice(0, 10000);
+        if (input.visaSponsorship != null)
+            clean.visaSponsorship = !!input.visaSponsorship;
+        if (input.applicationDeadline != null) {
+            const d = new Date(input.applicationDeadline);
+            if (!Number.isNaN(d.getTime()))
+                clean.applicationDeadline = d;
+        }
+        if (input.applyLink != null) {
+            const link = String(input.applyLink).trim().slice(0, 500);
+            // Basic URL sanity — reject javascript:, data:, and other non-http schemes
+            if (link && !/^https?:\/\//i.test(link)) {
+                return { __error: "Apply link must start with http:// or https://" };
+            }
+            clean.applyLink = link || null;
+        }
+        if (input.applyEmail != null) {
+            const email = String(input.applyEmail).trim().slice(0, 200);
+            if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                return { __error: "Apply email is not a valid email address." };
+            }
+            clean.applyEmail = email || null;
+        }
+        return clean;
+    }
     // Portal: create job listing
     app.post("/api/agency-portal/jobs", auth_1.isAuthenticated, async (req, res) => {
         try {
@@ -12534,7 +12664,19 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
             const agency = await storage_1.storage.getAgencyByClaimedUser(userId);
             if (!agency)
                 return res.status(403).json({ message: "No agency claimed" });
-            const job = await storage_1.storage.createAgencyJob({ ...req.body, agencyId: agency.id });
+            // 2026-08 SECURITY (mass-assignment fix): previously spread req.body
+            // straight into the DB insert, which let any claimed-agency user set
+            // isFeatured / isActive / viewCount by injecting those fields into
+            // their POST body — free promotion + fake engagement metrics.
+            // Whitelist only the fields an agency owner should legitimately set;
+            // isFeatured stays admin-only, viewCount is server-tracked, isActive
+            // uses the schema default (true) unless we later add a "publish" toggle.
+            const b = req.body ?? {};
+            const cleanBody = sanitizeAgencyJobInput(b);
+            if (cleanBody.__error) {
+                return res.status(400).json({ message: cleanBody.__error });
+            }
+            const job = await storage_1.storage.createAgencyJob({ ...cleanBody, agencyId: agency.id });
             res.status(201).json(job);
         }
         catch (error) {
@@ -12552,7 +12694,14 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
             const job = await storage_1.storage.getAgencyJobById(req.params.jobId);
             if (!job || job.agencyId !== agency.id)
                 return res.status(403).json({ message: "Access denied" });
-            const updated = await storage_1.storage.updateAgencyJob(req.params.jobId, req.body);
+            // 2026-08 SECURITY (mass-assignment fix): same whitelist for updates.
+            // Also strip agencyId so the owner can't reassign the job to another
+            // agency they don't own.
+            const cleanBody = sanitizeAgencyJobInput(req.body ?? {});
+            if (cleanBody.__error) {
+                return res.status(400).json({ message: cleanBody.__error });
+            }
+            const updated = await storage_1.storage.updateAgencyJob(req.params.jobId, cleanBody);
             res.json(updated);
         }
         catch (error) {
@@ -14878,6 +15027,93 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
         res.json({ preview: buildMsg(SAMPLE_NAME, variables), recipientCount: count });
     });
     // Broadcast message to multiple users (admin only)
+    // 2026-08 (Tony's Resend outage recovery): return the phone numbers of
+    // users who still haven't verified their email. Used by the admin
+    // /admin/broadcast page to fire a one-tap WhatsApp reminder. Filters:
+    //   - authenticated user with a phone
+    //   - email_verified = false
+    //   - not admin
+    //   - signed up within the last N hours (default 72 so we don't spam
+    //     ancient dead accounts that are about to be auto-deleted anyway)
+    app.get("/api/admin/unverified-users", auth_1.isAuthenticated, isAdmin, async (req, res) => {
+        try {
+            const hours = Math.min(720, Math.max(1, Number(req.query.hours) || 72));
+            const { rows } = await db_1.pool.query(`SELECT id, email, phone, first_name, created_at
+           FROM users
+          WHERE email_verified = false
+            AND is_admin = false
+            AND (role IS NULL OR role NOT IN ('ADMIN','SUPER_ADMIN'))
+            AND phone IS NOT NULL AND phone <> ''
+            AND created_at > NOW() - (INTERVAL '1 hour' * $1)
+          ORDER BY created_at DESC`, [hours]);
+            res.json({
+                total: rows.length,
+                users: rows.map(r => ({
+                    id: r.id,
+                    email: r.email,
+                    phone: r.phone,
+                    firstName: r.first_name ?? null,
+                    createdAt: r.created_at,
+                })),
+                phones: rows.map(r => r.phone),
+            });
+        }
+        catch (err) {
+            console.error("[admin/unverified-users] error:", err?.message);
+            res.status(500).json({ message: "Could not load unverified users." });
+        }
+    });
+    // 2026-08 (Resend outage recovery): fire a fresh verification code email
+    // to every unverified user in bulk. Uses the same sendEmailVerificationCode
+    // helper the normal Resend button uses, so the code is a real one that
+    // works. Pauses 200ms between sends to stay under Resend's rate limit.
+    app.post("/api/admin/broadcast-verify-code", auth_1.isAuthenticated, isAdmin, async (req, res) => {
+        try {
+            const hours = Math.min(720, Math.max(1, Number(req.body?.hours) || 72));
+            const { rows } = await db_1.pool.query(`SELECT id, email, first_name
+           FROM users
+          WHERE email_verified = false
+            AND is_admin = false
+            AND (role IS NULL OR role NOT IN ('ADMIN','SUPER_ADMIN'))
+            AND email IS NOT NULL AND email <> ''
+            AND email NOT LIKE '%@deleted.workabroadhub.local'
+            AND created_at > NOW() - (INTERVAL '1 hour' * $1)
+          ORDER BY created_at DESC`, [hours]);
+            const { sendEmailVerificationCode } = await Promise.resolve().then(() => __importStar(require("./services/identityVerification")));
+            let successful = 0;
+            let failed = 0;
+            const failures = [];
+            for (const u of rows) {
+                try {
+                    const result = await sendEmailVerificationCode(u.id, u.email);
+                    if (result.ok) {
+                        successful++;
+                    }
+                    else {
+                        failed++;
+                        failures.push({ email: u.email, reason: result.code || "unknown" });
+                    }
+                }
+                catch (err) {
+                    failed++;
+                    failures.push({ email: u.email, reason: err?.message?.slice(0, 100) || "exception" });
+                }
+                // Rate limit — 200ms between sends (5/sec, well under Resend's 10/sec)
+                await new Promise((r) => setTimeout(r, 200));
+            }
+            console.log(`[admin] broadcast-verify-code: ${successful}/${rows.length} sent (${failed} failed) hours=${hours}`);
+            res.json({
+                total: rows.length,
+                successful,
+                failed,
+                failures: failures.slice(0, 20), // sample failures for admin UI
+            });
+        }
+        catch (err) {
+            console.error("[admin/broadcast-verify-code] error:", err?.message);
+            res.status(500).json({ message: "Broadcast failed", error: err?.message });
+        }
+    });
     app.post("/api/admin/broadcast-sms", auth_1.isAuthenticated, isAdmin, async (req, res) => {
         try {
             const { phones, message, channel } = req.body;
@@ -18425,18 +18661,60 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
                 redeemAppliedPromo(payment.metadata).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
             }
             // 4. Handle referral if one was stored
+            // 2026-08 SECURITY (Phase 3 audit): previously trusted metadata.refCode
+            // directly and paid 10% commission. Since the client sets metadata.refCode
+            // at /api/paypal/init time, a user could send their OWN referral code and
+            // pocket 10% cashback on every PayPal payment. Fixed by:
+            //   (a) refusing to create a commission if the refCode belongs to the
+            //       paying user themselves (self-referral)
+            //   (b) requiring the refCode match a real user in the DB (unknown codes
+            //       are silently dropped instead of paying a fake influencer)
+            //   (c) requiring the payer's users.referred_by matches this refCode —
+            //       so a user can only ever generate commission for the referrer
+            //       they SIGNED UP under, never for a random code they inject later
+            // M-Pesa callback at line 5551 already does (c) correctly by reading
+            // users.referred_by from the DB instead of trusting request metadata.
             if (payment.metadata) {
                 try {
                     const meta = typeof payment.metadata === "string" ? JSON.parse(payment.metadata) : payment.metadata;
-                    if (meta?.refCode) {
-                        const commission = Math.round(payment.amount * 0.10);
-                        storage_1.storage.createReferral({
-                            refCode: meta.refCode,
-                            referredPhone: capture.payerEmail || "",
-                            paymentAmount: payment.amount,
-                            commission,
-                            status: "pending",
-                        }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+                    const clientRefCode = meta?.refCode;
+                    if (clientRefCode && userId) {
+                        const normCode = String(clientRefCode).trim().toUpperCase();
+                        // Read the payer's ACTUAL referral chain from the DB (source of truth)
+                        const { rows: [payerRow] } = await db_1.pool.query(`SELECT referred_by, referral_code FROM users WHERE id = $1 LIMIT 1`, [userId]);
+                        const authoritativeCode = String(payerRow?.referred_by ?? "").trim().toUpperCase();
+                        // Self-referral guard — payer's own code cannot pay them commission
+                        const payerOwnCode = String(payerRow?.referral_code ?? "").trim().toUpperCase();
+                        if (!authoritativeCode) {
+                            console.log(`[PayPal][Referral] Payer ${userId} has no referred_by — commission skipped (client sent "${normCode}")`);
+                        }
+                        else if (normCode === payerOwnCode) {
+                            console.warn(`[PayPal][Referral][Security] Self-referral blocked for user=${userId} — client sent their own code`);
+                        }
+                        else if (normCode !== authoritativeCode) {
+                            console.warn(`[PayPal][Referral][Security] refCode mismatch for user=${userId} — client="${normCode}" authoritative="${authoritativeCode}" — using authoritative`);
+                        }
+                        const effectiveCode = authoritativeCode; // always use DB value
+                        if (effectiveCode && effectiveCode !== payerOwnCode) {
+                            // Confirm the referrer code actually resolves to a real user
+                            const { rows: [refUser] } = await db_1.pool.query(`SELECT id FROM users WHERE UPPER(referral_code) = $1 LIMIT 1`, [effectiveCode]);
+                            if (!refUser) {
+                                console.warn(`[PayPal][Referral] refCode "${effectiveCode}" doesn't match any user — commission skipped`);
+                            }
+                            else if (refUser.id === userId) {
+                                console.warn(`[PayPal][Referral][Security] Self-referral (referrer.id === payer.id) blocked for user=${userId}`);
+                            }
+                            else {
+                                const commission = Math.round(payment.amount * 0.10);
+                                storage_1.storage.createReferral({
+                                    refCode: effectiveCode,
+                                    referredPhone: capture.payerEmail || "",
+                                    paymentAmount: payment.amount,
+                                    commission,
+                                    status: "pending",
+                                }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+                            }
+                        }
                     }
                 }
                 catch (_e) { /* non-fatal */ }

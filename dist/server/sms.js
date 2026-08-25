@@ -125,8 +125,65 @@ function formatPhoneNumber(phone) {
     }
     return '+' + cleaned;
 }
-// Send SMS message
+// 2026-08 (Tony's Kenya SMS delivery bug): Twilio numbers are commonly
+// WhatsApp-only sandboxes for Kenya use-cases (Twilio doesn't sell KE long
+// codes without A2P 10DLC-equivalent registration). For Kenyan numbers we
+// send via Africa's Talking, which is the standard local provider.
+// Falls back to Twilio only if AT credentials aren't set OR AT rejects.
+async function sendSmsViaAT(to, message) {
+    const AT_API_KEY = (process.env.AFRICASTALKING_API_KEY || "").trim();
+    const AT_USERNAME = (process.env.AFRICASTALKING_USERNAME || "").trim();
+    const AT_SENDER = (process.env.AFRICASTALKING_SMS_SENDER || "").trim(); // optional short code / alphanumeric sender
+    if (!AT_API_KEY || !AT_USERNAME) {
+        return { success: false, error: "africas_talking_not_configured" };
+    }
+    try {
+        const formattedTo = formatPhoneNumber(to);
+        // AT expects the "+" prefixed E.164 format
+        const withPlus = formattedTo.startsWith("+") ? formattedTo : `+${formattedTo}`;
+        const body = new URLSearchParams({
+            username: AT_USERNAME,
+            to: withPlus,
+            message,
+            ...(AT_SENDER ? { from: AT_SENDER } : {}),
+        });
+        const res = await fetch("https://api.africastalking.com/version1/messaging", {
+            method: "POST",
+            headers: {
+                apiKey: AT_API_KEY,
+                "Content-Type": "application/x-www-form-urlencoded",
+                Accept: "application/json",
+            },
+            body: body.toString(),
+            signal: AbortSignal.timeout(15000),
+        });
+        if (!res.ok) {
+            const txt = await res.text().catch(() => "");
+            console.error(`[AT SMS] ${res.status} ${txt.slice(0, 200)}`);
+            return { success: false, error: `at_http_${res.status}` };
+        }
+        const data = await res.json().catch(() => ({}));
+        // AT returns { SMSMessageData: { Recipients: [ { status: "Success", ... } ] } }
+        const recipient = data?.SMSMessageData?.Recipients?.[0];
+        if (recipient?.status === "Success") {
+            console.log(`[AT SMS] sent to ${withPlus} messageId=${recipient?.messageId ?? "?"}`);
+            return { success: true, sid: recipient?.messageId };
+        }
+        return { success: false, error: recipient?.status || "at_unknown_status" };
+    }
+    catch (err) {
+        console.error(`[AT SMS] exception: ${err?.message}`);
+        return { success: false, error: err?.message ?? "at_exception" };
+    }
+}
+// Send SMS message — tries Africa's Talking first (KE numbers), Twilio second.
 async function sendSMS(to, message) {
+    // Try Africa's Talking first (works for Kenya carriers without A2P setup)
+    const atResult = await sendSmsViaAT(to, message);
+    if (atResult.success)
+        return atResult;
+    // Fall back to Twilio only if AT is misconfigured OR the specific message failed.
+    // Common Twilio failure: code 21606 = "From number not SMS-capable" (WhatsApp sandbox).
     try {
         const client = await getTwilioClient();
         const fromNumber = await getTwilioFromPhoneNumber();
@@ -134,16 +191,16 @@ async function sendSMS(to, message) {
         const result = await client.messages.create({
             body: message,
             from: fromNumber,
-            to: formattedTo
+            to: formattedTo,
         });
-        console.log(`SMS sent successfully to ${formattedTo}: ${result.sid}`);
+        console.log(`SMS sent successfully to ${formattedTo} via Twilio: ${result.sid}`);
         return { success: true, sid: result.sid };
     }
     catch (error) {
-        console.error('Failed to send SMS:', error.message);
+        console.error('Failed to send SMS via Twilio:', error.message);
         let errorMsg = error.message;
         if (error.code === 21606) {
-            errorMsg = "SMS not available: Your Twilio number is a WhatsApp sandbox number and cannot send SMS to this destination. Purchase an SMS-capable number from Twilio to send SMS.";
+            errorMsg = `SMS not delivered: AT returned ${atResult.error || "unknown"}, Twilio number is a WhatsApp sandbox (21606). Configure AFRICASTALKING_API_KEY + AFRICASTALKING_USERNAME on Render for reliable Kenya SMS.`;
         }
         return { success: false, error: errorMsg };
     }

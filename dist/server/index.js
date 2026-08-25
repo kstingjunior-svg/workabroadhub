@@ -593,6 +593,16 @@ app.use((req, res, next) => {
         catch (err) {
             console.error("[Server] ❌ IELTS routes registration failed (non-fatal):", err?.message);
         }
+        // 2026-08 Phase 3 — MY CAREER dashboard aggregation.
+        // GET /api/me/career-overview returns 6 stat tiles + 10 recent applications.
+        // Registered here (before registerRoutes) so the /api catch-all doesn't shadow it.
+        try {
+            const { registerCareerOverviewRoute } = await Promise.resolve().then(() => __importStar(require("./routes/career-overview")));
+            registerCareerOverviewRoute(app);
+        }
+        catch (err) {
+            console.error("[Server] ❌ Career overview route registration failed (non-fatal):", err?.message);
+        }
         await (0, routes_1.registerRoutes)(httpServer, app);
         // Bootstrap can run after registerRoutes — it only touches the DB.
         try {

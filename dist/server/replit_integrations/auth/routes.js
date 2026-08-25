@@ -467,6 +467,13 @@ function registerAuthRoutes(app) {
     const getCachedUser = auth_user_cache_1.getCachedAuthUser;
     const setCachedUser = auth_user_cache_1.setCachedAuthUser;
     app.invalidateAuthUserCache = auth_user_cache_1.invalidateAuthUserCache;
+    // 2026-08 (Tony's "banner scares verified users" fix): on server boot,
+    // wipe every cached /api/auth/user response. Old payloads built by the
+    // previous deploy are missing the emailVerified field, which is exactly
+    // what left the red banner stuck on verified accounts. A clean cache on
+    // deploy guarantees the very next request rebuilds a correct payload.
+    (0, auth_user_cache_1.clearAllAuthUserCache)();
+    console.log("[Auth] Cleared in-memory auth-user cache on module load — verification flags will be repopulated fresh.");
     app.get("/api/auth/user", async (req, res) => {
         const t0 = Date.now();
         try {
@@ -516,9 +523,38 @@ function registerAuthRoutes(app) {
                         console.warn(`[Auth][/api/auth/user] getUserPlan failed — falling back to db.plan="${user.plan}":`, err?.message);
                     }
                 }
+                // 2026-08 (Tony's "banner scares verified users" fix): defensive
+                // fallback in case the Drizzle schema was out of date at deploy time
+                // and (user as any).emailVerified is still undefined. Read the
+                // verification flags directly from the DB row using a raw column
+                // fetch so the payload ALWAYS includes them for regular users.
+                // Without this, `emailVerified === true` on the client is
+                // `undefined === true` → false → the red "Final warning" banner
+                // never disappears even after successful verification.
+                let dbEmailVerified = user.emailVerified;
+                let dbPhoneVerified = user.phoneVerified;
+                if (dbEmailVerified === undefined || dbPhoneVerified === undefined) {
+                    try {
+                        const vr = await db_1.pool.query(`SELECT email_verified, phone_verified FROM users WHERE id = $1`, [userId]);
+                        if (vr.rows[0]) {
+                            dbEmailVerified = vr.rows[0].email_verified === true;
+                            dbPhoneVerified = vr.rows[0].phone_verified === true;
+                        }
+                    }
+                    catch (e) {
+                        console.warn(`[Auth][/api/auth/user] verification-flags fallback failed:`, e?.message);
+                    }
+                }
                 const payload = isAdminUser
                     ? { ...user, plan: "pro", subscriptionStatus: "active", emailVerified: true, phoneVerified: true, isAdminBypass: true }
-                    : { ...user, plan: livePlan, subscriptionStatus: livePlan === "free" ? "expired" : "active" };
+                    : {
+                        ...user,
+                        plan: livePlan,
+                        subscriptionStatus: livePlan === "free" ? "expired" : "active",
+                        // Always coerce to booleans — never send undefined to the client
+                        emailVerified: dbEmailVerified === true,
+                        phoneVerified: dbPhoneVerified === true,
+                    };
                 setCachedUser(userId, payload);
                 res.setHeader("Cache-Control", "private, max-age=5");
                 res.setHeader("X-Cache", "MISS");
@@ -738,7 +774,13 @@ function registerAuthRoutes(app) {
                 offerSmsFallback: result.code === "send_failed",
             });
         }
-        res.json({ ok: true, message: "Verification code sent. Check your inbox (and spam)." });
+        // 2026-08 (deliverability): pass last-2-digits hint to the client so
+        // users can find the right email even when it's buried in Spam.
+        res.json({
+            ok: true,
+            message: "Verification code sent. Check your inbox (and spam).",
+            codeHint: result.codeHint,
+        });
     });
     app.post("/api/auth/send-phone-code", async (req, res) => {
         const userId = getSessionUserId(req);

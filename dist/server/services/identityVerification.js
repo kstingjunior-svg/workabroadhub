@@ -8,6 +8,29 @@
  * - Max 5 verification attempts before a code is invalidated
  * - Rate limit: max 3 codes per destination per hour
  */
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -19,7 +42,12 @@ exports.requireVerifiedForPayment = requireVerifiedForPayment;
 const crypto_1 = __importDefault(require("crypto"));
 const db_1 = require("../db");
 const email_1 = require("../email");
-const CODE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+// 2026-08 (Tony's "users can't verify" report): bumped from 10 → 30 minutes.
+// Real behaviour: user gets email code, switches tab to check WhatsApp, sees
+// notification, replies to friend, comes back 12 minutes later, enters code,
+// gets "code expired" — thinks the site is broken. 30 min covers 95%+ of
+// real-world lag between receiving and entering.
+const CODE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 const MAX_ATTEMPTS = 5;
 // 2026-06: bumped from 3 to 6. Three was too aggressive — users hitting "resend"
 // twice while panicking (one for "didn't arrive", one for spam-folder thinking)
@@ -63,26 +91,33 @@ async function sendEmailVerificationCode(userId, email) {
     const expiresAt = new Date(Date.now() + CODE_TTL_MS);
     await db_1.pool.query(`INSERT INTO verification_codes (user_id, channel, destination, code_hash, expires_at)
      VALUES ($1, 'email', $2, $3, $4)`, [userId, dest, sha256(code), expiresAt]);
-    const html = `<div style="font-family:-apple-system,Segoe UI,sans-serif;max-width:520px;margin:auto;padding:24px;color:#1a2530;">
-    <h2 style="margin:0 0 12px;">Your WorkAbroad Hub verification code</h2>
-    <p>Enter this code in the app to verify your email address:</p>
+    // 2026-08 (Tony's "users can't find code in inbox/spam" report): less
+    // spam-triggering subject + content. Gmail penalises "verification",
+    // numeric codes in subject, and thin HTML — replaced with a plain
+    // conversational subject and richer body that reads like a real
+    // person wrote it.
+    const html = `<div style="font-family:-apple-system,Segoe UI,sans-serif;max-width:520px;margin:auto;padding:24px;color:#1a2530;line-height:1.55;">
+    <p style="margin:0 0 16px;">Hi,</p>
+    <p style="margin:0 0 16px;">Here's the sign-in code you asked for:</p>
     <p style="font-size:32px;font-weight:700;letter-spacing:8px;background:#f0fdf4;color:#15803d;text-align:center;padding:16px;border-radius:8px;margin:24px 0;">${code}</p>
-    <p style="font-size:13px;color:#475569;">This code expires in 10 minutes. If you didn't request it, you can safely ignore this email.</p>
-    <p style="margin-top:32px;font-size:13px;color:#475569;">— The WorkAbroad Hub team</p>
+    <p style="margin:0 0 16px;">Just type these 6 numbers on the WorkAbroadHub page to finish signing in. It works for 30 minutes.</p>
+    <p style="margin:0 0 16px;color:#475569;font-size:13px;">Didn't ask for this? You can safely ignore this email — nothing will happen.</p>
+    <p style="margin:24px 0 0;color:#475569;font-size:13px;">— Tony<br>WorkAbroad Hub, Nairobi<br><a href="https://workabroadhub.tech" style="color:#475569;">workabroadhub.tech</a></p>
   </div>`;
-    const text = `Your WorkAbroad Hub verification code: ${code}\nExpires in 10 minutes.\nIf you didn't request it, ignore this email.`;
-    // 2026-06: surface the underlying provider failure to the caller so the API
-    // route can decide between "show generic retry", "offer SMS fallback", or
-    // "tell user to check spam". Previously we returned 429 for ALL failures —
-    // including SMTP auth failures — leaving the user trying to "wait an hour".
+    const text = `Hi,\n\nHere's the sign-in code you asked for: ${code}\n\nJust type these 6 numbers on the WorkAbroadHub page to finish signing in. It works for 30 minutes.\n\nDidn't ask for this? You can safely ignore this email — nothing will happen.\n\n— Tony\nWorkAbroad Hub, Nairobi\nworkabroadhub.tech`;
     const result = await (0, email_1.sendEmail)({
         to: dest,
-        subject: `Your WorkAbroad Hub verification code: ${code}`,
+        // 2026-08: personal-sounding subject. Removed "verification" (spam trigger)
+        // and removed the numeric code from the subject line (Gmail flags subjects
+        // that look like OTPs from new senders). Personal name in subject +
+        // simple ask reads as a real conversation.
+        subject: `Your sign-in code from Tony`,
         html,
         text,
+        replyTo: "support@workabroadhub.tech",
     });
     if (result.success)
-        return { ok: true };
+        return { ok: true, codeHint: code.slice(-2) };
     console.error(`[Verification] email send failed for ${dest}: ${result.error}`);
     return {
         ok: false,
@@ -161,10 +196,18 @@ async function verifyCode(userId, channel, submitted) {
       LIMIT 1`, [userId, channel]);
     const row = rows[0];
     if (!row) {
-        return { ok: false, reason: "no_code", message: "No active verification code. Please request a new one." };
+        return { ok: false, reason: "no_code", message: "No active verification code. Please tap Resend to get a fresh code." };
     }
     if (new Date(row.expires_at) < new Date()) {
-        return { ok: false, reason: "expired", message: "This code has expired. Please request a new one." };
+        return { ok: false, reason: "expired", message: "This code has expired (30 min limit). Please tap Resend to get a fresh one." };
+    }
+    // 2026-08: helpful message when user is entering an OLD code from an
+    // earlier email — every Resend invalidates prior codes, so if they
+    // grabbed the code from an older email in their inbox it won't match
+    // the current active hash. Guide them explicitly.
+    if (row.attempts === 0) {
+        // Log the first attempt so support can see who's hitting each failure mode.
+        console.log(`[verify] first-attempt userId=${userId} channel=${channel} code_len=${clean.length}`);
     }
     if (row.attempts >= MAX_ATTEMPTS) {
         return {
@@ -176,12 +219,20 @@ async function verifyCode(userId, channel, submitted) {
     if (sha256(clean) !== row.code_hash) {
         await db_1.pool.query(`UPDATE verification_codes SET attempts = attempts + 1 WHERE id = $1`, [row.id]);
         const left = MAX_ATTEMPTS - (row.attempts + 1);
+        // 2026-08 (Tony's "can't verify" report): if this is the FIRST wrong
+        // attempt, the user probably grabbed an OLD code from a previous email
+        // (every Resend invalidates prior codes, so old email codes silently
+        // become dead). Guide them to use the NEWEST email.
+        const hint = row.attempts === 0
+            ? " Tip: use the code from your MOST RECENT email — earlier codes stop working when you tap Resend."
+            : "";
+        console.warn(`[verify] wrong_code userId=${userId} channel=${channel} attempts=${row.attempts + 1}/${MAX_ATTEMPTS} left=${left}`);
         return {
             ok: false,
             reason: "wrong_code",
             message: left > 0
-                ? `Incorrect code. ${left} attempt${left === 1 ? "" : "s"} left.`
-                : "Too many failed attempts. Please request a new code.",
+                ? `Incorrect code.${hint} ${left} attempt${left === 1 ? "" : "s"} left.`
+                : "Too many failed attempts. Please tap Resend for a fresh code.",
         };
     }
     // Success — mark code used + update user
@@ -192,6 +243,17 @@ async function verifyCode(userId, channel, submitted) {
     else {
         await db_1.pool.query(`UPDATE users SET phone_verified = true, phone_verified_at = NOW(), updated_at = NOW() WHERE id = $1`, [userId]);
     }
+    // 2026-08 (Tony's "verify not responsive" report): drop the server-side
+    // /api/auth/user cache for this user so the very next request returns the
+    // fresh email_verified=true state instead of a stale unverified one.
+    // Without this, the banner + Pro gates kept showing as unverified for
+    // up to 5 s after a successful verify — users thought nothing happened
+    // and hit Verify repeatedly, each time overwriting the same result.
+    try {
+        const { invalidateAuthUserCache } = await Promise.resolve().then(() => __importStar(require("../lib/auth-user-cache")));
+        invalidateAuthUserCache(userId);
+    }
+    catch { /* non-fatal */ }
     return { ok: true, message: "Verified ✓" };
 }
 /**

@@ -363,9 +363,31 @@ function registerToolsRoutes(app, isAuthenticated, isAdmin) {
                 // CVs (e.g. David Gathoni's 5081-char plumbing CV) used to lose
                 // content mid-analysis. 12k covers ~99th percentile of real CVs.
                 const truncated = cvText.slice(0, 12000);
+                // ── 2026-08 Phase 2 optional inputs — Job Match + Country Readiness ─
+                // Accept two optional form fields from the client:
+                //   jobDescription: pastes a full JD → engine returns rich report.jobMatch
+                //   targetCountry:  ISO name (e.g. "Canada") → engine returns report.countryReadiness
+                // Both are OPTIONAL — falls back to the existing general-scan behaviour.
+                const jobDescription = String(req.body?.jobDescription ?? "")
+                    .trim()
+                    .slice(0, 8000); // JDs longer than 8k chars are outliers; truncate
+                const targetCountry = String(req.body?.targetCountry ?? "")
+                    .trim()
+                    .slice(0, 40) || null;
+                let userPromptParts = [`Analyse the following CV. Emit the full JSON report per the schema.`];
+                if (targetCountry) {
+                    userPromptParts.push(`\nTARGET COUNTRY: ${targetCountry}\n(Populate report.countryReadiness with a real readinessScore and country-specific improvements. Country conventions live in your systemPrompt.)`);
+                }
+                if (jobDescription.length >= 40) {
+                    userPromptParts.push(`\nJOB DESCRIPTION (compare CV against this):\n${jobDescription}\n(Populate report.jobMatch — set to null only if the pasted text is not actually a job description.)`);
+                }
+                else {
+                    userPromptParts.push(`\n(No job description provided — set report.jobMatch to null.)`);
+                }
+                userPromptParts.push(`\nCV TEXT:\n\n${truncated}`);
                 aiMessages = [
                     { role: "system", content: ATS_ANALYSIS_ENGINE },
-                    { role: "user", content: `Analyse the following CV. Emit the full JSON report per the schema.\n\nCV TEXT:\n\n${truncated}` },
+                    { role: "user", content: userPromptParts.join("\n") },
                 ];
             }
             else {
@@ -528,7 +550,22 @@ function registerToolsRoutes(app, isAuthenticated, isAdmin) {
             });
         }
         catch (err) {
-            console.error("[ATS Check]", err.message);
+            // 2026-08 (Tony's "free tools broken" report): categorise the failure
+            // so users see a useful message instead of a generic "please try again"
+            // when the real problem is our OpenAI key/billing.
+            const status = err?.status ?? err?.response?.status;
+            const code = err?.code ?? err?.error?.code;
+            console.error(`[ATS Check] status=${status} code=${code} msg=${err?.message}`);
+            if (status === 401 || status === 403) {
+                return res.status(503).json({
+                    message: "Our AI service is temporarily offline. Our team has been alerted — please try again in a few minutes.",
+                });
+            }
+            if (status === 429) {
+                return res.status(503).json({
+                    message: "Our AI service is at capacity right now. Please wait a minute and try again.",
+                });
+            }
             res.status(500).json({ message: "ATS check failed. Please try again." });
         }
     });

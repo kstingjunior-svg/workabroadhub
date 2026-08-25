@@ -26,6 +26,35 @@ const storage_1 = require("../storage");
 const mpesa_1 = require("../mpesa");
 const paypal_1 = require("../paypal");
 const html_sanitizer_1 = require("../lib/html-sanitizer");
+// 2026-08 SECURITY (Tony's fake-email report): every payment initiator
+// must confirm the caller's users.email_verified = true. Users signing up
+// with junk emails and paying to access the portal now hit a 403.
+async function assertEmailVerified(req, res, userId) {
+    try {
+        const { rows } = await db_1.pool.query(`SELECT email_verified, is_admin, role FROM users WHERE id = $1`, [userId]);
+        const u = rows[0];
+        if (!u) {
+            res.status(401).json({ error: "User not found" });
+            return false;
+        }
+        if (u.is_admin || u.role === "ADMIN" || u.role === "SUPER_ADMIN")
+            return true;
+        if (!u.email_verified) {
+            res.status(403).json({
+                error: "Please verify your email before paying.",
+                verificationRequired: true,
+                verificationStep: "email",
+            });
+            return false;
+        }
+        return true;
+    }
+    catch (err) {
+        console.error("[scout-jobs] verify check failed:", err?.message);
+        res.status(500).json({ error: "Verification check failed." });
+        return false;
+    }
+}
 const PRICE_KES = 200;
 const VALID_INDUSTRIES = [
     "hospitality", "care", "nursing", "farming", "driving", "construction",
@@ -175,6 +204,8 @@ function registerScoutJobsRoutes(app) {
             const userId = currentUserId(req);
             if (!userId)
                 return res.status(401).json({ error: "Please sign in to post a scout job." });
+            if (!(await assertEmailVerified(req, res, userId)))
+                return;
             const check = validateBody(req.body);
             if (!check.ok)
                 return res.status(400).json({ error: check.error });
@@ -276,6 +307,8 @@ function registerScoutJobsRoutes(app) {
             const userId = currentUserId(req);
             if (!userId)
                 return res.status(401).json({ error: "Please sign in to post a scout job." });
+            if (!(await assertEmailVerified(req, res, userId)))
+                return;
             if (!(0, paypal_1.isPayPalConfigured)()) {
                 return res.status(503).json({ error: "PayPal is temporarily unavailable. Try M-Pesa." });
             }

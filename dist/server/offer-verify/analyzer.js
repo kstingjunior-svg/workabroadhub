@@ -86,56 +86,128 @@ Rules:
 async function analyzeOffer(input) {
     // Backwards-compat: legacy callers still pass a raw data URL string.
     const normalized = typeof input === "string" ? { kind: "image", imageBase64DataUrl: input } : input;
-    let vision;
-    try {
-        // Build the user message differently for image vs. text inputs.
-        const userContent = normalized.kind === "image"
-            ? [
-                { type: "text", text: "Analyze this employment offer letter. Return the JSON only." },
-                { type: "image_url", image_url: { url: normalized.imageBase64DataUrl, detail: "high" } },
-            ]
-            : [
-                {
-                    type: "text",
-                    text: "The user uploaded a document" +
-                        (normalized.sourceFilename ? ` named "${normalized.sourceFilename}"` : "") +
-                        " (PDF or Word). Layout/font signals are not available — analyze from the extracted text only. " +
-                        "For forgeryIndicators and positiveIndicators, ONLY include signals that can be judged from text " +
-                        "(grammar quality, template-y phrasing, contradictions, missing legal boilerplate, unusual monetary demands). " +
-                        "Do NOT invent visual observations like 'pixelated logo' when you can't see the image.\n\n" +
-                        "---BEGIN OFFER LETTER TEXT---\n" +
-                        normalized.text.slice(0, 12000) + // safety cap
-                        "\n---END OFFER LETTER TEXT---\n\nReturn the JSON only.",
-                },
-            ];
+    // 2026-08 (Tony's Christopher NYAGA fix): retry-with-cleanup layer.
+    // Mixed-script offers (Arabic/English MOHRE, Chinese contracts, French
+    // Canadian) frequently trip up gpt-4o's JSON mode — the model returns
+    // prose or malformed JSON despite response_format: json_object. First
+    // attempt uses raw text; if it throws (including JSON.parse errors), we
+    // retry once with Latin-only text stripped of RTL / CJK characters and
+    // a bumped max_tokens ceiling.
+    const buildUserContent = (textInput) => normalized.kind === "image"
+        ? [
+            { type: "text", text: "Analyze this employment offer letter. Return the JSON only." },
+            { type: "image_url", image_url: { url: normalized.imageBase64DataUrl, detail: "high" } },
+        ]
+        : [
+            {
+                type: "text",
+                text: "The user uploaded a document" +
+                    (normalized.sourceFilename ? ` named "${normalized.sourceFilename}"` : "") +
+                    " (PDF or Word). Layout/font signals are not available — analyze from the extracted text only. " +
+                    "For forgeryIndicators and positiveIndicators, ONLY include signals that can be judged from text " +
+                    "(grammar quality, template-y phrasing, contradictions, missing legal boilerplate, unusual monetary demands). " +
+                    "Do NOT invent visual observations like 'pixelated logo' when you can't see the image.\n\n" +
+                    "---BEGIN OFFER LETTER TEXT---\n" +
+                    textInput.slice(0, 12000) + // safety cap
+                    "\n---END OFFER LETTER TEXT---\n\nReturn the JSON only.",
+            },
+        ];
+    const callOpenAi = async (userContent, maxTokens = 2200) => {
         const completion = await openai_1.openai.chat.completions.create({
             model: "gpt-4o",
             response_format: { type: "json_object" },
             temperature: 0.1,
-            max_tokens: 2200,
+            max_tokens: maxTokens,
             messages: [
                 { role: "system", content: SYSTEM_PROMPT },
                 { role: "user", content: userContent },
             ],
         });
         const raw = completion.choices[0]?.message?.content ?? "{}";
-        vision = JSON.parse(raw);
+        return JSON.parse(raw);
+    };
+    // Strip RTL (Arabic, Hebrew), CJK, and other non-Latin scripts that
+    // frequently break JSON emission. Keeps Latin, digits, punctuation,
+    // whitespace. Also collapses multiple blank lines.
+    const stripNonLatin = (t) => t
+        .replace(/[֐-ࣿ一-鿿぀-ヿ가-힯]+/g, " ")
+        .replace(/[ \t]{2,}/g, " ")
+        .replace(/\n{3,}/g, "\n\n");
+    let vision;
+    let attempt = 1;
+    try {
+        vision = await callOpenAi(buildUserContent(normalized.kind === "text" ? normalized.text : ""));
     }
     catch (err) {
-        // 2026-08 (Tony's debug): log EVERYTHING useful about the OpenAI
-        // error so we can tell in Render logs whether it's a real rate
-        // limit, a context-length overflow, an invalid content-type from
-        // our text path, etc. status + code + type are the fields the
-        // OpenAI SDK exposes for programmatic handling.
-        console.error(`[offer-analyzer] Analysis call failed: kind=${normalized.kind} ` +
+        console.warn(`[offer-analyzer] Attempt 1 failed: kind=${normalized.kind} ` +
             `status=${err?.status ?? "?"} code=${err?.code ?? "?"} type=${err?.type ?? "?"} ` +
             `msg="${err?.message ?? "?"}" ` +
             (normalized.kind === "text" ? `textLen=${normalized.text.length}` : ""));
-        return {
-            ok: false,
-            error: "vision_failed",
-            message: mapVisionError(err?.message ?? ""),
-        };
+        // Second attempt: only useful for text path with mixed-script content
+        // or JSON parse errors. For image errors (rate limit, invalid image,
+        // quota) retrying with the same input won't help — surface immediately.
+        const errStr = String(err?.message ?? "").toLowerCase();
+        // 2026-08 (Chris NYAGA fix): broaden JSON detection — previous regex
+        // missed "Unterminated string in JSON at position X" which is exactly
+        // what mixed-script MOHRE offers trigger. Now catches every V8 JSON
+        // parse error variant.
+        const looksLikeJsonParse = errStr.includes("unexpected token") ||
+            errStr.includes("unexpected end of json") ||
+            errStr.includes("unterminated string") ||
+            errStr.includes("in json at position") ||
+            errStr.includes("json.parse") ||
+            (errStr.includes("json") && errStr.includes("parse"));
+        const isFatal = errStr.includes("credit_balance_exhausted") ||
+            errStr.includes("insufficient_quota") ||
+            errStr.includes("rate limit") ||
+            errStr.includes("429");
+        if (normalized.kind === "text" && looksLikeJsonParse && !isFatal) {
+            try {
+                attempt = 2;
+                const cleaned = stripNonLatin(normalized.text);
+                console.warn(`[offer-analyzer] Retrying with non-Latin stripped: ` +
+                    `origLen=${normalized.text.length} cleanedLen=${cleaned.length}`);
+                // 2026-08 (Chris NYAGA fix): also add an explicit instruction on
+                // retry that the JSON output values must be plain ASCII English —
+                // this prevents the model from including problematic control chars
+                // (RTL marks, unescaped newlines inside strings) that break parsing.
+                // Bumped max_tokens to 4000 to give the model plenty of room to
+                // finish valid JSON.
+                const retryContent = buildUserContent(cleaned);
+                retryContent[0].text +=
+                    "\n\nCRITICAL: Emit VALID JSON only. All string values must contain " +
+                        "plain ASCII English only (no Arabic, Hebrew, Chinese, or other " +
+                        "non-Latin scripts inside strings). No literal newlines or unescaped " +
+                        "quotes inside string values. If the input contains untranslated " +
+                        "non-Latin text you MUST NOT include it in the output — translate " +
+                        "or transliterate to English.";
+                vision = await callOpenAi(retryContent, 4000);
+            }
+            catch (err2) {
+                console.error(`[offer-analyzer] Analysis call failed on retry: kind=${normalized.kind} ` +
+                    `status=${err2?.status ?? "?"} code=${err2?.code ?? "?"} type=${err2?.type ?? "?"} ` +
+                    `msg="${err2?.message ?? "?"}"`);
+                return {
+                    ok: false,
+                    error: "vision_failed",
+                    message: mapVisionError(err2?.message ?? "", normalized.kind),
+                };
+            }
+        }
+        else {
+            console.error(`[offer-analyzer] Analysis call failed: kind=${normalized.kind} ` +
+                `status=${err?.status ?? "?"} code=${err?.code ?? "?"} type=${err?.type ?? "?"} ` +
+                `msg="${err?.message ?? "?"}" ` +
+                (normalized.kind === "text" ? `textLen=${normalized.text.length}` : ""));
+            return {
+                ok: false,
+                error: "vision_failed",
+                message: mapVisionError(err?.message ?? "", normalized.kind),
+            };
+        }
+    }
+    if (attempt === 2) {
+        console.log(`[offer-analyzer] Retry succeeded after Latin-only cleanup`);
     }
     // Map vision output to structured fields
     const fields = {
@@ -542,7 +614,7 @@ function clamp0100(v) {
         return 0;
     return Math.max(0, Math.min(100, Math.round(n)));
 }
-function mapVisionError(msg) {
+function mapVisionError(msg, kind = "image") {
     const lower = (msg || "").toLowerCase();
     // Billing / quota exhaustion — checked BEFORE the generic "429" branch
     // because OpenAI billing errors ALSO carry status 429, and the two need
@@ -558,16 +630,40 @@ function mapVisionError(msg) {
         return "Our verification AI is handling many requests right now. Please wait 30 seconds and try again.";
     }
     if (lower.includes("context_length") || lower.includes("maximum context") || lower.includes("too long")) {
-        return "This document is very long — try uploading just the first 2-3 pages, or a photo of the key page (offer details + salary + signatures).";
+        return kind === "text"
+            ? "This offer letter is longer than we can analyse in one go. Please upload just the offer details page (skip the T&Cs and appendices)."
+            : "This document is very long — try uploading just the first 2-3 pages, or a photo of the key page (offer details + salary + signatures).";
     }
     if (lower.includes("invalid_image") || lower.includes("could not process image")) {
         return "We couldn't read that image. Please try a clearer JPG/PNG photo — good lighting, no glare.";
     }
     if (lower.includes("timeout") || lower.includes("timed out")) {
-        return "The verification took longer than expected. Please try again with a smaller or clearer image.";
+        return kind === "text"
+            ? "The verification took longer than expected. Please try again."
+            : "The verification took longer than expected. Please try again with a smaller or clearer image.";
     }
     if (lower.includes("connection") || lower.includes("network") || lower.includes("econnrefused")) {
         return "We couldn't reach the verification service. Please check your connection and try again.";
     }
-    return "We couldn't complete verification for this document. Please try again with a clearer photo or scan.";
+    // 2026-08 (Tony): JSON parse failure — model returned prose instead of
+    // JSON despite response_format: json_object. Rare but happens on mixed-
+    // language content (e.g. Arabic/English MOHRE offers) or when the model
+    // refuses. Guide the user without falsely blaming a "clearer scan".
+    if (lower.includes("unexpected token") ||
+        lower.includes("json") && lower.includes("parse") ||
+        lower.includes("unexpected end of json")) {
+        return kind === "text"
+            ? "Our AI struggled to structure this offer letter. If it contains mixed languages or an unusual layout, try uploading a photo of the English page only, or paste just the key details (employer, role, salary, dates) into the classic verifier."
+            : "Our AI struggled to structure this document. Please try a clearer photo of just the offer details page.";
+    }
+    // 2026-08 (Tony): OpenAI content-policy refusal (rare for offer letters,
+    // but possible if the offer contains sensitive personal data).
+    if (lower.includes("content_policy") || lower.includes("safety_policy") || lower.includes("filtered")) {
+        return "Our AI flagged this content for manual review. Please contact us via WhatsApp and we'll verify it personally.";
+    }
+    // 2026-08: context-aware fallback so we don't tell a PDF user "try a
+    // clearer scan" when they never uploaded a scan.
+    return kind === "text"
+        ? "We couldn't complete verification for this document. Please try again in a minute, or paste just the offer details (employer, role, salary, dates) into the classic verifier."
+        : "We couldn't complete verification for this document. Please try again with a clearer photo or scan.";
 }
