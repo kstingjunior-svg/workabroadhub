@@ -144,9 +144,16 @@ export default function AccountVerifyPage() {
     try {
       const result = await jsonPost("/api/auth/send-email-code", {}) as any;
       setEmailCodeSent(true);
+      // 2026-08 (deliverability): show last-2-digits hint so users can
+      // pick the right email even when it's buried in Spam / Promotions
+      // with dozens of other messages from us.
+      const hint = result?.codeHint;
       toast({
-        title: "Code sent",
-        description: result?.message || "Check your inbox AND your spam folder for a 6-digit code.",
+        title: "Code sent — check inbox AND spam folder",
+        description: hint
+          ? `Look for the email with a code ending in ${hint}. From: Tony · Subject: Your sign-in code from Tony`
+          : "Look for the email from Tony · Subject: 'Your sign-in code from Tony'. Check spam if you don't see it.",
+        duration: 15000,
       });
     } catch (err: any) {
       // 2026-06: surface delivery failure clearly and offer fallback path.

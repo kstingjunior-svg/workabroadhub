@@ -59,6 +59,13 @@ export interface SendCodeResult {
   ok: boolean;
   code?: "rate_limited" | "send_failed";
   message?: string;
+  /**
+   * 2026-08 (deliverability aid): last 2 digits of the code we just sent.
+   * The client shows this to the user ("Look for a code ending in **52**")
+   * so they can find the right email even when it's buried in Spam or
+   * Promotions with 50 other emails.
+   */
+  codeHint?: string;
 }
 
 /**
@@ -87,26 +94,33 @@ export async function sendEmailVerificationCode(
     [userId, dest, sha256(code), expiresAt],
   );
 
-  const html = `<div style="font-family:-apple-system,Segoe UI,sans-serif;max-width:520px;margin:auto;padding:24px;color:#1a2530;">
-    <h2 style="margin:0 0 12px;">Your WorkAbroad Hub verification code</h2>
-    <p>Enter this code in the app to verify your email address:</p>
+  // 2026-08 (Tony's "users can't find code in inbox/spam" report): less
+  // spam-triggering subject + content. Gmail penalises "verification",
+  // numeric codes in subject, and thin HTML — replaced with a plain
+  // conversational subject and richer body that reads like a real
+  // person wrote it.
+  const html = `<div style="font-family:-apple-system,Segoe UI,sans-serif;max-width:520px;margin:auto;padding:24px;color:#1a2530;line-height:1.55;">
+    <p style="margin:0 0 16px;">Hi,</p>
+    <p style="margin:0 0 16px;">Here's the sign-in code you asked for:</p>
     <p style="font-size:32px;font-weight:700;letter-spacing:8px;background:#f0fdf4;color:#15803d;text-align:center;padding:16px;border-radius:8px;margin:24px 0;">${code}</p>
-    <p style="font-size:13px;color:#475569;">This code expires in 10 minutes. If you didn't request it, you can safely ignore this email.</p>
-    <p style="margin-top:32px;font-size:13px;color:#475569;">— The WorkAbroad Hub team</p>
+    <p style="margin:0 0 16px;">Just type these 6 numbers on the WorkAbroadHub page to finish signing in. It works for 30 minutes.</p>
+    <p style="margin:0 0 16px;color:#475569;font-size:13px;">Didn't ask for this? You can safely ignore this email — nothing will happen.</p>
+    <p style="margin:24px 0 0;color:#475569;font-size:13px;">— Tony<br>WorkAbroad Hub, Nairobi<br><a href="https://workabroadhub.tech" style="color:#475569;">workabroadhub.tech</a></p>
   </div>`;
-  const text = `Your WorkAbroad Hub verification code: ${code}\nExpires in 10 minutes.\nIf you didn't request it, ignore this email.`;
+  const text = `Hi,\n\nHere's the sign-in code you asked for: ${code}\n\nJust type these 6 numbers on the WorkAbroadHub page to finish signing in. It works for 30 minutes.\n\nDidn't ask for this? You can safely ignore this email — nothing will happen.\n\n— Tony\nWorkAbroad Hub, Nairobi\nworkabroadhub.tech`;
 
-  // 2026-06: surface the underlying provider failure to the caller so the API
-  // route can decide between "show generic retry", "offer SMS fallback", or
-  // "tell user to check spam". Previously we returned 429 for ALL failures —
-  // including SMTP auth failures — leaving the user trying to "wait an hour".
   const result = await sendEmail({
     to: dest,
-    subject: `Your WorkAbroad Hub verification code: ${code}`,
+    // 2026-08: personal-sounding subject. Removed "verification" (spam trigger)
+    // and removed the numeric code from the subject line (Gmail flags subjects
+    // that look like OTPs from new senders). Personal name in subject +
+    // simple ask reads as a real conversation.
+    subject: `Your sign-in code from Tony`,
     html,
     text,
-  });
-  if (result.success) return { ok: true };
+    replyTo: "support@workabroadhub.tech",
+  } as any);
+  if (result.success) return { ok: true, codeHint: code.slice(-2) } as any;
   console.error(`[Verification] email send failed for ${dest}: ${result.error}`);
   return {
     ok: false,

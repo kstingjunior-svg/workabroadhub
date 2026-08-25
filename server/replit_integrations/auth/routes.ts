@@ -805,7 +805,13 @@ export function registerAuthRoutes(app: Express) {
         offerSmsFallback: result.code === "send_failed",
       });
     }
-    res.json({ ok: true, message: "Verification code sent. Check your inbox (and spam)." });
+    // 2026-08 (deliverability): pass last-2-digits hint to the client so
+    // users can find the right email even when it's buried in Spam.
+    res.json({
+      ok: true,
+      message: "Verification code sent. Check your inbox (and spam).",
+      codeHint: (result as any).codeHint,
+    });
   });
 
   app.post("/api/auth/send-phone-code", async (req: Request, res: Response) => {

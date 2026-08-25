@@ -97,9 +97,17 @@ export function EmailVerifyBanner() {
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
+        // 2026-08 (deliverability): tell users EXACTLY what to look for in
+        // their inbox — from name, subject, and last-2-digits of the code.
+        // Prevents "I can't find the email" tickets even when Gmail routes
+        // us to Spam or Promotions.
+        const hint = (data as any)?.codeHint;
         toast({
-          title: "Verification code sent",
-          description: `Check your inbox and spam folder for a code from WorkAbroadHub. It expires in 15 minutes.`,
+          title: "Code sent — check inbox AND spam folder",
+          description: hint
+            ? `Look for an email from Tony · code ending in ${hint} · Subject: 'Your sign-in code from Tony'. It works for 30 minutes.`
+            : "Look for an email from Tony · Subject: 'Your sign-in code from Tony'. Check spam if you don't see it.",
+          duration: 15000,
         });
       } else {
         toast({
