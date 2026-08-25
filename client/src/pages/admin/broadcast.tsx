@@ -24,7 +24,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Send, Users, RefreshCw, MessageSquare, AlertTriangle } from "lucide-react";
+import { Loader2, Send, Users, RefreshCw, MessageSquare, AlertTriangle, Mail } from "lucide-react";
 
 const DEFAULT_MESSAGE =
   "Hi! Good news — our email verification issue is now fixed. Please refresh WorkAbroadHub and tap 'Resend' in the red banner at the top. You'll get a fresh 6-digit code within 30 seconds. Sorry for the delay! – Tony";
@@ -53,6 +53,38 @@ export default function AdminBroadcastPage() {
   const [channel, setChannel] = useState<"whatsapp" | "sms">("whatsapp");
   const [sending, setSending] = useState(false);
   const [progress, setProgress] = useState<BatchResult[]>([]);
+  const [emailSending, setEmailSending] = useState(false);
+  const [emailResult, setEmailResult] = useState<{ total: number; successful: number; failed: number } | null>(null);
+
+  async function sendEmailBroadcast() {
+    if (!confirm(`Send a FRESH verification code email to every unverified user in the last ${hoursBack} hours? This uses Resend (already fixed) and cannot be undone.`)) return;
+    setEmailSending(true);
+    setEmailResult(null);
+    try {
+      const csrfToken = await fetchCsrfToken();
+      const res = await fetch("/api/admin/broadcast-verify-code", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken },
+        body: JSON.stringify({ hours: hoursBack }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message || `Failed (${res.status})`);
+      setEmailResult({ total: data.total, successful: data.successful, failed: data.failed });
+      toast({
+        title: "Emails sent",
+        description: `${data.successful}/${data.total} verification codes delivered to inboxes.`,
+      });
+    } catch (err: any) {
+      toast({
+        title: "Email broadcast failed",
+        description: err?.message ?? "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setEmailSending(false);
+    }
+  }
 
   async function loadUsers() {
     setLoading(true);
@@ -163,6 +195,50 @@ export default function AdminBroadcastPage() {
         <p className="text-sm text-muted-foreground mt-1">
           Send a one-tap WhatsApp (falls back to SMS) to users who haven't verified their email yet.
         </p>
+      </div>
+
+      {/* 2026-08 (Resend recovery): fastest recovery path — resend the actual
+          verification code via email. No opt-in windows, no carrier setup,
+          works instantly since Resend is fixed. Users get a fresh 6-digit
+          code they can enter immediately. */}
+      <Card className="border-2 border-green-500/40 bg-green-50/40 dark:bg-green-950/20">
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Mail className="h-5 w-5 text-green-700 dark:text-green-400" />
+            RECOMMENDED: Email a fresh verification code
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm">
+            Send a brand-new 6-digit verification code to <b>every unverified user</b> from the last{" "}
+            <b>{hoursBack} hours</b>. They open the email, get the code, enter it — done.
+            Fastest possible recovery. Works instantly since Resend is now fixed.
+          </p>
+          <Button
+            onClick={sendEmailBroadcast}
+            disabled={emailSending}
+            className="w-full bg-green-700 hover:bg-green-800 text-white"
+            data-testid="btn-broadcast-email"
+          >
+            {emailSending
+              ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Emailing all unverified users…</>
+              : <><Mail className="h-4 w-4 mr-2" /> Email fresh code to all unverified users</>}
+          </Button>
+          {emailResult && (
+            <div className="rounded border border-green-300 dark:border-green-800 bg-white dark:bg-black/30 p-3 text-sm">
+              <span className="text-green-700 dark:text-green-400 font-semibold">
+                {emailResult.successful} / {emailResult.total} delivered
+              </span>
+              {emailResult.failed > 0 && (
+                <span className="text-red-600 ml-2">· {emailResult.failed} failed</span>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <div className="text-center text-xs text-muted-foreground">
+        — or use SMS / WhatsApp as backup —
       </div>
 
       <Card>

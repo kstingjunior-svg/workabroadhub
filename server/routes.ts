@@ -16371,6 +16371,61 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
     }
   });
 
+  // 2026-08 (Resend outage recovery): fire a fresh verification code email
+  // to every unverified user in bulk. Uses the same sendEmailVerificationCode
+  // helper the normal Resend button uses, so the code is a real one that
+  // works. Pauses 200ms between sends to stay under Resend's rate limit.
+  app.post("/api/admin/broadcast-verify-code", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const hours = Math.min(720, Math.max(1, Number(req.body?.hours) || 72));
+      const { rows } = await pool.query<{ id: string; email: string; first_name: string | null }>(
+        `SELECT id, email, first_name
+           FROM users
+          WHERE email_verified = false
+            AND is_admin = false
+            AND (role IS NULL OR role NOT IN ('ADMIN','SUPER_ADMIN'))
+            AND email IS NOT NULL AND email <> ''
+            AND email NOT LIKE '%@deleted.workabroadhub.local'
+            AND created_at > NOW() - (INTERVAL '1 hour' * $1)
+          ORDER BY created_at DESC`,
+        [hours],
+      );
+      const { sendEmailVerificationCode } = await import("./services/identityVerification");
+
+      let successful = 0;
+      let failed = 0;
+      const failures: Array<{ email: string; reason: string }> = [];
+
+      for (const u of rows) {
+        try {
+          const result = await sendEmailVerificationCode(u.id, u.email);
+          if (result.ok) {
+            successful++;
+          } else {
+            failed++;
+            failures.push({ email: u.email, reason: result.code || "unknown" });
+          }
+        } catch (err: any) {
+          failed++;
+          failures.push({ email: u.email, reason: err?.message?.slice(0, 100) || "exception" });
+        }
+        // Rate limit — 200ms between sends (5/sec, well under Resend's 10/sec)
+        await new Promise((r) => setTimeout(r, 200));
+      }
+
+      console.log(`[admin] broadcast-verify-code: ${successful}/${rows.length} sent (${failed} failed) hours=${hours}`);
+      res.json({
+        total:      rows.length,
+        successful,
+        failed,
+        failures:   failures.slice(0, 20), // sample failures for admin UI
+      });
+    } catch (err: any) {
+      console.error("[admin/broadcast-verify-code] error:", err?.message);
+      res.status(500).json({ message: "Broadcast failed", error: err?.message });
+    }
+  });
+
   app.post("/api/admin/broadcast-sms", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const { phones, message, channel } = req.body;
