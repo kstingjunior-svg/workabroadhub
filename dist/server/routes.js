@@ -1785,11 +1785,17 @@ Crawl-delay: 1`);
                     .where((0, drizzle_orm_1.eq)(schema_1.consultationBookings.status, "completed")),
                 // Community agency reports (proxy for total reviews/feedback submitted)
                 db_1.db.select({ c: (0, drizzle_orm_1.count)() }).from(schema_1.agencyReports),
-                // Distinct countries served from verified portals
-                db_1.db.execute((0, drizzle_orm_1.sql) `SELECT COUNT(DISTINCT country)::int AS c FROM verified_portals WHERE is_active = true`),
+                // 2026-08 (Tony's "inconsistent numbers" fix): count from the
+                // canonical `countries` table (this is what powers /country/:code
+                // pages), not from verified_portals — the latter was frozen at
+                // ~7 rows and never picked up new country hubs like Luxembourg,
+                // Lithuania, Turkey, Ireland, Netherlands, New Zealand, Poland,
+                // Kuwait, Oman that were added later. Now the number reflects
+                // reality: 15 country hubs.
+                db_1.db.execute((0, drizzle_orm_1.sql) `SELECT COUNT(*)::int AS c FROM countries WHERE is_active = true`),
             ]);
             const activeVisitors = await storage_1.storage.getActiveUsers(10);
-            const countriesServed = Math.max(7, Number((distinctCountries.rows?.[0]?.c) ?? 0));
+            const countriesServed = Number((distinctCountries.rows?.[0]?.c) ?? 0) || 15;
             // 2026-06 UNIFY: count online users from the SAME source the admin
             // dashboard uses — the `active_sessions` table with is_online = true.
             // Previously the home dashboard read the in-memory sessionMap (which
