@@ -6260,7 +6260,7 @@ Crawl-delay: 1`);
       mpesaEnv: process.env.MPESA_ENV || "production",
       shortcode: process.env.MPESA_SHORTCODE || "4153025",
       warning: !isPublic
-        ? "⚠️ Callback URL is NOT public. Set APP_URL=https://your-deployed-app.replit.app in environment secrets."
+        ? "⚠️ Callback URL is NOT public. Set APP_URL=https://workabroadhub.tech in Render environment variables."
         : null,
       instruction: "This URL must be registered in the Safaricom Daraja dashboard as the Callback URL for your shortcode.",
     });

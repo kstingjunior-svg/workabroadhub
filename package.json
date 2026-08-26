@@ -1,8 +1,16 @@
 {
-  "name": "rest-express",
+  "name": "workabroadhub",
   "version": "1.0.0",
   "type": "commonjs",
-  "license": "MIT",
+  "license": "UNLICENSED",
+  "private": true,
+  "author": {
+    "name": "Antony Macloud",
+    "email": "support@workabroadhub.tech",
+    "url": "https://workabroadhub.tech"
+  },
+  "description": "WorkAbroad Hub — Kenya's leading platform for verified overseas employment and career consultation. Built and maintained by Antony Macloud.",
+  "homepage": "https://workabroadhub.tech",
   "engines": {
     "node": ">=20.19.0"
   },

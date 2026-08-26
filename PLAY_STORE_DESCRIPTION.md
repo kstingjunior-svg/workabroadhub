@@ -57,9 +57,13 @@ Access professional services to boost your application:
 WorkAbroad Hub is a career consultation service, NOT a recruitment agency. We do not sell jobs, guarantee employment, or process visa applications. All job applications are made directly by you on third-party platforms. We provide professional career guidance and curated resources.
 
 **Data Privacy:**
-- Secure authentication via Replit Auth
+- Secure email + password authentication with mandatory verification
 - No personal data sold to third parties
 - Minimal data collection policy
+- Fully compliant with Kenya Data Protection Act 2019
+
+**Developer:**
+WorkAbroad Hub is built and maintained by Antony Macloud, an independent Kenyan software developer based in Nairobi.
 
 **Consultation Fee:**
 One-time fee of KES 4,500 for your career consultation package, which includes:
@@ -197,7 +201,7 @@ class MainActivity : AppCompatActivity() {
                 val url = request?.url?.toString() ?: return false
                 
                 // Only allow your app's domain
-                return if (url.startsWith("https://your-app-domain.replit.app")) {
+                return if (url.startsWith("https://workabroadhub.tech")) {
                     false // Load in WebView
                 } else {
                     // Open external links in browser
@@ -209,7 +213,7 @@ class MainActivity : AppCompatActivity() {
         }
         
         // Load your web app
-        webView.loadUrl("https://your-app-domain.replit.app")
+        webView.loadUrl("https://workabroadhub.tech")
     }
     
     // Handle back button
