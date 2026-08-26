@@ -19,7 +19,7 @@ import { AdminQuickPanel } from "@/components/admin-quick-panel";
 import { FirebaseConnectionBanner } from "@/components/firebase-connection-banner";
 import { SessionGuard } from "@/components/session-guard";
 import { ErrorBoundary } from "@/components/error-boundary";
-import { lazy, Suspense, ComponentType, useEffect, useState } from "react";
+import { lazy, Suspense, ComponentType, useEffect, useRef, useState } from "react";
 import { lazyWithRetry } from "@/lib/lazy-with-retry";
 import { prefetchCriticalData } from "./lib/queryClient";
 import { startServicesPriceWatcher } from "@/lib/services";
@@ -122,6 +122,9 @@ const ReportScam = lazyWithRetry(() => import("@/pages/report-scam"));
 const ScamWall = lazyWithRetry(() => import("@/pages/scam-wall"));
 const GreenCard = lazyWithRetry(() => import("@/pages/green-card"));
 const VisaGuides = lazyWithRetry(() => import("@/pages/visa-guides"));
+// 2026-08 (Tony's request): visit/tourist visa hub for all 15 covered
+// countries. Public route — no auth required (top-of-funnel SEO play).
+const VisitVisas = lazyWithRetry(() => import("@/pages/visit-visas"));
 const VisaCountry = lazyWithRetry(() => import("@/pages/visa-country"));
 const VisaAssistant = lazyWithRetry(() => import("@/pages/visa-assistant"));
 const BulkApply = lazyWithRetry(() => import("@/pages/bulk-apply"));
@@ -444,6 +447,7 @@ const LazyReportScam = withSuspense(ReportScam);
 const LazyScamWall = withSuspense(ScamWall);
 const LazyGreenCard = withSuspense(GreenCard);
 const LazyVisaGuides = withSuspense(VisaGuides);
+const LazyVisitVisas = withSuspense(VisitVisas);
 const LazyVisaCountry = withSuspense(VisaCountry);
 const LazyVisaAssistant = withSuspense(VisaAssistant);
 const LazyBulkApply = withSuspense(BulkApply);
@@ -710,6 +714,7 @@ function AuthenticatedRoutes() {
       <Route path="/data-safety" component={LazyDataSafety} />
       <Route path="/green-card" component={LazyGreenCard} />
       <Route path="/visa-guides" component={LazyVisaGuides} />
+      <Route path="/visit-visas" component={LazyVisitVisas} />
       <Route path="/visa/:country" component={LazyVisaCountry} />
       <Route path="/visa-assistant" component={LazyVisaAssistant} />
       <Route path="/bulk-apply" component={LazyBulkApply} />
@@ -775,9 +780,18 @@ function Router() {
     return stop;
   }, []);
 
-  // After Replit OIDC login, honour the stored redirect path
+  // After Replit OIDC login, honour the stored redirect path.
+  // 2026-08 (Tony's "app keeps jumping" fix): guard against firing more than
+  // once per session. The old version fired on EVERY user change — including
+  // the moment the email/password login modal populated the auth cache —
+  // which raced the modal's own navigate() and made the app visibly bounce
+  // between pages. Use a ref so we only honour the redirect on the initial
+  // "already-authenticated on page load" path (Replit OIDC returns via full
+  // page navigation, so this effect running once at mount is the right hook).
+  const oidcRedirectHandled = useRef(false);
   useEffect(() => {
-    if (user) {
+    if (user && !oidcRedirectHandled.current) {
+      oidcRedirectHandled.current = true;
       const redirect = localStorage.getItem("auth_redirect");
       if (redirect && redirect !== "/" && redirect !== "/dashboard") {
         localStorage.removeItem("auth_redirect");
