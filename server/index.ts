@@ -723,6 +723,43 @@ app.use((req, res, next) => {
       console.error("[Server] ❌ ensureNeaAgenciesSeeded failed:", err?.message);
     }
 
+    // 2026-08 (Tony's "live NEA sync" request): create the nea_sync_runs
+    // table if missing and start the weekly cron. Auto-fetch attempts fire
+    // every Monday 02:00 EAT. When NEAIMS blocks/JS-renders, admins get an
+    // "error, admin paste required" run row and can trigger a manual sync
+    // via /admin/nea-sync.
+    try {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS nea_sync_runs (
+          id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+          started_at        TIMESTAMP   NOT NULL DEFAULT NOW(),
+          finished_at       TIMESTAMP,
+          source            VARCHAR(32) NOT NULL,
+          status            VARCHAR(32) NOT NULL,
+          triggered_by      VARCHAR(128),
+          raw_bytes         INTEGER,
+          fetched_rows      INTEGER    DEFAULT 0,
+          new_agencies      INTEGER    DEFAULT 0,
+          updated_agencies  INTEGER    DEFAULT 0,
+          expired_agencies  INTEGER    DEFAULT 0,
+          revoked_agencies  INTEGER    DEFAULT 0,
+          unchanged         INTEGER    DEFAULT 0,
+          active_after      INTEGER,
+          expired_after     INTEGER,
+          error_message     TEXT,
+          notes             TEXT
+        );
+        CREATE INDEX IF NOT EXISTS nea_sync_runs_started_at_idx ON nea_sync_runs (started_at DESC);
+        CREATE INDEX IF NOT EXISTS nea_sync_runs_status_idx     ON nea_sync_runs (status);
+      `);
+      const { registerAdminNEASyncRoutes } = await import("./routes/admin-nea-sync");
+      registerAdminNEASyncRoutes(app);
+      const { startNEASyncScheduler } = await import("./lib/nea-sync/scheduler");
+      startNEASyncScheduler();
+    } catch (err: any) {
+      console.error("[Server] ❌ NEA sync bootstrap failed:", err?.message);
+    }
+
     // Wire Sentry's Express error handler AFTER all routes are registered
     // but BEFORE any custom 500 middleware. No-op if Sentry isn't initialised.
     attachSentryErrorHandler(app);

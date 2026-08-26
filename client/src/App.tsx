@@ -150,6 +150,10 @@ const KenyaCareersJob = lazyWithRetry(() => import("@/pages/kenya-careers-job"))
 const KenyaCareersMyApplications = lazyWithRetry(() => import("@/pages/kenya-careers-my-applications"));
 const KenyaCareersAdmin = lazyWithRetry(() => import("@/pages/admin/kenya-careers-admin"));
 const AdminBroadcast = lazyWithRetry(() => import("@/pages/admin/broadcast"));
+// 2026-08: live NEA sync admin panel — trigger auto-fetch, paste NEA export,
+// view sync history. Admin-only endpoints; the page shows permission errors
+// to non-admins.
+const AdminNEASync = lazyWithRetry(() => import("@/pages/admin/nea-sync"));
 const IeltsInterestAdmin = lazyWithRetry(() => import("@/pages/admin/ielts-interest"));
 const KenyaCareersCompany = lazyWithRetry(() => import("@/pages/kenya-careers-company"));
 const KenyaCareersEmployers = lazyWithRetry(() => import("@/pages/kenya-careers-employers"));
@@ -408,6 +412,7 @@ const LazyKenyaCareersJob = withSuspense(KenyaCareersJob);
 const LazyKenyaCareersMyApplications = withSuspense(KenyaCareersMyApplications);
 const LazyKenyaCareersAdmin = withSuspense(KenyaCareersAdmin);
 const LazyAdminBroadcast = withSuspense(AdminBroadcast);
+const LazyAdminNEASync = withSuspense(AdminNEASync);
 const LazyIeltsInterestAdmin = withSuspense(IeltsInterestAdmin);
 const LazyKenyaCareersCompany = withSuspense(KenyaCareersCompany);
 const LazyKenyaCareersEmployers = withSuspense(KenyaCareersEmployers);
@@ -613,6 +618,7 @@ function AuthenticatedRoutes() {
       <Route path="/kenya-careers/my-applications" component={LazyKenyaCareersMyApplications} />
       <Route path="/admin/kenya-careers" component={LazyKenyaCareersAdmin} />
       <Route path="/admin/broadcast" component={LazyAdminBroadcast} />
+      <Route path="/admin/nea-sync" component={LazyAdminNEASync} />
       <Route path="/admin/ielts-interest" component={LazyIeltsInterestAdmin} />
       <Route path="/kenya-careers/company/:slug" component={LazyKenyaCareersCompany} />
       <Route path="/employers" component={LazyKenyaCareersEmployers} />
