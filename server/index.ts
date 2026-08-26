@@ -752,8 +752,11 @@ app.use((req, res, next) => {
         CREATE INDEX IF NOT EXISTS nea_sync_runs_started_at_idx ON nea_sync_runs (started_at DESC);
         CREATE INDEX IF NOT EXISTS nea_sync_runs_status_idx     ON nea_sync_runs (status);
       `);
-      const { registerAdminNEASyncRoutes } = await import("./routes/admin-nea-sync");
-      registerAdminNEASyncRoutes(app);
+      // 2026-08 fix: don't re-register the admin routes here — routes.ts
+      // already wires them via `registerAdminNeaSyncRoutes(app, isAuthenticated,
+      // isAdmin)`. Calling both would double-register handlers, and the
+      // earlier attempt broke boot with a name-mismatch TypeError. This
+      // block now only starts the weekly scheduler.
       const { startNEASyncScheduler } = await import("./lib/nea-sync/scheduler");
       startNEASyncScheduler();
     } catch (err: any) {

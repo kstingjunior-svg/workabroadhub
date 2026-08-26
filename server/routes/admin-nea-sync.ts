@@ -1,40 +1,70 @@
 /**
  * Admin NEA-sync routes.
  *
- *   POST /api/admin/nea-sync/paste
- *     body: { raw: string }                — CSV/TSV/HTML pasted from NEAIMS
- *     Runs the pipeline and returns a SyncSummary. Admin-only.
+ * Called from server/routes.ts as:
+ *   registerAdminNeaSyncRoutes(app, isAuthenticated, isAdmin)
  *
- *   POST /api/admin/nea-sync/auto
- *     Triggers an immediate auto-fetch (same as the weekly cron). Admin-only.
+ * Two sets of routes with alias URLs so both the pre-existing spec
+ * (/run /runs /latest) and the admin UI I built (/paste /auto /history /last)
+ * work off the same handlers:
  *
- *   GET  /api/admin/nea-sync/history?limit=20
- *     Returns the last N sync runs for the admin dashboard.
- *
- *   GET  /api/admin/nea-sync/last
- *     Returns just the most recent run (for the small "Last synced" widget).
+ *   POST /api/admin/nea-sync/run     (alias: /auto)
+ *   POST /api/admin/nea-sync/paste                     — paste NEA export
+ *   GET  /api/admin/nea-sync/runs    (alias: /history) — recent runs
+ *   GET  /api/admin/nea-sync/latest  (alias: /last)    — most recent run
  */
 
-import type { Express, Request, Response } from "express";
+import type { Express, Request, Response, RequestHandler } from "express";
 import { pool } from "../db";
 import { runSyncFromSource, runAutoSync } from "../lib/nea-sync";
 
-async function isAdmin(req: Request): Promise<boolean> {
-  const userId = (req.session as any)?.customUserId as string | undefined;
-  if (!userId) return false;
-  const { rows } = await pool.query<{ is_admin: boolean; role: string }>(
-    `SELECT is_admin, role FROM users WHERE id = $1`,
-    [userId],
-  );
-  const u = rows[0];
-  return !!(u?.is_admin || u?.role === "ADMIN" || u?.role === "SUPER_ADMIN");
-}
+/**
+ * Backwards-compatible signature. routes.ts calls this with
+ * (app, isAuthenticated, isAdmin) — accept both args, fall back to an
+ * inline admin check if either middleware isn't passed.
+ */
+export function registerAdminNeaSyncRoutes(
+  app: Express,
+  isAuthenticated?: RequestHandler,
+  isAdmin?: RequestHandler,
+): void {
+  // If the caller didn't hand us middleware, use these inline guards so
+  // the routes are still admin-only (no accidental public exposure).
+  const authGuard: RequestHandler = isAuthenticated ?? ((req, res, next) => {
+    const userId = (req.session as any)?.customUserId as string | undefined;
+    if (!userId) return res.status(401).json({ message: "Please sign in first." });
+    next();
+  });
 
-export function registerAdminNEASyncRoutes(app: Express): void {
-  // ── POST /api/admin/nea-sync/paste ─────────────────────────────────────
-  app.post("/api/admin/nea-sync/paste", async (req: Request, res: Response) => {
-    if (!(await isAdmin(req))) return res.status(403).json({ message: "Admin only." });
+  const adminGuard: RequestHandler = isAdmin ?? (async (req, res, next) => {
+    const userId = (req.session as any)?.customUserId as string | undefined;
+    if (!userId) return res.status(401).json({ message: "Please sign in first." });
+    const { rows } = await pool.query<{ is_admin: boolean; role: string }>(
+      `SELECT is_admin, role FROM users WHERE id = $1`,
+      [userId],
+    );
+    const u = rows[0];
+    if (!u?.is_admin && u?.role !== "ADMIN" && u?.role !== "SUPER_ADMIN") {
+      return res.status(403).json({ message: "Admin only." });
+    }
+    next();
+  });
 
+  // ── Trigger endpoints ──────────────────────────────────────────────────
+  const autoHandler = async (req: Request, res: Response) => {
+    const userId = (req.session as any)?.customUserId as string;
+    try {
+      const summary = await runAutoSync(userId);
+      return res.json({ ok: summary.status !== "error", summary });
+    } catch (err: any) {
+      return res.status(500).json({ message: err?.message ?? "Auto-sync failed." });
+    }
+  };
+  app.post("/api/admin/nea-sync/run",  authGuard, adminGuard, autoHandler);
+  app.post("/api/admin/nea-sync/auto", authGuard, adminGuard, autoHandler);
+
+  // ── Paste endpoint ─────────────────────────────────────────────────────
+  app.post("/api/admin/nea-sync/paste", authGuard, adminGuard, async (req, res) => {
     const raw = String(req.body?.raw ?? "").trim();
     if (!raw || raw.length < 100) {
       return res.status(400).json({
@@ -44,7 +74,6 @@ export function registerAdminNEASyncRoutes(app: Express): void {
     if (raw.length > 5_000_000) {
       return res.status(413).json({ message: "Payload too large (>5MB)." });
     }
-
     const userId = (req.session as any)?.customUserId as string;
     try {
       const summary = await runSyncFromSource(raw, "admin_paste", userId);
@@ -54,22 +83,8 @@ export function registerAdminNEASyncRoutes(app: Express): void {
     }
   });
 
-  // ── POST /api/admin/nea-sync/auto ──────────────────────────────────────
-  app.post("/api/admin/nea-sync/auto", async (req: Request, res: Response) => {
-    if (!(await isAdmin(req))) return res.status(403).json({ message: "Admin only." });
-    const userId = (req.session as any)?.customUserId as string;
-    try {
-      const summary = await runAutoSync(userId);
-      return res.json({ ok: summary.status !== "error", summary });
-    } catch (err: any) {
-      return res.status(500).json({ message: err?.message ?? "Auto-sync failed." });
-    }
-  });
-
-  // ── GET /api/admin/nea-sync/history ────────────────────────────────────
-  app.get("/api/admin/nea-sync/history", async (req: Request, res: Response) => {
-    if (!(await isAdmin(req))) return res.status(403).json({ message: "Admin only." });
-
+  // ── History endpoints ──────────────────────────────────────────────────
+  const historyHandler = async (req: Request, res: Response) => {
     const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit ?? "20"), 10)));
     const { rows } = await pool.query(
       `SELECT id, started_at, finished_at, source, status, triggered_by,
@@ -82,11 +97,12 @@ export function registerAdminNEASyncRoutes(app: Express): void {
       [limit],
     );
     return res.json({ runs: rows });
-  });
+  };
+  app.get("/api/admin/nea-sync/runs",    authGuard, adminGuard, historyHandler);
+  app.get("/api/admin/nea-sync/history", authGuard, adminGuard, historyHandler);
 
-  // ── GET /api/admin/nea-sync/last ───────────────────────────────────────
-  app.get("/api/admin/nea-sync/last", async (req: Request, res: Response) => {
-    if (!(await isAdmin(req))) return res.status(403).json({ message: "Admin only." });
+  // ── Latest-run endpoint ────────────────────────────────────────────────
+  const latestHandler = async (_req: Request, res: Response) => {
     const { rows } = await pool.query(
       `SELECT id, started_at, finished_at, source, status,
               new_agencies, updated_agencies, expired_agencies,
@@ -97,7 +113,13 @@ export function registerAdminNEASyncRoutes(app: Express): void {
         LIMIT 1`,
     );
     return res.json({ run: rows[0] ?? null });
-  });
+  };
+  app.get("/api/admin/nea-sync/latest", authGuard, adminGuard, latestHandler);
+  app.get("/api/admin/nea-sync/last",   authGuard, adminGuard, latestHandler);
 
-  console.log("[Admin] NEA sync routes registered: /api/admin/nea-sync/{paste,auto,history,last}");
+  console.log("[Admin] NEA sync routes registered: /api/admin/nea-sync/{run|auto,paste,runs|history,latest|last}");
 }
+
+// Keep the old export name too so any other caller that imported the
+// UPPERCASE variant still works. Both names point to the same function.
+export const registerAdminNEASyncRoutes = registerAdminNeaSyncRoutes;
