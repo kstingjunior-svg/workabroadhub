@@ -237,6 +237,9 @@ const countryData: Record<string, { name: string; flagEmoji: string }> = {
   poland:       { name: "Poland",       flagEmoji: "🇵🇱" },
   kuwait:       { name: "Kuwait",       flagEmoji: "🇰🇼" },
   oman:         { name: "Oman",         flagEmoji: "🇴🇲" },
+  // 2026-08: Lithuania added — real Kenya pipeline for truck driving (CE +
+  // Code 95), welding, meat processing, and Vilnius IT/fintech.
+  lithuania:    { name: "Lithuania",    flagEmoji: "🇱🇹" },
 };
 
 export default function Country() {

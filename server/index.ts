@@ -702,6 +702,15 @@ app.use((req, res, next) => {
       console.error("[Server] ❌ ensureLuxembourgSeeded failed:", err?.message);
     }
 
+    // 2026-08 (Tony's request): seed Lithuania as a real country hub.
+    // Idempotent — re-runs are no-ops. See server/lib/ensure-lithuania-seeded.ts
+    try {
+      const { ensureLithuaniaSeeded } = await import("./lib/ensure-lithuania-seeded");
+      await ensureLithuaniaSeeded();
+    } catch (err: any) {
+      console.error("[Server] ❌ ensureLithuaniaSeeded failed:", err?.message);
+    }
+
     // 2026-06 (Tony's bulk update): upsert 581 verified NEA agencies from
     // the NEA portal export. Idempotent — re-runs update existing rows in
     // place via ON CONFLICT (license_number). Source-of-truth is the NEA

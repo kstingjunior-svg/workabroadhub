@@ -221,6 +221,18 @@ export default function Landing() {
       portals: "4 verified portals",
       demand: "EU Blue Card · KES 800k+/mo",
       gradient: "from-sky-500 to-red-500"
+    },
+    {
+      // 2026-08: Lithuania added — real Kenya pipeline. Tagline highlights
+      // the actual pathways so visitors self-select. Full eligibility banner
+      // (D-visa flow, cold-weather warning, avoid-agents warning) shows on
+      // the /country/lithuania page (visa_warning section).
+      code: "LT",
+      name: "Lithuania",
+      tagline: "Truck drivers, welders & Vilnius IT",
+      portals: "5 verified portals",
+      demand: "D-visa · KES 300k–520k/mo",
+      gradient: "from-yellow-500 to-green-600"
     }
   ];
 
