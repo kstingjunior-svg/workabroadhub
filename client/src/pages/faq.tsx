@@ -96,7 +96,7 @@ const categories = [
     faqs: [
       {
         q: "How do I verify if a recruitment agency is licensed?",
-        a: "Go to our Recruitment Agencies page and search by agency name or license number. Our database contains 1,295 agencies registered with the National Employment Authority (NEA). A valid license shows a current expiry date. If an agency is not in our database or has an expired license, be very cautious — they are operating illegally."
+        a: "Go to our Recruitment Agencies page and search by agency name or license number. Our database tracks over 2,600 agencies registered with the National Employment Authority (NEA), including both active and expired licences. A valid license shows a current expiry date. If an agency is not in our database or has an expired license, be very cautious — they are operating illegally."
       },
       {
         q: "An agency asked me to pay a fee to get a job abroad. Is this legal?",

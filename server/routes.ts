@@ -2022,15 +2022,18 @@ Crawl-delay: 1`);
           .where(eq(consultationBookingsTable.status, "completed")),
         // Community agency reports (proxy for total reviews/feedback submitted)
         db.select({ c: count() }).from(agencyReports),
-        // Distinct countries served from verified portals
-        db.execute(sql`SELECT COUNT(DISTINCT country)::int AS c FROM verified_portals WHERE is_active = true`),
+        // 2026-08 (Tony's "inconsistent numbers" fix): count from the
+        // canonical `countries` table (this is what powers /country/:code
+        // pages), not from verified_portals — the latter was frozen at
+        // ~7 rows and never picked up new country hubs like Luxembourg,
+        // Lithuania, Turkey, Ireland, Netherlands, New Zealand, Poland,
+        // Kuwait, Oman that were added later. Now the number reflects
+        // reality: 15 country hubs.
+        db.execute(sql`SELECT COUNT(*)::int AS c FROM countries WHERE is_active = true`),
       ]);
 
       const activeVisitors = await storage.getActiveUsers(10);
-      const countriesServed = Math.max(
-        7,
-        Number(((distinctCountries as any).rows?.[0]?.c) ?? 0),
-      );
+      const countriesServed = Number(((distinctCountries as any).rows?.[0]?.c) ?? 0) || 15;
 
       // 2026-06 UNIFY: count online users from the SAME source the admin
       // dashboard uses — the `active_sessions` table with is_online = true.

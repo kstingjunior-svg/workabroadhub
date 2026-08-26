@@ -807,7 +807,12 @@ export default function Landing() {
                 </h2>
 
                 <p className="text-lg text-blue-100/80 leading-relaxed max-w-xl">
-                  Stand out from <strong className="text-white">798 expired-license agencies</strong>. Get a verified badge, priority placement in 1,293 listings, and direct contact from
+                  {/* 2026-08 (Tony's "inconsistent numbers" fix): read from
+                      the same live /api/agencies/stats endpoint the Licence
+                      Checker widget uses. Previously hardcoded 798/1,293
+                      and drifted out of sync as the DB grew — Tony spotted
+                      798 here while the widget showed 1,709 expired. */}
+                  Stand out from <strong className="text-white">{agencyExpired} expired-license agencies</strong>. Get a verified badge, priority placement in {agencyValid} active listings, and direct contact from
                   thousands of monthly job-seekers. Built specifically for licensed recruiters serving Kenyans abroad.
                 </p>
 
@@ -891,7 +896,14 @@ export default function Landing() {
                     </Card>
                     <Card className="border-white/10 bg-white/5 backdrop-blur-sm">
                       <CardContent className="p-4 text-center">
-                        <div className="text-2xl font-bold text-cyan-400">6</div>
+                        {/* 2026-08 (Tony's "inconsistent numbers" fix):
+                            was hardcoded to 6 — matched the original landing
+                            page count from before we added Turkey / Luxembourg /
+                            Ireland / Netherlands / New Zealand / Poland /
+                            Kuwait / Oman / Lithuania. Now reads live from
+                            /api/public/stats which counts is_active=true rows
+                            in the `countries` table (now 15). */}
+                        <div className="text-2xl font-bold text-cyan-400">{publicStats?.countriesServed ?? "…"}</div>
                         <div className="text-xs text-blue-200/60">Countries Covered</div>
                       </CardContent>
                     </Card>
