@@ -763,6 +763,92 @@ app.use((req, res, next) => {
       console.error("[Server] ❌ NEA sync bootstrap failed:", err?.message);
     }
 
+    // 2026-08 (Tony's "wild ideas #1"): AutoApply Agent. Idempotent table
+    // creation, then register routes and start the overnight scan cron.
+    // Adzuna API keys are optional at boot — scanner silently no-ops until
+    // ADZUNA_APP_ID and ADZUNA_APP_KEY are set in Render env.
+    try {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS autoapply_agents (
+          id                  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+          user_id             VARCHAR     NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          target_countries    TEXT[]      NOT NULL DEFAULT '{}',
+          target_roles        TEXT[]      NOT NULL DEFAULT '{}',
+          target_industries   TEXT[]              DEFAULT '{}',
+          min_salary_kes      INTEGER,
+          visa_sponsorship_required BOOLEAN NOT NULL DEFAULT true,
+          remote_ok           BOOLEAN     NOT NULL DEFAULT false,
+          experience_years    INTEGER,
+          cv_text             TEXT        NOT NULL,
+          cv_file_url         TEXT,
+          is_active           BOOLEAN     NOT NULL DEFAULT true,
+          max_matches_per_day INTEGER     NOT NULL DEFAULT 10,
+          daily_report_time   VARCHAR(5)  NOT NULL DEFAULT '06:00',
+          last_scan_at        TIMESTAMP,
+          next_scan_at        TIMESTAMP,
+          total_matches_lifetime  INTEGER NOT NULL DEFAULT 0,
+          total_applied_lifetime  INTEGER NOT NULL DEFAULT 0,
+          created_at          TIMESTAMP   NOT NULL DEFAULT NOW(),
+          updated_at          TIMESTAMP   NOT NULL DEFAULT NOW(),
+          UNIQUE(user_id)
+        );
+        CREATE INDEX IF NOT EXISTS autoapply_agents_user_id_idx  ON autoapply_agents(user_id);
+        CREATE INDEX IF NOT EXISTS autoapply_agents_active_idx   ON autoapply_agents(is_active) WHERE is_active = true;
+
+        CREATE TABLE IF NOT EXISTS autoapply_matches (
+          id                  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+          agent_id            UUID        NOT NULL REFERENCES autoapply_agents(id) ON DELETE CASCADE,
+          user_id             VARCHAR     NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          source              VARCHAR(64) NOT NULL,
+          external_id         VARCHAR(256),
+          job_title           VARCHAR(500) NOT NULL,
+          employer            VARCHAR(500),
+          country             VARCHAR(64),
+          city                VARCHAR(200),
+          salary_display      VARCHAR(200),
+          salary_kes_monthly  INTEGER,
+          posted_at           TIMESTAMP,
+          apply_url           TEXT        NOT NULL,
+          description         TEXT,
+          match_score         INTEGER     NOT NULL,
+          match_reasons       TEXT[],
+          cover_letter        TEXT,
+          cover_letter_at     TIMESTAMP,
+          status              VARCHAR(32) NOT NULL DEFAULT 'new',
+          applied_at          TIMESTAMP,
+          dismissed_at        TIMESTAMP,
+          created_at          TIMESTAMP   NOT NULL DEFAULT NOW(),
+          UNIQUE(agent_id, source, external_id)
+        );
+        CREATE INDEX IF NOT EXISTS autoapply_matches_agent_id_idx  ON autoapply_matches(agent_id);
+        CREATE INDEX IF NOT EXISTS autoapply_matches_user_id_idx   ON autoapply_matches(user_id);
+        CREATE INDEX IF NOT EXISTS autoapply_matches_status_idx    ON autoapply_matches(status);
+        CREATE INDEX IF NOT EXISTS autoapply_matches_created_at_idx ON autoapply_matches(created_at DESC);
+        CREATE INDEX IF NOT EXISTS autoapply_matches_score_idx     ON autoapply_matches(match_score DESC);
+
+        CREATE TABLE IF NOT EXISTS autoapply_scan_runs (
+          id                  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+          agent_id            UUID        NOT NULL REFERENCES autoapply_agents(id) ON DELETE CASCADE,
+          started_at          TIMESTAMP   NOT NULL DEFAULT NOW(),
+          finished_at         TIMESTAMP,
+          status              VARCHAR(32) NOT NULL,
+          jobs_scanned        INTEGER     DEFAULT 0,
+          matches_found       INTEGER     DEFAULT 0,
+          matches_stored      INTEGER     DEFAULT 0,
+          cover_letters_generated INTEGER DEFAULT 0,
+          report_sent         BOOLEAN     DEFAULT false,
+          error_message       TEXT
+        );
+        CREATE INDEX IF NOT EXISTS autoapply_scan_runs_agent_idx ON autoapply_scan_runs(agent_id, started_at DESC);
+      `);
+      const { registerAutoApplyRoutes } = await import("./routes/autoapply");
+      registerAutoApplyRoutes(app);
+      const { startAutoApplyScheduler } = await import("./lib/autoapply/scheduler");
+      startAutoApplyScheduler();
+    } catch (err: any) {
+      console.error("[Server] ❌ AutoApply bootstrap failed:", err?.message);
+    }
+
     // Wire Sentry's Express error handler AFTER all routes are registered
     // but BEFORE any custom 500 middleware. No-op if Sentry isn't initialised.
     attachSentryErrorHandler(app);

@@ -784,6 +784,52 @@ export default function Landing() {
         </section>
 
         {/* ═══════════════════════════════════════════════════════════════ */}
+        {/* AUTOAPPLY AGENT — flagship AI product (2026-08 revenue play #1) */}
+        {/* ═══════════════════════════════════════════════════════════════ */}
+        <section id="autoapply-hero" className="py-14 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-purple-900 via-blue-900 to-slate-900 text-white relative overflow-hidden">
+          <div className="absolute inset-0 opacity-20" style={{ backgroundImage: "radial-gradient(circle at 30% 40%, rgba(168,85,247,0.4), transparent 55%), radial-gradient(circle at 75% 60%, rgba(59,130,246,0.35), transparent 50%)" }} />
+          <div className="relative max-w-5xl mx-auto text-center">
+            <div className="inline-flex items-center gap-2 px-3 py-1 bg-purple-500/20 border border-purple-400/30 rounded-full text-xs font-semibold text-purple-200 mb-4">
+              <Sparkles className="h-3 w-3" /> NEW · AI-POWERED
+            </div>
+            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight mb-4 leading-tight">
+              AutoApply Agent —{" "}
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-300 via-blue-300 to-cyan-300">
+                AI that applies to overseas jobs while you sleep
+              </span>
+            </h2>
+            <p className="text-blue-100/90 text-base sm:text-lg max-w-2xl mx-auto mb-6">
+              Tell us your target countries and roles. Every night your agent scans NHS Jobs, IRCC, Indeed
+              UK/Canada/UAE — ranks them against your CV, drafts tailored cover letters, and delivers a
+              curated inbox. Wake up. Click Apply. Done.
+            </p>
+            <div className="flex flex-wrap gap-2 justify-center text-xs text-blue-100/80 mb-6">
+              <span className="px-3 py-1 rounded-full bg-white/10 border border-white/20">📄 CV-tailored ranking</span>
+              <span className="px-3 py-1 rounded-full bg-white/10 border border-white/20">✍️ AI cover letters</span>
+              <span className="px-3 py-1 rounded-full bg-white/10 border border-white/20">📧 Morning digest email</span>
+              <span className="px-3 py-1 rounded-full bg-white/10 border border-white/20">🇬🇧 🇨🇦 🇺🇸 🇦🇺 🇩🇪</span>
+            </div>
+            <Button
+              size="lg"
+              className="text-base bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-400 hover:to-blue-400 text-white border-0 shadow-xl shadow-purple-500/30 gap-2"
+              onClick={() => {
+                if (currentUser) window.location.href = "/autoapply";
+                else {
+                  localStorage.setItem("auth_redirect", "/autoapply");
+                  openSignUp();
+                }
+              }}
+              data-testid="btn-autoapply-hero"
+            >
+              <Sparkles className="h-4 w-4" /> Activate my AutoApply Agent — Free trial
+            </Button>
+            <p className="text-xs text-blue-200/70 mt-3">
+              Free during launch · No credit card required · Cancel anytime
+            </p>
+          </div>
+        </section>
+
+        {/* ═══════════════════════════════════════════════════════════════ */}
         {/* CAREER SERVICES — PAID PRODUCTS (2026-08 Tony's revenue play)   */}
         {/* ═══════════════════════════════════════════════════════════════ */}
         {/* Before this section, career services were hidden behind auth —

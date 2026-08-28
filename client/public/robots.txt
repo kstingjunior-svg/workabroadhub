@@ -35,6 +35,7 @@ Allow: /visit-visas
 Allow: /blog
 Allow: /blog/
 Allow: /trust
+Allow: /autoapply
 Allow: /green-card
 Allow: /student-visas
 Allow: /about

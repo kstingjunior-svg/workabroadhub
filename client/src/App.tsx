@@ -132,6 +132,9 @@ const BlogPost  = lazyWithRetry(() => import("@/pages/blog/blog-post"));
 // trust/verification page. First-party content Google can prefer over the
 // third-party "scam exposer" Instagram posts currently being scraped.
 const TrustPage = lazyWithRetry(() => import("@/pages/trust"));
+// 2026-08 (Tony's "wild ideas #1"): AutoApply Agent — AI that hunts jobs
+// overnight. Signed-in only (agent config + inbox belongs to a user).
+const AutoApplyPage = lazyWithRetry(() => import("@/pages/autoapply"));
 const VisaCountry = lazyWithRetry(() => import("@/pages/visa-country"));
 const VisaAssistant = lazyWithRetry(() => import("@/pages/visa-assistant"));
 const BulkApply = lazyWithRetry(() => import("@/pages/bulk-apply"));
@@ -463,6 +466,7 @@ const LazyVisitVisas = withSuspense(VisitVisas);
 const LazyBlogIndex  = withSuspense(BlogIndex);
 const LazyBlogPost   = withSuspense(BlogPost);
 const LazyTrustPage  = withSuspense(TrustPage);
+const LazyAutoApplyPage = withSuspense(AutoApplyPage);
 const LazyVisaCountry = withSuspense(VisaCountry);
 const LazyVisaAssistant = withSuspense(VisaAssistant);
 const LazyBulkApply = withSuspense(BulkApply);
@@ -629,6 +633,7 @@ function AuthenticatedRoutes() {
       <Route path="/admin/kenya-careers" component={LazyKenyaCareersAdmin} />
       <Route path="/admin/broadcast" component={LazyAdminBroadcast} />
       <Route path="/admin/nea-sync" component={LazyAdminNEASync} />
+      <Route path="/autoapply" component={LazyAutoApplyPage} />
       <Route path="/admin/ielts-interest" component={LazyIeltsInterestAdmin} />
       <Route path="/kenya-careers/company/:slug" component={LazyKenyaCareersCompany} />
       <Route path="/employers" component={LazyKenyaCareersEmployers} />
@@ -929,6 +934,7 @@ function Router() {
         <Route path="/order/:orderId" component={ProtectedRedirect} />
         <Route path="/application-tracker" component={ProtectedRedirect} />
         <Route path="/profile" component={ProtectedRedirect} />
+        <Route path="/autoapply" component={ProtectedRedirect} />
         <Route path="/referrals" component={ProtectedRedirect} />
         <Route path="/career-match" component={ProtectedRedirect} />
         <Route path="/service-order/:serviceId" component={LazyServiceOrderPage} />
