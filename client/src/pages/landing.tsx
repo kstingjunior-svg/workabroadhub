@@ -10,7 +10,7 @@ import { LandingTrustStrip } from "@/components/landing-trust-strip";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PRO_FEATURES } from "@/lib/plan-features";
-import { Globe, Shield, FileCheck, CheckCircle, AlertTriangle, ExternalLink, Briefcase, GraduationCap, Building2, Sparkles, ArrowRight, BadgeCheck, TrendingUp, Users, HelpCircle, ChevronDown, CreditCard, ClipboardList, MessageCircle, Mail, Phone, MapPin, BarChart3, FileText, ShieldAlert, Download, Wrench, Smartphone, Headphones, ScanLine } from "lucide-react";
+import { Globe, Shield, FileCheck, CheckCircle, AlertTriangle, ExternalLink, Briefcase, GraduationCap, Building2, Sparkles, ArrowRight, BadgeCheck, TrendingUp, Users, HelpCircle, ChevronDown, CreditCard, ClipboardList, MessageCircle, Mail, Phone, MapPin, BarChart3, FileText, ShieldAlert, Download, Wrench, Smartphone, Headphones, ScanLine, Zap } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useTranslation } from "react-i18next";
 import { LanguageSelector } from "@/components/language-selector";
@@ -778,6 +778,161 @@ export default function Landing() {
               <p className="text-xs text-muted-foreground">No sign-up required · 100% free</p>
             </div>
 
+          </div>
+        </section>
+
+        {/* ═══════════════════════════════════════════════════════════════ */}
+        {/* CAREER SERVICES — PAID PRODUCTS (2026-08 Tony's revenue play)   */}
+        {/* ═══════════════════════════════════════════════════════════════ */}
+        {/* Before this section, career services were hidden behind auth —
+            anonymous visitors couldn't even see that KES 99 CV revamps
+            existed. Making the pricing public dramatically reduces bounce
+            rate and pre-qualifies buyers who arrive from Google searches
+            for "cv service kenya", "cover letter kenya", etc. Every CTA
+            still routes through openSignUp() so the payment funnel stays
+            behind email verification (fraud protection preserved). */}
+        <section id="career-services" className="py-20 sm:py-24 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-purple-50 via-blue-50/40 to-emerald-50/40 dark:from-slate-900 dark:via-purple-950/20 dark:to-emerald-950/20 border-y border-purple-100 dark:border-purple-900/40">
+          <div className="max-w-6xl mx-auto">
+            <div className="text-center mb-10 space-y-3">
+              <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 rounded-full text-sm font-semibold border border-purple-200 dark:border-purple-700">
+                <Sparkles className="h-4 w-4" />
+                Career Services — from KES 99
+              </div>
+              <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-slate-900 dark:text-white">
+                Professional CV, Cover &amp; SoP —{" "}
+                <span className="text-purple-600 dark:text-purple-400">delivered in 3 minutes</span>
+              </h2>
+              <p className="text-base sm:text-lg text-slate-600 dark:text-slate-400 max-w-2xl mx-auto">
+                Pay by M-Pesa (Kenya) or PayPal (worldwide). Download as Word or PDF.
+                No subscriptions, no upsells — pay only for what you need.
+              </p>
+            </div>
+
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+              {[
+                {
+                  title:     "CV Health Check",
+                  price:     "FREE",
+                  priceColor:"text-emerald-600 dark:text-emerald-400",
+                  time:      "3 min",
+                  blurb:     "See what recruiters &amp; ATS think of your CV. Score, keyword gaps, formatting issues.",
+                  badge:     { text: "FASTEST", color: "bg-emerald-500" },
+                  href:      "/tools/ats-cv-checker",
+                  cta:       "Try it free",
+                  isAuthed:  false, // free tool — no signup required
+                },
+                {
+                  title:     "CV Revamp",
+                  price:     "KES 99",
+                  priceColor:"text-blue-600 dark:text-blue-400",
+                  time:      "3 min",
+                  blurb:     "Grammar, formatting &amp; structure cleaned up. Recruiter-ready. Word + PDF.",
+                  badge:     { text: "MOST AFFORDABLE", color: "bg-blue-500" },
+                  compare:   "Typical typist: KES 1,500 — you save KES 1,401",
+                  cta:       "Get my CV revamped",
+                },
+                {
+                  title:     "Cover Letter",
+                  price:     "KES 149",
+                  priceColor:"text-purple-600 dark:text-purple-400",
+                  time:      "3 min",
+                  blurb:     "Custom letter for any job you apply to. Country-specific tone.",
+                  compare:   "Typical writer: KES 2,000 — you save KES 1,851",
+                  cta:       "Write my cover letter",
+                },
+                {
+                  title:     "Recruiter-Friendly CV",
+                  price:     "KES 499",
+                  priceColor:"text-amber-600 dark:text-amber-400",
+                  time:      "3 min",
+                  blurb:     "Get past the gatekeepers. We tune every section for the exact target role.",
+                  badge:     { text: "POPULAR", color: "bg-amber-500" },
+                  compare:   "Career coach: KES 5,000+ — you save KES 4,501",
+                  cta:       "Order recruiter CV",
+                },
+                {
+                  title:     "Country CV Rewrite",
+                  price:     "KES 699",
+                  priceColor:"text-pink-600 dark:text-pink-400",
+                  time:      "3 min",
+                  blurb:     "Restyled for UK, Canada, UAE, Germany, Australia — country-specific formatting.",
+                  badge:     { text: "BEST VALUE", color: "bg-pink-500" },
+                  compare:   "Country agent: KES 8,000+ — you save KES 7,300",
+                  cta:       "Rewrite for my target country",
+                },
+                {
+                  title:     "SoP / Personal Statement",
+                  price:     "KES 999",
+                  priceColor:"text-indigo-600 dark:text-indigo-400",
+                  time:      "3 min",
+                  blurb:     "For university &amp; scholarship applications. Compelling, structured, tailored.",
+                  compare:   "SoP consultant: KES 15,000 — you save KES 14,000",
+                  cta:       "Draft my SoP",
+                },
+              ].map((service, idx) => (
+                <div
+                  key={idx}
+                  className="relative group rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/60 backdrop-blur-sm p-5 flex flex-col hover:shadow-xl hover:-translate-y-0.5 transition-all"
+                  data-testid={`landing-service-card-${service.title.toLowerCase().replace(/\s+/g, "-")}`}
+                >
+                  {service.badge && (
+                    <div className={`absolute -top-2 right-4 ${service.badge.color} text-white text-[10px] font-bold px-2 py-1 rounded-md shadow-lg tracking-wide`}>
+                      {service.badge.text}
+                    </div>
+                  )}
+
+                  <h3 className="font-bold text-lg text-slate-900 dark:text-white mb-1">{service.title}</h3>
+                  <p className="text-sm text-slate-600 dark:text-slate-400 mb-4 flex-1" dangerouslySetInnerHTML={{ __html: service.blurb }} />
+
+                  <div className="flex items-baseline justify-between mb-2">
+                    <div className={`font-bold text-2xl ${service.priceColor}`}>{service.price}</div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                      <Zap className="h-3 w-3" /> {service.time}
+                    </div>
+                  </div>
+
+                  {service.compare && (
+                    <div className="text-xs text-emerald-700 dark:text-emerald-400 font-medium mb-3">
+                      ✓ {service.compare}
+                    </div>
+                  )}
+
+                  <Button
+                    className="w-full mt-auto"
+                    variant={service.badge?.text === "POPULAR" || service.badge?.text === "BEST VALUE" ? "default" : "outline"}
+                    onClick={() => {
+                      if (service.href) {
+                        window.location.href = service.href;
+                      } else {
+                        // 2026-08: send anonymous users through signup. Once
+                        // verified they land on /services with the same card
+                        // set and can complete payment. The verify wall +
+                        // email verification keep our fraud protection intact.
+                        localStorage.setItem("auth_redirect", "/services");
+                        openSignUp();
+                      }
+                    }}
+                    data-testid={`btn-service-${service.title.toLowerCase().replace(/\s+/g, "-")}`}
+                  >
+                    {service.cta}
+                  </Button>
+                </div>
+              ))}
+            </div>
+
+            {/* "See all" + secondary payment reassurance */}
+            <div className="mt-8 text-center space-y-3">
+              <a
+                href="/services"
+                className="inline-flex items-center gap-1 text-purple-600 dark:text-purple-400 font-semibold hover:underline"
+                data-testid="link-see-all-services"
+              >
+                See all 9 career services <ArrowRight className="h-4 w-4" />
+              </a>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                💳 M-Pesa · PayPal · Card &nbsp;·&nbsp; 🔒 Refund within 24h if we can&apos;t deliver &nbsp;·&nbsp; ⚡ Delivered in 3 minutes
+              </p>
+            </div>
           </div>
         </section>
 
