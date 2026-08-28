@@ -24,10 +24,12 @@ import { useFirebasePresence } from "@/hooks/use-firebase-presence";
 import { useLiveVisitorCount } from "@/hooks/use-live-visitor-count";
 import { useVerifiedSuccessStories } from "@/lib/firebase-success-stories";
 import SubmitForReviewModal from "@/components/submit-for-review-modal";
+import { useAuth } from "@/hooks/use-auth";
 
 export default function Landing() {
   const { t } = useTranslation();
   const { toast } = useToast();
+  const { user: currentUser } = useAuth();
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authModalTab, setAuthModalTab] = useState<"login" | "signup">("signup");
   const [authRedirectPath, setAuthRedirectPath] = useState<string | undefined>(undefined);
@@ -948,24 +950,34 @@ export default function Landing() {
                     className="w-full mt-auto"
                     variant={service.badge?.text === "POPULAR" || service.badge?.text === "BEST VALUE" ? "default" : "outline"}
                     onClick={() => {
+                      // Free tools with direct route (CV Health Check → /tools/ats-cv-checker)
                       if (service.href) {
                         window.location.href = service.href;
                         return;
                       }
-                      // 2026-08 (Tony's "kill the signup friction" fix):
-                      // Route anonymous users DIRECTLY to /services with the
-                      // clicked card highlighted — no signup modal blocking
-                      // them from seeing what they're about to buy. /services
-                      // is already a public route (see App.tsx). Signup is
-                      // only required at the actual payment step, which
-                      // preserves fraud protection without punishing browse
-                      // behaviour. Users who see the full product first
-                      // convert 40-60% higher than those hit with a signup
-                      // wall upfront.
-                      const target = (service as any).slug
-                        ? `/services?highlight=${(service as any).slug}`
-                        : "/services";
-                      window.location.href = target;
+
+                      // 2026-08 (Tony's "make it one-click" fix): jump the
+                      // user STRAIGHT to the order form for the picked
+                      // service. No intermediate "all services" browsing
+                      // list. Zero re-clicks required.
+                      //
+                      // • Authenticated user  → straight to /services/order/<slug>
+                      // • Anonymous user      → signup modal with return
+                      //   path = /services/order/<slug>, so after they
+                      //   complete signup + email verify they land IN the
+                      //   order form (not back on /services list).
+                      const slug = (service as any).slug;
+                      if (!slug) {
+                        window.location.href = "/services";
+                        return;
+                      }
+                      const target = `/services/order/${slug}`;
+                      if (currentUser) {
+                        window.location.href = target;
+                      } else {
+                        localStorage.setItem("auth_redirect", target);
+                        openSignUp();
+                      }
                     }}
                     data-testid={`btn-service-${service.title.toLowerCase().replace(/\s+/g, "-")}`}
                   >
