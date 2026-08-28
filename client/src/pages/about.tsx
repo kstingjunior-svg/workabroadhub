@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link } from "wouter";
+import { usePageSeo } from "@/hooks/use-page-seo";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -51,6 +52,13 @@ const milestones = [
 ];
 
 export default function AboutPage() {
+  usePageSeo({
+    title:       "About WorkAbroad Hub — Kenya's Trusted Overseas Employment Platform | Founded by Antony Macloud",
+    description: "WorkAbroad Hub is Kenya's leading platform for verified overseas jobs, NEA agency verification, and career guidance. Built and operated by Antony Macloud from Nairobi. 7,000+ members served.",
+    path:        "/about",
+    keywords:    ["about workabroad hub", "antony macloud", "kenya overseas jobs platform", "workabroadhub founder"],
+  });
+
   const [bookingOpen, setBookingOpen] = useState(false);
 
   const { data: publicStats } = useQuery<{ totalUsers: number; expiredAgencies: number }>({

@@ -1,5 +1,6 @@
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
+import { usePageSeo } from "@/hooks/use-page-seo";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -220,6 +221,13 @@ const conversionServices = [
 
 // ─── Component ───────────────────────────────────────────────────────────────
 export default function GreenCardPage() {
+  usePageSeo({
+    title:       "US Green Card Lottery for Kenyans (2026) — DV Lottery Eligibility, Deadlines & Application Guide",
+    description: "Complete Diversity Visa (Green Card) Lottery guide for Kenyans. Eligibility rules, application deadlines, photo requirements, and step-by-step submission tips. 55,000 US immigrant visas available yearly.",
+    path:        "/green-card",
+    keywords:    ["dv lottery kenya", "us green card kenya", "diversity visa kenya", "green card lottery application"],
+  });
+
   const { user } = useAuth();
 
   return (

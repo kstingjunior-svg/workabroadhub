@@ -13,6 +13,7 @@
 
 import { useRef, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
+import { usePageSeo } from "@/hooks/use-page-seo";
 import { Button } from "@/components/ui/button";
 import {
   Loader2, ShieldCheck, ShieldAlert, AlertTriangle, CheckCircle2, XCircle,
@@ -84,6 +85,13 @@ const VERDICT_STYLES = {
 } as const;
 
 export default function IeltsVerifyPage() {
+  usePageSeo({
+    title:       "Free IELTS Certificate Verification — Verify Any TRF Report | WorkAbroad Hub",
+    description: "Upload your IELTS Test Report Form (TRF) and get instant AI verification. Detects forged certificates, wrong band-score formats, invalid centre codes, and other IELTS fraud signals.",
+    path:        "/tools/ielts-verify",
+    keywords:    ["ielts verification kenya", "verify ielts trf", "fake ielts check", "ielts certificate verify"],
+  });
+
   const { toast } = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
 

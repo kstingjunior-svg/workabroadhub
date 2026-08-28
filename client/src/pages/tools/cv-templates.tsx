@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
+import { usePageSeo } from "@/hooks/use-page-seo";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "wouter";
@@ -102,6 +103,13 @@ function TemplateCard({ template }: { template: Template }) {
 }
 
 export default function CVTemplates() {
+  usePageSeo({
+    title:       "Free CV Templates for Kenyans — ATS-Optimised Word & PDF Downloads | WorkAbroad Hub",
+    description: "Download free ATS-optimised CV templates tailored for Kenyans applying to overseas jobs. UK, Canada, USA, Australia and Gulf formats. Word (.docx) and PDF versions.",
+    path:        "/tools/cv-templates",
+    keywords:    ["free cv template kenya", "ats cv template download", "kenya cv format", "overseas cv template"],
+  });
+
   const { data: templates, isLoading } = useQuery<Template[]>({
     queryKey: ["/api/templates"],
     staleTime: 300000,

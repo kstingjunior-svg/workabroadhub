@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
+import { usePageSeo } from "@/hooks/use-page-seo";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -138,6 +139,13 @@ function JobCard({ job, agencyScore }: { job: AgencyJobListing; agencyScore: num
 }
 
 export default function AgenciesMarketplace() {
+  usePageSeo({
+    title:       "Kenya Recruitment Agency Directory — Verified NEA Licences | WorkAbroad Hub",
+    description: "Browse Kenya's most complete recruitment-agency directory. Filter by country served, licence status, and verified rating. See employer reviews, complaints, and compliance history before you pay anyone.",
+    path:        "/agencies",
+    keywords:    ["kenya recruitment agencies directory", "overseas recruitment kenya", "verified agencies kenya", "top nea agencies"],
+  });
+
   const [search, setSearch] = useState("");
   const [country, setCountry] = useState("All Countries");
   const [category, setCategory] = useState("All Categories");

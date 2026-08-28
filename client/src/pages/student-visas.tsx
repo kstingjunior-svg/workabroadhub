@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
+import { usePageSeo } from "@/hooks/use-page-seo";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -696,6 +697,13 @@ function StudentVisaPaywall() {
 }
 
 export default function StudentVisas() {
+  usePageSeo({
+    title:       "Student Visas for Kenyans (2026) — Study Abroad in Canada, UK, USA, Australia & Europe",
+    description: "Complete student-visa guide for Kenyans planning to study abroad. Requirements, tuition fee estimates, scholarship options, IELTS/TOEFL scores, and university choice guidance by country.",
+    path:        "/student-visas",
+    keywords:    ["student visa kenya", "study abroad kenya", "canada student visa kenya", "uk student visa kenya", "kenya scholarships abroad"],
+  });
+
   const { user } = useAuth();
   const { data: userPlan } = useQuery<{ planId: string } | null>({
     queryKey: ["/api/user/plan"],

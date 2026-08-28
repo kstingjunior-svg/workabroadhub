@@ -15,6 +15,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
+import { usePageSeo } from "@/hooks/use-page-seo";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -112,6 +113,13 @@ const VERDICT_STYLES = {
 } as const;
 
 export default function VisaCheckPage() {
+  usePageSeo({
+    title:       "Free Visa Verification Tool — Spot Fake Visas & Work Permits | WorkAbroad Hub",
+    description: "Upload any visa or work-permit document and get instant AI verification. Detects forgery patterns, invalid stamps, expired formats, and paperwork commonly used by recruitment scammers targeting Kenyans.",
+    path:        "/tools/visa-check",
+    keywords:    ["visa verify kenya", "fake visa check", "work permit verification", "visa document check kenya"],
+  });
+
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const inputRef = useRef<HTMLInputElement>(null);

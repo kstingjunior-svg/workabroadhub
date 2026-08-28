@@ -16,6 +16,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
+import { usePageSeo } from "@/hooks/use-page-seo";
 import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import {
@@ -234,6 +235,13 @@ const FLOW_BLURB: Record<Flow, string> = {
 };
 
 export default function BirthCertificate() {
+  usePageSeo({
+    title:       "Kenya Birth Certificate — 2026 Replacement, Late Registration & eCitizen Guide",
+    description: "How to apply for or replace a Kenyan Birth Certificate via eCitizen. Late registration, corrections, and replacement fees explained. Essential for passport, visa and overseas job applications.",
+    path:        "/birth-certificate",
+    keywords:    ["kenya birth certificate", "birth certificate ecitizen", "replace birth certificate kenya", "late birth registration kenya"],
+  });
+
   const { user } = useAuth();
   const [activeFlow, setActiveFlow] = useState<Flow>("new");
 

@@ -4,6 +4,7 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
+import { usePageSeo } from "@/hooks/use-page-seo";
 import {
   Briefcase, MapPin, Loader2, Filter, ChevronRight, X, Trash2,
 } from "lucide-react";
@@ -70,6 +71,13 @@ function timeAgo(iso: string): string {
 }
 
 export default function KaziKaribuBrowse() {
+  usePageSeo({
+    title:       "Browse Local Kenya Jobs — Kazi Karibu Postings by County & Category",
+    description: "Latest local job postings across Kenya. Filter by county, category, and pay level. Skilled trades, construction, hospitality, retail, transport, and casual work near you.",
+    path:        "/kazi-karibu/browse",
+    keywords:    ["jobs in nairobi", "jobs in mombasa", "jobs in kisumu", "casual jobs kenya", "kazi karibu browse"],
+  });
+
   const [location] = useLocation();
   const params = useMemo(() => new URLSearchParams(location.split("?")[1] ?? ""), [location]);
   const [posts, setPosts] = useState<KaziKaribuPost[]>([]);

@@ -22,6 +22,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
+import { usePageSeo } from "@/hooks/use-page-seo";
 import {
   CheckCircle2, ArrowRight, ExternalLink, Lock, Crown,
   FileText, CreditCard, Calendar, MapPin, Clock, AlertCircle,
@@ -173,6 +174,13 @@ function PassportPaywall() {
 }
 
 export default function PassportApplication() {
+  usePageSeo({
+    title:       "Kenya Passport Application 2026 — eCitizen Steps, Fees & Booklet Types (32/48/64)",
+    description: "Complete Kenya passport application guide via eCitizen. Fees, booklet sizes, biometrics locations, processing times, and Diaspora requirements. Also covers renewal and replacement.",
+    path:        "/passport-application",
+    keywords:    ["kenya passport application", "ecitizen passport", "kenya passport fees 2026", "renew kenya passport", "kenya passport booklet 32 48 64"],
+  });
+
   const { user } = useAuth();
 
   const { data: userPlan } = useQuery<UserPlan>({

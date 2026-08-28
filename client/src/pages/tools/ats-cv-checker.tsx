@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { usePageSeo } from "@/hooks/use-page-seo";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -102,6 +103,13 @@ function ScoreRing({ score, grade }: { score: number; grade: string }) {
 const ATS_CACHE_KEY = "ats_result_cache";
 
 export default function ATSCVChecker() {
+  usePageSeo({
+    title:       "Free ATS CV Checker for Kenyans — Score Your CV Against Real Job Descriptions | WorkAbroad Hub",
+    description: "Free instant CV analysis. Upload your CV, paste a job description, and get a percentage match score, keyword gaps, formatting issues, and ATS-compatibility problems. No signup required.",
+    path:        "/tools/ats-cv-checker",
+    keywords:    ["ats cv checker kenya", "free cv score", "cv analyzer kenya", "resume checker kenya", "ats resume test"],
+  });
+
   const { user } = useAuth();
   const { toast } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);

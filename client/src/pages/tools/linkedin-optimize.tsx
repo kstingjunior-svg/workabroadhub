@@ -16,6 +16,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
+import { usePageSeo } from "@/hooks/use-page-seo";
 import {
   Card, CardContent, CardHeader, CardTitle, CardDescription,
 } from "@/components/ui/card";
@@ -241,6 +242,13 @@ function CopyBtn({ text }: { text: string }) {
 
 // ─── The workspace itself ────────────────────────────────────────────────
 export default function LinkedinOptimizePage() {
+  usePageSeo({
+    title:       "LinkedIn Profile Optimiser for Kenyans — AI Rewrite for Recruiter Attention | WorkAbroad Hub",
+    description: "AI-powered LinkedIn profile optimisation for Kenyan professionals targeting overseas recruiters. Rewrite your headline, About, and Experience sections to rank in LinkedIn Recruiter searches.",
+    path:        "/tools/linkedin-optimize",
+    keywords:    ["linkedin optimization kenya", "linkedin profile writer kenya", "recruiter linkedin kenya", "ai linkedin rewrite"],
+  });
+
   const [, navigate]     = useLocation();
   const { user, isLoading: authLoading } = useAuth();
   const { toast }        = useToast();

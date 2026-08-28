@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
+import { usePageSeo } from "@/hooks/use-page-seo";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -194,6 +195,13 @@ const HOW_IT_WORKS = [
 ];
 
 export default function ToolsHub() {
+  usePageSeo({
+    title:       "Free Career Tools for Kenyans — ATS CV Checker, Job Scam Detector, Visa Sponsorship Search | WorkAbroad Hub",
+    description: "Free tools for Kenyan job-seekers: ATS CV score, job-scam detector, visa-sponsoring employer search, offer letter verifier, IELTS test verifier, and more. No signup needed for most tools.",
+    path:        "/tools",
+    keywords:    ["free career tools kenya", "cv checker kenya", "job scam checker", "visa sponsorship search", "offer letter verify kenya"],
+  });
+
   const { user } = useAuth();
   const { toast } = useToast();
   const [copied, setCopied] = useState(false);

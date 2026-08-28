@@ -1,5 +1,6 @@
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
+import { usePageSeo } from "@/hooks/use-page-seo";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -114,6 +115,13 @@ const conversionCards = [
 ];
 
 export default function VisaGuidesPage() {
+  usePageSeo({
+    title:       "Work Visa Guides for Kenyans — Canada, UK, USA, Germany, UAE Immigration Pathways | WorkAbroad Hub",
+    description: "Free comprehensive work-visa guides for Kenyans: Canada Express Entry, UK Skilled Worker, US H-1B, EU Blue Card, UAE Employment. Eligibility, costs, processing times, official links.",
+    path:        "/visa-guides",
+    keywords:    ["work visa guides kenya", "canada express entry kenya", "uk skilled worker visa kenya", "us h1b kenya", "eu blue card kenya"],
+  });
+
   const { user } = useAuth();
 
   return (

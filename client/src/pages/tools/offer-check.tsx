@@ -13,6 +13,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
+import { usePageSeo } from "@/hooks/use-page-seo";
 import { Button } from "@/components/ui/button";
 import {
   Loader2, ShieldCheck, ShieldAlert, AlertTriangle, CheckCircle2, XCircle,
@@ -90,6 +91,13 @@ const VERDICT_STYLES = {
 } as const;
 
 export default function OfferCheckPage() {
+  usePageSeo({
+    title:       "Free Offer Letter Verifier — Check If Your Overseas Job Offer Is Real | WorkAbroad Hub",
+    description: "Upload any overseas job-offer letter and get an instant AI verification report. Detects fake employer stamps, wrong salary formats, forged visa paperwork, and language patterns used by scammers.",
+    path:        "/tools/offer-check",
+    keywords:    ["offer letter verify kenya", "fake job offer check", "verify overseas offer", "employment letter check kenya"],
+  });
+
   const { toast } = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
 

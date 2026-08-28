@@ -20,6 +20,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
+import { usePageSeo } from "@/hooks/use-page-seo";
 import { useAuth } from "@/hooks/use-auth";
 import {
   CheckCircle2, ArrowRight, ExternalLink, Crown,
@@ -171,6 +172,13 @@ function HelbClearancePaywall() {
 }
 
 export default function HelbClearance() {
+  usePageSeo({
+    title:       "HELB Compliance Certificate Kenya — 2026 Application Steps, Fees & Portal Link",
+    description: "How to get your HELB (Higher Education Loans Board) Compliance / Clearance Certificate. Required for overseas jobs, passports, TSC, and government employment. Fees, portal URL, and processing tips.",
+    path:        "/helb-clearance",
+    keywords:    ["helb clearance kenya", "helb compliance certificate", "helb portal kenya", "student loan clearance kenya"],
+  });
+
   const { user } = useAuth();
 
   const { data: userPlan } = useQuery<UserPlan>({

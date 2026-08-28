@@ -8,6 +8,7 @@
  */
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
+import { usePageSeo } from "@/hooks/use-page-seo";
 import {
   Briefcase, MapPin, Sparkles, ShieldCheck, Clock, ChevronRight, Loader2,
   Home, Wrench, Truck, GraduationCap, Utensils, Sprout, Brush, ShieldQuestion,
@@ -71,6 +72,13 @@ function formatBudget(p: KaziKaribuPost): string {
 }
 
 export default function KaziKaribu() {
+  usePageSeo({
+    title:       "Kazi Karibu — Local Kenya Jobs & Small Business Postings Near You | WorkAbroad Hub",
+    description: "Kazi Karibu connects Kenyan job-seekers with local employers posting small-business, casual, and skilled work opportunities across all 47 counties. Free to browse, free to post.",
+    path:        "/kazi-karibu",
+    keywords:    ["kazi karibu", "jobs in kenya near me", "local jobs kenya", "casual jobs nairobi", "small business jobs kenya"],
+  });
+
   const [posts, setPosts] = useState<KaziKaribuPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);

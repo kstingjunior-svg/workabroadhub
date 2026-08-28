@@ -24,6 +24,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
+import { usePageSeo } from "@/hooks/use-page-seo";
 import {
   CheckCircle2, ArrowRight, ExternalLink, Crown,
   FileText, CreditCard, AlertCircle, ShieldCheck,
@@ -174,6 +175,13 @@ function GoodConductPaywall() {
 }
 
 export default function GoodConduct() {
+  usePageSeo({
+    title:       "Certificate of Good Conduct Kenya — 2026 Application Guide, DCI Fees & eCitizen Portal",
+    description: "Step-by-step guide to applying for a Kenyan Police Clearance Certificate (Certificate of Good Conduct) via DCI and eCitizen. Fees, biometrics locations, processing time, and Diaspora requirements.",
+    path:        "/good-conduct",
+    keywords:    ["certificate of good conduct kenya", "police clearance kenya", "dci good conduct", "ecitizen good conduct application"],
+  });
+
   const { user } = useAuth();
 
   const { data: userPlan } = useQuery<UserPlan>({

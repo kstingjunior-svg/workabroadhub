@@ -11,6 +11,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
+import { usePageSeo } from "@/hooks/use-page-seo";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -42,6 +43,13 @@ const RISK_LABELS = {
 } as const;
 
 export default function AgenciesReportedIndex() {
+  usePageSeo({
+    title:       "Reported Fraudulent Recruitment Agencies in Kenya — Community Fraud Wall | WorkAbroad Hub",
+    description: "Community-reported recruitment fraud incidents in Kenya. Search by agency name to see complaints from Kenyan job-seekers. Protect yourself before you pay any agency.",
+    path:        "/agencies-reported",
+    keywords:    ["reported agencies kenya", "recruitment scams kenya", "fraudulent agencies list", "agency scam wall kenya"],
+  });
+
   const [, navigate] = useLocation();
   const [search, setSearch] = useState("");
   const [countryFilter, setCountryFilter] = useState("");

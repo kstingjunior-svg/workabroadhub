@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
+import { usePageSeo } from "@/hooks/use-page-seo";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -134,6 +135,13 @@ const categories = [
 ];
 
 export default function FAQPage() {
+  usePageSeo({
+    title:       "Frequently Asked Questions — Overseas Jobs, NEA Agencies, Payments | WorkAbroad Hub",
+    description: "Everything Kenyans ask about applying for overseas jobs: NEA verification, payment methods, refund policy, visa guidance, agency scams, and how our platform works.",
+    path:        "/faq",
+    keywords:    ["workabroadhub faq", "overseas jobs kenya questions", "nea agency questions", "how to apply overseas jobs kenya"],
+  });
+
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState("general");
   const [bookingOpen, setBookingOpen] = useState(false);

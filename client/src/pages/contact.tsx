@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
+import { usePageSeo } from "@/hooks/use-page-seo";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation } from "@tanstack/react-query";
@@ -61,6 +62,11 @@ const hours = [
 ];
 
 export default function ContactPage() {
+  usePageSeo({
+    title:       "Contact WorkAbroad Hub — Support, Media, Partnerships | Nairobi, Kenya",
+    description: "Get in touch with WorkAbroad Hub's team for support, partnerships or media enquiries. Email support@workabroadhub.tech or WhatsApp our Nairobi office directly. Response within 24 hours.",
+    path:        "/contact",
+  });
   const { toast } = useToast();
   const [bookingOpen, setBookingOpen] = useState(false);
   const [submitted, setSubmitted] = useState(false);

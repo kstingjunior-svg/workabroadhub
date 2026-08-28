@@ -14,6 +14,7 @@
 
 import { useRef, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
+import { usePageSeo } from "@/hooks/use-page-seo";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -87,6 +88,13 @@ const VERDICT_STYLES = {
 } as const;
 
 export default function JobScamCheckerPage() {
+  usePageSeo({
+    title:       "Free Job Scam Checker — Spot Fake Overseas Job Offers in Seconds | WorkAbroad Hub",
+    description: "Paste any suspicious job posting, agency message, or offer letter. Get instant AI analysis identifying red flags: fake salaries, unreliable agencies, upfront-fee scams, and phishing signs. Free.",
+    path:        "/tools/job-scam-checker",
+    keywords:    ["job scam checker kenya", "fake job offer check", "recruitment scam detector kenya", "overseas job scam verify"],
+  });
+
   const { toast } = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
 
