@@ -950,19 +950,22 @@ export default function Landing() {
                     onClick={() => {
                       if (service.href) {
                         window.location.href = service.href;
-                      } else {
-                        // 2026-08: send anonymous users through signup. Once
-                        // verified they land on /services?highlight=<slug>,
-                        // which auto-scrolls to and highlights the exact
-                        // card they clicked so they don't have to re-find
-                        // it. The verify wall + email verification keep our
-                        // fraud protection intact.
-                        const target = (service as any).slug
-                          ? `/services?highlight=${(service as any).slug}`
-                          : "/services";
-                        localStorage.setItem("auth_redirect", target);
-                        openSignUp();
+                        return;
                       }
+                      // 2026-08 (Tony's "kill the signup friction" fix):
+                      // Route anonymous users DIRECTLY to /services with the
+                      // clicked card highlighted — no signup modal blocking
+                      // them from seeing what they're about to buy. /services
+                      // is already a public route (see App.tsx). Signup is
+                      // only required at the actual payment step, which
+                      // preserves fraud protection without punishing browse
+                      // behaviour. Users who see the full product first
+                      // convert 40-60% higher than those hit with a signup
+                      // wall upfront.
+                      const target = (service as any).slug
+                        ? `/services?highlight=${(service as any).slug}`
+                        : "/services";
+                      window.location.href = target;
                     }}
                     data-testid={`btn-service-${service.title.toLowerCase().replace(/\s+/g, "-")}`}
                   >

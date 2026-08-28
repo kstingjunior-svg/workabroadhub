@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { fetchCsrfToken, clearCsrfToken } from "@/lib/queryClient";
 import { usePageSeo } from "@/hooks/use-page-seo";
+import { useAuth } from "@/hooks/use-auth";
 import { trackServerEvent } from "@/lib/analytics";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -32,7 +33,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { Link } from "wouter";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import type { Service } from "@shared/schema";
 import { getServiceSLA } from "@shared/sla-config";
@@ -152,6 +153,18 @@ export default function Services() {
   const [bookingOpen, setBookingOpen] = useState(false);
   const [paying, setPaying] = useState<string | null>(null);
   const [, navigate] = useLocation();
+
+  // 2026-08 (Tony's "expose pricing on landing" push): when the user arrives
+  // from a landing-page service card, the URL carries ?highlight=<slug>.
+  // We remember it, scroll to that card once services load, and pulse-
+  // highlight it so the user doesn't have to hunt for the same product
+  // they just clicked. Cleared from state after the effect fires once so
+  // it doesn't re-trigger on category switches.
+  const [highlightSlug, setHighlightSlug] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    const params = new URLSearchParams(window.location.search);
+    return params.get("highlight");
+  });
   const { toast } = useToast();
 
   // Services that use the new unified upload → pay → AI → download flow.
@@ -193,6 +206,8 @@ export default function Services() {
     write_from_scratch:  "/tools/write-from-scratch",
   };
 
+  const { user } = useAuth();
+
   async function startPayment(service: Service) {
     trackServerEvent("click_service", { serviceId: service.id });
 
@@ -211,6 +226,19 @@ export default function Services() {
       }
       // Free tool without a registered client route — fall back to /tools
       navigate("/tools");
+      return;
+    }
+
+    // 2026-08 (Tony's "kill signup friction on browse" fix): anonymous users
+    // can now BROWSE /services freely. But paid orders still require an
+    // account (needed for M-Pesa phone, order history, refund routing). If
+    // they hit an Order button while unauthenticated, redirect them to the
+    // landing page in login mode with a return path back to this exact
+    // service so signup doesn't feel like a dead end. Landing.tsx already
+    // handles the ?redirect= query param and auto-opens the auth modal.
+    if (!user) {
+      const returnTo = encodeURIComponent(`/services?highlight=${slug}`);
+      window.location.href = `/?redirect=${returnTo}`;
       return;
     }
 
@@ -320,6 +348,40 @@ export default function Services() {
     staleTime:       0,
     retry:           2,
   });
+
+  // 2026-08 (Tony's "expose pricing on landing" push): once the services
+  // load, look for the ?highlight=<slug> from the landing card the user
+  // clicked. Scroll it into view, pulse-highlight for 3 seconds, then
+  // clean the URL. Matches by code/slug so it survives DB rename churn.
+  useEffect(() => {
+    if (!highlightSlug || !services || services.length === 0) return;
+    const target = services.find(
+      (s: any) => (s.code ?? s.slug ?? s.id ?? "").toLowerCase() === highlightSlug.toLowerCase(),
+    );
+    if (!target) return;
+    // Auto-open the correct category tab if the service is in a specific one
+    if (target.category && activeCategory !== "All" && activeCategory !== target.category) {
+      setActiveCategory(target.category);
+    }
+    // Wait one paint so the card is in the DOM
+    const t = setTimeout(() => {
+      const el = document.querySelector<HTMLElement>(`[data-testid="card-service-${target.id}"]`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.classList.add("ring-4", "ring-purple-400", "ring-offset-2", "shadow-2xl");
+        setTimeout(() => {
+          el.classList.remove("ring-4", "ring-purple-400", "ring-offset-2", "shadow-2xl");
+        }, 3500);
+      }
+      // Strip ?highlight from URL so a page reload doesn't re-fire
+      const url = new URL(window.location.href);
+      url.searchParams.delete("highlight");
+      window.history.replaceState({}, "", url.pathname + (url.search || ""));
+      setHighlightSlug(null);
+    }, 200);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [services, highlightSlug]);
 
   const filtered = (services ?? []).filter(
     (s) => s && s.code && s.name && s.category &&
