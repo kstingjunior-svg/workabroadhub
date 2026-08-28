@@ -128,6 +128,10 @@ const VisitVisas = lazyWithRetry(() => import("@/pages/visit-visas"));
 // 2026-08 SEO push: blog for long-tail keyword targeting. Public routes.
 const BlogIndex = lazyWithRetry(() => import("@/pages/blog/blog-index"));
 const BlogPost  = lazyWithRetry(() => import("@/pages/blog/blog-post"));
+// 2026-08 (Tony's "Google AI Overview called us a scam" fix): dedicated
+// trust/verification page. First-party content Google can prefer over the
+// third-party "scam exposer" Instagram posts currently being scraped.
+const TrustPage = lazyWithRetry(() => import("@/pages/trust"));
 const VisaCountry = lazyWithRetry(() => import("@/pages/visa-country"));
 const VisaAssistant = lazyWithRetry(() => import("@/pages/visa-assistant"));
 const BulkApply = lazyWithRetry(() => import("@/pages/bulk-apply"));
@@ -458,6 +462,7 @@ const LazyVisaGuides = withSuspense(VisaGuides);
 const LazyVisitVisas = withSuspense(VisitVisas);
 const LazyBlogIndex  = withSuspense(BlogIndex);
 const LazyBlogPost   = withSuspense(BlogPost);
+const LazyTrustPage  = withSuspense(TrustPage);
 const LazyVisaCountry = withSuspense(VisaCountry);
 const LazyVisaAssistant = withSuspense(VisaAssistant);
 const LazyBulkApply = withSuspense(BulkApply);
@@ -728,6 +733,7 @@ function AuthenticatedRoutes() {
       <Route path="/visit-visas" component={LazyVisitVisas} />
       <Route path="/blog" component={LazyBlogIndex} />
       <Route path="/blog/:slug" component={LazyBlogPost} />
+      <Route path="/trust" component={LazyTrustPage} />
       <Route path="/visa/:country" component={LazyVisaCountry} />
       <Route path="/visa-assistant" component={LazyVisaAssistant} />
       <Route path="/bulk-apply" component={LazyBulkApply} />

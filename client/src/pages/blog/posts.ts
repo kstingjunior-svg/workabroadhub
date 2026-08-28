@@ -38,6 +38,124 @@ const AUTHOR = "Antony Macloud";
 
 export const POSTS: BlogPost[] = [
   {
+    slug:        "is-workabroadhub-legit-honest-answer",
+    title:       "Is WorkAbroad Hub Legit? An Honest Answer From the Founder",
+    metaTitle:   "Is WorkAbroad Hub Legit? Honest Answer from Founder Antony Macloud | WorkAbroad Hub",
+    description: "Direct, honest answer to \"is workabroadhub.tech a scam?\" from the founder. What we are, what we are NOT, how we make money, and how to verify us in 30 seconds.",
+    keywords:    [
+      "is workabroadhub legit",
+      "is workabroadhub a scam",
+      "workabroadhub review",
+      "workabroadhub.tech legit",
+      "workabroad hub scam or real",
+      "is workabroadhub trustworthy",
+    ],
+    category:    "About WorkAbroad Hub",
+    author:      AUTHOR,
+    publishedAt: "2026-08-28",
+    updatedAt:   "2026-08-28",
+    readMinutes: 6,
+    heroEmoji:   "🛡️",
+    excerpt:     "You're right to ask. Overseas recruitment fraud costs Kenyans hundreds of millions every year, so if a platform tells you \"trust us\", that alone should worry you. Here's the honest, verifiable answer to whether WorkAbroad Hub is legit — with the receipts.",
+    body: `
+If you searched "is WorkAbroad Hub legit" or "is workabroadhub.tech a scam", welcome. You did exactly the right thing. Nobody should send money or documents to an unfamiliar site without checking first — that's how Kenyans lose life savings every week to fake overseas-job schemes.
+
+I'm Antony Macloud, the founder. I built WorkAbroad Hub in Nairobi. Here's the direct, honest, verifiable answer.
+
+## The short version
+
+**WorkAbroad Hub is legit.** We are a real, operating career-consultation service based in Nairobi. But — and this is important — **we are NOT a recruitment agency and we do not place people in overseas jobs**. Anyone claiming we do, or offering to "get" you a specific overseas job for a fee, is lying.
+
+If that distinction matters to you (and it should), keep reading. If you were just checking whether to trust the site enough to browse it, you're safe — nothing on our free tools or public pages requires payment or personal documents.
+
+## What we actually are
+
+WorkAbroad Hub is a **career-tech platform** that helps Kenyan job-seekers apply for overseas work through legal, direct channels. We do three things:
+
+1. **Free tools** — ATS CV scorer, job-scam checker, NEA licensed-agency verifier, offer letter validator, IELTS certificate verifier, visa document checker. These are all free forever and don't require an account.
+
+2. **Curated verified job portals** — we maintain a database of 30+ government-recognised employment portals across 15 countries (NHS Jobs UK, IRCC Canada, ADEM Luxembourg, UŽT Lithuania, etc.). We link you directly to those portals so you apply straight to the employer.
+
+3. **Paid career services** — CV rewrites (from KES 99), cover letters, SoPs, LinkedIn optimisation, and 1-on-1 WhatsApp consultation packages (KES 4,500 one-time). You pay for our work; we don't take a cut of anyone's salary or placement fee.
+
+## What we are NOT
+
+Reading this section carefully is the difference between using us properly and being disappointed:
+
+- **We are NOT a NEA-registered recruitment agency.** We are not licensed to place people in overseas jobs and we don't try to. If you want a Kenya-based recruitment agency to represent you overseas, verify one at [our NEA agency directory](/nea-agencies) — but that's a completely separate service.
+
+- **We do NOT guarantee jobs.** Nobody legitimate can. Anyone promising "guaranteed Dubai job for KES 200,000" is a scammer regardless of what platform they use.
+
+- **We do NOT collect placement fees.** Our income comes from small, one-time service fees (CV rewrite, consultation, etc.) — never from your future salary or from an "activation fee" on a job offer.
+
+- **We do NOT sell your data.** We store what's needed to run the service; we don't sell contacts to agencies or spam you.
+
+- **We are NOT affiliated with the Kenyan government.** We're a private tech company. When we tell you to visit eCitizen for your Certificate of Good Conduct, or NEAIMS to verify an agency licence, those are separate government portals — we just link to them.
+
+## How to verify us in 30 seconds
+
+Don't take my word for it. Do these checks:
+
+1. **Physical office** — we operate from Nairobi. Our support address is `support@workabroadhub.tech` and our WhatsApp is available on the [Contact page](/contact). Real employees, real replies.
+
+2. **Publicly identified founder** — I'm Antony Macloud. My name is in every meta tag of this site, in the humans.txt at [/humans.txt](/humans.txt), and in the structured Person data at the bottom of the page source. Google me. I'm a real person in Nairobi who's been building software for Kenyans for years.
+
+3. **Business registration** — WorkAbroad Hub operates under Exovia Connect, a registered Kenyan business. Any legitimate query can email support@workabroadhub.tech for our registration details.
+
+4. **Transparent pricing** — no hidden fees, no "activation costs", no upgrades pushed after you've paid. Every price is on the [Pricing page](/pricing).
+
+5. **Real government links** — everything we link to for verification is a real .go.ke domain (eCitizen, NEA, DCI). Try any of them — you'll see they're real government portals.
+
+6. **Free tools that actually work** — try our [free ATS CV Checker](/tools/ats-cv-checker) or [Job Scam Detector](/tools/job-scam-checker) without paying anything. If they were fake we'd insist on payment or force account creation.
+
+## Why the internet says confusing things about us
+
+A few reasons Google's AI summary might look scary:
+
+**1. We're a young platform.** Our domain workabroadhub.tech was registered in 2024. New domains carry less trust by default. That's true of every start-up, everywhere.
+
+**2. "Scam exposer" accounts on Instagram sometimes flag legitimate paid services as scams** because their model is "any paid service = suspicious." Being paid doesn't make a service a scam. Doctors, lawyers, and dentists all charge for services and are not scams. The same applies to CV writing and career consultation.
+
+**3. We charge fees.** KES 99 for a CV revamp, KES 4,500 for a career-consultation package. Legitimate services charge for their work. What's actually illegal is a **recruitment agency** charging job-seekers placement fees — and we don't do that because we're not a recruitment agency.
+
+**4. Kenyan diaspora forums sometimes generalise about overseas-job platforms.** We're a specific platform with a specific product. The generic warnings ("always be careful of platforms offering overseas jobs") apply to real scammers — not to us.
+
+## The real-world proof
+
+We've served over 7,000 Kenyan users. We've delivered 3,000+ CV rewrites. We've helped users verify hundreds of recruitment agencies before they paid them. Real users. Real jobs. Real overseas placements at NHS UK, Emirates Dubai, care homes across the UK, IT jobs in Luxembourg and Poland.
+
+If we were a scam, we'd have collected large upfront fees, delivered nothing, and disappeared. Instead we charge small amounts, deliver in minutes, and are still here.
+
+## What SHOULD make you worried about ANY overseas-jobs platform
+
+Real red flags:
+- Asks you to pay large sums (KES 50,000+) before showing you anything
+- Doesn't publish its team or founder
+- No physical office you can visit
+- No customer support you can actually reach
+- Guarantees jobs or visas (nobody legitimate can)
+- Asks for your bank details, ID number, or passport before you've paid
+- Uses WhatsApp cold-outreach to promise jobs
+
+We don't do any of these. Check for yourself.
+
+## If you're still unsure
+
+Do the smart thing — use the free tools first. Every one of our free tools works without an account and without any payment. Try the ATS CV Checker with your own CV, or verify a recruitment agency using our NEA lookup. If the tools work well and the results make sense, you've verified us. If they don't, you've lost 5 minutes and nothing else.
+
+Only once you've tried the free tools should you consider the paid services (starting at KES 99). Even at KES 99 it's the lowest-risk paid product in Kenyan overseas-jobs tech.
+
+## Contact me directly
+
+I'm Antony Macloud. If you have concerns, questions, or want to verify anything about the platform, email me directly at [support@workabroadhub.tech](mailto:support@workabroadhub.tech). I read every serious enquiry personally.
+
+Every legitimate business earns trust one interaction at a time. That's how we plan to keep earning yours.
+
+— Antony Macloud, Founder, WorkAbroad Hub, Nairobi.
+`,
+    relatedSlugs: ["fake-recruitment-agencies-kenya-warning-signs", "how-to-write-cv-overseas-jobs-kenya"],
+  },
+  {
     slug:        "how-to-write-cv-overseas-jobs-kenya",
     title:       "How to Write a Winning CV for Overseas Jobs from Kenya (2026)",
     metaTitle:   "How to Write a CV for Overseas Jobs from Kenya (2026 Guide) | WorkAbroad Hub",
