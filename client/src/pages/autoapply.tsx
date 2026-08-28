@@ -218,6 +218,27 @@ export default function AutoApplyPage() {
           ))
         )}
       </section>
+
+      {/* ─── ToS-required attribution for the Adzuna free tier ─────────
+          Adzuna Developer Terms §5 require any product using their API
+          to display a "Powered by Adzuna" credit visible to end-users.
+          Placed here (page footer + on every Adzuna-sourced match card)
+          so we're compliant in both the aggregate and the individual
+          record view. */}
+      <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pb-10 pt-2 text-center">
+        <p className="text-xs text-muted-foreground">
+          Job data powered by{" "}
+          <a
+            href="https://www.adzuna.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-600 hover:underline font-medium"
+          >
+            Adzuna
+          </a>
+          . WorkAbroad Hub is not affiliated with Adzuna Ltd.
+        </p>
+      </section>
     </div>
   );
 }
@@ -311,6 +332,29 @@ function MatchCard({ match, onStatus }: { match: Match; onStatus: (s: Match["sta
             <Button size="sm" variant="ghost" className="gap-1 text-muted-foreground ml-auto" onClick={() => onStatus("dismissed")}>
               <X className="h-3 w-3" /> Dismiss
             </Button>
+          )}
+        </div>
+
+        {/* Per-card attribution — Adzuna ToS §5. Keep tiny + visible. */}
+        <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800 text-[10px] text-muted-foreground/70 flex items-center gap-1">
+          {match.source === "adzuna" && (
+            <>
+              Job data via{" "}
+              <a
+                href="https://www.adzuna.com/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:underline"
+              >
+                Adzuna
+              </a>
+            </>
+          )}
+          {match.source !== "adzuna" && <>Source: {match.source}</>}
+          {match.posted_at && (
+            <span className="ml-auto">
+              Posted {timeAgo(match.posted_at)}
+            </span>
           )}
         </div>
       </CardContent>
