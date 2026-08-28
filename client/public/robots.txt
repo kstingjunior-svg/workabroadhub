@@ -32,6 +32,8 @@ Allow: /agency-map
 Allow: /compliance-index
 Allow: /visa-guides
 Allow: /visit-visas
+Allow: /blog
+Allow: /blog/
 Allow: /green-card
 Allow: /student-visas
 Allow: /about

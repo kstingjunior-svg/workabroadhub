@@ -125,6 +125,9 @@ const VisaGuides = lazyWithRetry(() => import("@/pages/visa-guides"));
 // 2026-08 (Tony's request): visit/tourist visa hub for all 15 covered
 // countries. Public route — no auth required (top-of-funnel SEO play).
 const VisitVisas = lazyWithRetry(() => import("@/pages/visit-visas"));
+// 2026-08 SEO push: blog for long-tail keyword targeting. Public routes.
+const BlogIndex = lazyWithRetry(() => import("@/pages/blog/blog-index"));
+const BlogPost  = lazyWithRetry(() => import("@/pages/blog/blog-post"));
 const VisaCountry = lazyWithRetry(() => import("@/pages/visa-country"));
 const VisaAssistant = lazyWithRetry(() => import("@/pages/visa-assistant"));
 const BulkApply = lazyWithRetry(() => import("@/pages/bulk-apply"));
@@ -453,6 +456,8 @@ const LazyScamWall = withSuspense(ScamWall);
 const LazyGreenCard = withSuspense(GreenCard);
 const LazyVisaGuides = withSuspense(VisaGuides);
 const LazyVisitVisas = withSuspense(VisitVisas);
+const LazyBlogIndex  = withSuspense(BlogIndex);
+const LazyBlogPost   = withSuspense(BlogPost);
 const LazyVisaCountry = withSuspense(VisaCountry);
 const LazyVisaAssistant = withSuspense(VisaAssistant);
 const LazyBulkApply = withSuspense(BulkApply);
@@ -721,6 +726,8 @@ function AuthenticatedRoutes() {
       <Route path="/green-card" component={LazyGreenCard} />
       <Route path="/visa-guides" component={LazyVisaGuides} />
       <Route path="/visit-visas" component={LazyVisitVisas} />
+      <Route path="/blog" component={LazyBlogIndex} />
+      <Route path="/blog/:slug" component={LazyBlogPost} />
       <Route path="/visa/:country" component={LazyVisaCountry} />
       <Route path="/visa-assistant" component={LazyVisaAssistant} />
       <Route path="/bulk-apply" component={LazyBulkApply} />
