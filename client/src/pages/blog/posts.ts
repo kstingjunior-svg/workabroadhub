@@ -96,7 +96,7 @@ Reading this section carefully is the difference between using us properly and b
 
 Don't take my word for it. Do these checks:
 
-1. **Physical office** — we operate from Nairobi. Our support address is `support@workabroadhub.tech` and our WhatsApp is available on the [Contact page](/contact). Real employees, real replies.
+1. **Physical office** — we operate from Nairobi. Our support address is **support@workabroadhub.tech** and our WhatsApp is available on the [Contact page](/contact). Real employees, real replies.
 
 2. **Publicly identified founder** — I'm Antony Macloud. My name is in every meta tag of this site, in the humans.txt at [/humans.txt](/humans.txt), and in the structured Person data at the bottom of the page source. Google me. I'm a real person in Nairobi who's been building software for Kenyans for years.
 
