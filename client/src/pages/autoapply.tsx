@@ -58,6 +58,21 @@ interface Match {
   created_at: string;
 }
 
+interface PlanInfo {
+  id:                   string;
+  tier:                 "free" | "pro";
+  maxMatchesPerDay:     number;
+  maxCoverLettersPerDay: number;
+  scanEvery:            "daily" | "weekly";
+  dailyDigestEmail:     boolean;
+  priorityQueue:        boolean;
+  monthlyPriceKes:      number;
+}
+
+interface Offers {
+  pro: PlanInfo & { upgradeUrl: string };
+}
+
 const COUNTRY_OPTIONS = [
   { code: "uk", label: "🇬🇧 United Kingdom" },
   { code: "canada", label: "🇨🇦 Canada" },
@@ -82,11 +97,14 @@ export default function AutoApplyPage() {
   const qc = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<"new" | "starred" | "applied" | "dismissed" | "all">("new");
 
-  const { data: agentData, isLoading: agentLoading } = useQuery<{ agent: Agent | null }>({
+  const { data: agentData, isLoading: agentLoading } = useQuery<{ agent: Agent | null; plan: PlanInfo; offers: Offers }>({
     queryKey: ["/api/autoapply/agent"],
     staleTime: 30_000,
   });
   const agent = agentData?.agent ?? null;
+  const plan  = agentData?.plan;
+  const offers = agentData?.offers;
+  const isPro = plan?.tier === "pro";
 
   const { data: matchesData } = useQuery<{ matches: Match[] }>({
     queryKey: [`/api/autoapply/matches?status=${statusFilter === "all" ? "" : statusFilter}&limit=50`],
@@ -152,10 +170,24 @@ export default function AutoApplyPage() {
             <div>
               <h1 className="text-2xl sm:text-4xl font-bold flex items-center gap-2">
                 <Sparkles className="h-7 w-7" /> AutoApply Agent
+                {plan && (
+                  <Badge
+                    className={
+                      isPro
+                        ? "bg-gradient-to-r from-amber-400 to-orange-500 text-white border-0 font-bold text-xs uppercase tracking-wide"
+                        : "bg-white/15 border-white/25 text-white font-medium text-xs uppercase tracking-wide"
+                    }
+                  >
+                    {isPro ? "⚡ PRO" : "FREE"}
+                  </Badge>
+                )}
               </h1>
               <p className="text-blue-100/90 mt-1 text-sm">
                 Hunting {agent.target_roles.length} role{agent.target_roles.length !== 1 ? "s" : ""} across {agent.target_countries.length} {agent.target_countries.length === 1 ? "country" : "countries"}
                 {agent.last_scan_at ? ` · Last scan ${timeAgo(agent.last_scan_at)}` : " · No scans yet"}
+                {plan && (
+                  <span className="text-blue-200/70"> · {plan.maxMatchesPerDay} matches/day cap</span>
+                )}
               </p>
             </div>
             <div className="flex gap-2 flex-wrap">
@@ -204,6 +236,49 @@ export default function AutoApplyPage() {
         </div>
       </section>
 
+      {/* ─── FREE-tier upgrade card ─────────────────────────────────────
+           Shown only to free users, right above their match list. Anchor
+           of the paywall UX. Prices + limits come from /api/autoapply/agent
+           (single source of truth = server/lib/autoapply/plan-limits.ts). */}
+      {!isPro && offers && (
+        <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+          <Card className="border-2 border-amber-400/50 bg-gradient-to-r from-amber-50 via-orange-50 to-yellow-50 dark:from-amber-950/30 dark:via-orange-950/20 dark:to-yellow-950/30">
+            <CardContent className="p-5 sm:p-6 flex flex-col sm:flex-row gap-4 sm:items-center">
+              <div className="text-4xl sm:text-5xl">⚡</div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap mb-1">
+                  <h3 className="font-bold text-lg text-slate-900 dark:text-white">
+                    Upgrade to Pro
+                  </h3>
+                  <span className="text-xs font-semibold text-orange-700 dark:text-orange-300 bg-orange-100 dark:bg-orange-900/40 px-2 py-0.5 rounded-full uppercase tracking-wide">
+                    KES {offers.pro.monthlyPriceKes.toLocaleString()}/mo
+                  </span>
+                </div>
+                <p className="text-sm text-slate-700 dark:text-slate-300 leading-snug">
+                  You&apos;re on the Free plan — {plan?.maxMatchesPerDay} matches per week, no AI cover letters.
+                  Pro unlocks <b>{offers.pro.maxMatchesPerDay} matches/day</b>, <b>{offers.pro.maxCoverLettersPerDay} AI-drafted cover letters daily</b>, and the <b>morning digest email</b> that keeps you on top of every opportunity.
+                </p>
+                <ul className="mt-2 text-xs text-slate-600 dark:text-slate-400 space-y-0.5">
+                  <li>✓ 10× more matches surfaced every day</li>
+                  <li>✓ Tailored cover letter drafted for every top match</li>
+                  <li>✓ Morning email digest at 6am — never miss a fresh posting</li>
+                  <li>✓ Priority scan queue (your agent runs first)</li>
+                </ul>
+              </div>
+              <a href={offers.pro.upgradeUrl}>
+                <Button
+                  size="lg"
+                  className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white border-0 shadow-lg whitespace-nowrap gap-1"
+                  data-testid="btn-autoapply-upgrade"
+                >
+                  <Sparkles className="h-4 w-4" /> Upgrade for KES {offers.pro.monthlyPriceKes.toLocaleString()}
+                </Button>
+              </a>
+            </CardContent>
+          </Card>
+        </section>
+      )}
+
       {/* Match list */}
       <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-3">
         {matches.length === 0 ? (
@@ -214,7 +289,14 @@ export default function AutoApplyPage() {
           </Card>
         ) : (
           matches.map((m) => (
-            <MatchCard key={m.id} match={m} onStatus={(s) => setStatus.mutate({ id: m.id, status: s })} />
+            <MatchCard
+              key={m.id}
+              match={m}
+              isPro={isPro}
+              upgradeUrl={offers?.pro.upgradeUrl ?? "/services"}
+              proPrice={offers?.pro.monthlyPriceKes ?? 1500}
+              onStatus={(s) => setStatus.mutate({ id: m.id, status: s })}
+            />
           ))
         )}
       </section>
@@ -244,7 +326,15 @@ export default function AutoApplyPage() {
 }
 
 // ─── Match card ───────────────────────────────────────────────────────
-function MatchCard({ match, onStatus }: { match: Match; onStatus: (s: Match["status"]) => void }) {
+interface MatchCardProps {
+  match:      Match;
+  onStatus:   (s: Match["status"]) => void;
+  isPro:      boolean;
+  upgradeUrl: string;
+  proPrice:   number;
+}
+
+function MatchCard({ match, onStatus, isPro, upgradeUrl, proPrice }: MatchCardProps) {
   const { toast } = useToast();
   const [expanded, setExpanded] = useState(false);
 
@@ -308,6 +398,28 @@ function MatchCard({ match, onStatus }: { match: Match; onStatus: (s: Match["sta
             <div className="text-sm whitespace-pre-wrap text-slate-700 dark:text-slate-200 max-h-64 overflow-y-auto">
               {match.cover_letter}
             </div>
+          </div>
+        )}
+
+        {/* 2026-08 Phase 2 paywall: if the user is on the free tier AND
+            they've expanded a card that has NO cover letter (because free
+            plan skipped generating one), show the upgrade prompt right
+            where the letter would be. High-context conversion moment. */}
+        {expanded && !match.cover_letter && !isPro && (
+          <div className="border-2 border-dashed border-amber-400 rounded-lg p-4 mb-3 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/30 text-center space-y-2">
+            <div className="text-2xl">🔒</div>
+            <div className="text-sm font-semibold text-slate-900 dark:text-white">
+              AI cover letter — Pro feature
+            </div>
+            <p className="text-xs text-slate-600 dark:text-slate-400 max-w-md mx-auto">
+              Pro drafts a tailored 220-word cover letter for every match, written in the exact
+              tone recruiters in this country expect. Copy, paste, done — no writing from scratch.
+            </p>
+            <a href={upgradeUrl}>
+              <Button size="sm" className="bg-gradient-to-r from-amber-500 to-orange-500 text-white gap-1 mt-2">
+                <Sparkles className="h-3 w-3" /> Unlock for KES {proPrice.toLocaleString()}/mo
+              </Button>
+            </a>
           </div>
         )}
 

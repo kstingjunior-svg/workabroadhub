@@ -821,10 +821,10 @@ export default function Landing() {
               }}
               data-testid="btn-autoapply-hero"
             >
-              <Sparkles className="h-4 w-4" /> Activate my AutoApply Agent — Free trial
+              <Sparkles className="h-4 w-4" /> Activate my AutoApply Agent
             </Button>
             <p className="text-xs text-blue-200/70 mt-3">
-              Free during launch · No credit card required · Cancel anytime
+              Start free · 3 matches/week · Upgrade to Pro for 30 matches/day + AI cover letters + morning digest · KES 1,500/mo · Cancel anytime
             </p>
           </div>
         </section>

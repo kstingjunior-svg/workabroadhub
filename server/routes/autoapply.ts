@@ -15,6 +15,7 @@ import type { Express, Request, Response, RequestHandler } from "express";
 import { pool } from "../db";
 import { runScanForAgent, type AgentRow } from "../lib/autoapply";
 import { draftCoverLetter } from "../lib/autoapply/cover-letter";
+import { getAutoApplyLimits, AUTOAPPLY_PLAN_LIMITS } from "../lib/autoapply/plan-limits";
 
 function requireAuth(req: Request, res: Response): string | null {
   const userId = (req.session as any)?.customUserId as string | undefined;
@@ -26,14 +27,26 @@ function requireAuth(req: Request, res: Response): string | null {
 }
 
 export function registerAutoApplyRoutes(app: Express, _isAuthenticated?: RequestHandler): void {
-  // ── GET current user's agent ──────────────────────────────────────────
+  // ── GET current user's agent + their plan limits ────────────────────
   app.get("/api/autoapply/agent", async (req, res) => {
     const userId = requireAuth(req, res); if (!userId) return;
-    const { rows } = await pool.query<AgentRow>(
-      `SELECT * FROM autoapply_agents WHERE user_id = $1 LIMIT 1`,
-      [userId],
-    );
-    return res.json({ agent: rows[0] ?? null });
+    const [agentRes, planRes] = await Promise.all([
+      pool.query<AgentRow>(`SELECT * FROM autoapply_agents WHERE user_id = $1 LIMIT 1`, [userId]),
+      pool.query<{ plan: string | null; is_admin: boolean | null; role: string | null }>(
+        `SELECT plan, is_admin, role FROM users WHERE id = $1`, [userId],
+      ),
+    ]);
+    const u = planRes.rows[0];
+    const isAdmin = !!(u?.is_admin || u?.role === "ADMIN" || u?.role === "SUPER_ADMIN");
+    const planKey = isAdmin ? "pro" : (u?.plan ?? "free");
+    return res.json({
+      agent:  agentRes.rows[0] ?? null,
+      plan:   { id: planKey, ...getAutoApplyLimits(planKey) },
+      offers: {
+        // Frontend uses these to render the upgrade card
+        pro: { ...AUTOAPPLY_PLAN_LIMITS.pro, upgradeUrl: "/services" },
+      },
+    });
   });
 
   // ── POST create/update agent (upsert) ─────────────────────────────────
@@ -191,8 +204,25 @@ export function registerAutoApplyRoutes(app: Express, _isAuthenticated?: Request
   });
 
   // ── POST regenerate cover letter for a match ──────────────────────────
+  // Pro-only (Phase 2 gate). Free users see a "Upgrade to draft" prompt
+  // in the UI instead of the button.
   app.post("/api/autoapply/matches/:id/draft-letter", async (req, res) => {
     const userId = requireAuth(req, res); if (!userId) return;
+
+    // Plan check
+    const { rows: u } = await pool.query<{ plan: string | null; is_admin: boolean | null; role: string | null }>(
+      `SELECT plan, is_admin, role FROM users WHERE id = $1`, [userId],
+    );
+    const isAdmin = !!(u[0]?.is_admin || u[0]?.role === "ADMIN" || u[0]?.role === "SUPER_ADMIN");
+    const limits = getAutoApplyLimits(isAdmin ? "pro" : (u[0]?.plan ?? "free"));
+    if (limits.maxCoverLettersPerDay === 0) {
+      return res.status(402).json({
+        message: "AI cover letters are a Pro feature.",
+        upgradeUrl: "/services",
+        planRequired: "pro",
+      });
+    }
+
     const matchId = String(req.params.id);
     const { rows } = await pool.query(
       `SELECT m.job_title, m.employer, m.country, m.description, a.cv_text

@@ -20,6 +20,7 @@ import { scoreJobAgainstCv } from "./matcher";
 import { fetchAdzunaJobs, type NormalisedJob } from "./sources/adzuna";
 import { draftCoverLetter } from "./cover-letter";
 import { sendDailyDigest } from "./report";
+import { getAutoApplyLimits, type AutoApplyPlanLimits } from "./plan-limits";
 
 // ─── Public API ───────────────────────────────────────────────────────────
 
@@ -63,6 +64,12 @@ export async function runScanForAgent(agent: AgentRow): Promise<ScanSummary> {
   let stored = 0;
   let drafted = 0;
 
+  // 2026-08 (Phase 2 revenue): resolve the user's plan-based limits so
+  // free users get a taste (3 matches, no AI letters) and paid users
+  // get the full experience. Runs INSIDE the scan (not at API layer)
+  // so limits apply equally to on-demand + scheduled scans.
+  const limits = await resolveLimitsForUser(agent.user_id);
+
   try {
     // 1. Fetch jobs from all configured sources
     const jobs: NormalisedJob[] = [];
@@ -83,6 +90,14 @@ export async function runScanForAgent(agent: AgentRow): Promise<ScanSummary> {
     scanned = jobs.length;
 
     // 2. Score every fetched job against the user's CV
+    // 2026-08 Phase 2: use the SMALLER of (user's chosen daily cap, their
+    // plan's max). Free users are hard-capped at 3 matches/day even if
+    // they entered a bigger number in their config.
+    const effectiveCap = Math.min(
+      agent.max_matches_per_day,
+      limits.maxMatchesPerDay,
+    );
+
     const scored = jobs
       .map((job) => {
         const { score, reasons } = scoreJobAgainstCv({
@@ -97,7 +112,7 @@ export async function runScanForAgent(agent: AgentRow): Promise<ScanSummary> {
       })
       .filter((m) => m.score >= 40)   // discard weak matches
       .sort((a, b) => b.score - a.score)
-      .slice(0, agent.max_matches_per_day);
+      .slice(0, effectiveCap);
 
     // 3. Persist matches (ON CONFLICT dedupes previously-seen jobs)
     for (const { job, score, reasons } of scored) {
@@ -120,8 +135,11 @@ export async function runScanForAgent(agent: AgentRow): Promise<ScanSummary> {
       });
       if (inserted) {
         stored++;
-        // 4. Draft a cover letter for the top 5 new matches only (LLM cost control)
-        if (drafted < 5) {
+        // 4. Draft a cover letter for the top N new matches ONLY if the
+        //    user's plan permits AI letters (Phase 2 gate). Free users
+        //    see the match + apply URL but no letter — upgrade prompt
+        //    in the UI encourages them to Pro for the drafting service.
+        if (drafted < limits.maxCoverLettersPerDay) {
           try {
             const letter = await draftCoverLetter({
               jobTitle:    job.title,
@@ -139,16 +157,21 @@ export async function runScanForAgent(agent: AgentRow): Promise<ScanSummary> {
       }
     }
 
-    // 5. Send the morning digest (best-effort — a fail here doesn't fail the whole scan)
+    // 5. Send the morning digest — Pro-only (Phase 2 gate). Free users
+    //    see matches in the /autoapply inbox but don't get the daily
+    //    email. That daily-email habit is one of the biggest reasons
+    //    users upgrade — losing it hurts.
     let reportSent = false;
-    try {
-      const matches = await loadRecentMatches(agent.id, 24);
-      if (matches.length > 0) {
-        await sendDailyDigest({ agent, matches });
-        reportSent = true;
+    if (limits.dailyDigestEmail) {
+      try {
+        const matches = await loadRecentMatches(agent.id, 24);
+        if (matches.length > 0) {
+          await sendDailyDigest({ agent, matches });
+          reportSent = true;
+        }
+      } catch (err: any) {
+        console.warn(`[autoapply] digest send failed agent=${agent.id}:`, err?.message);
       }
-    } catch (err: any) {
-      console.warn(`[autoapply] digest send failed agent=${agent.id}:`, err?.message);
     }
 
     await closeScanRun(runId, {
@@ -327,4 +350,26 @@ async function closeScanRun(
       patch.errorMessage ?? null,
     ],
   );
+}
+
+// ─── Plan resolution ─────────────────────────────────────────────────
+// Cheap fetch — we skip /api/auth/user's heavier caching path since
+// scans happen in the background where a few extra ms are irrelevant.
+// Admins are treated as Pro (matches the rest of the platform's admin
+// bypass pattern).
+async function resolveLimitsForUser(userId: string): Promise<AutoApplyPlanLimits> {
+  try {
+    const { rows } = await pool.query<{ plan: string | null; is_admin: boolean | null; role: string | null }>(
+      `SELECT plan, is_admin, role FROM users WHERE id = $1`,
+      [userId],
+    );
+    const u = rows[0];
+    if (!u) return getAutoApplyLimits("free");
+    if (u.is_admin || u.role === "ADMIN" || u.role === "SUPER_ADMIN") {
+      return getAutoApplyLimits("pro");
+    }
+    return getAutoApplyLimits(u.plan);
+  } catch {
+    return getAutoApplyLimits("free");
+  }
 }
