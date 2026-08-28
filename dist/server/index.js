@@ -726,6 +726,13 @@ app.use((req, res, next) => {
         CREATE INDEX IF NOT EXISTS autoapply_agents_user_id_idx  ON autoapply_agents(user_id);
         CREATE INDEX IF NOT EXISTS autoapply_agents_active_idx   ON autoapply_agents(is_active) WHERE is_active = true;
 
+        -- 2026-08 Phase 2.5: 7-day Pro free trial on first agent creation.
+        -- pro_trial_ends_at is set to NOW() + 7 days when the user first
+        -- creates an agent. resolveLimitsForUser treats users with an
+        -- active trial as Pro regardless of their users.plan column.
+        ALTER TABLE autoapply_agents ADD COLUMN IF NOT EXISTS pro_trial_ends_at TIMESTAMP;
+        CREATE INDEX IF NOT EXISTS autoapply_agents_trial_idx ON autoapply_agents(pro_trial_ends_at) WHERE pro_trial_ends_at IS NOT NULL;
+
         CREATE TABLE IF NOT EXISTS autoapply_matches (
           id                  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
           agent_id            UUID        NOT NULL REFERENCES autoapply_agents(id) ON DELETE CASCADE,
