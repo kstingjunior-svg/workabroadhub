@@ -79,6 +79,9 @@ function renderHtml(args) {
       <br />
       <a href="https://workabroadhub.tech/autoapply" style="color:#64748b;">Manage settings</a> · <a href="https://workabroadhub.tech/autoapply?pause=1" style="color:#64748b;">Pause daily reports</a>
     </p>
+    <p style="color:#cbd5e1;font-size:11px;text-align:center;margin-top:8px;">
+      Job data powered by <a href="https://www.adzuna.com/" style="color:#94a3b8;">Adzuna</a>. WorkAbroad Hub is independent and not affiliated with Adzuna Ltd.
+    </p>
   </div>
 </body>
 </html>`;
