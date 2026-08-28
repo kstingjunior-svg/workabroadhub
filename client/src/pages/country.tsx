@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRoute, useLocation } from "wouter";
+import { usePageSeo } from "@/hooks/use-page-seo";
 import { trackJobLinkClick } from "@/lib/analytics";
 import { useJobRedirect } from "@/hooks/use-job-redirect";
 import { useAuth } from "@/hooks/use-auth";
@@ -244,6 +245,29 @@ const countryData: Record<string, { name: string; flagEmoji: string }> = {
 
 export default function Country() {
   const [, params] = useRoute("/country/:code");
+  // 2026-08 SEO: each country page gets its own unique title + description.
+  // Was previously inheriting the homepage's <title> from index.html, which
+  // was Google's #1 signal to demote every subpage. Now each of the 15
+  // country hubs targets country-specific queries like "jobs in canada
+  // from kenya" and "uk skilled worker visa kenya".
+  {
+    const code = params?.code || "";
+    const meta = (COUNTRY_META as any)[code] as { name: string; flagEmoji: string } | undefined;
+    const countryName = meta?.name || (code ? code.charAt(0).toUpperCase() + code.slice(1) : "Country");
+    usePageSeo({
+      title:       `${countryName} Jobs for Kenyans — Verified Portals, Visa Guide, Salary Info | WorkAbroad Hub`,
+      description: `Find verified overseas jobs in ${countryName}. Direct links to government-recognised employment portals, visa requirements from Kenya, salary ranges, and step-by-step application guides. No agents, no middlemen.`,
+      path:        `/country/${code}`,
+      keywords:    [
+        `jobs in ${countryName.toLowerCase()} from kenya`,
+        `${countryName.toLowerCase()} visa sponsorship kenya`,
+        `${countryName.toLowerCase()} work permit kenyan`,
+        `${countryName.toLowerCase()} employment kenya`,
+        `verified ${countryName.toLowerCase()} job portals`,
+      ],
+    });
+  }
+
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const { openJob } = useJobRedirect();

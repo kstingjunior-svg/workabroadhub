@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
+import { usePageSeo } from "@/hooks/use-page-seo";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
@@ -148,6 +149,21 @@ const PLAN_UI: Omit<PlanConfig, "price">[] = [
 ];
 
 export default function PricingPage() {
+  // 2026-08 SEO: pricing page had generic homepage title. Now targets
+  // "workabroad hub pricing" and cost-comparison queries.
+  usePageSeo({
+    title:       "Pricing — Career Consultation from KES 99 · Pay by M-Pesa or PayPal | WorkAbroad Hub",
+    description: "Transparent pricing for Kenya's leading overseas-jobs platform. Start free, upgrade to Basic (KES 1,000/mo) or Pro (KES 4,500/mo). One-time career services from KES 99. M-Pesa + PayPal accepted.",
+    path:        "/pricing",
+    keywords:    [
+      "workabroad hub pricing",
+      "kenya cv service price",
+      "overseas jobs kenya cost",
+      "career consultation fee kenya",
+      "m-pesa career services",
+    ],
+  });
+
   const { user }     = useAuth();
   const [, navigate] = useLocation();
 

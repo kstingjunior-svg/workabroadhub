@@ -23,6 +23,7 @@
  */
 import { useMemo, useState } from "react";
 import { Link } from "wouter";
+import { usePageSeo } from "@/hooks/use-page-seo";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -332,6 +333,17 @@ const DIFFICULTY_STYLES: Record<VisitVisa["difficulty"], string> = {
 // ─── Component ────────────────────────────────────────────────────────────
 
 export default function VisitVisasPage() {
+  usePageSeo({
+    title:       "Visit Visa Guide for Kenyans (2026) — 15 Countries · Official Portals & Nairobi Application Centres",
+    description: "Complete visit-visa guide for Kenyan passport holders. Costs, processing times, and official portals for USA, UK, Canada, Australia, UAE, Schengen and more — plus exact Nairobi VFS / TLScontact addresses.",
+    path:        "/visit-visas",
+    keywords:    [
+      "visit visa kenya", "tourist visa kenya", "schengen visa kenya",
+      "US B1 B2 visa kenya", "UK visitor visa kenya", "canada TRV kenya",
+      "VFS Nairobi", "TLScontact Nairobi", "kenya passport visa",
+    ],
+  });
+
   const [query, setQuery] = useState("");
   const [difficultyFilter, setDifficultyFilter] = useState<"all" | "Easy" | "Medium" | "Hard">("all");
 

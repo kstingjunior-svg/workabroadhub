@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { usePageSeo } from "@/hooks/use-page-seo";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -414,6 +415,23 @@ function JobCard({
 }
 
 export default function VisaSponsorshipJobs() {
+  // 2026-08 SEO: high-intent long-tail — "visa sponsorship jobs kenya",
+  // "companies that sponsor visas for kenyans" etc.
+  usePageSeo({
+    title:       "Visa Sponsorship Jobs for Kenyans (2026) — Verified Employers Only | WorkAbroad Hub",
+    description: "Live database of overseas employers actively sponsoring work visas for Kenyan candidates. Filter by country, industry, and salary. USA, Canada, UK, Australia, UAE, Europe. Free to browse.",
+    path:        "/tools/visa-sponsorship-jobs",
+    keywords:    [
+      "visa sponsorship jobs kenya",
+      "companies that sponsor visas for kenyans",
+      "overseas jobs with sponsorship",
+      "uk visa sponsorship jobs kenya",
+      "canada visa sponsor jobs kenya",
+      "us visa sponsorship jobs kenya",
+      "australia sponsor visa kenya",
+    ],
+  });
+
   const [, navigate] = useLocation();
   const [country, setCountry] = useState("All Countries");
   const [category, setCategory] = useState("All Categories");

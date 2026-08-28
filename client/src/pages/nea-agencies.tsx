@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { usePageSeo } from "@/hooks/use-page-seo";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -111,6 +112,22 @@ function AgencyRatingDisplay({ licenseNumber }: { licenseNumber: string }) {
 }
 
 export default function NeaAgenciesPage() {
+  // 2026-08 SEO: high-intent page targeting "NEA licensed recruitment
+  // agencies", "verify NEA license", "kenya recruitment agencies list".
+  usePageSeo({
+    title:       "NEA Licensed Recruitment Agencies in Kenya — Verify Any Agency Before You Pay | WorkAbroad Hub",
+    description: "Free verification tool for Kenya's 2,625+ recruitment agencies. Search by name or licence number. Check active vs expired NEA licences before paying any agency. Updated live from the National Employment Authority register.",
+    path:        "/nea-agencies",
+    keywords:    [
+      "NEA licensed agencies kenya",
+      "verify NEA license",
+      "kenya recruitment agencies list",
+      "check agency license kenya",
+      "national employment authority verified agencies",
+      "kenya overseas recruitment agencies",
+    ],
+  });
+
   const { toast } = useToast();
   const { user } = useAuth();
   const { openUpgradeModal } = useUpgradeModal();

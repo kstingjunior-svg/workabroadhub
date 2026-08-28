@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { fetchCsrfToken, clearCsrfToken } from "@/lib/queryClient";
+import { usePageSeo } from "@/hooks/use-page-seo";
 import { trackServerEvent } from "@/lib/analytics";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -129,6 +130,24 @@ function ServiceCardSkeleton() {
 }
 
 export default function Services() {
+  // 2026-08 SEO: /services was showing the homepage title, was penalised
+  // by Google (98% traffic drop) as a duplicate. Unique title targets
+  // the "professional CV writing kenya" long-tail queries.
+  usePageSeo({
+    title:       "Professional CV, Cover Letter & Career Services for Kenyans — Pay by M-Pesa | WorkAbroad Hub",
+    description: "ATS-optimised CV rewrite, cover letters, SoP, LinkedIn optimisation, and interview coaching for Kenyans seeking overseas jobs. Delivered in minutes. From KES 99. Pay by M-Pesa or PayPal.",
+    path:        "/services",
+    keywords:    [
+      "professional cv writing kenya",
+      "ats cv kenya",
+      "cover letter kenya",
+      "linkedin optimization kenya",
+      "career services kenya",
+      "sop writing kenya",
+      "interview coaching kenya",
+    ],
+  });
+
   const [activeCategory, setActiveCategory] = useState("All");
   const [bookingOpen, setBookingOpen] = useState(false);
   const [paying, setPaying] = useState<string | null>(null);
