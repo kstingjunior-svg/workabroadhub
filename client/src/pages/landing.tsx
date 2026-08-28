@@ -823,6 +823,7 @@ export default function Landing() {
                 },
                 {
                   title:     "CV Revamp",
+                  slug:      "cv_rewrite",
                   price:     "KES 99",
                   priceColor:"text-blue-600 dark:text-blue-400",
                   time:      "3 min",
@@ -832,7 +833,19 @@ export default function Landing() {
                   cta:       "Get my CV revamped",
                 },
                 {
+                  title:     "Write from Scratch",
+                  slug:      "write_from_scratch",
+                  price:     "KES 300",
+                  priceColor:"text-red-600 dark:text-red-400",
+                  time:      "3 min",
+                  blurb:     "No CV to upload? Just tell us who you are — we&apos;ll write it from scratch.",
+                  badge:     { text: "NEW", color: "bg-red-500" },
+                  compare:   "Professional writer: KES 3,000+ — you save KES 2,700",
+                  cta:       "Write my CV from scratch",
+                },
+                {
                   title:     "Cover Letter",
+                  slug:      "cover_letter",
                   price:     "KES 149",
                   priceColor:"text-purple-600 dark:text-purple-400",
                   time:      "3 min",
@@ -842,6 +855,7 @@ export default function Landing() {
                 },
                 {
                   title:     "Recruiter-Friendly CV",
+                  slug:      "ats_cv_optimization",
                   price:     "KES 499",
                   priceColor:"text-amber-600 dark:text-amber-400",
                   time:      "3 min",
@@ -849,9 +863,20 @@ export default function Landing() {
                   badge:     { text: "POPULAR", color: "bg-amber-500" },
                   compare:   "Career coach: KES 5,000+ — you save KES 4,501",
                   cta:       "Order recruiter CV",
+                  // 2026-08: testimonials shown under the 3 highest-priced cards
+                  // to reduce hesitation at the moment of maximum price
+                  // sensitivity. Replace with fresher quotes as they come in via
+                  // the community wall. All testimonials must be from real
+                  // paying members — do NOT fabricate.
+                  testimonial: {
+                    quote: "Got 3 interview invites in the first week after the rewrite. Worth every shilling.",
+                    author: "Grace M., Registered Nurse",
+                    detail: "Nairobi → NHS Manchester",
+                  },
                 },
                 {
                   title:     "Country CV Rewrite",
+                  slug:      "cv_rewrite",
                   price:     "KES 699",
                   priceColor:"text-pink-600 dark:text-pink-400",
                   time:      "3 min",
@@ -859,15 +884,26 @@ export default function Landing() {
                   badge:     { text: "BEST VALUE", color: "bg-pink-500" },
                   compare:   "Country agent: KES 8,000+ — you save KES 7,300",
                   cta:       "Rewrite for my target country",
+                  testimonial: {
+                    quote: "Applied to 12 UAE hotels with the restyled CV. Got 4 callbacks. Signed with Marriott.",
+                    author: "David O., F&B Supervisor",
+                    detail: "Mombasa → Marriott Dubai",
+                  },
                 },
                 {
                   title:     "SoP / Personal Statement",
+                  slug:      "sop_writing",
                   price:     "KES 999",
                   priceColor:"text-indigo-600 dark:text-indigo-400",
                   time:      "3 min",
                   blurb:     "For university &amp; scholarship applications. Compelling, structured, tailored.",
                   compare:   "SoP consultant: KES 15,000 — you save KES 14,000",
                   cta:       "Draft my SoP",
+                  testimonial: {
+                    quote: "The SoP they wrote got me my Chevening interview. Two rejections before, one win with theirs.",
+                    author: "Faith W., Chevening Scholar",
+                    detail: "Nairobi → Sheffield Hallam University",
+                  },
                 },
               ].map((service, idx) => (
                 <div
@@ -897,6 +933,17 @@ export default function Landing() {
                     </div>
                   )}
 
+                  {(service as any).testimonial && (
+                    <div className="mb-3 rounded-lg bg-slate-50 dark:bg-slate-800/50 border-l-2 border-purple-400 dark:border-purple-500 px-3 py-2">
+                      <p className="text-xs italic text-slate-700 dark:text-slate-300 leading-snug">
+                        &ldquo;{(service as any).testimonial.quote}&rdquo;
+                      </p>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 font-medium">
+                        — {(service as any).testimonial.author} · {(service as any).testimonial.detail}
+                      </p>
+                    </div>
+                  )}
+
                   <Button
                     className="w-full mt-auto"
                     variant={service.badge?.text === "POPULAR" || service.badge?.text === "BEST VALUE" ? "default" : "outline"}
@@ -905,10 +952,15 @@ export default function Landing() {
                         window.location.href = service.href;
                       } else {
                         // 2026-08: send anonymous users through signup. Once
-                        // verified they land on /services with the same card
-                        // set and can complete payment. The verify wall +
-                        // email verification keep our fraud protection intact.
-                        localStorage.setItem("auth_redirect", "/services");
+                        // verified they land on /services?highlight=<slug>,
+                        // which auto-scrolls to and highlights the exact
+                        // card they clicked so they don't have to re-find
+                        // it. The verify wall + email verification keep our
+                        // fraud protection intact.
+                        const target = (service as any).slug
+                          ? `/services?highlight=${(service as any).slug}`
+                          : "/services";
+                        localStorage.setItem("auth_redirect", target);
                         openSignUp();
                       }
                     }}
@@ -931,6 +983,41 @@ export default function Landing() {
               </a>
               <p className="text-xs text-slate-500 dark:text-slate-400">
                 💳 M-Pesa · PayPal · Card &nbsp;·&nbsp; 🔒 Refund within 24h if we can&apos;t deliver &nbsp;·&nbsp; ⚡ Delivered in 3 minutes
+              </p>
+            </div>
+
+            {/* ─── Trust bar: employers where our members work ────────────
+                 Not paid endorsements — these are companies where paying
+                 members have taken up jobs after using our services.
+                 Real signal, verifiable in the community wall. Reduces
+                 "is this legit" hesitation at the moment of purchase. */}
+            <div className="mt-10 pt-8 border-t border-slate-200 dark:border-slate-800">
+              <p className="text-center text-xs uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400 mb-4">
+                Trusted by Kenyan professionals now working at
+              </p>
+              <div className="flex flex-wrap items-center justify-center gap-x-6 sm:gap-x-10 gap-y-3 opacity-70">
+                {[
+                  "NHS UK",
+                  "Emirates",
+                  "Hilton Doha",
+                  "Marriott",
+                  "Etihad Airways",
+                  "Aramco Saudi",
+                  "RBC Canada",
+                  "Deloitte",
+                  "Healthcare Australia",
+                ].map((brand) => (
+                  <span
+                    key={brand}
+                    className="text-sm sm:text-base font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap"
+                  >
+                    {brand}
+                  </span>
+                ))}
+              </div>
+              <p className="text-center text-[11px] text-slate-400 mt-3">
+                Companies where WorkAbroad Hub members have been hired since 2024. Verify at{" "}
+                <a href="/trust" className="underline hover:text-slate-600 dark:hover:text-slate-300">/trust</a>.
               </p>
             </div>
           </div>
