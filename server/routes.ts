@@ -5641,6 +5641,43 @@ Crawl-delay: 1`);
             phone:  phonePaid || null,
           });
 
+          // 2026-08 (P0 anonymous checkout): GUEST ORDER FAST-PATH.
+          // If the payment metadata carries { isGuestOrder: true, serviceOrderId },
+          // there is no user_id and no user to look up. Skip runPaymentPipeline
+          // entirely (which requires a user) and directly kick off AI generation
+          // for the linked service_orders row. notifyOrderCompleted (called by
+          // processOrder after AI finishes) already handles guest email delivery
+          // via the download_token magic link.
+          let isGuestOrderPayment = false;
+          let guestOrderIdForPipeline: string | null = null;
+          try {
+            const gmeta: any = typeof payment.metadata === "string"
+              ? JSON.parse(payment.metadata)
+              : (payment.metadata ?? {});
+            if (gmeta?.isGuestOrder === true && typeof gmeta.serviceOrderId === "string") {
+              isGuestOrderPayment = true;
+              guestOrderIdForPipeline = gmeta.serviceOrderId;
+            }
+          } catch { /* metadata parse fail — fall through to normal flow */ }
+
+          if (isGuestOrderPayment && guestOrderIdForPipeline) {
+            console.log(`[MPESA/PAYMENTS CALLBACK] Guest order fast-path: paymentId=${payment.id} orderId=${guestOrderIdForPipeline}`);
+            try {
+              const { onPaymentSuccessForServiceOrder } = await import("./service-order-routes");
+              onPaymentSuccessForServiceOrder(guestOrderIdForPipeline).then(() =>
+                console.log(`[MPESA/PAYMENTS CALLBACK] Guest AI generation triggered | orderId=${guestOrderIdForPipeline}`)
+              ).catch((err: any) =>
+                console.error(`[MPESA/PAYMENTS CALLBACK] Guest AI generation FAILED: ${err?.message}`)
+              );
+              await storage.updatePayment(payment.id, {
+                deliveryStatus: "delivered",
+              } as any).catch(() => {});
+            } catch (guestErr: any) {
+              console.error(`[MPESA/PAYMENTS CALLBACK] Guest fast-path failed: ${guestErr?.message}`);
+            }
+            return;  // done — skip the rest of the pipeline
+          }
+
           // 6-7. runPaymentPipeline — processPayment → unlockService → deliverService → notify
           // Resolution order: userId (set at STK push) → phonePaid fallback (guest / orphan-linked)
           let pipelineUser = await storage.getUserById(payment.userId).catch(() => null);

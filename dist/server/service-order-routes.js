@@ -44,6 +44,7 @@ exports.registerServiceOrderRoutes = registerServiceOrderRoutes;
 const multer_1 = __importDefault(require("multer"));
 const crypto_1 = __importDefault(require("crypto"));
 const db_1 = require("./db");
+const storage_1 = require("./storage");
 const openai_1 = require("./lib/openai");
 const extract_text_1 = require("./utils/extract-text");
 const document_renderer_1 = require("./services/document-renderer");
@@ -1760,16 +1761,15 @@ function registerServiceOrderRoutes(app, isAuthenticated) {
             // `service_id`/`service_name` not `description`, `email` for payer,
             // and needs user_id NULLABLE (fixed in migration 0045).
             const paymentId = crypto_1.default.randomUUID();
-            // 2026-08 (P0): the real DB has payments.metadata as JSONB (despite
-            // the Drizzle schema saying varchar). Without ::jsonb cast, Postgres
-            // errors "COALESCE types character varying and json cannot be matched"
-            // because the callback/verify handlers do COALESCE(metadata, '{}'::jsonb).
+            // 2026-08 (P0): payments.metadata is VARCHAR in the real DB (legacy
+            // schema stores stringified JSON as text — see the BUGFIX comment at
+            // routes.ts:6325). No ::jsonb cast; just plain text JSON string.
             await db_1.pool.query(`INSERT INTO payments
            (id, user_id, email, amount, currency, status, method, phone,
             reference, service_id, service_name, metadata,
             created_at, updated_at)
          VALUES ($1, $2, $3, $4, 'KES', 'pending', 'mpesa', $5,
-                 $6, $7, $8, $9::jsonb,
+                 $6, $7, $8, $9,
                  NOW(), NOW())`, [
                 paymentId,
                 null, // guest — no user (column now nullable, see 0045)
@@ -1792,13 +1792,33 @@ function registerServiceOrderRoutes(app, isAuthenticated) {
             const callbackUrl = appOrigin ? `${appOrigin}/api/payments/mpesa/callback` : undefined;
             const stk = await stkPush(normalizedPhone, amount, `${order.service_name}`.slice(0, 60), paymentId, callbackUrl);
             // Persist Safaricom identifiers so the callback can find this row.
+            // 2026-08 (P0): metadata is VARCHAR (stores JSON strings), NOT jsonb.
+            // Read → parse → merge → stringify → write. Also write to
+            // checkout_request_id column directly since it exists on the schema
+            // and the callback matches on that field first.
             const merchantId = stk?.MerchantRequestID ?? null;
             const checkoutId = stk?.CheckoutRequestID ?? null;
             if (checkoutId) {
-                await db_1.pool.query(`UPDATE payments
-              SET metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb,
-                  updated_at = NOW()
-            WHERE id = $1`, [paymentId, JSON.stringify({ merchantRequestId: merchantId, checkoutRequestId: checkoutId })]);
+                try {
+                    const { rows: metaRows } = await db_1.pool.query(`SELECT metadata FROM payments WHERE id = $1`, [paymentId]);
+                    let merged = {};
+                    try {
+                        merged = metaRows[0]?.metadata ? JSON.parse(metaRows[0].metadata) : {};
+                    }
+                    catch {
+                        merged = {};
+                    }
+                    merged.merchantRequestId = merchantId;
+                    merged.checkoutRequestId = checkoutId;
+                    await db_1.pool.query(`UPDATE payments
+                SET metadata = $2,
+                    checkout_request_id = $3,
+                    updated_at = NOW()
+              WHERE id = $1`, [paymentId, JSON.stringify(merged), checkoutId]);
+                }
+                catch (metaErr) {
+                    console.warn("[ServiceOrder] payment metadata update failed:", metaErr?.message);
+                }
             }
             console.log(`[ServiceOrder] Guest STK push initiated: orderId=${order.id} paymentId=${paymentId} phone=${normalizedPhone} amount=${amount}`);
             res.json({
@@ -2027,6 +2047,60 @@ function registerServiceOrderRoutes(app, isAuthenticated) {
         catch (err) {
             console.error("[ServiceOrder] download error:", err?.message);
             res.status(500).json({ message: "Could not generate the document. Please try again." });
+        }
+    });
+    // ─── POST /api/admin/service-orders/:id/force-generate ───────────────────
+    // 2026-08 (P0 stuck-payment recovery): when a guest payment succeeded but
+    // the callback failed to trigger AI generation (COALESCE bug, orphaned
+    // link, whatever), admin can force-generate here. Bypasses the payment
+    // status check — treat the fact that admin is calling as authorization
+    // that money was received. Marks any matching pending_payment order as
+    // paid before kicking off generation.
+    //
+    // Auth: admin session OR ?adminKey=xxx matching ADMIN_FORCE_KEY env
+    //       (fallback so admin can hit this from an incognito browser tab
+    //       without needing to sign in on that device).
+    app.post("/api/admin/service-orders/:id/force-generate", async (req, res) => {
+        try {
+            const orderId = String(req.params.id || "").trim();
+            if (!orderId)
+                return res.status(400).json({ message: "orderId required" });
+            // Auth
+            const adminId = req.user?.claims?.sub ?? req.user?.id;
+            const isSessionAdmin = adminId
+                ? await storage_1.storage.isUserAdmin(adminId).catch(() => false)
+                : false;
+            const adminKey = String(req.query?.adminKey ?? req.body?.adminKey ?? "");
+            const envAdminKey = process.env.ADMIN_FORCE_KEY || "";
+            const isKeyAdmin = envAdminKey.length > 8 && adminKey === envAdminKey;
+            if (!isSessionAdmin && !isKeyAdmin) {
+                return res.status(403).json({ message: "Admin only" });
+            }
+            // Verify the order exists
+            const { rows } = await db_1.pool.query(`SELECT id, status, service_name FROM service_orders WHERE id = $1 LIMIT 1`, [orderId]);
+            const order = rows[0];
+            if (!order)
+                return res.status(404).json({ message: "Order not found" });
+            // If still pending_payment, flip to paid so processOrder will run.
+            // (Idempotent — if already paid/processing/completed, we still kick off.)
+            if (order.status === "pending_payment") {
+                await db_1.pool.query(`UPDATE service_orders SET status = 'paid', updated_at = NOW() WHERE id = $1`, [orderId]);
+            }
+            console.log(`[admin/force-generate] triggered for orderId=${orderId} previousStatus=${order.status} by=${isSessionAdmin ? adminId : "ADMIN_KEY"}`);
+            // Fire and forget — we don't want to hold the HTTP response for
+            // 60 seconds while AI generates.
+            onPaymentSuccessForServiceOrder(orderId).catch((err) => console.error(`[admin/force-generate] async gen failed: ${err?.message}`));
+            res.json({
+                success: true,
+                orderId,
+                serviceName: order.service_name,
+                previousStatus: order.status,
+                message: "AI generation triggered. Poll /api/services/order/:id/status?token=xxx or watch /my-orders to see it complete in ~1 minute.",
+            });
+        }
+        catch (err) {
+            console.error("[admin/force-generate] error:", err?.message);
+            res.status(500).json({ message: err?.message });
         }
     });
     // ─── POST /api/admin/service-orders/:id/complete-rewrite ─────────────────
