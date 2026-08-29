@@ -36,3 +36,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_service_orders_download_token
 CREATE INDEX IF NOT EXISTS idx_service_orders_guest_email
   ON service_orders (LOWER(guest_email))
   WHERE guest_email IS NOT NULL;
+
+-- 2026-08 (P0 guest-checkout follow-up): payments.user_id was NOT NULL,
+-- which blocked our anonymous M-Pesa flow ("column phone_number of relation
+-- payments does not exist" error was misleading — the real fault was the
+-- user_id NULL constraint tripping on the INSERT). Drop the constraint so
+-- guest payments can record with user_id NULL. All existing rows already
+-- have a user_id, so this is safe (no data lost, no default backfill).
+ALTER TABLE payments ALTER COLUMN user_id DROP NOT NULL;

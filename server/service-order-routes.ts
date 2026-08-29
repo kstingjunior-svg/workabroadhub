@@ -1976,11 +1976,12 @@ export function registerServiceOrderRoutes(app: Express, isAuthenticated: Reques
         service_name: string;
         status: string;
         amount: number | null;
+        guest_email: string | null;
         guest_phone: string | null;
         download_token: string | null;
       }>(
         `SELECT id, user_id, service_slug, service_name, status, amount,
-                guest_phone, download_token
+                guest_email, guest_phone, download_token
            FROM service_orders WHERE id = $1 LIMIT 1`,
         [orderId],
       );
@@ -2011,18 +2012,27 @@ export function registerServiceOrderRoutes(app: Express, isAuthenticated: Reques
 
       // Create a pending payment row with user_id NULL (guest). The callback
       // handler already looks up serviceOrderId from metadata to link back.
+      // 2026-08 (P0 column-name fix): schema has `phone` not `phone_number`,
+      // `service_id`/`service_name` not `description`, `email` for payer,
+      // and needs user_id NULLABLE (fixed in migration 0045).
       const paymentId = crypto.randomUUID();
       await pool.query(
         `INSERT INTO payments
-           (id, user_id, amount, currency, status, method, phone_number, reference, description, metadata, created_at, updated_at)
-         VALUES ($1, $2, $3, 'KES', 'pending', 'mpesa', $4, $5, $6, $7, NOW(), NOW())`,
+           (id, user_id, email, amount, currency, status, method, phone,
+            reference, service_id, service_name, metadata,
+            created_at, updated_at)
+         VALUES ($1, $2, $3, $4, 'KES', 'pending', 'mpesa', $5,
+                 $6, $7, $8, $9,
+                 NOW(), NOW())`,
         [
           paymentId,
-          null,                    // guest — no user
+          null,                    // guest — no user (column now nullable, see 0045)
+          order.guest_email,       // payer email for refund/audit
           amount,
           normalizedPhone,
           paymentId,               // reference == paymentId (used as AccountReference)
-          `${order.service_name} — WorkAbroadHub`,
+          order.service_slug,
+          order.service_name,
           JSON.stringify({
             serviceOrderId: order.id,
             serviceSlug: order.service_slug,
