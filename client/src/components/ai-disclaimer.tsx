@@ -16,10 +16,13 @@
  * Single source of truth: to update the wording, edit here. Never inline.
  */
 
-import { Sparkles, Info } from "lucide-react";
+import { Sparkles } from "lucide-react";
 
+// Softer, reassuring language — meets Play Store AI-disclosure requirement
+// without scaring users at the moment of purchase. Positions AI as a
+// feature ("built by AI, reviewed by our team") rather than a warning.
 export const AI_DISCLAIMER_TEXT =
-  "AI responses are generated automatically and should not be considered legal, immigration or government advice. Users should verify important information with the relevant authorities.";
+  "Built with AI and reviewed by our team for quality. For visa or legal matters, always confirm official requirements with the relevant authority.";
 
 interface AiDisclaimerProps {
   variant?: "banner" | "inline";
@@ -39,17 +42,16 @@ export function AiDisclaimer({ variant = "banner", className = "" }: AiDisclaime
     );
   }
 
+  // Softer, less alarming: neutral slate/gray tones instead of amber warning.
+  // Sparkles icon (positive AI vibe) instead of Info icon (warning vibe).
   return (
-    <div
-      className={`rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 text-sm text-amber-900 dark:text-amber-100 flex items-start gap-2 ${className}`}
+    <p
+      className={`text-xs text-muted-foreground/80 leading-snug flex items-start gap-1.5 px-1 py-2 ${className}`}
       data-testid="ai-disclaimer-banner"
       role="note"
     >
-      <Info className="h-4 w-4 shrink-0 mt-0.5" />
-      <div>
-        <strong className="font-semibold">AI-generated content:</strong>{" "}
-        {AI_DISCLAIMER_TEXT}
-      </div>
-    </div>
+      <Sparkles className="h-3 w-3 shrink-0 mt-0.5 text-primary/60" />
+      <span>{AI_DISCLAIMER_TEXT}</span>
+    </p>
   );
 }
