@@ -1,5 +1,13 @@
 const APP_NAME = "WorkAbroad Hub";
-const CACHE_VERSION = "v5"; // bumped after country dashboard resilience fix
+// 2026-08 (Tony's "PWA cycles in the same place" fix): bumped v5 → v6.
+// Every existing installed PWA will see its old caches nuked on activate,
+// clearing any stale index.html that was still pointing to chunk hashes
+// that no longer exist on the server (the root cause of the reload loop).
+// v7 (2026-08 Tony P0): bump forces every cached client to drop its stale
+// static assets and refetch after the big anonymous-checkout deploy —
+// stops "Just a small detour" from surfacing to users whose in-app browser
+// (WhatsApp/Messenger) was still holding pre-deploy chunk hashes.
+const CACHE_VERSION = "v7";
 const STATIC_CACHE = `workabroad-static-${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `workabroad-dynamic-${CACHE_VERSION}`;
 
@@ -63,21 +71,26 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Navigation requests — network first, fall back to offline page
+  // Navigation requests — network first, DO NOT cache the response.
+  //
+  // 2026-08 (Tony's "PWA cycles in the same place" fix): the old version
+  // cached every navigation response into DYNAMIC_CACHE. That meant if the
+  // network was momentarily slow, the SW returned a cached index.html that
+  // could be days old — and its chunk hashes were long gone from the
+  // server, so page-load 404'd → main.tsx reloaded → SW returned same
+  // stale HTML → infinite loop. Fix: on a fresh network response, serve
+  // it directly and DON'T cache it. If offline, fall back to the tiny
+  // static /offline.html shell instead of a potentially-stale index.html.
   if (request.mode === "navigate") {
     event.respondWith(
-      fetch(request)
-        .then((response) => {
-          // Cache a copy of successful navigation responses
-          const clone = response.clone();
-          caches.open(DYNAMIC_CACHE).then((cache) => cache.put(request, clone));
-          return response;
-        })
-        .catch(() =>
-          caches.match(request)
-            .then((cached) => cached || caches.match("/offline.html"))
-            .then((r) => r || new Response("<h1>WorkAbroad Hub — Offline</h1>", { headers: { "Content-Type": "text/html" } }))
+      fetch(request).catch(() =>
+        caches.match("/offline.html").then((r) =>
+          r || new Response(
+            "<h1>WorkAbroad Hub — Offline</h1><p>Please reconnect and try again.</p>",
+            { headers: { "Content-Type": "text/html" } }
+          )
         )
+      )
     );
     return;
   }

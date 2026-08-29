@@ -499,6 +499,44 @@ export default function Country() {
     );
   }
 
+  // 2026-08 (Tony P0: "Just a small detour" on country clicks): safety net.
+  // If we ended up with NO country data AND no synthetic fallback (unknown
+  // slug, or fetch returned null via on401=returnNull), render a friendly
+  // in-place state instead of crashing later on effectiveCountry accessors.
+  // This is what was throwing users into the generic error boundary.
+  if (!effectiveCountry) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <Card className="max-w-md w-full">
+          <CardContent className="p-8 text-center">
+            <Globe className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <h2 className="text-xl font-semibold mb-2">
+              {countryInfo?.name || "Country"} dashboard is loading
+            </h2>
+            <p className="text-muted-foreground mb-6 text-sm">
+              We're fetching the latest portals + guides. If this takes more
+              than a few seconds, tap Refresh below or come back in a moment.
+            </p>
+            <div className="space-y-2">
+              <Button
+                className="w-full"
+                onClick={() => window.location.reload()}
+                data-testid="button-country-refresh"
+              >
+                Refresh
+              </Button>
+              <Link href="/">
+                <Button variant="outline" className="w-full" data-testid="button-country-back">
+                  Back to home
+                </Button>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-md border-b">
