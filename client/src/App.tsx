@@ -925,6 +925,53 @@ function Router() {
         <Route path="/report/:toolName/:reportId" component={LazyToolReport} />
         <Route path="/green-card" component={LazyGreenCard} />
         <Route path="/visa-guides" component={LazyVisaGuides} />
+        {/* 2026-08 (SEO + trust + public browsing): all these pages MUST be
+            reachable without an account. /trust counters "workabroadhub is a
+            scam" AI Overview; /visit-visas + /blog target long-tail search;
+            /agencies + /nea-agencies + /agencies-reported are the fraud-
+            protection surface people find via Google and NEED to reach
+            without signing up first; /scam-wall + /report-* are the trust-
+            report public utilities; /journey + /salary + /guides are
+            informational SEO magnets; /kenya-careers + /forum are open
+            community browse. All were only registered in AuthenticatedRoutes
+            so anonymous visitors got 404s. */}
+        <Route path="/trust" component={LazyTrustPage} />
+        <Route path="/visit-visas" component={LazyVisitVisas} />
+        <Route path="/blog" component={LazyBlogIndex} />
+        <Route path="/blog/:slug" component={LazyBlogPost} />
+        <Route path="/agencies" component={LazyAgenciesMarketplace} />
+        <Route path="/agencies/:agencyId" component={LazyAgencyProfilePage} />
+        <Route path="/nea-agencies" component={LazyNeaAgencies} />
+        <Route path="/agencies-reported" component={LazyAgenciesReportedIndex} />
+        <Route path="/agencies-reported/:slug" component={LazyAgencyReported} />
+        <Route path="/scam-wall" component={LazyScamWall} />
+        <Route path="/report-fraud" component={LazyReportFraud} />
+        <Route path="/report-scam" component={LazyReportScam} />
+        <Route path="/report-abuse" component={LazyReportAbuse} />
+        <Route path="/journey/:country" component={LazyJourneyPage} />
+        <Route path="/journey" component={LazyJourneyPage} />
+        <Route path="/salary" component={LazySalaryPage} />
+        <Route path="/guides/:slug" component={LazyGuidePage} />
+        <Route path="/guides" component={LazyGuidesIndex} />
+        <Route path="/agency-map" component={LazyAgencyMap} />
+        <Route path="/compliance-index" component={LazyComplianceIndex} />
+        <Route path="/certificate/:certificateId" component={LazyCertificateVerify} />
+        <Route path="/verify" component={LazyVerify} />
+        <Route path="/verify-us" component={LazyVerifyUs} />
+        <Route path="/portals/community" component={LazyCommunityPortals} />
+        <Route path="/kenya-careers" component={LazyKenyaCareers} />
+        <Route path="/kenya-careers/job/:id" component={LazyKenyaCareersJob} />
+        <Route path="/kenya-careers/company/:slug" component={LazyKenyaCareersCompany} />
+        <Route path="/employers" component={LazyKenyaCareersEmployers} />
+        <Route path="/forum/:country" component={LazyForum} />
+        <Route path="/community" component={LazyCommunity} />
+        <Route path="/student-visas" component={LazyStudentVisas} />
+        <Route path="/passport-application" component={LazyPassportApplication} />
+        <Route path="/good-conduct" component={LazyGoodConduct} />
+        <Route path="/tax-compliance-certificate" component={LazyTaxComplianceCertificate} />
+        <Route path="/helb-clearance" component={LazyHelbClearance} />
+        <Route path="/birth-certificate" component={LazyBirthCertificate} />
+        <Route path="/calculator" component={LazyCalculatorPage} />
         <Route path="/visa/:country" component={LazyVisaCountry} />
         <Route path="/visa-assistant" component={LazyVisaAssistant} />
         <Route path="/bulk-apply" component={LazyBulkApply} />

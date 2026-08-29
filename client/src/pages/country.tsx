@@ -510,7 +510,51 @@ export default function Country() {
   // slug, or fetch returned null via on401=returnNull), render a friendly
   // in-place state instead of crashing later on effectiveCountry accessors.
   // This is what was throwing users into the generic error boundary.
+  //
+  // 2026-08 refinement: differentiate ANONYMOUS (no session → 401 →
+  // returnNull) from LOGGED-IN-BUT-NO-DATA (transient fetch failure). Anon
+  // users see a clear "sign in to access" card with a return path; signed-in
+  // users see a "loading, try refresh" card.
   if (!effectiveCountry) {
+    const isAnonymous = !u;
+    if (isAnonymous) {
+      // Save intended destination so post-login redirect brings them back here.
+      try { localStorage.setItem("auth_redirect", `/country/${code}`); } catch {}
+      return (
+        <div className="min-h-screen bg-background flex items-center justify-center p-4">
+          <Card className="max-w-md w-full">
+            <CardContent className="p-8 text-center">
+              <Lock className="h-12 w-12 text-primary/70 mx-auto mb-4" />
+              <h2 className="text-xl font-semibold mb-2">
+                {countryInfo?.name || "This country"}'s job portals are for members
+              </h2>
+              <p className="text-muted-foreground mb-6 text-sm">
+                Sign in (or create a free account) to unlock verified job portals,
+                visa guides, and salary data for {countryInfo?.name || "this country"}.
+                Takes 30 seconds.
+              </p>
+              <div className="space-y-2">
+                <Button
+                  className="w-full"
+                  onClick={() => {
+                    // Landing.tsx picks up ?redirect= and opens the login modal.
+                    window.location.href = `/?redirect=${encodeURIComponent(`/country/${code}`)}`;
+                  }}
+                  data-testid="button-country-signin"
+                >
+                  Sign in to unlock
+                </Button>
+                <Link href="/">
+                  <Button variant="outline" className="w-full" data-testid="button-country-back">
+                    Back to home
+                  </Button>
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      );
+    }
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <Card className="max-w-md w-full">

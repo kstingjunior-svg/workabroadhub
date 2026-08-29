@@ -880,7 +880,14 @@ export default function Landing() {
                 },
                 {
                   title:     "CV Revamp",
-                  slug:      "cv_rewrite",
+                  // 2026-08 (P0 slug mismatch): was "cv_rewrite" which is
+                  // actually the Country-Specific CV Rewrite service
+                  // (KES 699). Users clicking CV Revamp for KES 99 were
+                  // being routed to a page that priced the service at 699
+                  // — wrong price on the order screen kills conversion +
+                  // damages trust. Correct slug per SERVICE_META in
+                  // service-order-flow.tsx is "cv_fix_lite".
+                  slug:      "cv_fix_lite",
                   price:     "KES 99",
                   priceColor:"text-blue-600 dark:text-blue-400",
                   time:      "3 min",
