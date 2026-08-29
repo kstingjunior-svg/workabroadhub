@@ -120,6 +120,15 @@ export default function Landing() {
       !!p && /^\/(?![/\\])/.test(p) && !/^\s*(javascript:|data:|vbscript:)/i.test(p);
     if (isSafeRedirect(redirect) && redirect !== "/" && redirect !== "/dashboard") {
       setAuthRedirectPath(redirect!);
+      // 2026-08 (Tony's "AutoApply lands on dashboard after login" fix):
+      // ALSO stash in localStorage so App.tsx's post-login effect can honour
+      // it. Previously we only set React state → the auth modal used it as a
+      // prop, BUT App.tsx's own useEffect([user]) fires FIRST after login,
+      // sees empty localStorage, does nothing → user briefly renders on /
+      // (dashboard for signed-in users) → then modal's setTimeout races to
+      // navigate. Writing to both places means whichever effect wins, the
+      // user still lands on the intended page (e.g. /autoapply).
+      try { localStorage.setItem("auth_redirect", redirect!); } catch { /* private mode */ }
       setAuthModalTab("login");
       setAuthModalOpen(true);
       // Clean the redirect param from the URL bar

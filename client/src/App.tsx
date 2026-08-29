@@ -346,7 +346,14 @@ function ProtectedRedirect() {
     // The modal lives on the landing page. Send users to / with a
     // redirect= query param; landing.tsx's effect picks it up and opens
     // the login modal automatically.
+    //
+    // 2026-08 (Tony's "AutoApply lands on dashboard after login" fix):
+    // ALSO save to localStorage as a belt-and-braces guarantee — App.tsx's
+    // useEffect([user]) reads localStorage the moment the auth query flips
+    // truthy, so if that effect wins the race against the modal's own
+    // setTimeout navigate, the user still ends up on the intended page.
     if (location && location !== "/" && location !== "/dashboard") {
+      try { localStorage.setItem("auth_redirect", location); } catch { /* private mode */ }
       navigate("/?redirect=" + encodeURIComponent(location), { replace: true });
     } else {
       navigate("/", { replace: true });
