@@ -892,6 +892,14 @@ export default function Landing() {
                 {
                   title:     "Write from Scratch",
                   slug:      "write_from_scratch",
+                  // 2026-08 (P0): Write-from-Scratch isn't a CV-upload flow —
+                  // it has its own dedicated page that collects personal info
+                  // (name, target role, experience) instead of parsing a CV.
+                  // Route the card there directly rather than to the unified
+                  // /services/order/:slug which only knows about CV-upload
+                  // services (SERVICE_META has no write_from_scratch entry
+                  // → "Service not found" 404 was surfacing).
+                  href:      "/tools/write-from-scratch",
                   price:     "KES 300",
                   priceColor:"text-red-600 dark:text-red-400",
                   time:      "3 min",
