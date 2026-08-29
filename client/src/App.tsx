@@ -180,6 +180,8 @@ const EmployerDashboard = lazyWithRetry(() => import("@/pages/employer/employer-
 const EmployerManage = lazyWithRetry(() => import("@/pages/employer/employer-manage"));
 const EmployerRegisterCompany = lazyWithRetry(() => import("@/pages/employer/employer-register-company"));
 const ServiceOrderFlow = lazyWithRetry(() => import("@/pages/service-order-flow"));
+// 2026-08 (Tony's anonymous-checkout): magic-link download page for guest orders.
+const DownloadMagic = lazyWithRetry(() => import("@/pages/download-magic"));
 const LoginPage = lazyWithRetry(() => import("@/pages/login"));
 const ForgotPassword = lazyWithRetry(() => import("@/pages/forgot-password"));
 const ResetPassword = lazyWithRetry(() => import("@/pages/reset-password"));
@@ -642,6 +644,8 @@ function AuthenticatedRoutes() {
       <Route path="/employer/register-company" component={LazyEmployerRegisterCompany} />
       <Route path="/employer/companies/:id/manage" component={LazyEmployerManage} />
       <Route path="/services/order/:slug" component={LazyServiceOrderFlow} />
+      {/* 2026-08 (guest orders): public magic-link download page — no auth. */}
+      <Route path="/download/:token" component={withSuspense(DownloadMagic)} />
       <Route path="/login" component={LazyLoginPage} />
       <Route path="/signup" component={LazyLoginPage} />
       <Route path="/forgot-password" component={LazyForgotPassword} />

@@ -821,10 +821,10 @@ export default function Landing() {
               }}
               data-testid="btn-autoapply-hero"
             >
-              <Sparkles className="h-4 w-4" /> Activate my AutoApply Agent
+              <Sparkles className="h-4 w-4" /> Activate my AutoApply Agent — 7-day free Pro trial
             </Button>
             <p className="text-xs text-blue-200/70 mt-3">
-              Start free · 3 matches/week · Upgrade to Pro for 30 matches/day + AI cover letters + morning digest · KES 1,500/mo · Cancel anytime
+              7-day Pro trial included · No credit card needed · Pro: KES 1,500/mo or KES 15,000/year (save 17%) · Free tier forever after trial
             </p>
           </div>
         </section>
@@ -1002,28 +1002,20 @@ export default function Landing() {
                         return;
                       }
 
-                      // 2026-08 (Tony's "make it one-click" fix): jump the
-                      // user STRAIGHT to the order form for the picked
-                      // service. No intermediate "all services" browsing
-                      // list. Zero re-clicks required.
-                      //
-                      // • Authenticated user  → straight to /services/order/<slug>
-                      // • Anonymous user      → signup modal with return
-                      //   path = /services/order/<slug>, so after they
-                      //   complete signup + email verify they land IN the
-                      //   order form (not back on /services list).
+                      // 2026-08 (Tony's anonymous-checkout directive): EVERY
+                      // user — logged in or anonymous — goes STRAIGHT to the
+                      // order form. No signup modal, no auth wall. The order
+                      // page itself collects name/email/phone from guests and
+                      // delivers via email magic-link. This is the single
+                      // biggest conversion killer we've had: making a stranger
+                      // sign up before they even know if the CV service is
+                      // right for them.
                       const slug = (service as any).slug;
                       if (!slug) {
                         window.location.href = "/services";
                         return;
                       }
-                      const target = `/services/order/${slug}`;
-                      if (currentUser) {
-                        window.location.href = target;
-                      } else {
-                        localStorage.setItem("auth_redirect", target);
-                        openSignUp();
-                      }
+                      window.location.href = `/services/order/${slug}`;
                     }}
                     data-testid={`btn-service-${service.title.toLowerCase().replace(/\s+/g, "-")}`}
                   >

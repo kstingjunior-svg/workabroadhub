@@ -144,10 +144,30 @@ export default function ServiceOrderFlow() {
   const pollRef = useRef<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  // ── Guest checkout (2026-08, Tony's anonymous-purchase directive) ────────
+  // If not signed in, collect name/email/phone at checkout so we can deliver
+  // the finished document via email magic-link (no account required). Server
+  // returns a downloadToken we then use to poll /status and download files.
+  const { user } = useAuth();
+  const isAnonymous = !user;
+  const [guestName, setGuestName] = useState<string>("");
+  const [guestEmail, setGuestEmail] = useState<string>("");
+  const [guestPhone, setGuestPhone] = useState<string>("");
+  const [downloadToken, setDownloadToken] = useState<string | null>(null);
+
+  // Restore token from localStorage on mount so refreshes / return visits
+  // keep working. Keyed by orderId (set once we have one).
+  useEffect(() => {
+    if (!orderId) return;
+    try {
+      const stored = localStorage.getItem(`wah_download_token:${orderId}`);
+      if (stored && !downloadToken) setDownloadToken(stored);
+    } catch { /* private mode / quota — silent */ }
+  }, [orderId, downloadToken]);
+
   // ── Viral share loop ─────────────────────────────────────────────────────
   // 2026-07 (growth): after a successful order, auto-open the ShareSuccessModal.
   // Every paying user becomes a billboard — see /components/share-success-modal.tsx.
-  const { user } = useAuth();
   const [shareOpen, setShareOpen] = useState(false);
   const [autoOpenedShare, setAutoOpenedShare] = useState(false);
   const [deliveredScore, setDeliveredScore] = useState<number | null>(null);
@@ -311,7 +331,12 @@ export default function ServiceOrderFlow() {
     let slowMessageShown = false;
     pollRef.current = window.setInterval(async () => {
       try {
-        const res = await fetch(`/api/services/order/${id}/status`, { credentials: "include" });
+        // 2026-08 (guest orders): append ?token=xxx when we have one so
+        // anonymous polls still work — server accepts token as auth alt.
+        const statusUrl = downloadToken
+          ? `/api/services/order/${id}/status?token=${encodeURIComponent(downloadToken)}`
+          : `/api/services/order/${id}/status`;
+        const res = await fetch(statusUrl, { credentials: "include" });
         if (!res.ok) return;
         const data = await res.json();
         if (data.status === "completed") {
@@ -358,6 +383,23 @@ export default function ServiceOrderFlow() {
       toast({ title: "Upload your CV", description: "We need your CV to generate the document.", variant: "destructive" });
       return;
     }
+    // Guest checkout: name/email/phone all required (server double-validates).
+    // We front-load the check so the user sees the error inline before waiting
+    // for a network round-trip.
+    if (isAnonymous) {
+      if (!guestName.trim() || !guestEmail.trim() || !guestPhone.trim()) {
+        toast({
+          title: "A few quick details",
+          description: "Please enter your name, email, and phone so we can email you your finished document.",
+          variant: "destructive",
+        });
+        return;
+      }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail.trim())) {
+        toast({ title: "Check your email", description: "That email doesn't look right — please double-check it.", variant: "destructive" });
+        return;
+      }
+    }
     setSubmitting(true);
     try {
       const csrf = await fetchCsrfToken();
@@ -366,6 +408,12 @@ export default function ServiceOrderFlow() {
       if (jobDescription) form.append("jobDescription", jobDescription);
       if (targetCountry)  form.append("targetCountry", targetCountry);
       if (extraInput)     form.append("extraInput", extraInput);
+      // Guest fields — server ignores these when a session cookie is present.
+      if (isAnonymous) {
+        form.append("guestName",  guestName.trim());
+        form.append("guestEmail", guestEmail.trim().toLowerCase());
+        form.append("guestPhone", guestPhone.trim());
+      }
       // 2026-07 (photo embed): attach optional headshot for top-right
       // placement in the delivered PDF/DOCX. Named "photo" per multer field.
       if (photoBlob) {
@@ -454,6 +502,19 @@ export default function ServiceOrderFlow() {
       setEstSeconds(data.estSeconds || 60);
       setAmount(data.price ?? 0);
 
+      // 2026-08 (guest orders): persist the download token so refresh doesn't
+      // orphan the order. Also auto-fill the M-Pesa phone field so the guest
+      // doesn't have to type it twice.
+      if (data.downloadToken && data.orderId) {
+        setDownloadToken(data.downloadToken);
+        try {
+          localStorage.setItem(`wah_download_token:${data.orderId}`, data.downloadToken);
+        } catch { /* private mode — token still lives in state for this session */ }
+      }
+      if (isAnonymous && guestPhone && !mpesaPhone) {
+        setMpesaPhone(guestPhone.trim());
+      }
+
       if (data.needsPayment && data.price > 0) {
         // Stay on the SAME page — show the inline M-Pesa STK pay UI so the
         // user pays for THIS service (not pushed to the Pro Plan upgrade).
@@ -515,46 +576,69 @@ export default function ServiceOrderFlow() {
     try {
       const csrf = await fetchCsrfToken();
 
-      // ─── STEP 1: create the pending payment row (DB) ────────────────────
-      // Returns paymentId / checkoutRequestId — but does NOT send STK push yet.
-      const initRes = await fetch("/api/payments/initiate", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
-        body: JSON.stringify({
-          method: "mpesa",
-          phoneNumber: phoneClean,
-          serviceId: slug,
-          serviceName: serviceName || meta.name,
-          serviceOrderId: orderId,            // payment pipeline reads this to mark THIS order paid
-        }),
-      });
-      const initData = await initRes.json();
-      if (!initRes.ok || initData?.success === false) {
-        if (initRes.status === 403 && /verify/i.test(initData?.message ?? "")) {
-          toast({ title: "Verify your account first", description: "Redirecting…" });
-          const returnTo = encodeURIComponent(window.location.pathname + window.location.search);
-          setTimeout(() => navigate(`/account/verify?returnTo=${returnTo}`), 1200);
-          return;
+      // 2026-08 (guest orders): TWO payment paths, one UX.
+      //   Logged-in path: /api/payments/initiate + /api/mpesa/stk (2 hops,
+      //                   fraud checks, account-lockout guards, all the
+      //                   existing enterprise machinery).
+      //   Guest path:     /api/services/order/:id/pay-guest (1 hop, auth'd
+      //                   by the download token minted at order creation,
+      //                   fires STK push directly with the guest's phone).
+      if (isAnonymous) {
+        if (!downloadToken) {
+          throw new Error("Payment link expired. Please refresh the page and try again.");
         }
-        throw new Error(initData?.message || initData?.error || "Could not create payment record.");
-      }
-      const paymentId = initData?.paymentId ?? initData?.checkoutRequestId ?? initData?.checkout_request_id;
-      if (!paymentId) {
-        throw new Error("Server did not return a paymentId. Cannot trigger STK push.");
-      }
+        const payRes = await fetch(`/api/services/order/${orderId}/pay-guest`, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
+          body: JSON.stringify({ token: downloadToken, phone: phoneClean }),
+        });
+        const payData = await payRes.json();
+        if (!payRes.ok || payData?.success === false) {
+          throw new Error(payData?.message || "Could not send M-Pesa prompt. Please try again.");
+        }
+      } else {
+        // ─── STEP 1: create the pending payment row (DB) ────────────────────
+        // Returns paymentId / checkoutRequestId — but does NOT send STK push yet.
+        const initRes = await fetch("/api/payments/initiate", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
+          body: JSON.stringify({
+            method: "mpesa",
+            phoneNumber: phoneClean,
+            serviceId: slug,
+            serviceName: serviceName || meta.name,
+            serviceOrderId: orderId,            // payment pipeline reads this to mark THIS order paid
+          }),
+        });
+        const initData = await initRes.json();
+        if (!initRes.ok || initData?.success === false) {
+          if (initRes.status === 403 && /verify/i.test(initData?.message ?? "")) {
+            toast({ title: "Verify your account first", description: "Redirecting…" });
+            const returnTo = encodeURIComponent(window.location.pathname + window.location.search);
+            setTimeout(() => navigate(`/account/verify?returnTo=${returnTo}`), 1200);
+            return;
+          }
+          throw new Error(initData?.message || initData?.error || "Could not create payment record.");
+        }
+        const paymentId = initData?.paymentId ?? initData?.checkoutRequestId ?? initData?.checkout_request_id;
+        if (!paymentId) {
+          throw new Error("Server did not return a paymentId. Cannot trigger STK push.");
+        }
 
-      // ─── STEP 2: actually trigger the Safaricom STK push ────────────────
-      // This is what makes the M-Pesa prompt appear on the user's phone.
-      const stkRes = await fetch("/api/mpesa/stk", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
-        body: JSON.stringify({ checkoutRequestId: paymentId }),
-      });
-      const stkData = await stkRes.json();
-      if (!stkRes.ok || stkData?.success === false) {
-        throw new Error(stkData?.message || stkData?.error || "Safaricom STK push failed. Try again.");
+        // ─── STEP 2: actually trigger the Safaricom STK push ────────────────
+        // This is what makes the M-Pesa prompt appear on the user's phone.
+        const stkRes = await fetch("/api/mpesa/stk", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
+          body: JSON.stringify({ checkoutRequestId: paymentId }),
+        });
+        const stkData = await stkRes.json();
+        if (!stkRes.ok || stkData?.success === false) {
+          throw new Error(stkData?.message || stkData?.error || "Safaricom STK push failed. Try again.");
+        }
       }
 
       setStkSent(true);
@@ -731,6 +815,65 @@ export default function ServiceOrderFlow() {
                   Draft saved — you can safely close and come back later
                 </div>
               )}
+
+              {/* 2026-08 (Tony's anonymous-checkout directive): guest fields
+                  shown ONLY when not logged in. No signup, no login modal —
+                  just three fields so we can email the finished document.
+                  Auto-fills the M-Pesa STK phone at pay-time. */}
+              {isAnonymous && (
+                <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3">
+                  <div className="flex items-start gap-2 -mt-1">
+                    <Sparkles className="h-4 w-4 shrink-0 mt-0.5 text-primary" />
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">No account needed</p>
+                      <p className="text-xs text-muted-foreground leading-snug">
+                        Just tell us where to send your finished document. Pay, download, done — we'll email your CV to the address below.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div>
+                      <Label htmlFor="guest-name" className="text-xs">Full name</Label>
+                      <Input
+                        id="guest-name"
+                        type="text"
+                        autoComplete="name"
+                        placeholder="Jane Wanjiku"
+                        value={guestName}
+                        onChange={(e) => setGuestName(e.target.value)}
+                        data-testid="input-guest-name"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="guest-email" className="text-xs">Email (for delivery)</Label>
+                      <Input
+                        id="guest-email"
+                        type="email"
+                        autoComplete="email"
+                        inputMode="email"
+                        placeholder="you@example.com"
+                        value={guestEmail}
+                        onChange={(e) => setGuestEmail(e.target.value)}
+                        data-testid="input-guest-email"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="guest-phone" className="text-xs">Phone (for M-Pesa)</Label>
+                      <Input
+                        id="guest-phone"
+                        type="tel"
+                        autoComplete="tel"
+                        inputMode="tel"
+                        placeholder="0712345678"
+                        value={guestPhone}
+                        onChange={(e) => setGuestPhone(e.target.value)}
+                        data-testid="input-guest-phone"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {meta.needsCv && (
                 <div>
                   <Label className="block mb-2">Your CV (PDF or Word)</Label>
@@ -994,7 +1137,9 @@ export default function ServiceOrderFlow() {
                     setDownloadBusy("pdf");
                     try {
                       const slug = (serviceName || meta.name || "document").toLowerCase().replace(/\s+/g, "-");
-                      await triggerDownload(`/api/services/order/${orderId}/download/pdf`, `workabroadhub-${slug}.pdf`);
+                      // 2026-08 (guest orders): append ?token=xxx for anon downloads
+                      const tokenQ = downloadToken ? `?token=${encodeURIComponent(downloadToken)}` : "";
+                      await triggerDownload(`/api/services/order/${orderId}/download/pdf${tokenQ}`, `workabroadhub-${slug}.pdf`);
                       setDownloadedOnce(true);
                     } catch (e: any) {
                       setDownloadErrorMsg(e?.message || "Download failed. Please refresh and try again.");
@@ -1015,7 +1160,8 @@ export default function ServiceOrderFlow() {
                     setDownloadBusy("docx");
                     try {
                       const slug = (serviceName || meta.name || "document").toLowerCase().replace(/\s+/g, "-");
-                      await triggerDownload(`/api/services/order/${orderId}/download/docx`, `workabroadhub-${slug}.docx`);
+                      const tokenQ = downloadToken ? `?token=${encodeURIComponent(downloadToken)}` : "";
+                      await triggerDownload(`/api/services/order/${orderId}/download/docx${tokenQ}`, `workabroadhub-${slug}.docx`);
                       setDownloadedOnce(true);
                     } catch (e: any) {
                       setDownloadErrorMsg(e?.message || "Download failed. Please refresh and try again.");

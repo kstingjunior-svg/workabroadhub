@@ -229,18 +229,18 @@ export default function Services() {
       return;
     }
 
-    // 2026-08 (Tony's "kill signup friction on browse" fix): anonymous users
-    // can now BROWSE /services freely. But paid orders still require an
-    // account (needed for M-Pesa phone, order history, refund routing). If
-    // they hit an Order button while unauthenticated, redirect them to the
-    // landing page in login mode with a return path back to this exact
-    // service so signup doesn't feel like a dead end. Landing.tsx already
-    // handles the ?redirect= query param and auto-opens the auth modal.
-    if (!user) {
-      const returnTo = encodeURIComponent(`/services?highlight=${slug}`);
-      window.location.href = `/?redirect=${returnTo}`;
-      return;
-    }
+    // 2026-08 (Tony's anonymous-checkout directive): drop ALL auth gates on
+    // career-service order clicks. Anonymous users go STRAIGHT to the order
+    // page — no signup, no login modal, no redirect. The order page collects
+    // name/email/phone at checkout and delivers via email magic-link. The
+    // old "redirect to landing?redirect=…" flow killed conversion by making
+    // people sign up before they even knew if the service could help them.
+    //
+    // Auth is still required for the LEGACY /api/pay flow below (non-AI
+    // services like consultations that need order-history routing). AI-
+    // delivered career services (CV Revamp, Cover Letter, SOP, etc.) hit
+    // the new guest-friendly /api/services/order/:slug endpoint via the
+    // navigate() call further down.
 
     // 2026-07: LinkedIn Optimization is now a premium Pro-tier LIVE workspace,
     // not a one-shot order. The workspace itself handles the Pro gate (or

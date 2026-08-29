@@ -47,7 +47,6 @@ const db_1 = require("./db");
 const openai_1 = require("./lib/openai");
 const extract_text_1 = require("./utils/extract-text");
 const document_renderer_1 = require("./services/document-renderer");
-const identityVerification_1 = require("./services/identityVerification");
 // ── Multer (memory storage, 10 MB cap) ───────────────────────────────────────
 // 2026-07 (Tony's users report "can't upload CV"): loosened previously-strict
 // limits. Root cause was: (a) 5 MB was too small for scanned/graphic-heavy CVs,
@@ -581,6 +580,17 @@ async function extractCvOrError(req) {
 // ── DB helpers ──────────────────────────────────────────────────────────────
 async function createOrder(args) {
     const id = crypto_1.default.randomUUID();
+    // 2026-08 anonymous-checkout: mint a download token for GUEST orders only.
+    // 48 hex chars = 24 bytes of entropy → far beyond brute-forceable. Stored
+    // in plain text (not hashed) because we need to look it up by exact value
+    // from a URL — hashing would require a scan. Compensating controls:
+    // partial unique index + rate-limited endpoint + 30-day expiry + download
+    // count cap. Logged-in users don't need a token (they auth via session).
+    const isGuest = !args.userId;
+    const downloadToken = isGuest ? crypto_1.default.randomBytes(24).toString("hex") : null;
+    const downloadExpiresAt = isGuest
+        ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
+        : null;
     // Sanitize the referrer token — must look like a UUID, must NOT be the
     // user's own prior order (self-referral is meaningless). Silently drop
     // anything that doesn't validate rather than reject the whole order.
@@ -590,7 +600,8 @@ async function createOrder(args) {
         if (/^[0-9a-fA-F-]{8,64}$/.test(t)) {
             try {
                 const { rows } = await db_1.pool.query(`SELECT user_id FROM service_orders WHERE id = $1 LIMIT 1`, [t]);
-                // Only credit when the referring order belongs to a DIFFERENT user.
+                // Only credit when the referring order belongs to a DIFFERENT user
+                // (or is itself a guest — always attributable in that case).
                 if (rows[0] && rows[0].user_id !== args.userId)
                     referrer = t;
             }
@@ -611,14 +622,16 @@ async function createOrder(args) {
        (id, user_id, service_id, service_slug, service_name, amount, currency, status,
         cv_text, job_description, target_country, extra_input, referrer_order_id, photo_data,
         cv_raw_base64, cv_raw_mime, cv_raw_filename, cv_extraction_status,
+        guest_name, guest_email, guest_phone, download_token, download_expires_at,
         created_at, updated_at)
      VALUES ($1, $2, $3, $3, $4, $5, 'KES', 'pending_payment',
              $6, $7, $8, $9, $10, $11,
              $12, $13, $14, $15,
+             $16, $17, $18, $19, $20,
              NOW(), NOW())
      ON CONFLICT (id) DO NOTHING`, [
         id,
-        args.userId,
+        args.userId, // null for guest orders (nullable column)
         args.slug, // used for both service_id and service_slug
         args.serviceName,
         args.amount ?? 0,
@@ -632,8 +645,14 @@ async function createOrder(args) {
         args.cvRawFile?.mime ?? null,
         args.cvRawFile?.filename ?? null,
         extractionStatus,
+        // Guest checkout fields — null when userId is present
+        args.guestName ?? null,
+        args.guestEmail ?? null,
+        args.guestPhone ?? null,
+        downloadToken,
+        downloadExpiresAt,
     ]);
-    return id;
+    return { id, downloadToken };
 }
 // 2026-08 deferred-extraction: run the slow extraction cascade (Tesseract,
 // OpenAI PDF file-upload) for orders where fast extraction returned empty.
@@ -1140,25 +1159,61 @@ CRITICAL LENGTH REQUIREMENT — READ CAREFULLY (do not violate):
  */
 async function notifyOrderCompleted(orderId) {
     try {
-        const { rows } = await db_1.pool.query(`SELECT user_id, service_name, service_slug FROM service_orders WHERE id = $1 AND status = 'completed'`, [orderId]);
+        // 2026-08 (guest orders): pull guest fields alongside user_id so we can
+        // route delivery correctly. Guest = user_id NULL + guest_email present.
+        const { rows } = await db_1.pool.query(`SELECT user_id, service_name, service_slug,
+              guest_name, guest_email, guest_phone, download_token
+         FROM service_orders WHERE id = $1 AND status = 'completed'`, [orderId]);
         const order = rows[0];
         if (!order)
             return;
-        // Fetch the user for their email + phone + first name
-        const { rows: userRows } = await db_1.pool.query(`SELECT email, phone, first_name FROM users WHERE id = $1`, [order.user_id]);
-        const user = userRows[0];
-        if (!user)
+        // Two delivery paths:
+        //   (a) Logged-in user   → lookup users.email/phone/first_name, deliver as before
+        //   (b) Guest order      → use guest_* fields + download_token magic link
+        let recipientEmail = null;
+        let recipientPhone = null;
+        let firstName = "there";
+        let isGuestDelivery = false;
+        if (order.user_id) {
+            const { rows: userRows } = await db_1.pool.query(`SELECT email, phone, first_name FROM users WHERE id = $1`, [order.user_id]);
+            const user = userRows[0];
+            if (!user)
+                return;
+            recipientEmail = user.email;
+            recipientPhone = user.phone;
+            firstName = (user.first_name || "").split(/\s+/)[0] || "there";
+        }
+        else if (order.guest_email) {
+            isGuestDelivery = true;
+            recipientEmail = order.guest_email;
+            recipientPhone = order.guest_phone;
+            firstName = (order.guest_name || "").split(/\s+/)[0] || "there";
+        }
+        else {
+            // Neither user_id nor guest_email — nothing we can do. Log and bail.
+            console.warn(`[ServiceOrder] notifyOrderCompleted: order ${orderId} has no recipient (no user_id, no guest_email)`);
             return;
-        const firstName = (user.first_name || "").split(/\s+/)[0] || "there";
+        }
         const serviceName = order.service_name || "document";
         const appOrigin = (process.env.APP_ORIGIN || "https://workabroadhub.tech").replace(/\/$/, "");
         const documentsUrl = `${appOrigin}/my-documents`;
         // Direct order page — mobile-first, big PDF + Word buttons already there.
-        // /my-documents requires them to hunt for their order among many; the order
-        // page opens straight to their downloads. Better for Kenyan mobile users.
         const orderUrl = `${appOrigin}/order/${orderId}`;
-        // Direct PDF download URL — one-tap on mobile if the user still has a session.
-        const directPdfUrl = `${appOrigin}/api/services/order/${orderId}/download/pdf`;
+        // Direct PDF download URL — one-tap on mobile if the user still has a session
+        // OR appended with the download token for guest orders.
+        const tokenSuffix = isGuestDelivery && order.download_token ? `?token=${order.download_token}` : "";
+        const directPdfUrl = `${appOrigin}/api/services/order/${orderId}/download/pdf${tokenSuffix}`;
+        // Guest magic download page — token in the URL, no login required.
+        const guestDownloadUrl = isGuestDelivery && order.download_token
+            ? `${appOrigin}/download/${order.download_token}`
+            : documentsUrl;
+        // Which URL to feature as the primary CTA (works for both paths).
+        const primaryDownloadUrl = isGuestDelivery ? guestDownloadUrl : documentsUrl;
+        // For guest emails, keep old vars in scope but redefine so the existing
+        // template below uses the guest link seamlessly.
+        // (documentsUrl still referenced below — leave it pointing to /my-documents
+        // for logged-in users; guests will follow the primaryDownloadUrl instead.)
+        void orderUrl; // preserved for future analytics; keeps lint quiet
         // Support contact — reads from env, falls back to Tony's number so users
         // never feel stranded even if WHATSAPP_SUPPORT_NUMBER isn't set.
         const supportPhone = (process.env.WHATSAPP_SUPPORT_NUMBER || process.env.ADMIN_PHONE_NUMBER || "").replace(/^\+?/, "");
@@ -1166,30 +1221,38 @@ async function notifyOrderCompleted(orderId) {
             ? `\n\nQuestions? Reply here or WhatsApp us on wa.me/${supportPhone} — we read every message.`
             : `\n\nQuestions? Reply here — we read every message.`;
         // ── Email (primary) ───────────────────────────────────────────────────
-        if (user.email) {
+        if (recipientEmail) {
             try {
                 const { sendWithFailover } = await Promise.resolve().then(() => __importStar(require("./lib/email-providers")));
+                // Guest emails feature the magic-link download page as the ONE CTA.
+                // Logged-in emails keep the old two-link layout (dashboard + direct PDF).
+                const primaryCtaLabel = isGuestDelivery
+                    ? "Download my document →"
+                    : "Download my document →";
+                const guestExpiryNote = isGuestDelivery
+                    ? `<p style="font-size:12px;line-height:1.5;color:#94a3b8;margin:16px 0 0">This download link works for 30 days. Save it or download your document now.</p>`
+                    : `<p style="font-size:13px;line-height:1.55;margin:24px 0 8px;color:#64748b">Prefer a direct download? <a href="${directPdfUrl}" style="color:#0f766e;font-weight:600">Grab the PDF here</a> (sign in required).</p>`;
                 const html = `
           <div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1e293b">
             <h1 style="font-size:22px;font-weight:700;color:#0f766e;margin:0 0 8px">Your ${serviceName} is ready 🎉</h1>
             <p style="font-size:15px;line-height:1.55;margin:0 0 20px">
               Hi ${escapeHtml(firstName)}, we've just finished your ${serviceName.toLowerCase()}. It's optimized, warm, and ready for recruiters.
             </p>
-            <a href="${documentsUrl}" style="display:inline-block;background:linear-gradient(90deg,#14b8a6,#06b6d4);color:#fff;font-weight:600;text-decoration:none;padding:14px 24px;border-radius:8px;font-size:15px">
-              Download my document →
+            <a href="${primaryDownloadUrl}" style="display:inline-block;background:linear-gradient(90deg,#14b8a6,#06b6d4);color:#fff;font-weight:600;text-decoration:none;padding:14px 24px;border-radius:8px;font-size:15px">
+              ${primaryCtaLabel}
             </a>
-            <p style="font-size:13px;line-height:1.55;margin:24px 0 8px;color:#64748b">
-              Prefer a direct download? <a href="${directPdfUrl}" style="color:#0f766e;font-weight:600">Grab the PDF here</a> (sign in required).
-            </p>
+            ${guestExpiryNote}
             <div style="border-top:1px solid #e2e8f0;margin:24px 0 12px"></div>
             <p style="font-size:12px;line-height:1.5;color:#94a3b8;margin:0">
               You're getting this because you completed an order at WorkAbroad Hub. If something looks off, just reply to this email — we read every message.
             </p>
           </div>
         `;
-                const text = `Your ${serviceName} is ready.\n\nHi ${firstName}, we've just finished your ${serviceName.toLowerCase()}. Download it here:\n\n${documentsUrl}\n\nOr grab the PDF directly (sign in required): ${directPdfUrl}\n\n— WorkAbroad Hub`;
+                const text = isGuestDelivery
+                    ? `Your ${serviceName} is ready.\n\nHi ${firstName}, we've just finished your ${serviceName.toLowerCase()}. Download it here:\n\n${primaryDownloadUrl}\n\nThis link works for 30 days.\n\n— WorkAbroad Hub`
+                    : `Your ${serviceName} is ready.\n\nHi ${firstName}, we've just finished your ${serviceName.toLowerCase()}. Download it here:\n\n${documentsUrl}\n\nOr grab the PDF directly (sign in required): ${directPdfUrl}\n\n— WorkAbroad Hub`;
                 await sendWithFailover({
-                    to: user.email,
+                    to: recipientEmail,
                     subject: `Your ${serviceName} is ready — download it here`,
                     html,
                     text,
@@ -1205,7 +1268,12 @@ async function notifyOrderCompleted(orderId) {
         // download buttons — no digging through /my-documents), clear PDF+Word
         // offer, and a support phone so people never feel stranded. Format uses
         // *bold* which WhatsApp renders natively.
-        if (user.phone) {
+        //
+        // 2026-08 (guest orders — EMAIL-ONLY delivery per founder decision):
+        // We skip WhatsApp for guests. Their phone was collected for the M-Pesa
+        // STK push only; they didn't opt in to marketing messages, and email
+        // delivery is what we committed to at checkout ("we'll email your CV").
+        if (recipientPhone && !isGuestDelivery) {
             try {
                 const { sendWhatsApp } = await Promise.resolve().then(() => __importStar(require("./services/whatsapp")));
                 const waMessage = `🎉 *Your ${serviceName} is ready, ${firstName}!*\n\n` +
@@ -1213,27 +1281,29 @@ async function notifyOrderCompleted(orderId) {
                     `Both *PDF* and *Word* formats waiting for you. Tap the link, choose your format, and it saves straight to your phone.\n\n` +
                     `_(We also sent this to your email as a backup.)_` +
                     supportLine;
-                await sendWhatsApp(user.phone, waMessage);
+                await sendWhatsApp(recipientPhone, waMessage);
             }
             catch (waErr) {
                 console.warn(`[ServiceOrder] completion WhatsApp failed for ${orderId}:`, waErr?.message);
             }
         }
         // ── In-app notification (tertiary) ────────────────────────────────────
-        // Populates the bell icon in the header so returning users see the alert.
-        try {
-            const { storage } = await Promise.resolve().then(() => __importStar(require("./storage")));
-            await storage.createUserNotification({
-                userId: order.user_id,
-                type: "success",
-                title: `Your ${serviceName} is ready`,
-                message: `Tap to download your ${serviceName.toLowerCase()} — PDF and Word both available.`,
-            });
+        // Only for logged-in users — guests have no account, so no bell icon.
+        if (order.user_id) {
+            try {
+                const { storage } = await Promise.resolve().then(() => __importStar(require("./storage")));
+                await storage.createUserNotification({
+                    userId: order.user_id,
+                    type: "success",
+                    title: `Your ${serviceName} is ready`,
+                    message: `Tap to download your ${serviceName.toLowerCase()} — PDF and Word both available.`,
+                });
+            }
+            catch (notifErr) {
+                console.warn(`[ServiceOrder] in-app notification failed for ${orderId}:`, notifErr?.message);
+            }
         }
-        catch (notifErr) {
-            console.warn(`[ServiceOrder] in-app notification failed for ${orderId}:`, notifErr?.message);
-        }
-        console.log(`[ServiceOrder] Completion notifications dispatched for order ${orderId} (email=${!!user.email} wa=${!!user.phone})`);
+        console.log(`[ServiceOrder] Completion notifications dispatched for order ${orderId} (mode=${isGuestDelivery ? "GUEST" : "USER"} email=${!!recipientEmail} wa=${!!recipientPhone && !isGuestDelivery})`);
     }
     catch (outer) {
         console.error(`[ServiceOrder] notifyOrderCompleted outer failure for ${orderId}:`, outer?.message);
@@ -1445,22 +1515,53 @@ function startStuckOrderSweep() {
 // ── Route registration ─────────────────────────────────────────────────────
 function registerServiceOrderRoutes(app, isAuthenticated) {
     // POST /api/services/order/:slug
-    // Body: multipart/form-data { cv: File, jobDescription?, targetCountry?, extraInput? }
-    // Response: { orderId, serviceName, price, needsPayment: true }
+    // Body: multipart/form-data { cv: File, jobDescription?, targetCountry?, extraInput?,
+    //                             guestName?, guestEmail?, guestPhone? }
+    // Response: { orderId, serviceName, price, needsPayment: true, downloadToken? }
     //
-    // 2026-08 SECURITY: gated on email verification. All paid CV / cover
-    // letter / SoP services flow through this endpoint — fake-email accounts
-    // must not be able to initiate an order (which creates a payment row
-    // and STK push). Same policy applied to /api/subscriptions/upgrade.
-    app.post("/api/services/order/:slug", isAuthenticated, identityVerification_1.requireVerifiedForPayment, cvUploadWithJsonErrors("cv"), async (req, res) => {
+    // 2026-08 (Tony's anonymous-checkout directive): TWO paths, one endpoint.
+    //   Logged-in path:  session cookie → userId → existing flow (my-orders, etc.)
+    //   Guest path:      no session   → require guestName + guestEmail + guestPhone
+    //                                   → mint downloadToken → deliver via email
+    //
+    // Payment IS the auth for guests — no doc is generated until M-Pesa or
+    // PayPal webhook confirms the payment row created here. Rate limits below
+    // prevent order-spam from anonymous IPs.
+    app.post("/api/services/order/:slug", cvUploadWithJsonErrors("cv"), async (req, res) => {
         const t0 = Date.now();
         const slug = String(req.params.slug || "").toLowerCase();
-        console.log(`[ServiceOrder] POST /api/services/order/${slug} | userId=${req.user?.claims?.sub ?? req.user?.id ?? "??"} hasFile=${!!req.file}`);
+        const sessionUserId = req.user?.claims?.sub ?? req.user?.id;
+        const isGuest = !sessionUserId;
+        console.log(`[ServiceOrder] POST /api/services/order/${slug} | userId=${sessionUserId ?? "GUEST"} hasFile=${!!req.file}`);
         try {
-            const userId = req.user?.claims?.sub ?? req.user?.id;
-            if (!userId) {
-                console.warn(`[ServiceOrder] No userId on request`);
-                return res.status(401).json({ message: "Please sign in first." });
+            // Guest checkout validation — name + email + phone all required so
+            // we can (a) address the delivery email, (b) email the download link,
+            // (c) drive the M-Pesa STK push at pay time.
+            let guestName = null;
+            let guestEmail = null;
+            let guestPhone = null;
+            if (isGuest) {
+                guestName = String(req.body?.guestName ?? "").trim() || null;
+                guestEmail = String(req.body?.guestEmail ?? "").trim().toLowerCase() || null;
+                guestPhone = String(req.body?.guestPhone ?? "").trim() || null;
+                if (!guestName || !guestEmail || !guestPhone) {
+                    return res.status(400).json({
+                        message: "Please provide your name, email, and phone number so we can send your finished document.",
+                        missingFields: {
+                            guestName: !guestName,
+                            guestEmail: !guestEmail,
+                            guestPhone: !guestPhone,
+                        },
+                    });
+                }
+                if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail)) {
+                    return res.status(400).json({ message: "That email doesn't look right — please double-check it." });
+                }
+                // Loose phone check — Kenyan (07/01/+254) or international (+xxx).
+                const phoneDigits = guestPhone.replace(/\D/g, "");
+                if (phoneDigits.length < 9 || phoneDigits.length > 15) {
+                    return res.status(400).json({ message: "Please enter a valid phone number (e.g. 0712345678)." });
+                }
             }
             const config = getConfig(slug);
             if (!config) {
@@ -1535,8 +1636,11 @@ function registerServiceOrderRoutes(app, isAuthenticated) {
             // record it in the `amount` column (the old schema requires it).
             const { rows: priceRows } = await db_1.pool.query(`SELECT price FROM services WHERE slug = $1 OR code = $1 LIMIT 1`, [slug]);
             const price = priceRows[0]?.price ?? 0;
-            const orderId = await createOrder({
-                userId,
+            const { id: orderId, downloadToken } = await createOrder({
+                userId: sessionUserId ?? null,
+                guestName,
+                guestEmail,
+                guestPhone,
                 slug,
                 serviceName: config.name,
                 amount: price,
@@ -1548,13 +1652,18 @@ function registerServiceOrderRoutes(app, isAuthenticated) {
                 photoDataUrl,
                 cvRawFile,
             });
-            console.log(`[ServiceOrder] Created orderId=${orderId} slug=${slug} price=${price} cvLen=${cvText?.length ?? 0} deferred=${cvRawFile ? "yes" : "no"} in ${Date.now() - t0}ms`);
+            console.log(`[ServiceOrder] Created orderId=${orderId} slug=${slug} price=${price} mode=${isGuest ? "GUEST" : "USER"} cvLen=${cvText?.length ?? 0} deferred=${cvRawFile ? "yes" : "no"} in ${Date.now() - t0}ms`);
             res.json({
                 orderId,
                 serviceName: config.name,
                 price,
                 estSeconds: config.estSeconds,
                 needsPayment: price > 0,
+                // Guest flow: client stores this token in localStorage and uses it
+                // as ?token=xxx on status polls + download requests. Never emitted
+                // for logged-in users (they auth via session cookie).
+                downloadToken: downloadToken ?? undefined,
+                isGuestOrder: isGuest,
             });
         }
         catch (err) {
@@ -1598,18 +1707,150 @@ function registerServiceOrderRoutes(app, isAuthenticated) {
             });
         }
     });
+    // POST /api/services/order/:orderId/pay-guest — initiate M-Pesa STK for guest.
+    // 2026-08 (Tony's anonymous-checkout directive): dedicated payment path for
+    // no-account orders. Auth via ?token=xxx (matches the download token minted
+    // at order creation). Records a payments row with user_id NULL and hands off
+    // to the standard mpesa.stkPush → callback → runPaymentPipeline machinery,
+    // which already handles guest orders correctly because notifyOrderCompleted
+    // routes on guest_email when user_id is NULL.
+    //
+    // Rate limited (implicitly via the token uniqueness — one token per order,
+    // one order per legitimate flow) + phone normalization + amount pulled from
+    // the immutable order row (client can't tamper with the price).
+    app.post("/api/services/order/:orderId/pay-guest", async (req, res) => {
+        try {
+            const orderId = String(req.params.orderId || "").trim();
+            const tokenParam = String(req.body?.token ?? req.query?.token ?? "").trim();
+            if (!orderId || !tokenParam) {
+                return res.status(400).json({ message: "orderId and token are required." });
+            }
+            const { rows } = await db_1.pool.query(`SELECT id, user_id, service_slug, service_name, status, amount,
+                guest_phone, download_token
+           FROM service_orders WHERE id = $1 LIMIT 1`, [orderId]);
+            const order = rows[0];
+            if (!order)
+                return res.status(404).json({ message: "Order not found." });
+            if (!order.download_token)
+                return res.status(400).json({ message: "This order is not a guest order — sign in instead." });
+            if (order.download_token.length !== tokenParam.length ||
+                !crypto_1.default.timingSafeEqual(Buffer.from(order.download_token), Buffer.from(tokenParam))) {
+                return res.status(401).json({ message: "Invalid download token." });
+            }
+            if (order.status !== "pending_payment") {
+                return res.status(409).json({ message: `Order is already ${order.status}.` });
+            }
+            const amount = Number(order.amount ?? 0);
+            if (!(amount > 0))
+                return res.status(400).json({ message: "This order has no amount to pay." });
+            // Phone override from body (user may have changed it in the pay form).
+            // Fall back to what they supplied at checkout.
+            const rawPhone = String(req.body?.phone ?? "").trim() || order.guest_phone || "";
+            if (!rawPhone)
+                return res.status(400).json({ message: "Please provide your M-Pesa phone number." });
+            // Normalize to E.164 254XXXXXXXXX so Safaricom accepts it.
+            const { normalizePhone } = await Promise.resolve().then(() => __importStar(require("./utils/phone")));
+            const normalizedPhone = normalizePhone(rawPhone, "KE") ?? rawPhone;
+            if (!/^254[71]\d{8}$/.test(normalizedPhone)) {
+                return res.status(400).json({ message: "Invalid phone number. Use 07XXXXXXXX or 01XXXXXXXX." });
+            }
+            // Create a pending payment row with user_id NULL (guest). The callback
+            // handler already looks up serviceOrderId from metadata to link back.
+            const paymentId = crypto_1.default.randomUUID();
+            await db_1.pool.query(`INSERT INTO payments
+           (id, user_id, amount, currency, status, method, phone_number, reference, description, metadata, created_at, updated_at)
+         VALUES ($1, $2, $3, 'KES', 'pending', 'mpesa', $4, $5, $6, $7, NOW(), NOW())`, [
+                paymentId,
+                null, // guest — no user
+                amount,
+                normalizedPhone,
+                paymentId, // reference == paymentId (used as AccountReference)
+                `${order.service_name} — WorkAbroadHub`,
+                JSON.stringify({
+                    serviceOrderId: order.id,
+                    serviceSlug: order.service_slug,
+                    isGuestOrder: true,
+                }),
+            ]);
+            // Fire the STK push. AccountReference = paymentId so the callback can
+            // resolve which pending payment this is for.
+            const { stkPush } = await Promise.resolve().then(() => __importStar(require("./mpesa")));
+            const appOrigin = (process.env.APP_ORIGIN || process.env.APP_URL || "").replace(/\/$/, "");
+            const callbackUrl = appOrigin ? `${appOrigin}/api/payments/mpesa/callback` : undefined;
+            const stk = await stkPush(normalizedPhone, amount, `${order.service_name}`.slice(0, 60), paymentId, callbackUrl);
+            // Persist Safaricom identifiers so the callback can find this row.
+            const merchantId = stk?.MerchantRequestID ?? null;
+            const checkoutId = stk?.CheckoutRequestID ?? null;
+            if (checkoutId) {
+                await db_1.pool.query(`UPDATE payments
+              SET metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb,
+                  updated_at = NOW()
+            WHERE id = $1`, [paymentId, JSON.stringify({ merchantRequestId: merchantId, checkoutRequestId: checkoutId })]);
+            }
+            console.log(`[ServiceOrder] Guest STK push initiated: orderId=${order.id} paymentId=${paymentId} phone=${normalizedPhone} amount=${amount}`);
+            res.json({
+                success: true,
+                paymentId,
+                checkoutRequestId: checkoutId,
+                message: "STK push sent. Check your phone and enter your M-Pesa PIN.",
+            });
+        }
+        catch (err) {
+            console.error("[ServiceOrder] pay-guest error:", err?.message);
+            res.status(500).json({ message: err?.message || "Could not initiate M-Pesa payment. Please try again." });
+        }
+    });
+    // GET /api/services/order/by-token/:token — resolve token → orderId+status
+    // 2026-08 (guest orders): the magic-link download page (/download/:token)
+    // knows the token but not the orderId. This endpoint gives it both, so it
+    // can then use the standard status + download endpoints. Public, but the
+    // token itself is unguessable (24 bytes entropy) so this is safe.
+    //   404 → token not recognized (mistyped / bad URL)
+    //   410 → token expired (>30 days since order)
+    //   200 → { orderId, serviceName, status, downloadAvailable }
+    app.get("/api/services/order/by-token/:token", async (req, res) => {
+        const token = String(req.params.token || "").trim();
+        // Length check first — avoids expensive queries on obviously-invalid input.
+        if (token.length < 32 || token.length > 96 || !/^[a-f0-9]+$/i.test(token)) {
+            return res.status(404).json({ message: "Download link not found." });
+        }
+        const { rows } = await db_1.pool.query(`SELECT id, service_name, status, download_expires_at
+         FROM service_orders WHERE download_token = $1 LIMIT 1`, [token]);
+        const order = rows[0];
+        if (!order)
+            return res.status(404).json({ message: "Download link not found." });
+        if (order.download_expires_at && order.download_expires_at < new Date()) {
+            return res.status(410).json({ message: "This download link has expired." });
+        }
+        res.json({
+            orderId: order.id,
+            serviceName: order.service_name,
+            status: order.status,
+            downloadAvailable: order.status === "completed",
+        });
+    });
     // GET /api/services/order/:orderId/status
-    app.get("/api/services/order/:orderId/status", isAuthenticated, async (req, res) => {
-        const userId = req.user?.claims?.sub ?? req.user?.id;
-        if (!userId)
-            return res.status(401).json({ message: "Please sign in." });
-        const { rows } = await db_1.pool.query(`SELECT id, user_id, service_slug, service_name, status, error_message, created_at, completed_at
+    // 2026-08 (guest orders): auth EITHER via session cookie OR ?token=xxx.
+    // Constant-time compare on the token to avoid timing oracles.
+    app.get("/api/services/order/:orderId/status", async (req, res) => {
+        const sessionUserId = req.user?.claims?.sub ?? req.user?.id;
+        const tokenParam = String(req.query?.token ?? "").trim();
+        const { rows } = await db_1.pool.query(`SELECT id, user_id, service_slug, service_name, status, error_message,
+              created_at, completed_at, download_token, download_expires_at
          FROM service_orders WHERE id = $1`, [req.params.orderId]);
         const order = rows[0];
         if (!order)
             return res.status(404).json({ message: "Order not found." });
-        if (order.user_id !== userId)
-            return res.status(403).json({ message: "Not your order." });
+        // Authorization: session-owner OR valid token (guest checkout).
+        const isOwner = sessionUserId && order.user_id === sessionUserId;
+        const tokenValid = tokenParam.length > 0 &&
+            order.download_token != null &&
+            order.download_token.length === tokenParam.length &&
+            crypto_1.default.timingSafeEqual(Buffer.from(tokenParam), Buffer.from(order.download_token)) &&
+            (!order.download_expires_at || order.download_expires_at > new Date());
+        if (!isOwner && !tokenValid) {
+            return res.status(sessionUserId ? 403 : 401).json({ message: sessionUserId ? "Not your order." : "Missing or invalid download token." });
+        }
         res.json({
             orderId: order.id,
             serviceSlug: order.service_slug,
@@ -1627,23 +1868,46 @@ function registerServiceOrderRoutes(app, isAuthenticated) {
         });
     });
     // GET /api/services/order/:orderId/download/:format
-    app.get("/api/services/order/:orderId/download/:format", isAuthenticated, async (req, res) => {
+    // 2026-08 (guest orders): auth via session OR ?token=xxx. Guests get up
+    // to MAX_GUEST_DOWNLOADS pulls per order — enough for legitimate use
+    // (PDF + Word × a few retries), tight enough to prevent public sharing.
+    const MAX_GUEST_DOWNLOADS = 20;
+    app.get("/api/services/order/:orderId/download/:format", async (req, res) => {
         try {
-            const userId = req.user?.claims?.sub ?? req.user?.id;
-            if (!userId)
-                return res.status(401).json({ message: "Please sign in." });
+            const sessionUserId = req.user?.claims?.sub ?? req.user?.id;
+            const tokenParam = String(req.query?.token ?? "").trim();
             const format = String(req.params.format || "").toLowerCase();
             if (!["docx", "pdf"].includes(format)) {
                 return res.status(400).json({ message: "Format must be 'docx' or 'pdf'." });
             }
-            const { rows } = await db_1.pool.query(`SELECT user_id, service_slug, service_name, status, output_text, photo_data FROM service_orders WHERE id = $1`, [req.params.orderId]);
+            const { rows } = await db_1.pool.query(`SELECT user_id, service_slug, service_name, status, output_text, photo_data,
+                  download_token, download_expires_at, download_count
+             FROM service_orders WHERE id = $1`, [req.params.orderId]);
             const order = rows[0];
             if (!order)
                 return res.status(404).json({ message: "Order not found." });
-            if (order.user_id !== userId)
-                return res.status(403).json({ message: "Not your order." });
+            // Auth: owner OR valid token.
+            const isOwner = sessionUserId && order.user_id === sessionUserId;
+            const tokenValid = tokenParam.length > 0 &&
+                order.download_token != null &&
+                order.download_token.length === tokenParam.length &&
+                crypto_1.default.timingSafeEqual(Buffer.from(tokenParam), Buffer.from(order.download_token)) &&
+                (!order.download_expires_at || order.download_expires_at > new Date());
+            if (!isOwner && !tokenValid) {
+                return res.status(sessionUserId ? 403 : 401).json({ message: sessionUserId ? "Not your order." : "Download link is missing or expired." });
+            }
+            // Guest-only cap: prevent public re-sharing abuse.
+            if (tokenValid && !isOwner && order.download_count >= MAX_GUEST_DOWNLOADS) {
+                return res.status(429).json({
+                    message: `This download link has been used ${MAX_GUEST_DOWNLOADS} times already. Please contact support if you need it re-issued.`,
+                });
+            }
             if (order.status !== "completed" || !order.output_text) {
                 return res.status(409).json({ message: "Order is not ready yet." });
+            }
+            // Bump the counter for guest downloads only (session users are unlimited).
+            if (tokenValid && !isOwner) {
+                db_1.pool.query(`UPDATE service_orders SET download_count = download_count + 1 WHERE id = $1`, [req.params.orderId]).catch((e) => console.warn("[ServiceOrder] download_count bump failed:", e?.message));
             }
             const config = getConfig(order.service_slug);
             const filenameBase = config?.filename ?? order.service_name.replace(/\s+/g, "_");

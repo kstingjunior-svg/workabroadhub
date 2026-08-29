@@ -38,6 +38,15 @@ export function UpgradeModalProvider({ children }: { children: React.ReactNode }
 
   const openUpgradeModal = useCallback(
     (trigger: UpgradeModalTrigger = "manual", featureName?: string, defaultPlan?: "basic" | "pro") => {
+      // 2026-08 (Tony's anonymous-checkout directive): NEVER open the pricing
+      // upgrade modal (KES 99/1000/4500) on career-service order pages. Those
+      // pages have their OWN per-service pricing shown inline; the tiered
+      // upgrade modal is for job/country/consultation gating only. Popping it
+      // on a user who's mid-checkout for a CV Revamp is pure conversion loss.
+      if (typeof window !== "undefined" && /^\/services\/order\//.test(window.location.pathname)) {
+        return;
+      }
+
       // 2026-06 FIX: don't show the upgrade modal to users who are ALREADY on
       // a paid plan. The previous version would unconditionally open it, which
       // trapped admin-granted Pro users behind a "Pay again" wall because the
