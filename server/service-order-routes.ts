@@ -2016,13 +2016,17 @@ export function registerServiceOrderRoutes(app: Express, isAuthenticated: Reques
       // `service_id`/`service_name` not `description`, `email` for payer,
       // and needs user_id NULLABLE (fixed in migration 0045).
       const paymentId = crypto.randomUUID();
+      // 2026-08 (P0): the real DB has payments.metadata as JSONB (despite
+      // the Drizzle schema saying varchar). Without ::jsonb cast, Postgres
+      // errors "COALESCE types character varying and json cannot be matched"
+      // because the callback/verify handlers do COALESCE(metadata, '{}'::jsonb).
       await pool.query(
         `INSERT INTO payments
            (id, user_id, email, amount, currency, status, method, phone,
             reference, service_id, service_name, metadata,
             created_at, updated_at)
          VALUES ($1, $2, $3, $4, 'KES', 'pending', 'mpesa', $5,
-                 $6, $7, $8, $9,
+                 $6, $7, $8, $9::jsonb,
                  NOW(), NOW())`,
         [
           paymentId,
