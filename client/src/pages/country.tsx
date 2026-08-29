@@ -252,7 +252,13 @@ export default function Country() {
   // from kenya" and "uk skilled worker visa kenya".
   {
     const code = params?.code || "";
-    const meta = (COUNTRY_META as any)[code] as { name: string; flagEmoji: string } | undefined;
+    // 2026-08 P0 FIX: was referencing COUNTRY_META which doesn't exist in
+    // this file (that const lives in forum.tsx). The local const is
+    // `countryData` (defined line 223). Every country click was throwing
+    // `ReferenceError: COUNTRY_META is not defined` → ErrorBoundary → "Just
+    // a small detour" page for EVERY user, not just anonymous / expired
+    // sessions. Confirmed via console: at country-BIgskONV.js:1:5265.
+    const meta = countryData[code] as { name: string; flagEmoji: string } | undefined;
     const countryName = meta?.name || (code ? code.charAt(0).toUpperCase() + code.slice(1) : "Country");
     usePageSeo({
       title:       `${countryName} Jobs for Kenyans — Verified Portals, Visa Guide, Salary Info | WorkAbroad Hub`,
