@@ -926,6 +926,12 @@ function Router() {
       <Route path="/tools/interview-practice" component={InterviewPractice} />
       <Route path="/tools/job-match" component={JobMatch} />
         <Route path="/services" component={LazyServices} />
+        {/* 2026-08 (P0 — Tony's anonymous-checkout directive): these two
+            routes MUST be reachable by logged-out users so career-service
+            purchases + magic-link downloads work without an account. The
+            duplicate up in AuthenticatedRoutes covers signed-in users. */}
+        <Route path="/services/order/:slug" component={LazyServiceOrderFlow} />
+        <Route path="/download/:token" component={withSuspense(DownloadMagic)} />
         <Route path="/country/:code" component={LazyCountry} />
         <Route path="/forum/:country" component={LazyForum} />
         <Route path="/dashboard" component={ProtectedRedirect} />
