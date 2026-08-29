@@ -114,6 +114,11 @@ import { initSentry, attachSentryErrorHandler, captureException } from "./lib/se
 initSentry();
 import { serveStatic } from "./static";
 import { initSocketIO } from "./socket";
+// 2026-08 (P0 CSP audit): analytics WebSocket was defined but never wired
+// to the HTTP server, so every client hit `WebSocket connection failed` on
+// /ws/analytics — polluting console + retry-looping every 5s forever. This
+// import + init call below closes the loop.
+import { initWebSocketServer } from "./websocket";
 
 import { applyDdosProtection } from "./middleware/ddos-protection";
 
@@ -128,6 +133,18 @@ const PORT = parseInt(process.env.PORT || "5000", 10);
 
 httpServer.listen(PORT, "0.0.0.0", () => {
   console.log(`[Server] Running on port ${PORT}`);
+
+  // 2026-08 (P0 CSP audit): mount WebSocket server on the SAME http server
+  // so the /ws/analytics + /ws/user + /ws/presence-count paths get proper
+  // HTTP-upgrade handshakes. Without this, every browser client hit
+  // "WebSocket connection failed" on load and the reconnect loop retried
+  // every 5s indefinitely. Called from inside listen() so the http server
+  // is already accepting connections when we attach.
+  try {
+    initWebSocketServer(httpServer);
+  } catch (e: any) {
+    console.error("[Server] initWebSocketServer failed:", e?.message);
+  }
 
   // 2026-06 CRITICAL: start BullMQ workers on boot. These three queues handle
   // ATS CV generation, bulk job applications, and job-alert delivery — all
@@ -384,6 +401,82 @@ app.use(
     crossOriginEmbedderPolicy: false,
     crossOriginOpenerPolicy: {
       policy: "same-origin-allow-popups",
+    },
+    // 2026-08 (P0 CSP audit): Helmet's default CSP is `default-src 'self'`
+    // which blocks Firebase Realtime DB, our own analytics WebSocket, our
+    // inline theme/version-check scripts in index.html, and every third-
+    // party we depend on (Google Fonts, PayPal, Adzuna attribution img,
+    // etc). This custom policy allow-lists ONLY what the app actually
+    // needs — nothing more.
+    //
+    // Sources touched:
+    //   • Self-hosted assets: 'self' everywhere
+    //   • Inline bootstrap scripts (theme, version-check): 'unsafe-inline'
+    //     for script-src (small, self-contained, unavoidable without a
+    //     nonce pipeline in vite; hash-pinning them was too brittle
+    //     across builds)
+    //   • Firebase Realtime DB + Auth + Storage: *.firebaseio.com,
+    //     *.googleapis.com, *.gstatic.com, wss://*.firebaseio.com
+    //   • Own WebSocket (analytics presence): wss://workabroadhub.tech,
+    //     wss://*.onrender.com (Render staging), ws:// for local dev
+    //   • Fonts: fonts.googleapis.com (CSS) + fonts.gstatic.com (fonts)
+    //   • Images: data: URIs (all photo embeds), blob: (uploads previews),
+    //     any HTTPS (job portal favicons, agency logos)
+    //   • PayPal: paypal.com + paypalobjects.com for its checkout SDK
+    //   • Frame-src: PayPal + Google (for OAuth) checkout iframes
+    contentSecurityPolicy: {
+      useDefaults: false,
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: [
+          "'self'",
+          "'unsafe-inline'",   // for inline theme + version-check bootstrap
+          "https://*.firebaseio.com",
+          "https://*.googleapis.com",
+          "https://*.gstatic.com",
+          "https://apis.google.com",
+          "https://www.paypal.com",
+          "https://*.paypalobjects.com",
+          "https://www.google-analytics.com",
+          "https://www.googletagmanager.com",
+        ],
+        // 2026-08: allow inline event handlers (onclick=…) in our own HTML
+        // bootstrap — the version-check banner uses onclick attributes.
+        scriptSrcAttr: ["'unsafe-inline'"],
+        styleSrc: [
+          "'self'",
+          "'unsafe-inline'",   // Tailwind + shadcn set inline styles at runtime
+          "https://fonts.googleapis.com",
+        ],
+        fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
+        imgSrc: ["'self'", "data:", "blob:", "https:"],
+        connectSrc: [
+          "'self'",
+          "https://*.firebaseio.com",
+          "wss://*.firebaseio.com",
+          "https://*.googleapis.com",
+          "https://*.google-analytics.com",
+          "https://*.paypal.com",
+          "https://api.openai.com",
+          "https://sandbox.safaricom.co.ke",
+          "https://api.safaricom.co.ke",
+          "wss://workabroadhub.tech",
+          "wss://*.onrender.com",
+          "ws://localhost:*",
+          "https://o4506995718553600.ingest.sentry.io",
+        ],
+        frameSrc: [
+          "'self'",
+          "https://www.paypal.com",
+          "https://accounts.google.com",
+          "https://*.firebaseapp.com",
+        ],
+        workerSrc: ["'self'", "blob:"],
+        objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+        formAction: ["'self'"],
+        upgradeInsecureRequests: [],
+      },
     },
   })
 );
@@ -794,6 +887,13 @@ app.use((req, res, next) => {
         );
         CREATE INDEX IF NOT EXISTS autoapply_agents_user_id_idx  ON autoapply_agents(user_id);
         CREATE INDEX IF NOT EXISTS autoapply_agents_active_idx   ON autoapply_agents(is_active) WHERE is_active = true;
+
+        -- 2026-08 Phase 2.5: 7-day Pro free trial on first agent creation.
+        -- pro_trial_ends_at is set to NOW() + 7 days when the user first
+        -- creates an agent. resolveLimitsForUser treats users with an
+        -- active trial as Pro regardless of their users.plan column.
+        ALTER TABLE autoapply_agents ADD COLUMN IF NOT EXISTS pro_trial_ends_at TIMESTAMP;
+        CREATE INDEX IF NOT EXISTS autoapply_agents_trial_idx ON autoapply_agents(pro_trial_ends_at) WHERE pro_trial_ends_at IS NOT NULL;
 
         CREATE TABLE IF NOT EXISTS autoapply_matches (
           id                  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
