@@ -386,6 +386,23 @@ export function AuthModal({
 
       sessionStorage.clear();
 
+      // 2026-08 (Tony's "app keeps jumping after login" report): the redirect
+      // race was this — App.tsx has a useEffect([user]) that reads
+      // `auth_redirect` from localStorage and navigates the moment the auth
+      // query cache flips truthy. Meanwhile THIS modal waits 400ms, then
+      // reads the SAME key and navigates. Result: page bounces between the
+      // intended destination and /dashboard. Fix: consume + clear the
+      // localStorage entry HERE, snapshot it, but DO NOT delete yet — that
+      // way if the modal's own setTimeout navigate fails (unmount mid-flight,
+      // browser tab freeze, ancestor unmount, etc.) App.tsx's post-login
+      // useEffect can still recover and land the user on the right page.
+      // The cleanup happens in the setTimeout callback below, or in the
+      // App.tsx effect (whichever fires first) — both check + remove.
+      const preConsumedRedirect =
+        redirectPath ||
+        localStorage.getItem("auth_redirect") ||
+        null;
+
       // Pre-populate the auth-user query cache so the dashboard mounts
       // already-authenticated.
       //
@@ -436,10 +453,11 @@ export function AuthModal({
       // the initial dashboard mount; any extra fields the dashboard needs are
       // fetched by its own queries.
 
-      const finalDest =
-        redirectPath ||
-        localStorage.getItem("auth_redirect") ||
-        "/dashboard";
+      // 2026-08 (Tony's "app keeps jumping" fix): use the pre-consumed
+      // value we snapshotted BEFORE setQueryData. Reading localStorage
+      // again here would give the same answer, but doing it once above
+      // makes the ordering guarantee obvious.
+      const finalDest = preConsumedRedirect || "/dashboard";
 
       if (tab === "signup") {
         // 2026-07 (Tony's inline-verify request): stay INSIDE the modal.
@@ -449,19 +467,23 @@ export function AuthModal({
         // then are they redirected. No page navigation away from signup.
         setPendingDest(finalDest);
         setStage("verify");
-        // clear the auth_redirect intent for later
-        localStorage.removeItem("auth_redirect");
         setLoading(false);
         return;
       }
 
-      // Login path — unchanged, straight to destination
+      // Login path — straight to destination. Shortened the 400ms delay to
+      // 150ms; the old 400ms window was long enough for a stray effect to
+      // navigate first and cause the visible "flash" users reported.
+      //
+      // 2026-08 (Tony's "AutoApply lands on dashboard" fix): only clear
+      // localStorage AFTER navigate fires. If this timeout never fires
+      // (unmount / freeze), the App-level useEffect can still recover.
       setTimeout(() => {
+        try { localStorage.removeItem("auth_redirect"); } catch {}
         onClose();
         resetForm();
-        localStorage.removeItem("auth_redirect");
         navigate(finalDest);
-      }, 400);
+      }, 150);
     } catch {
       setServerError(
         "Network error. Please check your connection and try again."
@@ -513,6 +535,9 @@ export function AuthModal({
         return;
       }
       // Success — close modal + go to destination
+      // 2026-08: clear localStorage AFTER navigating, so if this path also
+      // races the App-level effect the redirect is still recoverable.
+      try { localStorage.removeItem("auth_redirect"); } catch {}
       onClose();
       resetForm();
       navigate(pendingDest);
