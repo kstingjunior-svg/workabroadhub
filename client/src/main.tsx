@@ -84,6 +84,53 @@ const CHUNK_PATTERNS = [
   "chunkloaderror",
 ];
 
+// 2026-08 (Tony's "PWA cycles in the same place / refresh doesn't work"
+// report): if the service worker is serving stale index.html that references
+// chunk hashes no longer on the server, we'd chunk-fail → reload → SW serves
+// same stale HTML → chunk-fail again → infinite loop. The loop guard below
+// counts reloads in a short window; once we cross the threshold we
+// aggressively nuke the SW + caches and hard-reload once. This turns a
+// broken PWA into a self-healing one.
+const CHUNK_RELOAD_KEY = "wah_chunk_reload_count";
+const CHUNK_RELOAD_TS_KEY = "wah_chunk_reload_ts";
+const CHUNK_RELOAD_WINDOW_MS = 60_000;   // reset counter after 1 min of calm
+const CHUNK_RELOAD_MAX = 2;              // >2 reloads in the window → nuke
+
+async function nukeCachesAndReload(): Promise<void> {
+  try {
+    if ("serviceWorker" in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map((r) => r.unregister().catch(() => false)));
+    }
+    if ("caches" in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((k) => caches.delete(k).catch(() => false)));
+    }
+  } catch { /* best-effort — we're about to hard reload anyway */ }
+  // Hard reload (bypasses any residual browser cache)
+  window.location.replace(window.location.pathname + window.location.search);
+}
+
+function handleChunkFailureWithLoopGuard(): void {
+  const now = Date.now();
+  const lastTs = parseInt(sessionStorage.getItem(CHUNK_RELOAD_TS_KEY) || "0", 10);
+  const count = now - lastTs < CHUNK_RELOAD_WINDOW_MS
+    ? parseInt(sessionStorage.getItem(CHUNK_RELOAD_KEY) || "0", 10) + 1
+    : 1;
+  sessionStorage.setItem(CHUNK_RELOAD_KEY, String(count));
+  sessionStorage.setItem(CHUNK_RELOAD_TS_KEY, String(now));
+
+  if (count > CHUNK_RELOAD_MAX) {
+    console.warn(`[WAH] Chunk-reload loop detected (${count} in <60s) — nuking SW + caches.`);
+    sessionStorage.removeItem(CHUNK_RELOAD_KEY);
+    sessionStorage.removeItem(CHUNK_RELOAD_TS_KEY);
+    nukeCachesAndReload();
+    return;
+  }
+  console.warn(`[WAH] Chunk load failure (attempt ${count}) — reloading for fresh bundle`);
+  window.location.reload();
+}
+
 function isNoiseError(message: string): boolean {
   const lower = message.toLowerCase();
   return NOISE_PATTERNS.some((p) => lower.includes(p));
@@ -124,10 +171,11 @@ window.addEventListener("error", (event) => {
   // Always ignore noise
   if (isNoiseError(message)) return;
 
-  // Chunk-load failures: stale bundle after a new deploy — reload to get fresh chunks
+  // Chunk-load failures: stale bundle after a new deploy — reload to get fresh
+  // chunks. Uses loop-guarded reload so a bad SW cache can't trap us in an
+  // infinite reload cycle (the "PWA cycles in the same place" bug).
   if (isChunkError(message)) {
-    console.warn("[WAH] Chunk load failure — reloading for fresh bundle");
-    window.location.reload();
+    handleChunkFailureWithLoopGuard();
     return;
   }
 
@@ -162,8 +210,7 @@ window.addEventListener("unhandledrejection", (event) => {
   // Chunk failures from dynamically-imported pages
   if (isChunkError(message)) {
     event.preventDefault();
-    console.warn("[WAH] Chunk load failure (promise) — reloading for fresh bundle");
-    window.location.reload();
+    handleChunkFailureWithLoopGuard();
     return;
   }
 

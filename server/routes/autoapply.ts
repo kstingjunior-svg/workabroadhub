@@ -15,7 +15,12 @@ import type { Express, Request, Response, RequestHandler } from "express";
 import { pool } from "../db";
 import { runScanForAgent, type AgentRow } from "../lib/autoapply";
 import { draftCoverLetter } from "../lib/autoapply/cover-letter";
-import { getAutoApplyLimits, AUTOAPPLY_PLAN_LIMITS } from "../lib/autoapply/plan-limits";
+import {
+  getAutoApplyLimits,
+  AUTOAPPLY_PLAN_LIMITS,
+  AUTOAPPLY_PRO_TRIAL_DAYS,
+  AUTOAPPLY_PRO_ANNUAL_KES,
+} from "../lib/autoapply/plan-limits";
 
 function requireAuth(req: Request, res: Response): string | null {
   const userId = (req.session as any)?.customUserId as string | undefined;
@@ -27,24 +32,61 @@ function requireAuth(req: Request, res: Response): string | null {
 }
 
 export function registerAutoApplyRoutes(app: Express, _isAuthenticated?: RequestHandler): void {
-  // ── GET current user's agent + their plan limits ────────────────────
+  // ── GET current user's agent + plan limits + trial status + quota ───
   app.get("/api/autoapply/agent", async (req, res) => {
     const userId = requireAuth(req, res); if (!userId) return;
-    const [agentRes, planRes] = await Promise.all([
-      pool.query<AgentRow>(`SELECT * FROM autoapply_agents WHERE user_id = $1 LIMIT 1`, [userId]),
+    const [agentRes, planRes, quotaRes] = await Promise.all([
+      pool.query<AgentRow & { pro_trial_ends_at: Date | null }>(
+        `SELECT * FROM autoapply_agents WHERE user_id = $1 LIMIT 1`, [userId],
+      ),
       pool.query<{ plan: string | null; is_admin: boolean | null; role: string | null }>(
         `SELECT plan, is_admin, role FROM users WHERE id = $1`, [userId],
       ),
+      pool.query<{ c: string }>(
+        `SELECT COUNT(*)::text AS c FROM autoapply_matches
+          WHERE user_id = $1 AND cover_letter IS NOT NULL
+            AND cover_letter_at > NOW() - INTERVAL '24 hours'`,
+        [userId],
+      ),
     ]);
     const u = planRes.rows[0];
+    const agent = agentRes.rows[0];
     const isAdmin = !!(u?.is_admin || u?.role === "ADMIN" || u?.role === "SUPER_ADMIN");
-    const planKey = isAdmin ? "pro" : (u?.plan ?? "free");
+    const trialActive = !!(agent?.pro_trial_ends_at && new Date(agent.pro_trial_ends_at).getTime() > Date.now());
+
+    // Effective plan considers admin bypass + active trial
+    let effectivePlanKey: string;
+    if (isAdmin || trialActive) effectivePlanKey = "pro";
+    else effectivePlanKey = u?.plan ?? "free";
+
+    const limits = getAutoApplyLimits(effectivePlanKey);
+    const lettersUsedToday = Number(quotaRes.rows[0]?.c ?? 0);
+
     return res.json({
-      agent:  agentRes.rows[0] ?? null,
-      plan:   { id: planKey, ...getAutoApplyLimits(planKey) },
+      agent: agent ?? null,
+      plan: {
+        id: effectivePlanKey,
+        ...limits,
+        // Trial info exposed to UI so it can render the countdown
+        trial_active:      trialActive,
+        trial_ends_at:     agent?.pro_trial_ends_at ?? null,
+        real_plan:         u?.plan ?? "free",   // underlying plan (post-trial)
+      },
+      quota: {
+        letters_used_today:      lettersUsedToday,
+        letters_daily_limit:     limits.maxCoverLettersPerDay,
+        letters_remaining_today: Math.max(0, limits.maxCoverLettersPerDay - lettersUsedToday),
+      },
       offers: {
-        // Frontend uses these to render the upgrade card
-        pro: { ...AUTOAPPLY_PLAN_LIMITS.pro, upgradeUrl: "/services" },
+        // Frontend uses these to render the upgrade card. Includes annual
+        // option (~17% cheaper vs. monthly × 12).
+        pro: {
+          ...AUTOAPPLY_PLAN_LIMITS.pro,
+          upgradeUrl:      "/services",
+          annualPriceKes:  AUTOAPPLY_PRO_ANNUAL_KES,
+          annualSavings:   AUTOAPPLY_PLAN_LIMITS.pro.monthlyPriceKes * 12 - AUTOAPPLY_PRO_ANNUAL_KES,
+        },
+        trialDays: AUTOAPPLY_PRO_TRIAL_DAYS,
       },
     });
   });
@@ -75,13 +117,18 @@ export function registerAutoApplyRoutes(app: Express, _isAuthenticated?: Request
     const remoteOk = body.remote_ok === true;
     const maxPerDay = Math.min(30, Math.max(1, Number(body.max_matches_per_day ?? 10)));
 
+    // 2026-08 Phase 2.5: on FIRST create, grant a 7-day Pro trial. Users
+    // who already have an agent (updating settings) keep whatever trial
+    // state they had — we never extend or reset the trial retroactively.
     const { rows } = await pool.query<AgentRow>(
       `INSERT INTO autoapply_agents
          (user_id, target_countries, target_roles, target_industries,
           min_salary_kes, visa_sponsorship_required, remote_ok,
           experience_years, cv_text, max_matches_per_day,
-          is_active, next_scan_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,true,NOW() + INTERVAL '5 minutes')
+          is_active, next_scan_at, pro_trial_ends_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,true,
+               NOW() + INTERVAL '5 minutes',
+               NOW() + ($11::text || ' days')::interval)
        ON CONFLICT (user_id) DO UPDATE
          SET target_countries          = EXCLUDED.target_countries,
              target_roles              = EXCLUDED.target_roles,
@@ -94,6 +141,7 @@ export function registerAutoApplyRoutes(app: Express, _isAuthenticated?: Request
              max_matches_per_day       = EXCLUDED.max_matches_per_day,
              is_active                 = true,
              updated_at                = NOW()
+             -- Deliberately DO NOT touch pro_trial_ends_at on update
        RETURNING *`,
       [
         userId,
@@ -106,6 +154,7 @@ export function registerAutoApplyRoutes(app: Express, _isAuthenticated?: Request
         experienceYrs,
         cvText,
         maxPerDay,
+        String(AUTOAPPLY_PRO_TRIAL_DAYS),
       ],
     );
     return res.json({ agent: rows[0] });

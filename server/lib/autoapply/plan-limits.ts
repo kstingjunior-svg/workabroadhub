@@ -25,6 +25,17 @@ export interface AutoApplyPlanLimits {
 
 // Canonical limits. Update here and both server + client update in the
 // same deploy (client reads via /api/autoapply/plan-info).
+// 2026-08 Phase 2.5: length of the auto-granted Pro trial when a user
+// first activates their AutoApply agent. Long enough for them to see
+// the value (daily digest × 7 days = 7 morning "wow" moments), short
+// enough to force a decision.
+export const AUTOAPPLY_PRO_TRIAL_DAYS = 7;
+
+// 2026-08 Phase 2.5: annual pricing option shown alongside monthly.
+// Two months free vs. paying 12 × monthly = ~17% discount. Bumps LTV
+// dramatically because annual customers rarely churn mid-year.
+export const AUTOAPPLY_PRO_ANNUAL_KES = 15_000;
+
 export const AUTOAPPLY_PLAN_LIMITS: Record<string, AutoApplyPlanLimits> = {
   free: {
     tier:                 "free",

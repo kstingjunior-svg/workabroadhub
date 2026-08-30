@@ -9,7 +9,7 @@
  * visitors get bounced to /login by the wrapper route in App.tsx.
  */
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { usePageSeo } from "@/hooks/use-page-seo";
@@ -22,6 +22,7 @@ import { Label } from "@/components/ui/label";
 import {
   Sparkles, RefreshCw, Star, Check, X, ExternalLink, Loader2,
   MapPin, Briefcase, DollarSign, Zap, Copy, Pause, Play,
+  Upload, FileText,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────
@@ -67,10 +68,24 @@ interface PlanInfo {
   dailyDigestEmail:     boolean;
   priorityQueue:        boolean;
   monthlyPriceKes:      number;
+  trial_active?:        boolean;
+  trial_ends_at?:       string | null;
+  real_plan?:           string;
+}
+
+interface Quota {
+  letters_used_today:      number;
+  letters_daily_limit:     number;
+  letters_remaining_today: number;
 }
 
 interface Offers {
-  pro: PlanInfo & { upgradeUrl: string };
+  pro: PlanInfo & {
+    upgradeUrl:     string;
+    annualPriceKes: number;
+    annualSavings:  number;
+  };
+  trialDays: number;
 }
 
 const COUNTRY_OPTIONS = [
@@ -97,14 +112,19 @@ export default function AutoApplyPage() {
   const qc = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<"new" | "starred" | "applied" | "dismissed" | "all">("new");
 
-  const { data: agentData, isLoading: agentLoading } = useQuery<{ agent: Agent | null; plan: PlanInfo; offers: Offers }>({
+  const { data: agentData, isLoading: agentLoading } = useQuery<{ agent: Agent | null; plan: PlanInfo; offers: Offers; quota: Quota }>({
     queryKey: ["/api/autoapply/agent"],
     staleTime: 30_000,
   });
   const agent = agentData?.agent ?? null;
   const plan  = agentData?.plan;
   const offers = agentData?.offers;
+  const quota = agentData?.quota;
   const isPro = plan?.tier === "pro";
+  const trialActive = !!plan?.trial_active;
+  const trialDaysLeft = plan?.trial_ends_at
+    ? Math.max(0, Math.ceil((new Date(plan.trial_ends_at).getTime() - Date.now()) / (24 * 60 * 60 * 1000)))
+    : 0;
 
   const { data: matchesData } = useQuery<{ matches: Match[] }>({
     queryKey: [`/api/autoapply/matches?status=${statusFilter === "all" ? "" : statusFilter}&limit=50`],
@@ -236,44 +256,120 @@ export default function AutoApplyPage() {
         </div>
       </section>
 
-      {/* ─── FREE-tier upgrade card ─────────────────────────────────────
-           Shown only to free users, right above their match list. Anchor
-           of the paywall UX. Prices + limits come from /api/autoapply/agent
-           (single source of truth = server/lib/autoapply/plan-limits.ts). */}
-      {!isPro && offers && (
+      {/* ─── TRIAL banner ─ Pro tier via 7-day free trial ─────────────
+           Shown to trial users so they see the countdown urgency. */}
+      {trialActive && plan && offers && (
         <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
-          <Card className="border-2 border-amber-400/50 bg-gradient-to-r from-amber-50 via-orange-50 to-yellow-50 dark:from-amber-950/30 dark:via-orange-950/20 dark:to-yellow-950/30">
-            <CardContent className="p-5 sm:p-6 flex flex-col sm:flex-row gap-4 sm:items-center">
-              <div className="text-4xl sm:text-5xl">⚡</div>
+          <Card className="border-2 border-purple-400/50 bg-gradient-to-r from-purple-50 via-blue-50 to-cyan-50 dark:from-purple-950/30 dark:via-blue-950/20 dark:to-cyan-950/30">
+            <CardContent className="p-4 sm:p-5 flex flex-col sm:flex-row gap-3 sm:items-center">
+              <div className="text-3xl">🎁</div>
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap mb-1">
-                  <h3 className="font-bold text-lg text-slate-900 dark:text-white">
-                    Upgrade to Pro
-                  </h3>
-                  <span className="text-xs font-semibold text-orange-700 dark:text-orange-300 bg-orange-100 dark:bg-orange-900/40 px-2 py-0.5 rounded-full uppercase tracking-wide">
-                    KES {offers.pro.monthlyPriceKes.toLocaleString()}/mo
-                  </span>
+                <div className="font-bold text-slate-900 dark:text-white">
+                  Free Pro trial active — {trialDaysLeft} day{trialDaysLeft === 1 ? "" : "s"} left
                 </div>
-                <p className="text-sm text-slate-700 dark:text-slate-300 leading-snug">
-                  You&apos;re on the Free plan — {plan?.maxMatchesPerDay} matches per week, no AI cover letters.
-                  Pro unlocks <b>{offers.pro.maxMatchesPerDay} matches/day</b>, <b>{offers.pro.maxCoverLettersPerDay} AI-drafted cover letters daily</b>, and the <b>morning digest email</b> that keeps you on top of every opportunity.
+                <p className="text-sm text-slate-700 dark:text-slate-300 mt-1">
+                  You&apos;re enjoying all Pro features: {plan.maxMatchesPerDay} matches/day, AI cover letters, and morning digest email.
+                  {trialDaysLeft <= 2 && (
+                    <b className="text-purple-700 dark:text-purple-300"> Upgrade now to keep everything after the trial ends.</b>
+                  )}
                 </p>
-                <ul className="mt-2 text-xs text-slate-600 dark:text-slate-400 space-y-0.5">
-                  <li>✓ 10× more matches surfaced every day</li>
-                  <li>✓ Tailored cover letter drafted for every top match</li>
-                  <li>✓ Morning email digest at 6am — never miss a fresh posting</li>
-                  <li>✓ Priority scan queue (your agent runs first)</li>
-                </ul>
               </div>
               <a href={offers.pro.upgradeUrl}>
                 <Button
                   size="lg"
-                  className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white border-0 shadow-lg whitespace-nowrap gap-1"
-                  data-testid="btn-autoapply-upgrade"
+                  className="bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-400 hover:to-blue-400 text-white border-0 shadow-lg whitespace-nowrap gap-1"
+                  data-testid="btn-autoapply-trial-upgrade"
                 >
-                  <Sparkles className="h-4 w-4" /> Upgrade for KES {offers.pro.monthlyPriceKes.toLocaleString()}
+                  <Sparkles className="h-4 w-4" /> Keep Pro — KES {offers.pro.monthlyPriceKes.toLocaleString()}/mo
                 </Button>
               </a>
+            </CardContent>
+          </Card>
+        </section>
+      )}
+
+      {/* ─── Quota indicator ─ For Pro users near the letter cap ──────── */}
+      {isPro && !trialActive && quota && quota.letters_daily_limit > 0 && quota.letters_remaining_today <= 3 && (
+        <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+          <Card className="border-amber-300 bg-amber-50/50 dark:bg-amber-950/20">
+            <CardContent className="p-3 flex items-center gap-3 text-sm">
+              <Zap className="h-4 w-4 text-amber-600 shrink-0" />
+              <div className="flex-1">
+                <b>{quota.letters_used_today}/{quota.letters_daily_limit} AI cover letters used today.</b>{" "}
+                {quota.letters_remaining_today === 0
+                  ? <span className="text-amber-700 dark:text-amber-300">Daily quota reached — resets at midnight EAT. New matches after that will get letters drafted automatically.</span>
+                  : <span className="text-muted-foreground">{quota.letters_remaining_today} letter{quota.letters_remaining_today === 1 ? "" : "s"} remaining today.</span>
+                }
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+      )}
+
+      {/* ─── FREE-tier upgrade card (post-trial or never-trialled) ─────
+           Shown only to genuine free users (NOT trial users, they see the
+           trial banner instead). Includes both monthly and annual pricing. */}
+      {!isPro && !trialActive && offers && (
+        <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+          <Card className="border-2 border-amber-400/50 bg-gradient-to-r from-amber-50 via-orange-50 to-yellow-50 dark:from-amber-950/30 dark:via-orange-950/20 dark:to-yellow-950/30">
+            <CardContent className="p-5 sm:p-6">
+              <div className="flex flex-col sm:flex-row gap-4 sm:items-start">
+                <div className="text-4xl sm:text-5xl">⚡</div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <h3 className="font-bold text-lg text-slate-900 dark:text-white">
+                      Upgrade to Pro
+                    </h3>
+                    <span className="text-xs font-semibold text-orange-700 dark:text-orange-300 bg-orange-100 dark:bg-orange-900/40 px-2 py-0.5 rounded-full uppercase tracking-wide">
+                      From KES {offers.pro.monthlyPriceKes.toLocaleString()}/mo
+                    </span>
+                  </div>
+                  <p className="text-sm text-slate-700 dark:text-slate-300 leading-snug">
+                    You&apos;re on the Free plan — {plan?.maxMatchesPerDay} matches per week, no AI cover letters.
+                    Pro unlocks <b>{offers.pro.maxMatchesPerDay} matches/day</b>, <b>{offers.pro.maxCoverLettersPerDay} AI-drafted cover letters daily</b>, and the <b>morning digest email</b>.
+                  </p>
+                  <ul className="mt-2 text-xs text-slate-600 dark:text-slate-400 space-y-0.5">
+                    <li>✓ 10× more matches surfaced every day (not per week)</li>
+                    <li>✓ Tailored AI cover letter drafted for every top match</li>
+                    <li>✓ Morning email digest at 6am — never miss a fresh posting</li>
+                    <li>✓ Priority scan queue (your agent runs first)</li>
+                  </ul>
+                </div>
+              </div>
+
+              {/* Two pricing options: monthly + annual (annual saves ~17%) */}
+              <div className="mt-4 grid sm:grid-cols-2 gap-3">
+                <a href={offers.pro.upgradeUrl} className="block">
+                  <div className="border rounded-lg p-4 hover:border-orange-400 bg-white dark:bg-slate-900 transition-all">
+                    <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase mb-1">Monthly</div>
+                    <div className="text-2xl font-bold text-slate-900 dark:text-white">
+                      KES {offers.pro.monthlyPriceKes.toLocaleString()}
+                      <span className="text-sm text-muted-foreground font-normal">/mo</span>
+                    </div>
+                    <Button size="sm" variant="outline" className="w-full mt-3">
+                      Choose monthly
+                    </Button>
+                  </div>
+                </a>
+                <a href={`${offers.pro.upgradeUrl}?plan=annual`} className="block">
+                  <div className="border-2 border-orange-500 rounded-lg p-4 bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-950/40 dark:to-amber-950/30 relative">
+                    <div className="absolute -top-2 right-3 bg-orange-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-md uppercase">
+                      Save {Math.round((offers.pro.annualSavings / (offers.pro.monthlyPriceKes * 12)) * 100)}%
+                    </div>
+                    <div className="text-xs font-semibold text-orange-700 dark:text-orange-300 uppercase mb-1">Annual (best value)</div>
+                    <div className="text-2xl font-bold text-slate-900 dark:text-white">
+                      KES {offers.pro.annualPriceKes.toLocaleString()}
+                      <span className="text-sm text-muted-foreground font-normal">/year</span>
+                    </div>
+                    <div className="text-xs text-emerald-700 dark:text-emerald-400 mt-1">
+                      = KES {Math.round(offers.pro.annualPriceKes / 12).toLocaleString()}/mo · save KES {offers.pro.annualSavings.toLocaleString()}
+                    </div>
+                    <Button size="sm" className="w-full mt-3 bg-gradient-to-r from-orange-500 to-amber-500 text-white">
+                      Choose annual
+                    </Button>
+                  </div>
+                </a>
+              </div>
             </CardContent>
           </Card>
         </section>
@@ -494,6 +590,52 @@ function OnboardingForm({ onCreated }: { onCreated: () => void }) {
   const [visaReq, setVisaReq] = useState(true);
   const [cvText, setCvText] = useState("");
 
+  // 2026-08 (Tony's UX ask): upload OR paste. Uploading a PDF/DOCX auto-
+  // extracts the text into the same cvText state — user can still tweak
+  // before submitting. Falls back gracefully if extraction is thin (scanned
+  // image PDF, etc.) by leaving the paste box empty and showing a toast.
+  const cvFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [uploadingCv, setUploadingCv] = useState(false);
+  const [uploadedCvName, setUploadedCvName] = useState<string | null>(null);
+
+  async function handleCvFile(file: File) {
+    if (!file) return;
+    setUploadingCv(true);
+    setUploadedCvName(null);
+    try {
+      const fd = new FormData();
+      fd.append("cv", file);
+      const res = await fetch("/api/util/extract-cv-text", {
+        method: "POST",
+        credentials: "include",
+        body: fd,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.text || data.text.length < 50) {
+        toast({
+          title: "Couldn't read this file",
+          description: data?.message || "It may be a scanned image PDF. Try a text-based PDF or paste manually.",
+          variant: "destructive",
+        });
+        return;
+      }
+      setCvText(data.text);
+      setUploadedCvName(file.name);
+      toast({
+        title: "CV loaded",
+        description: `Extracted ${data.text.length.toLocaleString()} characters from ${file.name}. Review below and edit if needed.`,
+      });
+    } catch (e: any) {
+      toast({
+        title: "Upload failed",
+        description: e?.message || "Network error. Please try again or paste manually.",
+        variant: "destructive",
+      });
+    } finally {
+      setUploadingCv(false);
+    }
+  }
+
   const roles = useMemo(() => rolesInput.split(",").map((r) => r.trim()).filter(Boolean), [rolesInput]);
 
   const create = useMutation({
@@ -600,12 +742,64 @@ function OnboardingForm({ onCreated }: { onCreated: () => void }) {
           </div>
 
           <div>
-            <Label htmlFor="cv" className="text-base font-semibold">5. Paste your CV (plain text)</Label>
-            <p className="text-xs text-muted-foreground mt-1 mb-2">Copy from your Word/PDF CV. Everything the agent uses to match jobs comes from here. Minimum 200 characters.</p>
+            <Label htmlFor="cv" className="text-base font-semibold">5. Your CV</Label>
+            <p className="text-xs text-muted-foreground mt-1 mb-3">Upload your Word/PDF CV OR paste the text below. Everything the agent uses to match jobs comes from here. Minimum 200 characters.</p>
+
+            {/* Upload / drag-drop area — auto-extracts text into the box below */}
+            <div
+              onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const f = e.dataTransfer.files?.[0];
+                if (f) void handleCvFile(f);
+              }}
+              onClick={() => cvFileInputRef.current?.click()}
+              className="border-2 border-dashed border-input hover:border-primary/50 rounded-lg p-4 text-center cursor-pointer transition mb-3 bg-muted/30"
+              data-testid="cv-drop-zone"
+            >
+              <input
+                ref={cvFileInputRef}
+                type="file"
+                accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void handleCvFile(f);
+                  // Reset so re-uploading the same file re-triggers
+                  e.target.value = "";
+                }}
+                data-testid="input-cv-file"
+              />
+              {uploadingCv ? (
+                <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground py-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Reading your CV…
+                </div>
+              ) : uploadedCvName ? (
+                <div className="flex items-center justify-center gap-2 text-sm text-emerald-700 dark:text-emerald-400">
+                  <FileText className="h-4 w-4" />
+                  <span className="font-medium truncate max-w-xs">{uploadedCvName}</span>
+                  <span className="text-xs text-muted-foreground">— tap to replace</span>
+                </div>
+              ) : (
+                <>
+                  <Upload className="h-6 w-6 mx-auto text-muted-foreground mb-2" />
+                  <p className="text-sm font-medium">Click to upload your CV, or drag & drop</p>
+                  <p className="text-xs text-muted-foreground mt-1">PDF or Word (.docx), up to 5 MB</p>
+                </>
+              )}
+            </div>
+
+            <div className="relative my-3">
+              <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border" /></div>
+              <div className="relative flex justify-center text-[10px] uppercase tracking-wider"><span className="bg-background px-2 text-muted-foreground">or paste the text</span></div>
+            </div>
+
             <Textarea
               id="cv"
               value={cvText}
-              onChange={(e) => setCvText(e.target.value)}
+              onChange={(e) => { setCvText(e.target.value); setUploadedCvName(null); }}
               placeholder="Paste your CV here..."
               rows={10}
               className="font-mono text-xs"

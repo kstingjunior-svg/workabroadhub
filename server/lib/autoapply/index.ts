@@ -135,23 +135,28 @@ export async function runScanForAgent(agent: AgentRow): Promise<ScanSummary> {
       });
       if (inserted) {
         stored++;
-        // 4. Draft a cover letter for the top N new matches ONLY if the
-        //    user's plan permits AI letters (Phase 2 gate). Free users
-        //    see the match + apply URL but no letter — upgrade prompt
-        //    in the UI encourages them to Pro for the drafting service.
-        if (drafted < limits.maxCoverLettersPerDay) {
-          try {
-            const letter = await draftCoverLetter({
-              jobTitle:    job.title,
-              employer:    job.employer ?? "the hiring team",
-              country:     job.country ?? "the target country",
-              jobDescription: (job.description ?? "").slice(0, 2000),
-              cvText:      agent.cv_text.slice(0, 3000),
-            });
-            await attachCoverLetter(inserted, letter);
-            drafted++;
-          } catch (err: any) {
-            console.warn(`[autoapply] cover-letter draft failed match=${inserted}:`, err?.message);
+        // 4. Draft a cover letter — Phase 2.5 quota check.
+        //    Counts against the LAST 24 HOURS across all scans (not just
+        //    this one), so a user can't game the quota by triggering
+        //    multiple scans. Once quota hits limit, remaining matches
+        //    still get stored but without letters — the UI shows a
+        //    "quota resets midnight" note for those.
+        if (limits.maxCoverLettersPerDay > 0) {
+          const usedToday = await countLettersDraftedInLast24h(agent.user_id);
+          if (usedToday + drafted < limits.maxCoverLettersPerDay) {
+            try {
+              const letter = await draftCoverLetter({
+                jobTitle:    job.title,
+                employer:    job.employer ?? "the hiring team",
+                country:     job.country ?? "the target country",
+                jobDescription: (job.description ?? "").slice(0, 2000),
+                cvText:      agent.cv_text.slice(0, 3000),
+              });
+              await attachCoverLetter(inserted, letter);
+              drafted++;
+            } catch (err: any) {
+              console.warn(`[autoapply] cover-letter draft failed match=${inserted}:`, err?.message);
+            }
           }
         }
       }
@@ -227,12 +232,41 @@ export async function runScanForAgent(agent: AgentRow): Promise<ScanSummary> {
  * Called by the scheduler on its tick; safe to call multiple times per day
  * (agents that already scanned in the last 20h are skipped).
  */
+/**
+ * Fetch every active agent that's due for a scan and run them serially.
+ *
+ * 2026-08 Phase 2.5: tiered scan cadence via SQL. Pro users (users.plan
+ * IN ('pro','basic'), admins, or in active trial) are due every 20
+ * hours. Free users are due every 7 days. This makes the daily-morning-
+ * digest habit an explicit Pro perk and reduces our Adzuna quota use
+ * for freeloaders. Priority queue: Pro agents ordered first.
+ */
 export async function runDueScans(): Promise<{ scanned: number; errors: number }> {
-  const { rows } = await pool.query<AgentRow>(
-    `SELECT * FROM autoapply_agents
-      WHERE is_active = true
-        AND (last_scan_at IS NULL OR last_scan_at < NOW() - INTERVAL '20 hours')
-      ORDER BY last_scan_at ASC NULLS FIRST
+  const { rows } = await pool.query<AgentRow & { is_pro_effective: boolean }>(
+    `SELECT a.*,
+            (
+              u.is_admin = true
+              OR u.role IN ('ADMIN','SUPER_ADMIN')
+              OR u.plan IN ('pro','basic')
+              OR (a.pro_trial_ends_at IS NOT NULL AND a.pro_trial_ends_at > NOW())
+            ) AS is_pro_effective
+       FROM autoapply_agents a
+       JOIN users u ON u.id = a.user_id
+      WHERE a.is_active = true
+        AND (
+          a.last_scan_at IS NULL
+          OR (
+            (u.is_admin = true OR u.role IN ('ADMIN','SUPER_ADMIN') OR u.plan IN ('pro','basic')
+             OR (a.pro_trial_ends_at IS NOT NULL AND a.pro_trial_ends_at > NOW()))
+            AND a.last_scan_at < NOW() - INTERVAL '20 hours'
+          )
+          OR (
+            NOT (u.is_admin = true OR u.role IN ('ADMIN','SUPER_ADMIN') OR u.plan IN ('pro','basic')
+                 OR (a.pro_trial_ends_at IS NOT NULL AND a.pro_trial_ends_at > NOW()))
+            AND a.last_scan_at < NOW() - INTERVAL '7 days'
+          )
+        )
+      ORDER BY is_pro_effective DESC, a.last_scan_at ASC NULLS FIRST
       LIMIT 50`,
   );
   let ok = 0, err = 0;
@@ -292,6 +326,23 @@ async function attachCoverLetter(matchId: string, letter: string): Promise<void>
       WHERE id = $1`,
     [matchId, letter],
   );
+}
+
+/**
+ * 2026-08 Phase 2.5: count how many cover letters were drafted for this
+ * user in the last 24h. Used to enforce the daily letter quota so a
+ * user can't game the limit by triggering multiple scans in one day.
+ */
+async function countLettersDraftedInLast24h(userId: string): Promise<number> {
+  const { rows } = await pool.query<{ c: string }>(
+    `SELECT COUNT(*)::text AS c
+       FROM autoapply_matches
+      WHERE user_id = $1
+        AND cover_letter IS NOT NULL
+        AND cover_letter_at > NOW() - INTERVAL '24 hours'`,
+    [userId],
+  );
+  return Number(rows[0]?.c ?? 0);
 }
 
 async function loadRecentMatches(agentId: string, hours: number) {
@@ -357,15 +408,34 @@ async function closeScanRun(
 // scans happen in the background where a few extra ms are irrelevant.
 // Admins are treated as Pro (matches the rest of the platform's admin
 // bypass pattern).
+//
+// 2026-08 Phase 2.5: honour the pro_trial_ends_at column on
+// autoapply_agents. Users in an active 7-day trial get Pro limits
+// even though users.plan may still be 'free'. When the trial expires
+// (checked on every scan) they silently drop to free until they
+// upgrade.
 async function resolveLimitsForUser(userId: string): Promise<AutoApplyPlanLimits> {
   try {
-    const { rows } = await pool.query<{ plan: string | null; is_admin: boolean | null; role: string | null }>(
-      `SELECT plan, is_admin, role FROM users WHERE id = $1`,
+    const { rows } = await pool.query<{
+      plan: string | null;
+      is_admin: boolean | null;
+      role: string | null;
+      pro_trial_ends_at: Date | null;
+    }>(
+      `SELECT u.plan, u.is_admin, u.role, a.pro_trial_ends_at
+         FROM users u
+         LEFT JOIN autoapply_agents a ON a.user_id = u.id
+        WHERE u.id = $1
+        LIMIT 1`,
       [userId],
     );
     const u = rows[0];
     if (!u) return getAutoApplyLimits("free");
     if (u.is_admin || u.role === "ADMIN" || u.role === "SUPER_ADMIN") {
+      return getAutoApplyLimits("pro");
+    }
+    // Active Pro trial → treat as Pro
+    if (u.pro_trial_ends_at && new Date(u.pro_trial_ends_at).getTime() > Date.now()) {
       return getAutoApplyLimits("pro");
     }
     return getAutoApplyLimits(u.plan);

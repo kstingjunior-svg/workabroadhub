@@ -40,6 +40,39 @@ import { storage } from "../storage";
 import { stkPush, isMpesaAvailable } from "../mpesa";
 import { createPayPalOrder, capturePayPalOrder, isPayPalConfigured } from "../paypal";
 import { renderDocx, renderPdf } from "../services/document-renderer";
+
+// 2026-08 SECURITY (Tony's fake-email report): every payment initiator
+// must confirm the caller's users.email_verified = true. Signed-in users
+// with fake unverified emails now get 403; guest (unauthenticated) users
+// were already blocked upstream.
+async function assertEmailVerified(res: Response, userId: string | null): Promise<boolean> {
+  if (!userId) {
+    res.status(401).json({ error: "Please sign in and verify your email first." });
+    return false;
+  }
+  try {
+    const { rows } = await pool.query<{ email_verified: boolean; is_admin: boolean; role: string }>(
+      `SELECT email_verified, is_admin, role FROM users WHERE id = $1`,
+      [userId],
+    );
+    const u = rows[0];
+    if (!u) { res.status(401).json({ error: "User not found" }); return false; }
+    if (u.is_admin || u.role === "ADMIN" || u.role === "SUPER_ADMIN") return true;
+    if (!u.email_verified) {
+      res.status(403).json({
+        error: "Please verify your email before paying.",
+        verificationRequired: true,
+        verificationStep: "email",
+      });
+      return false;
+    }
+    return true;
+  } catch (err: any) {
+    console.error("[write-from-scratch] verify check failed:", err?.message);
+    res.status(500).json({ error: "Verification check failed." });
+    return false;
+  }
+}
 import {
   generateDocument,
   WriteFromScratchGenerationError,
@@ -188,6 +221,7 @@ export function registerWriteFromScratchRoutes(app: Express): void {
       }
 
       const userId = currentUserId(req);
+      if (!(await assertEmailVerified(res, userId))) return;
 
       // Everyone pays KES 300 — no Pro bypass. Kept the isPro helper around in
       // case we want to add it back later, but the current policy is: uniform
@@ -388,6 +422,7 @@ export function registerWriteFromScratchRoutes(app: Express): void {
       }
 
       const userId = currentUserId(req);
+      if (!(await assertEmailVerified(res, userId))) return;
 
       // Pro users get the tool for free — reuse the same fast path as /init.
       if (userId) {

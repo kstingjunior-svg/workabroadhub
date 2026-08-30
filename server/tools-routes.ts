@@ -623,6 +623,46 @@ export function registerToolsRoutes(
   );
 
   // ════════════════════════════════════════════════════════════════════════════
+  // UTIL: Extract plain text from an uploaded CV file
+  // POST /api/util/extract-cv-text
+  //
+  // 2026-08 (Tony's UX ask): the AutoApply setup form previously required
+  // users to paste plain text from their Word/PDF CV. Way too much friction
+  // on mobile — most users have PDFs and can't cleanly copy them. This
+  // endpoint accepts a PDF/DOCX file and returns { text: string } so the
+  // client can upload → auto-populate → user tweaks → submit. Public, no
+  // auth, no scoring — just fast text extraction. Uses the same cascade
+  // as the ATS checker so all the OCR fallbacks apply.
+  // ════════════════════════════════════════════════════════════════════════════
+  app.post(
+    "/api/util/extract-cv-text",
+    upload.single("cv"),
+    async (req: any, res: Response) => {
+      try {
+        if (!req.file) {
+          return res.status(400).json({ message: "No file uploaded. Please upload a PDF or DOCX." });
+        }
+        const { text, method } = await extractTextFromBuffer(
+          req.file.buffer,
+          req.file.mimetype,
+          req.file.originalname,
+        );
+        if (!text || text.trim().length < 50) {
+          return res.status(422).json({
+            message: "We couldn't read enough text from this file. It may be a scanned image PDF. Please upload a text-based PDF or paste manually.",
+            text: text ?? "",
+            extractMethod: method,
+          });
+        }
+        return res.json({ text: text.trim(), extractMethod: method });
+      } catch (err: any) {
+        console.error("[extract-cv-text] error:", err?.message);
+        return res.status(500).json({ message: "Could not read this file. Please try a different PDF or paste the text manually." });
+      }
+    },
+  );
+
+  // ════════════════════════════════════════════════════════════════════════════
   // STEP 3: JOB SCAM CHECKER
   // POST /api/tools/scam-check
   // ════════════════════════════════════════════════════════════════════════════

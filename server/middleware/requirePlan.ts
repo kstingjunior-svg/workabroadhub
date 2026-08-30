@@ -58,14 +58,32 @@ export const requireAnyPaidPlan: RequestHandler = async (req: any, res, next) =>
   try {
     // ── Admin bypass ────────────────────────────────────────────────────────
     // Admins (is_admin=true OR role in ADMIN/SUPER_ADMIN) get free access.
-    const { rows } = await pool.query<{ is_admin: boolean; role: string }>(
-      `SELECT is_admin, role FROM users WHERE id = $1`,
+    // 2026-08 SECURITY: also pull email_verified so we can block existing
+    // paid users who signed up with fake emails before the verification
+    // gate was tightened.
+    const { rows } = await pool.query<{ is_admin: boolean; role: string; email_verified: boolean }>(
+      `SELECT is_admin, role, email_verified FROM users WHERE id = $1`,
       [userId],
     );
     const user = rows[0];
     if (user && (user.is_admin === true || user.role === "ADMIN" || user.role === "SUPER_ADMIN")) {
       req.planId = "pro";
       return next();
+    }
+
+    // 2026-08 SECURITY (Tony's fake-email report): require verified email
+    // before granting any paid entitlement. Users who signed up with fake
+    // Gmail addresses before the payment-init gate was added kept plan=pro
+    // but never proved they own the email. This forces them back through
+    // /verify-email before any paid feature works.
+    if (user && !user.email_verified) {
+      logViolation({ userId, endpoint, method, ip, reason: "email_not_verified", planId: "unverified", timestamp: ts });
+      return res.status(403).json({
+        error: "Email verification required",
+        message: "Please verify your email address to access this feature.",
+        verificationRequired: true,
+        verificationStep: "email",
+      });
     }
 
     // ── Fresh plan check (does end_date expiration enforcement) ─────────────
