@@ -63,8 +63,19 @@ function sessionUserId(req) {
         null);
 }
 function initWebSocketServer(httpServer, sessionParser) {
+    // 2026-08 FIX (Tony's live audit — WS /ws/presence-count fails on prod):
+    // socket.io ALSO attaches to httpServer via `initSocketIO(httpServer)` at
+    // module load. When socket.io v4 registers its upgrade handler, it can
+    // interfere with `ws.WebSocketServer({ server })` — the two libraries
+    // race for the same 'upgrade' event and non-socket.io upgrades get
+    // silently dropped.
+    //
+    // Fix: use `noServer: true` on every ws.WebSocketServer so ws does NOT
+    // attach its own upgrade listener. We register ONE unified upgrade
+    // dispatcher on httpServer that routes by URL path — socket.io still
+    // handles /socket.io/*, we handle /ws/*. No race, no interference.
     // ── Admin analytics channel ───────────────────────────────────────────────
-    wss = new ws_1.WebSocketServer({ server: httpServer, path: "/ws/analytics" });
+    wss = new ws_1.WebSocketServer({ noServer: true });
     wss.on("connection", (ws, req) => {
         // Only log analytics connections in debug mode to avoid log spam
         if (process.env.WS_DEBUG === "1") {
@@ -123,7 +134,7 @@ function initWebSocketServer(httpServer, sessionParser) {
     // Clients identify themselves by sending { type: "identify", userId: "..." }.
     // If a sessionParser is provided, the claimed userId is validated against the
     // server-side session — equivalent to Socket.io's socket.request.user?.id check.
-    userWss = new ws_1.WebSocketServer({ server: httpServer, path: "/ws/user" });
+    userWss = new ws_1.WebSocketServer({ noServer: true });
     userWss.on("connection", (ws, req) => {
         let registeredUserId = null;
         const ping = setInterval(() => {
@@ -233,7 +244,7 @@ function initWebSocketServer(httpServer, sessionParser) {
     // trying to inflate the count by spamming connections from one machine).
     const ipConnectionCount = new Map();
     const VISITOR_MAX_PER_IP = 5;
-    visitorWss = new ws_1.WebSocketServer({ server: httpServer, path: "/ws/presence-count" });
+    visitorWss = new ws_1.WebSocketServer({ noServer: true });
     visitorWss.on("connection", (ws, req) => {
         const ip = String(req.headers["x-forwarded-for"]?.split(",")[0]?.trim() ||
             req.socket.remoteAddress || "unknown");
@@ -351,6 +362,40 @@ function initWebSocketServer(httpServer, sessionParser) {
     // Also broadcast a heartbeat every 30 s so newly-connected admin clients
     // get a fresh snapshot even if no presence events have fired
     setInterval(broadcastPresence, 30000);
+    // ── Unified upgrade dispatcher (noServer-mode fix) ────────────────────────
+    // Because all three WebSocketServers above are in `noServer: true` mode,
+    // ws will NOT attach any listener to httpServer on its own. We register
+    // ONE listener here that inspects the URL path and routes to the correct
+    // WebSocketServer.handleUpgrade() call. Anything NOT under /ws/* we leave
+    // untouched so socket.io (attached separately in server/socket.ts) can
+    // handle its own /socket.io/* upgrades without competing with us.
+    httpServer.on("upgrade", (req, socket, head) => {
+        // Guard: req.url can be undefined on malformed upgrades.
+        const rawUrl = req.url ?? "";
+        // Strip query string for path matching
+        const path = rawUrl.split("?")[0];
+        // Not one of ours — let socket.io (or anything else) handle it.
+        // DO NOT destroy the socket; another listener needs it.
+        if (!path.startsWith("/ws/"))
+            return;
+        let target = null;
+        if (path === "/ws/analytics")
+            target = wss;
+        else if (path === "/ws/user")
+            target = userWss;
+        else if (path === "/ws/presence-count")
+            target = visitorWss;
+        if (!target) {
+            // Unknown /ws/* path — 404 the upgrade and close cleanly.
+            socket.write("HTTP/1.1 404 Not Found\r\n\r\n");
+            socket.destroy();
+            return;
+        }
+        target.handleUpgrade(req, socket, head, (ws) => {
+            target.emit("connection", ws, req);
+        });
+    });
+    console.log("[WS] Unified upgrade dispatcher installed for /ws/analytics, /ws/user, /ws/presence-count");
 }
 function broadcastNewUserEvent(event) {
     if (!wss)

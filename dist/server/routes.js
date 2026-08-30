@@ -21106,20 +21106,12 @@ If your instinct says "3,500", STOP and re-read the SERVICES block above.`;
             res.status(500).json({ message: "AI chat unavailable" });
         }
     });
-    // ── API 404 catch-all ───────────────────────────────────────────────────────
-    // Any /api/* path that fell through all route handlers without a response.
-    // Must come after all route registrations and before Vite / static middleware.
-    app.use("/api", (_req, res) => {
-        if (!res.headersSent) {
-            res.status(404).json({
-                success: false,
-                error: {
-                    type: "notfound",
-                    message: "Resource not found",
-                },
-            });
-        }
-    });
+    // ── API 404 catch-all — MOVED TO END (see below, after /api/voice, /api/track-event, retry engine) ─
+    // 2026-08 FIX (Tony's audit): the catch-all was HERE (mid-file), which
+    // meant /api/track-event and /api/voice — both registered AFTER this line —
+    // never matched. Client-side analytics fired 404 on every navigation. Same
+    // bug pattern that killed AutoApply. The catch-all now runs at the end
+    // of registerRoutes so every real handler gets first shot.
     // ── Unmatched-payment retry engine ──────────────────────────────────────────
     // Every 5 minutes: re-run smartMatchUser on payments that haven't matched yet
     // and have been retried fewer than 5 times.
@@ -21185,6 +21177,20 @@ If your instinct says "3,500", STOP and re-read the SERVICES block above.`;
         await db_1.pool.query(`INSERT INTO funnel_events (user_id, event, page, metadata)
        VALUES ($1, $2, $3, $4)`, [userId ?? req.user?.id ?? null, event, page ?? null, metadata]);
         res.sendStatus(200);
+    });
+    // ── API 404 catch-all — MUST BE LAST ────────────────────────────────────────
+    // Any /api/* path that fell through every registered handler above.
+    // Registering this earlier shadows every route declared after it.
+    app.use("/api", (_req, res) => {
+        if (!res.headersSent) {
+            res.status(404).json({
+                success: false,
+                error: {
+                    type: "notfound",
+                    message: "Resource not found",
+                },
+            });
+        }
     });
     return httpServer;
 }
