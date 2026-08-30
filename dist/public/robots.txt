@@ -1,3 +1,7 @@
+# WorkAbroad Hub — https://workabroadhub.tech
+# Developed and maintained by: Antony Macloud (Nairobi, Kenya)
+# Contact: support@workabroadhub.tech
+
 User-agent: *
 Allow: /
 
@@ -27,6 +31,11 @@ Allow: /verify
 Allow: /agency-map
 Allow: /compliance-index
 Allow: /visa-guides
+Allow: /visit-visas
+Allow: /blog
+Allow: /blog/
+Allow: /trust
+Allow: /autoapply
 Allow: /green-card
 Allow: /student-visas
 Allow: /about
