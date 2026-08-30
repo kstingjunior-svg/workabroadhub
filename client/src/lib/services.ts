@@ -3,7 +3,34 @@ import type { Service } from "@shared/schema";
 const LS_KEY     = "services";
 const LS_TS_KEY  = "services_updated";
 
+// 2026-08 FIX (Tony's audit — 15 duplicate /api/services requests on /pricing
+// load): multiple components call loadServices() in parallel during mount.
+// Each was firing its own network round-trip. Coalesce them into a single
+// in-flight promise + short-lived result cache so we hit the network once
+// per ~30s window regardless of caller count.
+let inFlight: Promise<Service[]> | null = null;
+let lastResult: { data: Service[]; at: number } | null = null;
+const RESULT_TTL_MS = 30_000;
+
 export async function loadServices(): Promise<Service[]> {
+  const now = Date.now();
+  if (lastResult && now - lastResult.at < RESULT_TTL_MS) {
+    return lastResult.data;
+  }
+  if (inFlight) return inFlight;
+  inFlight = (async () => {
+    try {
+      const svcs = await fetchServicesRaw();
+      lastResult = { data: svcs, at: Date.now() };
+      return svcs;
+    } finally {
+      inFlight = null;
+    }
+  })();
+  return inFlight;
+}
+
+async function fetchServicesRaw(): Promise<Service[]> {
   const res = await fetch("/api/services", {
     credentials: "include",
     cache: "no-store",

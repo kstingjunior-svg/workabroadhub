@@ -470,6 +470,11 @@ app.use(
           "https://www.paypal.com",
           "https://accounts.google.com",
           "https://*.firebaseapp.com",
+          // 2026-08 FIX (live console error): Firebase RTDB uses regional
+          // subdomains like s-gke-usc1-nssi4-41.firebaseio.com for its
+          // long-polling fallback iframe. Without this, the presence /
+          // realtime features break silently in Chrome.
+          "https://*.firebaseio.com",
         ],
         workerSrc: ["'self'", "blob:"],
         objectSrc: ["'none'"],
