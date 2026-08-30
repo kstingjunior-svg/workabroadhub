@@ -665,7 +665,24 @@ function OnboardingForm({ onCreated }: { onCreated: () => void }) {
       toast({ title: "AutoApply agent created", description: "Your first scan runs in ~5 minutes." });
       onCreated();
     },
-    onError: (err: any) => toast({ title: "Setup failed", description: err.message, variant: "destructive" }),
+    onError: (err: any) => {
+      // 2026-08 (Tony's "Setup failed — [object Object]" report): apiRequest
+      // sometimes throws an Error whose .message is a non-string (e.g. an
+      // upstream validator returned { message: {...} }). Rendering that in a
+      // toast gave the user "[object Object]" instead of anything useful.
+      // Extract the best string we can from a mix of possible shapes.
+      const raw = err?.body?.message ?? err?.message ?? err?.body?.error ?? err;
+      const description =
+        typeof raw === "string"
+          ? raw
+          : typeof raw === "object" && raw !== null
+            ? (raw.message ?? raw.error ?? JSON.stringify(raw).slice(0, 200))
+            : String(raw ?? "Unknown error");
+      // Log the full error object so we can diagnose in devtools if it
+      // happens again.
+      console.error("[autoapply] activate failed:", err, "body:", err?.body);
+      toast({ title: "Setup failed", description, variant: "destructive" });
+    },
   });
 
   return (
