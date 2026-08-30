@@ -240,6 +240,43 @@ export default function AutoApplyPage() {
         </div>
       </section>
 
+      {/* 2026-08 (Tony's UX ask): the dashboard was silent right after
+           activation — 4 zero-value stat tiles + empty inbox looked
+           identical to a broken feature. These two banners make the
+           actual state readable:
+             1. Never-scanned  → warm-up notice with Scan-now CTA
+             2. Scanned-but-no-matches → likely Adzuna key or filter issue */}
+      {agent.last_scan_at === null && (
+        <section className="bg-blue-50 dark:bg-blue-950/30 border-b border-blue-200 dark:border-blue-900">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-start gap-3">
+            <Loader2 className="h-5 w-5 text-blue-600 animate-spin flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                Your agent is warming up — first scan runs in ~5 minutes.
+              </p>
+              <p className="text-xs text-blue-800/80 dark:text-blue-200/80 mt-1">
+                Don't want to wait? Click <b>Scan now</b> above to start immediately. Matches will appear here as they're found.
+              </p>
+            </div>
+          </div>
+        </section>
+      )}
+      {agent.last_scan_at !== null && agent.total_matches_lifetime === 0 && (
+        <section className="bg-amber-50 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-900">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-start gap-3">
+            <div className="h-5 w-5 rounded-full bg-amber-400 flex items-center justify-center flex-shrink-0 mt-0.5 text-white text-xs font-bold">!</div>
+            <div className="flex-1">
+              <p className="text-sm font-medium text-amber-900 dark:text-amber-100">
+                Scan ran but no matches found yet.
+              </p>
+              <p className="text-xs text-amber-800/80 dark:text-amber-200/80 mt-1">
+                Likely causes: (a) the Adzuna API keys aren't configured on the server (ADZUNA_APP_ID + ADZUNA_APP_KEY), (b) your target roles are too narrow, or (c) no jobs matched your salary / visa filters. Try broadening your role list or clicking <b>Scan now</b> to retry.
+              </p>
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* Filter chips */}
       <section className="border-b bg-muted/30 sticky top-0 z-30 backdrop-blur">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex gap-2 flex-wrap">
