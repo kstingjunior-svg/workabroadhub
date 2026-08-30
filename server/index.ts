@@ -764,6 +764,20 @@ app.use((req, res, next) => {
       console.error("[Server] ❌ Career overview route registration failed (non-fatal):", err?.message);
     }
 
+    // 2026-08 CRITICAL FIX (Tony's live 404 on /api/autoapply/agent):
+    // MUST register AutoApply routes BEFORE registerRoutes() — that function
+    // ends with an `app.use("/api", 404)` catch-all that shadows every
+    // /api/* route registered afterwards. This was the actual root cause of
+    // "Setup failed" on Activate. Same pattern Kenya Careers + Career Overview
+    // above use for the same reason.
+    try {
+      const { registerAutoApplyRoutes } = await import("./routes/autoapply");
+      registerAutoApplyRoutes(app);
+      console.log("[Server] ✓ AutoApply routes registered (before /api catch-all)");
+    } catch (err: any) {
+      console.error("[Server] ❌ AutoApply route registration failed:", err?.message);
+    }
+
     await registerRoutes(httpServer, app);
 
     // Bootstrap can run after registerRoutes — it only touches the DB.
@@ -869,17 +883,11 @@ app.use((req, res, next) => {
     // feature — routes never got registered, and every client request
     // returned 404 "Resource not found". User saw a useless "Setup failed"
     // toast with no way to know the actual cause.
-    // Now we register the routes FIRST so the endpoints always exist, then
-    // do the schema/scheduler bootstrap in a separate try — any failure
-    // there gets logged but the routes still work (and will surface a real
-    // 500 with a proper message if a table is genuinely missing).
-    try {
-      const { registerAutoApplyRoutes } = await import("./routes/autoapply");
-      registerAutoApplyRoutes(app);
-      console.log("[Server] ✓ AutoApply routes registered");
-    } catch (err: any) {
-      console.error("[Server] ❌ AutoApply route registration failed:", err?.message);
-    }
+    // Routes are registered EARLIER (before registerRoutes) so they can't
+    // be shadowed by the /api catch-all. Here we just create the tables +
+    // start the scheduler — any failure gets logged but the routes still
+    // work (and will surface a real 500 with a proper message if a table is
+    // genuinely missing).
     try {
       await pool.query(`
         CREATE TABLE IF NOT EXISTS autoapply_agents (
