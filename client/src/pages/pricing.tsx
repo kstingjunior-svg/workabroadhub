@@ -177,13 +177,17 @@ export default function PricingPage() {
     staleTime: 5 * 60 * 1000,
   });
 
-  const { data: dbPlans, isLoading: plansLoading } = useQuery<{ plan_id: string; price: number }[]>({
+  const { data: dbPlans, isLoading: plansLoading } = useQuery<{ planId: string; price: number }[]>({
     queryKey: ["/api/plans"],
     staleTime: 30 * 1000,
   });
 
   const PLANS: PlanConfig[] = PLAN_UI.map((ui) => {
-    const dbRow = dbPlans?.find((p) => p.plan_id === ui.id);
+    // 2026-08 (P0): API returns camelCase `planId`; previously we matched
+    // against snake_case `plan_id` → every lookup silently failed → every
+    // price rendered as KES 0 on the pricing page. Kills every upgrade
+    // conversion — user sees "0 KES/month" and closes the tab.
+    const dbRow = dbPlans?.find((p) => p.planId === ui.id);
     const price = dbRow?.price ?? 0;
     const extra: Pick<PlanConfig, "perMonth" | "urgency"> = { urgency: ui.urgency };
     if (ui.id === "pro" && price > 0) {
