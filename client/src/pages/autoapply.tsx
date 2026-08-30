@@ -11,6 +11,7 @@
 
 import { useMemo, useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest, fetchCsrfToken } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { usePageSeo } from "@/hooks/use-page-seo";
 import { Card, CardContent } from "@/components/ui/card";
@@ -605,9 +606,14 @@ function OnboardingForm({ onCreated }: { onCreated: () => void }) {
     try {
       const fd = new FormData();
       fd.append("cv", file);
+      // Attach CSRF manually — apiRequest JSON-encodes the body, so we can't
+      // use it for multipart uploads. fetchCsrfToken is a no-op after the
+      // first call (result is cached).
+      const csrf = await fetchCsrfToken();
       const res = await fetch("/api/util/extract-cv-text", {
         method: "POST",
         credentials: "include",
+        headers: csrf ? { "X-CSRF-Token": csrf } : {},
         body: fd,
       });
       const data = await res.json().catch(() => ({}));
@@ -640,22 +646,20 @@ function OnboardingForm({ onCreated }: { onCreated: () => void }) {
 
   const create = useMutation({
     mutationFn: async () => {
-      const res = await fetch("/api/autoapply/agent", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          target_countries: countries,
-          target_roles:     roles,
-          min_salary_kes:   minSalary ? Number(minSalary) : null,
-          experience_years: experienceYrs ? Number(experienceYrs) : null,
-          visa_sponsorship_required: visaReq,
-          cv_text:          cvText,
-        }),
+      // 2026-08 (Tony's "Invalid or missing CSRF token" report on Activate):
+      // was using raw fetch() which does NOT attach the X-CSRF-Token header.
+      // Switched to apiRequest which handles CSRF token fetch + attachment
+      // automatically (see client/src/lib/queryClient.ts). All other mutating
+      // calls in the app go through apiRequest for exactly this reason.
+      const res = await apiRequest("POST", "/api/autoapply/agent", {
+        target_countries: countries,
+        target_roles:     roles,
+        min_salary_kes:   minSalary ? Number(minSalary) : null,
+        experience_years: experienceYrs ? Number(experienceYrs) : null,
+        visa_sponsorship_required: visaReq,
+        cv_text:          cvText,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.message ?? "Setup failed");
-      return data;
+      return res.json();
     },
     onSuccess: () => {
       toast({ title: "AutoApply agent created", description: "Your first scan runs in ~5 minutes." });
