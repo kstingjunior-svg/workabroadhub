@@ -211,27 +211,31 @@ async function deliverService(payment, user) {
             }).catch((err) => { console.error('[deliverService] Notification failed:', err?.message); });
             break;
         }
-        // ─── 9. ASSISTED APPLY LITE ──────────────────────────────────────────────
+        // ─── 9. ASSISTED APPLY LITE — 5 real application kits ────────────────────
+        // 2026-08 (Tony's audit): the AI pipeline (processOrder) now generates
+        // 5 tailored CV+cover letter kits per order via SERVICE_CONFIGS. This
+        // handler only sends the "we're preparing them" confirmation — the real
+        // deliverable arrives via notifyOrderCompleted (email + WhatsApp with PDF).
         case "assisted_apply_lite":
         case "assisted_apply": {
-            await (0, whatsapp_1.sendWhatsApp)(phone, `🤝 Assisted Apply Activated — KES ${amount.toLocaleString()} confirmed!\n\nHi ${name}, your *Assisted Apply* service is now active.\n\nReply with:\n1️⃣ Your target job title\n2️⃣ Target country\n3️⃣ Job posting URL (optional)\n\nNanjila will personally prepare your application materials and guide you through every step.\n\n— WorkAbroad Hub 🌍`).catch((err) => { console.error('[deliverService] WhatsApp failed:', { error: err?.message, timestamp: new Date().toISOString() }); });
+            await (0, whatsapp_1.sendWhatsApp)(phone, `📦 Assisted Apply Confirmed — KES ${amount.toLocaleString()} received!\n\nHi ${name}, we're preparing your 5 tailored application kits right now.\n\nEach kit includes a custom CV + cover letter for a real overseas employer that's currently hiring, plus step-by-step submission instructions.\n\nYou'll get the full PDF via WhatsApp and email in ~3 minutes.\n\n— WorkAbroad Hub 🌍`).catch((err) => { console.error('[deliverService] WhatsApp failed:', { error: err?.message, timestamp: new Date().toISOString() }); });
             storage_1.storage.createUserNotification({
                 userId: user.id,
-                type: "success",
-                title: "Assisted Apply Activated",
-                message: "Reply to your WhatsApp with your target job and country — Nanjila will handle your application.",
+                type: "info",
+                title: "Preparing your 5 application kits",
+                message: "Your 5 tailored application kits are being generated. You'll receive the PDF via WhatsApp + email in ~3 minutes.",
             }).catch((err) => { console.error('[deliverService] Notification failed:', err?.message); });
             break;
         }
-        // ─── 10. GUIDED APPLY / DOCUMENT PREP ────────────────────────────────────
+        // ─── 10. GUIDED APPLY — 5 kits + tracker + interview prep bundle ─────────
         case "guided_apply":
         case "document_prep": {
-            await (0, whatsapp_1.sendWhatsApp)(phone, `📋 Guided Apply Activated — KES ${amount.toLocaleString()} confirmed!\n\nHi ${name}, you now have access to our step-by-step guided application service.\n\nLogin to your dashboard to start → https://workabroadhub.tech/dashboard\n\nFor questions, reply here and Nanjila will assist you 🤝`).catch((err) => { console.error('[deliverService] WhatsApp failed:', { error: err?.message, timestamp: new Date().toISOString() }); });
+            await (0, whatsapp_1.sendWhatsApp)(phone, `📋 Guided Apply Confirmed — KES ${amount.toLocaleString()} received!\n\nHi ${name}, we're preparing your premium bundle:\n\n✅ 5 tailored application kits (real employers)\n✅ 30-day tracker (pre-filled)\n✅ Interview prep for your top 3\n✅ 4 weeks of Monday WhatsApp check-ins\n\nFull bundle PDF arrives via WhatsApp + email in ~4 minutes.\n\n— WorkAbroad Hub 🌍`).catch((err) => { console.error('[deliverService] WhatsApp failed:', { error: err?.message, timestamp: new Date().toISOString() }); });
             storage_1.storage.createUserNotification({
                 userId: user.id,
-                type: "success",
-                title: "Guided Apply Unlocked",
-                message: "Step-by-step guided application is now available in your dashboard.",
+                type: "info",
+                title: "Preparing your Guided Apply bundle",
+                message: "Your 5 kits + tracker + interview prep bundle is being generated. Delivery via WhatsApp + email in ~4 minutes.",
             }).catch((err) => { console.error('[deliverService] Notification failed:', err?.message); });
             break;
         }
