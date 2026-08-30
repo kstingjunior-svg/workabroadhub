@@ -225,20 +225,24 @@ export async function seedDatabase() {
       features: ["Tailored CV for each of 5 jobs", "Matching cover letter per application", "ATS-optimized per job description", "Application tracking dashboard", "⚡ AI delivery — under 10 minutes"],
     },
     {
+      // 2026-08 (Tony's honesty rebuild): copy CANNOT promise "we submit for
+      // you" — the platform has no LinkedIn/Indeed API + auto-submission
+      // breaks their ToS. Real deliverable: 5 tailored, ready-to-submit
+      // application kits. User submits themselves in one click each.
       slug: "assisted_apply_lite",
       name: "Assisted Apply Lite",
-      description: "We build and submit 5 job applications for you — just share your CV and target role",
+      description: "5 ready-to-submit application kits for real overseas jobs — tailored CV + cover letter + one-click submission steps",
       price: 1499, currency: "KES", isActive: true, order: 12,
       category: "Job Search Tools", badge: "New",
-      features: ["5 job applications built for you", "Custom CV & cover letter per job", "ATS-optimized applications", "Application status tracking", "WhatsApp progress update"],
+      features: ["5 tailored application kits (real employers currently hiring)", "Custom CV & cover letter per kit", "ATS-optimized per job description", "Step-by-step submission instructions", "Delivered as PDF + WhatsApp"],
     },
     {
       slug: "guided_apply",
       name: "Guided Apply Mode",
-      description: "We apply to 5 verified overseas jobs on your behalf with custom CV and cover letters",
+      description: "5 tailored application kits + 30-day tracker + interview prep for your top 3 + weekly WhatsApp coaching",
       price: 2500, currency: "KES", isActive: true, order: 13,
       category: "Job Search Tools", badge: "Premium",
-      features: ["We apply to 5 verified jobs on your behalf", "Custom CV & cover letter per application", "Application tracking dashboard", "Weekly progress WhatsApp report", "Refund policy if no interviews in 30 days"],
+      features: ["5 tailored application kits ready to submit", "30-day application tracker (pre-filled)", "Interview prep for your top 3 kits", "4 weeks of Monday WhatsApp check-ins", "30-day playbook + follow-up templates"],
     },
     {
       slug: "application_tracking",
