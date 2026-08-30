@@ -57,7 +57,9 @@ async function ensureSchema() {
         await db_1.pool.query(`
       CREATE TABLE IF NOT EXISTS delivered_cv_fingerprints (
         id               UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
-        user_id          VARCHAR         NOT NULL,
+        -- 2026-08: user_id nullable so guest orders (anonymous checkout) can
+        -- still be fingerprinted. See task #1 in the pending list.
+        user_id          VARCHAR,
         service_order_id VARCHAR,
         service_slug     VARCHAR(60)     NOT NULL,
         exact_hash       VARCHAR(64)     NOT NULL,
@@ -86,13 +88,21 @@ async function recordDeliveredCv(args) {
         return; // garbage in = skip
     await ensureSchema();
     try {
+        // Idempotent: if the user_id column was created NOT NULL by an earlier
+        // schema, drop the constraint on first run so guest orders can save.
+        // Wrap in its own try/catch — a failure here shouldn't break the insert
+        // if the constraint is already gone (subsequent runs no-op cleanly).
+        try {
+            await db_1.pool.query(`ALTER TABLE delivered_cv_fingerprints ALTER COLUMN user_id DROP NOT NULL`);
+        }
+        catch { /* already nullable, or table doesn't exist — insert below will surface real errors */ }
         const eHash = exactHash(args.cvText);
         const sHash = structuralHash(args.cvText);
         const score = Math.max(MIN_DELIVERED_SCORE, args.deliveredScore ?? MIN_DELIVERED_SCORE);
         await db_1.pool.query(`INSERT INTO delivered_cv_fingerprints
          (user_id, service_order_id, service_slug, exact_hash, structural_hash, delivered_score, text_length)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`, [args.userId, args.serviceOrderId ?? null, args.serviceSlug, eHash, sHash, score, args.cvText.length]);
-        console.log(`[cv-fingerprint] recorded delivery for user=${args.userId} slug=${args.serviceSlug} score=${score}`);
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`, [args.userId ?? null, args.serviceOrderId ?? null, args.serviceSlug, eHash, sHash, score, args.cvText.length]);
+        console.log(`[cv-fingerprint] recorded delivery for user=${args.userId ?? "GUEST"} slug=${args.serviceSlug} score=${score}`);
     }
     catch (err) {
         console.error("[cv-fingerprint] recordDeliveredCv failed:", err?.message ?? err);

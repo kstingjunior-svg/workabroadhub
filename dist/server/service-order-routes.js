@@ -1065,9 +1065,15 @@ CRITICAL LENGTH REQUIREMENT — READ CAREFULLY (do not violate):
         try {
             const { CV_OUTPUT_SLUGS, recordDeliveredCv } = await Promise.resolve().then(() => __importStar(require("./lib/cv-fingerprint")));
             const slug = String(order.service_slug ?? "").toLowerCase();
-            if (CV_OUTPUT_SLUGS.has(slug) && order.user_id) {
+            // 2026-08 (task #1 trust fix): dropped the `&& order.user_id` guard.
+            // Guest orders (anonymous checkout) MUST also be fingerprinted so
+            // when they re-upload their delivered CV to /tools/ats-cv-checker
+            // the promised score is honoured. Without this, guest users saw
+            // the raw AI grader score their delivered CV low and thought we'd
+            // ripped them off — exactly the "score didn't improve" complaint.
+            if (CV_OUTPUT_SLUGS.has(slug)) {
                 recordDeliveredCv({
-                    userId: order.user_id,
+                    userId: order.user_id ?? null,
                     serviceOrderId: orderId,
                     serviceSlug: slug,
                     cvText: output,
