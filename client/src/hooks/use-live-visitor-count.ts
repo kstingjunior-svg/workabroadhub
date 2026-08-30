@@ -43,17 +43,28 @@ export function useLiveVisitorCount(): number | null {
     let ws: WebSocket | null = null;
     let reconnectTimer: number | null = null;
     let closedIntentionally = false;
+    // 2026-08 FIX (Tony's live audit): if the WS server is unreachable (e.g.
+    // Render proxy misconfig), the old fixed 5s retry created 16+ console
+    // errors per minute per visitor. Now we exponential-backoff up to 5 min
+    // and stop entirely after 10 failed attempts — the "live count" widget
+    // just shows nothing rather than spamming errors forever.
+    let attempts = 0;
+    const MAX_ATTEMPTS = 10;
+    let openedOnce = false;
 
     function connect() {
+      if (attempts >= MAX_ATTEMPTS) return;
+      attempts++;
       try {
         ws = new WebSocket(`${proto}://${window.location.host}/ws/presence-count`);
       } catch {
-        // WebSocket constructor itself threw — retry in 5s
-        reconnectTimer = window.setTimeout(connect, 5000);
+        scheduleReconnect();
         return;
       }
 
       ws.onopen = () => {
+        openedOnce = true;
+        attempts = 0; // reset backoff on successful connect
         try { ws?.send(JSON.stringify({ type: "identify", visitorId })); } catch { /* ignore */ }
       };
       ws.onmessage = (evt) => {
@@ -66,12 +77,19 @@ export function useLiveVisitorCount(): number | null {
       };
       ws.onclose = () => {
         if (closedIntentionally) return;
-        // Auto-reconnect with a small backoff so flaky 3G doesn't lose the
-        // counter for the rest of the session
-        if (reconnectTimer) window.clearTimeout(reconnectTimer);
-        reconnectTimer = window.setTimeout(connect, 5000);
+        scheduleReconnect();
       };
       ws.onerror = () => { /* close handler will reconnect */ };
+    }
+
+    function scheduleReconnect() {
+      if (reconnectTimer) window.clearTimeout(reconnectTimer);
+      // If we've never successfully opened, back off aggressively — most
+      // likely a server-side outage, not flaky 3G. If we DID open before,
+      // treat this as a transient hiccup and reconnect faster.
+      const base = openedOnce ? 5000 : 15000;
+      const delay = Math.min(300000, base * Math.pow(2, Math.max(0, attempts - 1)));
+      reconnectTimer = window.setTimeout(connect, delay);
     }
 
     connect();

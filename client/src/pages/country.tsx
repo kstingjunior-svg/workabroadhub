@@ -231,6 +231,10 @@ const countryData: Record<string, { name: string; flagEmoji: string }> = {
   turkey: { name: "Turkey", flagEmoji: "🇹🇷" },
   // 2026-07: Luxembourg added.
   luxembourg: { name: "Luxembourg", flagEmoji: "🇱🇺" },
+  // 2026-08: Germany added — previously the /country/germany + /country/de
+  // URLs both dropped to the "Country" fallback because Germany wasn't in
+  // this table at all.
+  germany:      { name: "Germany",      flagEmoji: "🇩🇪" },
   // 2026-07 Tier 1: highest Kenya-to-country hiring pipelines.
   ireland:      { name: "Ireland",      flagEmoji: "🇮🇪" },
   netherlands:  { name: "Netherlands",  flagEmoji: "🇳🇱" },
@@ -241,6 +245,26 @@ const countryData: Record<string, { name: string; flagEmoji: string }> = {
   // 2026-08: Lithuania added — real Kenya pipeline for truck driving (CE +
   // Code 95), welding, meat processing, and Vilnius IT/fintech.
   lithuania:    { name: "Lithuania",    flagEmoji: "🇱🇹" },
+  // 2026-08 FIX (Tony's live audit): AutoApply target-country chips + inbound
+  // Google traffic use ISO 2-letter codes (gb, ca, us, au, de, nl, pl, nz,
+  // ie, lt, lu, tr, kw, om). Without these aliases the page title rendered
+  // as "Gb Jobs for Kenyans", "De Jobs for Kenyans" etc — bad SEO + confusing
+  // to users. Point each ISO code at the same metadata as its full-name entry.
+  gb: { name: "United Kingdom", flagEmoji: "🇬🇧" },
+  us: { name: "USA", flagEmoji: "🇺🇸" },
+  ca: { name: "Canada", flagEmoji: "🇨🇦" },
+  au: { name: "Australia", flagEmoji: "🇦🇺" },
+  ae: { name: "UAE / Arab Countries", flagEmoji: "🇦🇪" },
+  de: { name: "Germany", flagEmoji: "🇩🇪" },
+  nl: { name: "Netherlands", flagEmoji: "🇳🇱" },
+  nz: { name: "New Zealand", flagEmoji: "🇳🇿" },
+  ie: { name: "Ireland", flagEmoji: "🇮🇪" },
+  pl: { name: "Poland", flagEmoji: "🇵🇱" },
+  lt: { name: "Lithuania", flagEmoji: "🇱🇹" },
+  lu: { name: "Luxembourg", flagEmoji: "🇱🇺" },
+  tr: { name: "Turkey", flagEmoji: "🇹🇷" },
+  kw: { name: "Kuwait", flagEmoji: "🇰🇼" },
+  om: { name: "Oman", flagEmoji: "🇴🇲" },
 };
 
 export default function Country() {
