@@ -860,6 +860,26 @@ app.use((req, res, next) => {
     // creation, then register routes and start the overnight scan cron.
     // Adzuna API keys are optional at boot — scanner silently no-ops until
     // ADZUNA_APP_ID and ADZUNA_APP_KEY are set in Render env.
+    //
+    // 2026-08 FIX (Tony's "Setup failed" report on /autoapply):
+    // The old flow wrapped CREATE TABLE + route registration + scheduler
+    // start in ONE try block, so a single Postgres hiccup (e.g. an ALTER
+    // TABLE that lacks permission on Supabase, or the users table not yet
+    // being visible on cold start) silently killed the ENTIRE AutoApply
+    // feature — routes never got registered, and every client request
+    // returned 404 "Resource not found". User saw a useless "Setup failed"
+    // toast with no way to know the actual cause.
+    // Now we register the routes FIRST so the endpoints always exist, then
+    // do the schema/scheduler bootstrap in a separate try — any failure
+    // there gets logged but the routes still work (and will surface a real
+    // 500 with a proper message if a table is genuinely missing).
+    try {
+      const { registerAutoApplyRoutes } = await import("./routes/autoapply");
+      registerAutoApplyRoutes(app);
+      console.log("[Server] ✓ AutoApply routes registered");
+    } catch (err: any) {
+      console.error("[Server] ❌ AutoApply route registration failed:", err?.message);
+    }
     try {
       await pool.query(`
         CREATE TABLE IF NOT EXISTS autoapply_agents (
@@ -941,12 +961,16 @@ app.use((req, res, next) => {
         );
         CREATE INDEX IF NOT EXISTS autoapply_scan_runs_agent_idx ON autoapply_scan_runs(agent_id, started_at DESC);
       `);
-      const { registerAutoApplyRoutes } = await import("./routes/autoapply");
-      registerAutoApplyRoutes(app);
+      // Routes already registered above — just start the scheduler now
+      // that the tables are guaranteed to exist.
       const { startAutoApplyScheduler } = await import("./lib/autoapply/scheduler");
       startAutoApplyScheduler();
+      console.log("[Server] ✓ AutoApply schema + scheduler ready");
     } catch (err: any) {
-      console.error("[Server] ❌ AutoApply bootstrap failed:", err?.message);
+      console.error(
+        "[Server] ❌ AutoApply schema/scheduler bootstrap failed (routes still work, but scans won't run):",
+        err?.message,
+      );
     }
 
     // Wire Sentry's Express error handler AFTER all routes are registered

@@ -63,7 +63,16 @@ async function throwIfResNotOk(res: Response) {
       }
 
       if (json?.error) {
-        const err = new Error(json.error) as any;
+        // 2026-08 FIX: some endpoints (e.g. AutoApply 404 handler) return
+        // { success:false, error:{ type, message } } — an object, not a
+        // string. new Error(obj).message becomes "[object Object]" which
+        // then surfaces in user-facing toasts as gibberish. Extract the
+        // nested message first.
+        const errMsg =
+          typeof json.error === "string"
+            ? json.error
+            : (json.error?.message ?? json.error?.type ?? JSON.stringify(json.error));
+        const err = new Error(errMsg) as any;
         err.status = res.status;
         err.body = json;
         throw err;
