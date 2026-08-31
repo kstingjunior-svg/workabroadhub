@@ -373,13 +373,13 @@ export default function VisitVisasPage() {
             <span className="text-sm">Visit Visas</span>
           </div>
           <h1 className="text-3xl sm:text-5xl font-bold tracking-tight mb-4">
-            Visit-visa guide for every country we cover
+            Apply for your visit visa here
           </h1>
           <p className="text-blue-100/90 max-w-3xl text-base sm:text-lg leading-relaxed">
-            Real official portals, real Nairobi application centres, real costs.
-            No agents, no upsells — everything below is a link direct to a
-            government website or the official visa-application centre for
-            Kenyan passport holders.
+            One-click apply for a visit visa to any of the {COUNTRIES.length} countries
+            we cover. Every "Apply Now" button below goes <b>directly</b> to the
+            official government portal or the authorised Nairobi application
+            centre (VFS / TLScontact / Capago). No agents, no fees, no scams.
           </p>
 
           <div className="mt-6 flex flex-wrap gap-3 text-sm">
@@ -440,22 +440,45 @@ export default function VisitVisasPage() {
                 className="border rounded-xl px-4 sm:px-5 data-[state=open]:bg-muted/30"
                 data-testid={`visa-card-${c.slug}`}
               >
-                <AccordionTrigger className="hover:no-underline py-4">
-                  <div className="flex-1 flex items-center gap-3 sm:gap-4 text-left">
-                    <div className="text-3xl sm:text-4xl leading-none">{c.flag}</div>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-bold text-base sm:text-lg leading-tight">{c.name}</div>
-                      <div className="text-xs sm:text-sm text-muted-foreground truncate">
-                        {c.visaType}
-                      </div>
+                {/* 2026-08 (Tony's directive: "easy steps like apply for your
+                    visit visa here"): the Apply Now button is the FIRST thing
+                    on each row. Clicking it opens the official portal in a
+                    new tab immediately — no need to expand the accordion, no
+                    need to scroll. Users who want more details still get the
+                    accordion chevron to expand cost / processing / gotcha /
+                    application-centre address. */}
+                <div className="flex items-center gap-3 sm:gap-4 py-4">
+                  <div className="text-3xl sm:text-4xl leading-none flex-shrink-0">{c.flag}</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-bold text-base sm:text-lg leading-tight">{c.name}</div>
+                    <div className="text-xs sm:text-sm text-muted-foreground truncate">
+                      {c.visaType} · {c.cost}
                     </div>
-                    <Badge
-                      variant="outline"
-                      className={`hidden sm:inline-flex ${DIFFICULTY_STYLES[c.difficulty]} border font-medium text-xs`}
-                    >
-                      {c.difficulty}
-                    </Badge>
                   </div>
+                  <Badge
+                    variant="outline"
+                    className={`hidden md:inline-flex ${DIFFICULTY_STYLES[c.difficulty]} border font-medium text-xs`}
+                  >
+                    {c.difficulty}
+                  </Badge>
+                  <a
+                    href={c.officialUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-shrink-0"
+                    data-testid={`apply-now-${c.slug}`}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Button
+                      size="sm"
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 whitespace-nowrap"
+                    >
+                      Apply Now <ExternalLink className="h-3.5 w-3.5" />
+                    </Button>
+                  </a>
+                </div>
+                <AccordionTrigger className="hover:no-underline py-2 -mt-2 border-t text-xs text-muted-foreground data-[state=open]:text-foreground">
+                  <span className="flex-1 text-left">Show application details, cost, processing time & the one thing to watch for</span>
                 </AccordionTrigger>
 
                 <AccordionContent className="pt-2 pb-5 space-y-4">

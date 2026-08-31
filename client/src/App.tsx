@@ -122,12 +122,12 @@ const ReportScam = lazyWithRetry(() => import("@/pages/report-scam"));
 const ScamWall = lazyWithRetry(() => import("@/pages/scam-wall"));
 const GreenCard = lazyWithRetry(() => import("@/pages/green-card"));
 const VisaGuides = lazyWithRetry(() => import("@/pages/visa-guides"));
-// 2026-08 REMOVED (Tony's directive): visit/tourist visa page taken down.
-// WorkAbroadHub is a WORK-abroad platform, not a tourism/visa aggregator.
-// Advertising visit-visa guidance we don't actually offer misled users
-// and diluted the brand. File retained at client/src/pages/visit-visas.tsx
-// in case we bring it back, but no route points at it.
-// const VisitVisas = lazyWithRetry(() => import("@/pages/visit-visas"));
+// 2026-08 RESTORED (Tony's directive): visit/tourist visa page brought back.
+// Users get a single page listing every country we cover with clear
+// "Apply here" links to the official embassy / VFS / e-visa portal for
+// each. Top-of-funnel SEO play — anonymous visitors welcome, no auth
+// required.
+const VisitVisas = lazyWithRetry(() => import("@/pages/visit-visas"));
 // 2026-08 SEO push: blog for long-tail keyword targeting. Public routes.
 const BlogIndex = lazyWithRetry(() => import("@/pages/blog/blog-index"));
 const BlogPost  = lazyWithRetry(() => import("@/pages/blog/blog-post"));
@@ -474,17 +474,7 @@ const LazyReportScam = withSuspense(ReportScam);
 const LazyScamWall = withSuspense(ScamWall);
 const LazyGreenCard = withSuspense(GreenCard);
 const LazyVisaGuides = withSuspense(VisaGuides);
-// 2026-08 REMOVED: see note above at the VisitVisas import.
-// const LazyVisitVisas = withSuspense(VisitVisas);
-// Component-based redirect for the retired /visit-visas URL — sends any
-// stale link (Google SERPs, WhatsApp shares, old email) to /visa-guides
-// on the next tick. useEffect ensures the redirect fires AFTER render so
-// we don't loop.
-function VisitVisasRedirect() {
-  const [, nav] = useLocation();
-  useEffect(() => { nav("/visa-guides", { replace: true }); }, [nav]);
-  return null;
-}
+const LazyVisitVisas = withSuspense(VisitVisas);
 const LazyBlogIndex  = withSuspense(BlogIndex);
 const LazyBlogPost   = withSuspense(BlogPost);
 const LazyTrustPage  = withSuspense(TrustPage);
@@ -759,11 +749,7 @@ function AuthenticatedRoutes() {
       <Route path="/data-safety" component={LazyDataSafety} />
       <Route path="/green-card" component={LazyGreenCard} />
       <Route path="/visa-guides" component={LazyVisaGuides} />
-      {/* 2026-08 REMOVED: /visit-visas — we don't offer visit visa services.
-          Redirect any inbound traffic (Google, WhatsApp shares, backlinks)
-          to /visa-guides so people who click the old link still land
-          somewhere useful instead of a 404. */}
-      <Route path="/visit-visas" component={VisitVisasRedirect} />
+      <Route path="/visit-visas" component={LazyVisitVisas} />
       <Route path="/blog" component={LazyBlogIndex} />
       <Route path="/blog/:slug" component={LazyBlogPost} />
       <Route path="/trust" component={LazyTrustPage} />
@@ -944,7 +930,7 @@ function Router() {
         <Route path="/visa-guides" component={LazyVisaGuides} />
         {/* 2026-08 (SEO + trust + public browsing): all these pages MUST be
             reachable without an account. /trust counters "workabroadhub is a
-            scam" AI Overview; /blog targets long-tail search;
+            scam" AI Overview; /visit-visas + /blog target long-tail search;
             /agencies + /nea-agencies + /agencies-reported are the fraud-
             protection surface people find via Google and NEED to reach
             without signing up first; /scam-wall + /report-* are the trust-
@@ -953,10 +939,7 @@ function Router() {
             community browse. All were only registered in AuthenticatedRoutes
             so anonymous visitors got 404s. */}
         <Route path="/trust" component={LazyTrustPage} />
-        {/* 2026-08 REMOVED: /visit-visas — WorkAbroadHub does not offer
-            visit/tourist visa services. Redirect old URL → /visa-guides so
-            inbound traffic doesn't hit a 404. */}
-        <Route path="/visit-visas" component={VisitVisasRedirect} />
+        <Route path="/visit-visas" component={LazyVisitVisas} />
         <Route path="/blog" component={LazyBlogIndex} />
         <Route path="/blog/:slug" component={LazyBlogPost} />
         <Route path="/agencies" component={LazyAgenciesMarketplace} />
