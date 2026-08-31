@@ -143,7 +143,20 @@ export default function AutoApplyPage() {
     },
     onSuccess: (data) => {
       toast({ title: "Scan started", description: data?.message ?? "New matches in ~60s" });
-      setTimeout(() => qc.invalidateQueries({ queryKey: [`/api/autoapply/matches?status=new&limit=50`] }), 60_000);
+      // 2026-08 FIX: after scan completes on the server, last_scan_at and
+      // total_matches_lifetime both update on the agent row — but the client
+      // wasn't invalidating the agent query, so the header stayed on "No
+      // scans yet" and the "Total matches" stat stayed at 0. Now we refresh
+      // both agent + matches after the scan window elapses.
+      setTimeout(() => {
+        qc.invalidateQueries({ queryKey: ["/api/autoapply/agent"] });
+        qc.invalidateQueries({
+          predicate: (q) => {
+            const key = q.queryKey?.[0];
+            return typeof key === "string" && key.startsWith("/api/autoapply/matches");
+          },
+        });
+      }, 60_000);
     },
     onError: (err: any) => toast({ title: "Scan failed", description: err.message, variant: "destructive" }),
   });
@@ -171,7 +184,23 @@ export default function AutoApplyPage() {
       if (!res.ok) throw new Error("Status update failed");
       return res.json();
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: [`/api/autoapply/matches?status=${statusFilter === "all" ? "" : statusFilter}&limit=50`] }),
+    // 2026-08 FIX (Tony's audit): status change bumps total_applied_lifetime
+    // on the agent row (see server/routes/autoapply.ts line 247) BUT the
+    // client wasn't invalidating the /api/autoapply/agent query, so the
+    // "Applied" stat tile stayed at 0 forever. Also only the current filter
+    // list was refreshing — moving a match from 'new' to 'applied' left both
+    // tabs stale until refetchInterval or navigation. Now we invalidate
+    // agent + all match queries so every counter and every tab reflects the
+    // change immediately.
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/autoapply/agent"] });
+      qc.invalidateQueries({
+        predicate: (q) => {
+          const key = q.queryKey?.[0];
+          return typeof key === "string" && key.startsWith("/api/autoapply/matches");
+        },
+      });
+    },
   });
 
   if (agentLoading) {
