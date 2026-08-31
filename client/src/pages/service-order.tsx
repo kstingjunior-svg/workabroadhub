@@ -260,6 +260,22 @@ export default function ServiceOrderPage() {
 
   const selectedPaymentMethod = form.watch("paymentMethod");
 
+  // 2026-08 (Tony's /visit-visas Get help CTA): prefill targetCountry from
+  // ?country= query param so users clicking "Get help (KES 999)" from the
+  // visit-visa page arrive with their country already set. Falls back to
+  // whatever they had (blank on first load). Only runs once on mount so
+  // it doesn't fight the user if they change the field manually.
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const preCountry = params.get("country");
+      if (preCountry && preCountry.trim().length > 0) {
+        form.setValue("targetCountry", preCountry.trim(), { shouldDirty: false });
+      }
+    } catch { /* ignore */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Load PayPal SDK when config is available
   useEffect(() => {
     if (!paypalConfig?.enabled || !paypalConfig.clientId) return;

@@ -461,21 +461,40 @@ export default function VisitVisasPage() {
                   >
                     {c.difficulty}
                   </Badge>
-                  <a
-                    href={c.officialUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex-shrink-0"
-                    data-testid={`apply-now-${c.slug}`}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <Button
-                      size="sm"
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 whitespace-nowrap"
+                  <div className="flex-shrink-0 flex flex-col sm:flex-row gap-2">
+                    {/* Primary: bounce to the official portal, free. */}
+                    <a
+                      href={c.officialUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      data-testid={`apply-now-${c.slug}`}
+                      onClick={(e) => e.stopPropagation()}
                     >
-                      Apply Now <ExternalLink className="h-3.5 w-3.5" />
-                    </Button>
-                  </a>
+                      <Button
+                        size="sm"
+                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 whitespace-nowrap"
+                      >
+                        Apply Now <ExternalLink className="h-3.5 w-3.5" />
+                      </Button>
+                    </a>
+                    {/* 2026-08 (Tony's paid-service ask): secondary CTA that
+                        starts our paid Visit Visa Application Kit order,
+                        pre-filling target_country from the row context. AI
+                        generates a country-specific application kit — draft
+                        form, docs checklist, cover letter, financial proof
+                        calc, itinerary, interview prep. KES 999. */}
+                    <Link href={`/services/order/visit_visa_kit?country=${encodeURIComponent(c.name)}`}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="w-full border-blue-600 text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950 gap-1.5 whitespace-nowrap"
+                        onClick={(e) => e.stopPropagation()}
+                        data-testid={`kit-order-${c.slug}`}
+                      >
+                        Get help (KES 999)
+                      </Button>
+                    </Link>
+                  </div>
                 </div>
                 <AccordionTrigger className="hover:no-underline py-2 -mt-2 border-t text-xs text-muted-foreground data-[state=open]:text-foreground">
                   <span className="flex-1 text-left">Show application details, cost, processing time & the one thing to watch for</span>
