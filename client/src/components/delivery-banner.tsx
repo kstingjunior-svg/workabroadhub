@@ -55,7 +55,20 @@ export async function triggerDownload(url: string, filename: string): Promise<vo
     if (res.status === 401 || res.status === 403) {
       throw new Error("You may need to sign in again. Open My Documents in the menu to retry.");
     }
-    throw new Error(`Download failed (${res.status}). Please refresh and try again.`);
+    // 2026-08 (Tony's live 429 fix): DO NOT tell the user to "refresh and
+    // try again" on 429 — refreshing bumps the guest download counter,
+    // which is exactly what caused the 429 in the first place. Surface
+    // the server's actual message and route them to WhatsApp support.
+    if (res.status === 429) {
+      let msg = "This download link has been used too many times. Please contact support on WhatsApp and we'll re-issue it — DO NOT refresh, it will just make it worse.";
+      try {
+        const body = await res.json();
+        if (body?.message) msg = String(body.message) + " Please message us on WhatsApp — don't keep refreshing.";
+      } catch { /* body wasn't JSON — fall back to generic msg */ }
+      throw new Error(msg);
+    }
+    // Any other error: safe to suggest a retry.
+    throw new Error(`Download failed (${res.status}). If this keeps happening, message us on WhatsApp — we'll re-send the file.`);
   }
   const blob = await res.blob();
   const objectUrl = URL.createObjectURL(blob);
