@@ -476,6 +476,18 @@ const LazyGreenCard = withSuspense(GreenCard);
 const LazyVisaGuides = withSuspense(VisaGuides);
 const LazyVisitVisas = withSuspense(VisitVisas);
 const LazyBlogIndex  = withSuspense(BlogIndex);
+
+// 2026-08 (Tony's spec: Global Work Visa Hub). Self-contained module —
+// see server/routes/hub.ts + server/lib/hub-plan-generator.ts. Public
+// pages, no auth required for /hub and /hub/countries/:slug; the Tracker
+// bounces to sign-in via the same auth_redirect pattern the rest of the
+// app uses.
+const HubHomepage = lazyWithRetry(() => import("@/pages/hub/index"));
+const HubCountry  = lazyWithRetry(() => import("@/pages/hub/country"));
+const HubTracker  = lazyWithRetry(() => import("@/pages/hub/tracker"));
+const LazyHubHomepage = withSuspense(HubHomepage);
+const LazyHubCountry  = withSuspense(HubCountry);
+const LazyHubTracker  = withSuspense(HubTracker);
 const LazyBlogPost   = withSuspense(BlogPost);
 const LazyTrustPage  = withSuspense(TrustPage);
 const LazyAutoApplyPage = withSuspense(AutoApplyPage);
@@ -750,6 +762,10 @@ function AuthenticatedRoutes() {
       <Route path="/green-card" component={LazyGreenCard} />
       <Route path="/visa-guides" component={LazyVisaGuides} />
       <Route path="/visit-visas" component={LazyVisitVisas} />
+      {/* 2026-08: Global Work Visa Hub — top-of-funnel, public. */}
+      <Route path="/hub" component={LazyHubHomepage} />
+      <Route path="/hub/countries/:slug" component={LazyHubCountry} />
+      <Route path="/hub/tracker" component={LazyHubTracker} />
       <Route path="/blog" component={LazyBlogIndex} />
       <Route path="/blog/:slug" component={LazyBlogPost} />
       <Route path="/trust" component={LazyTrustPage} />
@@ -940,6 +956,11 @@ function Router() {
             so anonymous visitors got 404s. */}
         <Route path="/trust" component={LazyTrustPage} />
         <Route path="/visit-visas" component={LazyVisitVisas} />
+        {/* 2026-08: Global Work Visa Hub — also mounted in the auth block
+            so signed-in traffic hits the same URLs without a redirect. */}
+        <Route path="/hub" component={LazyHubHomepage} />
+        <Route path="/hub/countries/:slug" component={LazyHubCountry} />
+        <Route path="/hub/tracker" component={LazyHubTracker} />
         <Route path="/blog" component={LazyBlogIndex} />
         <Route path="/blog/:slug" component={LazyBlogPost} />
         <Route path="/agencies" component={LazyAgenciesMarketplace} />

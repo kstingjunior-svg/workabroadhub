@@ -783,6 +783,25 @@ app.use((req, res, next) => {
       console.error("[Server] ❌ AutoApply route registration failed:", err?.message);
     }
 
+    // 2026-08: Global Work Visa Hub — self-contained module. Registers BEFORE
+    // registerRoutes() for the same catch-all reason as AutoApply above.
+    // Owns its own tables (hub_countries, hub_visa_types, hub_application_
+    // checklists, hub_user_journeys, hub_shortage_occupations) created
+    // idempotently by bootstrapHubSchema(). Zero disturbance to existing
+    // WorkAbroadHub tables or routes.
+    try {
+      const { registerHubRoutes, bootstrapHubSchema } = await import("./routes/hub");
+      registerHubRoutes(app);
+      console.log("[Server] ✓ Global Work Visa Hub routes registered (before /api catch-all)");
+      // Fire-and-forget schema bootstrap so the route registration itself
+      // isn't blocked by a slow first-run seed insert.
+      bootstrapHubSchema()
+        .then(() => console.log("[Server] ✓ Hub schema ready"))
+        .catch((e: any) => console.error("[Server] ❌ Hub schema bootstrap failed:", e?.message));
+    } catch (err: any) {
+      console.error("[Server] ❌ Hub route registration failed:", err?.message);
+    }
+
     await registerRoutes(httpServer, app);
 
     // Bootstrap can run after registerRoutes — it only touches the DB.
