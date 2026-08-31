@@ -233,6 +233,32 @@ async function seedDatabase() {
             category: "Legal & Verification", badge: "New",
             features: ["Full contract review (up to 15 pages)", "Red flag & hidden clause identification", "Salary, overtime & leave clause analysis", "Written report with risk ratings", "WhatsApp follow-up Q&A session"],
         },
+        // 2026-08 (Hub revenue layer — 3 upsell products, priced for KES-first
+        // audience with the USD equivalents Tony's spec asks for):
+        {
+            slug: "hub_score_unlock",
+            name: "Hub — Full Suitability Score",
+            description: "Unlock the exact per-step gap analysis for your target country, plus a 90-day glide path to raise your Suitability Score to 100%",
+            price: 650, currency: "KES", isActive: true, order: 21,
+            category: "Job Search Tools", badge: "≈ $4.99",
+            features: ["Full per-step gap analysis for your target country", "Week-by-week 90-day glide path to 100%", "Top 3 prioritized shortcuts for the biggest score jumps", "Delivered as PDF within 30 seconds"],
+        },
+        {
+            slug: "hub_vault_monthly",
+            name: "Document Vault (monthly)",
+            description: "Upload your passport, CV, and documents once. We auto-fill every visa form for you and convert your CV to Europass, Canada, and Australia formats.",
+            price: 3900, currency: "KES", isActive: true, order: 22,
+            category: "Job Search Tools", badge: "$29/mo · Cancel anytime",
+            features: ["One-time upload, every form auto-filled", "CV auto-converted to Europass (Germany), Canada IRCC, Australia DHA formats", "Encrypted at rest — you own your data", "Reusable across every country you explore", "Saves ~4 hours on your first application"],
+        },
+        {
+            slug: "hub_visa_concierge",
+            name: "Visa Concierge — Express Lane",
+            description: "Our team reviews every field of your visa file and submits it to the consulate within 24 hours. Full refund if we miss a typo the consulate flags.",
+            price: 25000, currency: "KES", isActive: true, order: 23,
+            category: "Legal & Verification", badge: "≈ $199 · 24h SLA",
+            features: ["Human review of every application field before submission", "Formatting check against the consulate's current requirements", "Submission within 24 hours of your final tick", "Consulate receipt emailed to you the moment it lands", "Full refund guarantee on formatting errors we should have caught"],
+        },
         {
             // 2026-08 (Tony's ask: paid visit-visa application help). Users pay KES 999,
             // AI generates a country-specific application kit (draft form, docs

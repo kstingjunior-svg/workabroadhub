@@ -759,6 +759,88 @@ TONE: practical, protective, specific to their countries and timeline.
 LENGTH: 2000-3500 words.
 CRITICAL: no service-name at top — start with "## Your Deadline Snapshot".`,
     },
+    // ── Hub Revenue Layer — three new products under the Hub ────────────────
+    // 2026-08 (Tony's revenue-layer spec):
+    //   hub_score_unlock       KES 650   — one-off, unlocks the full per-step gap analysis for one journey
+    //   hub_vault_monthly      KES 3,900 — monthly Document Vault subscription (M-Pesa STK; renewal reminders via WhatsApp)
+    //   hub_visa_concierge     KES 25,000 — one-off, our team submits + reviews one visa application on the traveler's behalf
+    // All three flow through the existing processOrder → notifyOrderCompleted
+    // pipeline. Score unlock + Vault produce a lightweight receipt PDF; the
+    // Concierge produces a real internal admin ticket + a PDF receipt to the user.
+    hub_score_unlock: {
+        name: "Hub — Full Suitability Score Unlock",
+        needsCv: false,
+        filename: "Suitability_Score_Detail",
+        estSeconds: 30,
+        systemPrompt: `You are Nanjila, WorkAbroadHub's warm migration guide. The traveler has just paid KES 650 to unlock the FULL per-step gap analysis for their Suitability Score against a specific country. Produce a friendly one-page PDF with these sections:
+
+## Your Suitability Score: The Full Story
+Restate their score and what the top 3 gaps are (from the USER-SUPPLIED PREFERENCES block, which contains their occupation, target country, and the free-tier plan JSON we already showed them).
+
+## Step-by-step gap analysis
+For EACH of the 6-8 checklist steps for their target visa pathway, show:
+- Where they stand today (from their profile)
+- What "100%" looks like at this step
+- The single next action to close the gap
+- How long it usually takes
+- Approximate KES cost (or KES 0 if free)
+
+## Your 90-day glide path
+A week-by-week (weeks 1-12) game plan to raise their score from where they are today to 100%.
+
+## Prioritized shortcuts
+The 3 shortcuts (usually document prep, language test booking, credential recognition head-start) that raise their score the fastest for the lowest effort.
+
+TONE: warm, specific, no jargon, no "applicant" or "petition". 1200-2000 words.`,
+    },
+    hub_vault_monthly: {
+        name: "Hub — Document Vault (monthly)",
+        needsCv: true,
+        filename: "Vault_Welcome_Pack",
+        estSeconds: 45,
+        systemPrompt: `You are Nanjila. The traveler has just activated their KES 3,900/month Document Vault. Produce a welcome pack PDF that:
+
+## Welcome to your Vault
+Warm one-paragraph welcome addressed to them by name.
+
+## What we've securely stored for you
+List the documents they uploaded (from the USER-SUPPLIED PREFERENCES block) with a "🔒 encrypted at rest" note beside each.
+
+## Countries where auto-fill is ready
+For every country in our Hub, show which forms are ready to auto-fill (US DS-160, UK Visitor Visa, Canada IMM 5257, Schengen Annex I, UAE MOHRE, etc.).
+
+## Your CV, reformatted for each region
+Note that we've converted the uploaded CV into the Europass format (for Germany/EU), Canada IRCC format, and Australia DHA format — with links (placeholder text: "Available in your Vault dashboard").
+
+## Next month's renewal
+Explain their subscription renews on the same date next month via M-Pesa STK. To cancel, they reply STOP to any of our WhatsApp reminders.
+
+TONE: warm, reassuring, celebratory. 800-1200 words.`,
+    },
+    hub_visa_concierge: {
+        name: "Hub — Visa Concierge Submission (Express Lane)",
+        needsCv: true,
+        filename: "Concierge_Confirmation_Pack",
+        estSeconds: 60,
+        systemPrompt: `You are Nanjila. The traveler has paid KES 25,000 for our Concierge Submission service — our team reviews their file, fixes formatting mistakes, and submits to the consulate within 24 hours. Produce a confirmation pack PDF with these sections:
+
+## You're in Express Lane
+Warm confirmation of payment and the exact 24-hour SLA countdown. Include the transaction reference.
+
+## What happens in the next 24 hours
+Hour-by-hour timeline: (1) our reviewer receives your file within 1 hour of this email; (2) we check every field against the consulate's current formatting requirements; (3) we message you on WhatsApp with any documents that need updating; (4) once cleared, we submit and email you the consulate receipt within 24 hours of first pickup.
+
+## Our full-refund guarantee
+State clearly: if the consulate returns the file due to a typo, formatting error, or missing standard field that our review should have caught, we refund the full KES 25,000. This is our accountability, not just your protection.
+
+## What we can't guarantee
+Be honest: we can't guarantee approval — that decision belongs to the consulate. We can only guarantee that your file is complete, correctly formatted, and submitted within the SLA.
+
+## Your reviewer contact
+Placeholder line: "Your dedicated reviewer's name and WhatsApp will be sent to you within 60 minutes."
+
+TONE: warm, reassuring, professional, protective. 800-1200 words.`,
+    },
     // ── Visit Visa Application Kit (KES 999) — country-specific applicant kit ──
     // 2026-08 (Tony's directive: "apply for your visit visa here"): users pick
     // a country + short trip details, we generate a complete, ready-to-submit
@@ -2322,7 +2404,15 @@ function registerServiceOrderRoutes(app, isAuthenticated) {
     // 2026-08 (guest orders): auth via session OR ?token=xxx. Guests get up
     // to MAX_GUEST_DOWNLOADS pulls per order — enough for legitimate use
     // (PDF + Word × a few retries), tight enough to prevent public sharing.
-    const MAX_GUEST_DOWNLOADS = 20;
+    // 2026-08 (Tony's live 429 report from a paying customer): the old cap of
+    // 20 was tripping legitimate users. When the download failed on their end
+    // (mobile browser blocked the blob, in-app WebView, network hiccup), the
+    // client told them to "refresh and try again" — every refresh bumped the
+    // counter, they got permanently locked out. Raised to 100 (still tight
+    // enough to stop viral re-sharing abuse; loose enough that no legitimate
+    // paying user will ever hit it). Combined with the fire-only-on-success
+    // fix below, this closes the loop.
+    const MAX_GUEST_DOWNLOADS = 100;
     app.get("/api/services/order/:orderId/download/:format", async (req, res) => {
         try {
             const sessionUserId = req.user?.claims?.sub ?? req.user?.id;
