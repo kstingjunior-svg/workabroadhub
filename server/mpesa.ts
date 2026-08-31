@@ -12,6 +12,37 @@ const MPESA_BASE_URL = (process.env.MPESA_BASE_URL || "").trim() || (
   _isProd ? "https://api.safaricom.co.ke" : "https://sandbox.safaricom.co.ke"
 );
 console.log(`[M-Pesa] Environment: ${_isProd ? "PRODUCTION" : "SANDBOX"} | base=${MPESA_BASE_URL}`);
+// 2026-08 (Tony's "not seeing M-Pesa SMS on my phone" report):
+// If NODE_ENV=production but MPESA_ENV isn't set to production, every STK
+// push goes to sandbox — the user sees the prompt but no real money moves,
+// and no M-Pesa SMS ever hits Tony's phone. Add a loud, unmissable warning
+// at boot so this misconfiguration surfaces in the very first Render log.
+if (process.env.NODE_ENV === "production" && !_isProd) {
+  console.warn(
+    "\n" +
+    "╔═══════════════════════════════════════════════════════════════════╗\n" +
+    "║  ⚠  MPESA IS RUNNING IN SANDBOX MODE ON A PRODUCTION SERVER  ⚠   ║\n" +
+    "║                                                                   ║\n" +
+    "║  Every STK Push goes to sandbox.safaricom.co.ke                   ║\n" +
+    "║  No real money is being collected. No M-Pesa SMS will arrive.     ║\n" +
+    "║                                                                   ║\n" +
+    "║  FIX: Set MPESA_ENV=production on Render, and make sure the       ║\n" +
+    "║  MPESA_CONSUMER_KEY, MPESA_CONSUMER_SECRET, MPESA_SHORTCODE,      ║\n" +
+    "║  and MPESA_PASSKEY are your Go-Live (production) credentials,     ║\n" +
+    "║  not sandbox ones.                                                ║\n" +
+    "╚═══════════════════════════════════════════════════════════════════╝\n"
+  );
+}
+// 2026-08: also warn if PRODUCTION mode is set but the shortcode looks like
+// Safaricom's public sandbox test till (174379) — a common copy-paste from
+// Daraja docs that lands real users on the wrong till.
+if (_isProd && (process.env.MPESA_SHORTCODE || "").trim() === "174379") {
+  console.warn(
+    "\n[M-Pesa] ⚠ MPESA_SHORTCODE=174379 which is Safaricom's PUBLIC SANDBOX " +
+    "till. Real payments will fail (or land in Safaricom's demo account). " +
+    "Replace with YOUR Go-Live shortcode from Daraja.\n"
+  );
+}
 export function getCallbackBaseUrl(): string {
   if (process.env.MPESA_CALLBACK_URL) {
     const url = new URL(process.env.MPESA_CALLBACK_URL);
