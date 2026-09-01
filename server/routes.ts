@@ -45,6 +45,22 @@ import { calculateAgencyScore, recalculateAllScores } from "./score-engine";
 const recentStkPushes = new Map<string, number>();
 const STK_PUSH_COOLDOWN_MS = 30_000;
 
+// 2026-08 (Tony's stuck-payments audit): per-normalized-phone STK cooldown.
+// Same phone can't fire another STK within 60s of the previous one. Prevents
+// button-mashing that produced 6 stuck rows for +254704454609 in 15 min.
+// Trim entries older than 5 min every ~500 requests to keep the map small.
+const stkPhoneCooldown = new Map<string, number>();
+let _cooldownGcCounter = 0;
+export function getOrCreateStkCooldown(): Map<string, number> {
+  if (++_cooldownGcCounter % 500 === 0) {
+    const cutoff = Date.now() - 5 * 60_000;
+    for (const [phone, ts] of stkPhoneCooldown) {
+      if (ts < cutoff) stkPhoneCooldown.delete(phone);
+    }
+  }
+  return stkPhoneCooldown;
+}
+
 // Zod validation schemas for service orders
 const createOrderSchema = z.object({
   serviceId: z.string().min(1, "Service ID is required"),
@@ -22468,12 +22484,46 @@ If your instinct says "3,500", STOP and re-read the SERVICES block above.`;
         });
       }
 
+      // 2026-08 (Tony's stuck-payments audit — Erick Kivisu's +96560022904):
+      // Strict Kenyan-Safaricom validation. This endpoint used to just prepend
+      // "254" if phone started with "0"; foreign numbers slipped through
+      // unchanged and Daraja happily accepted STK pushes to them that could
+      // NEVER complete (destination not on M-Pesa). Result: permanent stuck
+      // rows in the admin queue. Now we reject at initiation with a friendly
+      // PayPal redirect message — no more phantom stuck payments from
+      // foreign numbers.
+      const { validateKenyanPhone } = await import("./lib/validate-kenyan-phone");
+      const phoneCheck = validateKenyanPhone(userRow.phone);
+      if (!phoneCheck.ok) {
+        return res.status(400).json({
+          message: phoneCheck.reason,
+          code: "INVALID_MPESA_PHONE",
+          suggestPaypal: true,
+        });
+      }
+      const normalizedPhone = phoneCheck.normalized;
+
+      // 2026-08 (Tony's stuck-payments audit — 6 rapid STK pushes to
+      // +254704454609 within 15 min): per-phone cooldown. Blocks the same
+      // phone from firing another STK within 60 seconds of the previous one.
+      // Cheap enough (in-memory Map) to run on every request; large enough
+      // to stop button-mashing without punishing legitimate retries after
+      // Safaricom timeouts (which happen in the 60-90s range).
+      const cooldown = getOrCreateStkCooldown();
+      const lastAt = cooldown.get(normalizedPhone);
+      if (lastAt && Date.now() - lastAt < 60_000) {
+        const waitSec = Math.ceil((60_000 - (Date.now() - lastAt)) / 1000);
+        return res.status(429).json({
+          message: `Please wait ${waitSec}s before requesting another M-Pesa prompt on ${normalizedPhone}. If the previous prompt didn't arrive, check your phone is unlocked and has network.`,
+          code: "STK_COOLDOWN",
+          retryAfterSec: waitSec,
+        });
+      }
+      cooldown.set(normalizedPhone, Date.now());
+
       // 4. Fire STK push via the existing unified endpoint logic
       const transactionRef = `WAH-${nanoid(12)}`;
       const amountKES = Math.round(Number(amount));
-      const normalizedPhone = userRow.phone.startsWith("0")
-        ? `254${userRow.phone.slice(1)}`
-        : userRow.phone;
 
       const [payment] = await db
         .insert(paymentsTable)
