@@ -156,7 +156,7 @@ export default function AdminPricing() {
 
   if (isLoading) {
     return (
-      <AdminLayout>
+      <AdminLayout title="Pricing Control">
         <div className="p-6 space-y-4">
           <h1 className="text-2xl font-bold">Pricing Control</h1>
           {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-28 w-full rounded-lg" />)}
@@ -172,7 +172,7 @@ export default function AdminPricing() {
   }, {});
 
   return (
-    <AdminLayout>
+    <AdminLayout title="Pricing Control">
       <div className="p-6 max-w-4xl mx-auto space-y-8" data-testid="admin-pricing-page">
         <div className="flex items-center gap-3">
           <DollarSign className="h-7 w-7 text-primary" />

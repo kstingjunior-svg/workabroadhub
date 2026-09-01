@@ -18,6 +18,7 @@ import { ArrowLeft, Globe, Loader2, CheckCircle, AlertTriangle, Phone, FileText,
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient, fetchCsrfToken } from "@/lib/queryClient";
+import { StkReadyModal } from "@/components/stk-ready-modal";
 import { formatPhone } from "@/lib/phone";
 import { trackServiceOrder } from "@/lib/analytics";
 import type { Service, ServiceOrder } from "@shared/schema";
@@ -539,6 +540,30 @@ export default function ServiceOrderPage() {
     }
   };
 
+  // 2026-08 (Tony's payment-failure audit): pre-STK Get Ready gate.
+  // Only shown when payment method is mpesa — PayPal bypass since there's
+  // no phone-based prompt to wait for.
+  const [readyOpen, setReadyOpen] = useState(false);
+  const [readyData, setReadyData] = useState<IntakeFormData | null>(null);
+
+  const runSubmitFlow = async (data: IntakeFormData) => {
+    try {
+      const order: ServiceOrder = await createOrderMutation.mutateAsync();
+      setOrderId(order.id);
+      const intakeData = {
+        fullName: data.fullName, email: data.email, phone: data.phone,
+        targetCountry: data.targetCountry, currentRole: data.currentRole,
+        yearsExperience: data.yearsExperience, additionalInfo: data.additionalInfo,
+        currentCvUrl: data.currentCvUrl, linkedinUrl: data.linkedinUrl,
+      };
+      await submitOrderMutation.mutateAsync({
+        orderId: order.id, intakeData, paymentMethod: data.paymentMethod,
+      });
+    } catch (error) {
+      console.error("Order error:", error);
+    }
+  };
+
   const onSubmit = async (data: IntakeFormData) => {
     // Validate LinkedIn URL is provided for LinkedIn Profile Optimization
     if (service?.name === "LinkedIn Profile Optimization" && !data.linkedinUrl?.trim()) {
@@ -548,31 +573,14 @@ export default function ServiceOrderPage() {
       });
       return;
     }
-
-    try {
-      const order: ServiceOrder = await createOrderMutation.mutateAsync();
-      setOrderId(order.id);
-
-      const intakeData = {
-        fullName: data.fullName,
-        email: data.email,
-        phone: data.phone,
-        targetCountry: data.targetCountry,
-        currentRole: data.currentRole,
-        yearsExperience: data.yearsExperience,
-        additionalInfo: data.additionalInfo,
-        currentCvUrl: data.currentCvUrl,
-        linkedinUrl: data.linkedinUrl,
-      };
-
-      await submitOrderMutation.mutateAsync({
-        orderId: order.id,
-        intakeData,
-        paymentMethod: data.paymentMethod,
-      });
-    } catch (error) {
-      console.error("Order error:", error);
+    // If paying by M-Pesa, show the Get Ready modal first — huge cut on
+    // DS-timeout failures. PayPal skips straight through.
+    if (data.paymentMethod === "mpesa") {
+      setReadyData(data);
+      setReadyOpen(true);
+      return;
     }
+    await runSubmitFlow(data);
   };
 
   const formatPrice = (price: number) => {
@@ -1455,6 +1463,16 @@ export default function ServiceOrderPage() {
           </Button>
         </div>
       </div>
+
+      {/* 2026-08: pre-STK Get Ready gate */}
+      <StkReadyModal
+        open={readyOpen}
+        onOpenChange={setReadyOpen}
+        onConfirmed={() => { if (readyData) runSubmitFlow(readyData); }}
+        amountKes={service?.price ?? 0}
+        phone={readyData?.phone ?? null}
+        productName={service?.name}
+      />
     </div>
   );
 }

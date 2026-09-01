@@ -53,6 +53,15 @@ export interface HubPlan {
   topThreeCountries: Array<{ slug: string; name: string; flag: string; whyThisFits: string; matchScore: number }>;
   gapsToClose:       Array<{ item: string; whyItMatters: string; howLong: string }>;
   assumptions:       Array<{ what: string; whyWeAssumed: string }>;
+  // 2026-08 (revenue layer): shortage-list-driven Fast-Track flag
+  fastTrackEligible: boolean;
+  fastTrackReason:   string;
+  // Contextual upsell hints — client renders each in the right moment
+  upsellHints: {
+    unlockFullScore: { priceKes: number; priceUsd: number; reason: string };
+    vault:           { priceKes: number; priceUsd: number; reason: string };
+    concierge:       { priceKes: number; priceUsd: number; reason: string };
+  };
 }
 
 /**
@@ -133,6 +142,21 @@ Pick 3 from the DATA.candidates list. #1 gets the highest suitability. Include o
 GAPS-TO-CLOSE:
 List 3-5 specific, actionable steps to raise the score to 100. Each item must be doable within 6 months. Example: "Book a German B1 test — you're already close" not "Improve German".
 
+FAST-TRACK RULE (uses the shortage-list tool result):
+Look at DATA.shortageListHits. If ANY row has iso2 matching your
+recommendedCountry's iso2 AND the occupation substring-matches the
+user's stated occupation, you MUST:
+  - set "fastTrackEligible": true
+  - set "fastTrackReason" to a warm one-sentence explanation
+    referencing the specific government body when known
+    (e.g. "Germany's Federal Employment Agency lists registered
+    nurses on the current shortage list — your file goes to the
+    top of the pile automatically.")
+  - mention Fast-Track eligibility in the OPENING paragraph of
+    narrativePlan so the reader sees it before scrolling
+Never invent a Fast-Track claim if the tool result doesn't support it.
+Set "fastTrackEligible": false and "fastTrackReason": "" in that case.
+
 OUTPUT (strict JSON, no prose outside JSON):
 {
   "suitabilityScore": integer 30-98,
@@ -149,7 +173,9 @@ OUTPUT (strict JSON, no prose outside JSON):
   ],
   "assumptions": [
     { "what": string, "whyWeAssumed": string }
-  ]
+  ],
+  "fastTrackEligible": boolean,
+  "fastTrackReason": string
 }`;
 
   // ── User turn with resolved DATA block (this is our "tool result" injection)
@@ -199,6 +225,28 @@ Now generate the plan JSON.`;
     assumptions: Array.isArray(parsed.assumptions) ? parsed.assumptions.slice(0, 5).map((a: any) => ({
       what: String(a.what ?? ""), whyWeAssumed: String(a.whyWeAssumed ?? ""),
     })) : [],
+    // 2026-08 (revenue layer): Fast-Track flag + contextual upsells.
+    // fastTrackEligible comes from the model (already validated against the
+    // shortage-list tool). upsellHints are computed server-side from static
+    // pricing so we never let the model invent prices.
+    fastTrackEligible: !!parsed.fastTrackEligible,
+    fastTrackReason:   String(parsed.fastTrackReason ?? ""),
+    upsellHints: {
+      unlockFullScore: {
+        priceKes: 650, priceUsd: 4.99,
+        reason: `Your free score shows ${clamp(parsed.suitabilityScore, 30, 98)}%. Unlock the exact per-step gap analysis and see the shortest path to 100%.`,
+      },
+      vault: {
+        priceKes: 3900, priceUsd: 29,
+        reason: `You'll fill 6+ forms across the countries you're exploring. The Vault stores your documents once and auto-fills every one — most travelers save 4+ hours on their first application.`,
+      },
+      concierge: {
+        priceKes: 25000, priceUsd: 199,
+        reason: parsed.fastTrackEligible
+          ? "You're on the Fast-Track list — that advantage disappears if the file gets returned for a typo. Our review takes 24 hours."
+          : "Most consulate refusals come from tiny formatting mistakes, not from unqualified candidates. We double-check every comma before submission.",
+      },
+    },
   };
 
   return plan;

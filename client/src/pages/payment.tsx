@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, CheckCircle, Loader2, Shield, Square, CheckSquare, PhoneCall, RefreshCw, AlertCircle, Copy, Info, Star } from "lucide-react";
 import { Link } from "wouter";
 import { apiRequest, getQueryFn, fetchCsrfToken } from "@/lib/queryClient";
+import { StkReadyModal } from "@/components/stk-ready-modal";
 import { fireSuccessConfetti } from "@/lib/confetti";
 import type { UserSubscription } from "@shared/schema";
 import { trackPaymentStarted, trackPaymentCompleted, trackServerEvent } from "@/lib/analytics";
@@ -583,6 +584,13 @@ export default function Payment() {
     trackSelection(method);
   };
 
+  // 2026-08 (Tony's payment-failure audit): pre-STK Get Ready gate — same
+  // pattern as components/upgrade-modal.tsx. Captures the pending payload
+  // so the modal's onConfirmed can fire the actual mutation.
+  const [readyOpen, setReadyOpen] = useState(false);
+  const [readyPayload, setReadyPayload] = useState<any>(null);
+  const openReadyThen = (payload: any) => { setReadyPayload(payload); setReadyOpen(true); };
+
   const paymentMutation = useMutation({
     mutationFn: async (data: { method: string; phoneNumber?: string; serviceOrderId?: string }) => {
       // If the user arrived from /services/order/:slug, the orderId is in the
@@ -837,7 +845,7 @@ export default function Payment() {
     trackServerEvent("click_pay", { amount: paymentAmount, method: "mpesa" });
     // 2026-06: clear any previous M-Pesa error card before re-attempting.
     setMpesaError(null);
-    paymentMutation.mutate({ method: "mpesa", phoneNumber });
+    openReadyThen({ method: "mpesa", phoneNumber });
   }, [phoneNumber, paymentMutation, toast, pendingPayment, pendingSecondsLeft, paymentId, priceReady, basePaymentAmount]);
 
   const handleRetry = () => {
@@ -1182,12 +1190,15 @@ export default function Payment() {
               onRetry={() => {
                 setMpesaError(null);
                 if (phoneNumber) {
-                  paymentMutation.mutate({
+                  // 2026-08 audit: prior retry referenced two undefined
+                  // variables (urlServiceId / urlServiceName) which threw
+                  // ReferenceError the moment a user clicked "Try again"
+                  // on the MpesaErrorCard. Match the initial payMpesa()
+                  // shape at line 848 exactly.
+                  openReadyThen({
                     method: "mpesa",
                     phoneNumber,
                     ...(refCode ? { refCode } : {}),
-                    serviceId: urlServiceId ?? undefined,
-                    serviceName: urlServiceName ?? undefined,
                   } as any);
                 }
               }}
@@ -1884,6 +1895,16 @@ export default function Payment() {
           </p>
         )}
       </div>
+
+      {/* 2026-08: pre-STK Get Ready gate — see components/stk-ready-modal.tsx */}
+      <StkReadyModal
+        open={readyOpen}
+        onOpenChange={setReadyOpen}
+        onConfirmed={() => { if (readyPayload) paymentMutation.mutate(readyPayload); }}
+        amountKes={paymentAmount || 0}
+        phone={phoneNumber}
+        productName="M-Pesa Payment"
+      />
     </section>
   );
 }

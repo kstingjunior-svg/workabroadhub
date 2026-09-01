@@ -171,7 +171,7 @@ export default function RevenueLivePage() {
   const lastRefresh  = new Date(dataUpdatedAt || Date.now());
 
   return (
-    <AdminLayout>
+    <AdminLayout title="Revenue Live">
       <div className="space-y-6 p-6">
         {/* Header */}
         <div className="flex items-center justify-between flex-wrap gap-3">

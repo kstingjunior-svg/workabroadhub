@@ -105,8 +105,108 @@ export async function bootstrapHubSchema(): Promise<void> {
       UNIQUE(country_iso2, occupation)
     );
     CREATE INDEX IF NOT EXISTS hub_shortage_lookup_idx ON hub_shortage_occupations(country_iso2, occupation);
+
+    -- 2026-08 (revenue layer): Document Vault ($29/mo subscription)
+    CREATE TABLE IF NOT EXISTS hub_document_vault (
+      id                          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id                     VARCHAR     NOT NULL UNIQUE,
+      passport_scan_url           TEXT,
+      cv_upload_url               TEXT,
+      formatted_europass_cv_url   TEXT,
+      formatted_canada_cv_url     TEXT,
+      formatted_australia_cv_url  TEXT,
+      photo_compressed_url        TEXT,
+      police_clearance_url        TEXT,
+      medical_report_url          TEXT,
+      financial_proof_url         TEXT,
+      last_used_at                TIMESTAMP,
+      created_at                  TIMESTAMP   NOT NULL DEFAULT NOW(),
+      updated_at                  TIMESTAMP   NOT NULL DEFAULT NOW()
+    );
+
+    -- Partner Agencies (B2B: monthly spotlight + $500/lead)
+    CREATE TABLE IF NOT EXISTS hub_partner_agencies (
+      id                          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+      name                        VARCHAR(120) NOT NULL,
+      logo_url                    TEXT,
+      contact_email               VARCHAR(255),
+      contact_whatsapp            VARCHAR(32),
+      blurb                       TEXT,
+      country_focus_iso2          CHAR(2)[]   NOT NULL DEFAULT '{}',
+      role_focus                  TEXT[]      NOT NULL DEFAULT '{}',
+      spotlight_fee_per_month_kes INTEGER     NOT NULL DEFAULT 0,
+      spotlight_active_from       DATE,
+      spotlight_active_until      DATE,
+      referral_fee_per_lead_kes   INTEGER     NOT NULL DEFAULT 65000,
+      is_active                   BOOLEAN     NOT NULL DEFAULT true,
+      verified_at                 TIMESTAMP,
+      created_at                  TIMESTAMP   NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS hub_partner_active_idx ON hub_partner_agencies(is_active) WHERE is_active = true;
+
+    -- Lead Transactions (per-referral revenue tracking)
+    CREATE TABLE IF NOT EXISTS hub_lead_transactions (
+      id                     UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id                VARCHAR     NOT NULL,
+      partner_agency_id      UUID        NOT NULL REFERENCES hub_partner_agencies(id) ON DELETE CASCADE,
+      journey_id             UUID        REFERENCES hub_user_journeys(id) ON DELETE SET NULL,
+      referral_fee_kes       INTEGER     NOT NULL,
+      status                 VARCHAR(24) NOT NULL DEFAULT 'shown',
+      agency_disputed_reason TEXT,
+      invoice_id             VARCHAR(64),
+      created_at             TIMESTAMP   NOT NULL DEFAULT NOW(),
+      updated_at             TIMESTAMP   NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS hub_leads_agency_idx ON hub_lead_transactions(partner_agency_id, status);
+    CREATE INDEX IF NOT EXISTS hub_leads_user_idx   ON hub_lead_transactions(user_id, created_at DESC);
+
+    -- Users table extensions (idempotent — safe on every boot)
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS hub_subscription_tier VARCHAR(24) NOT NULL DEFAULT 'free';
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS hub_vault_renews_at   TIMESTAMP;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id    VARCHAR(64);
+    CREATE INDEX IF NOT EXISTS users_hub_tier_idx ON users(hub_subscription_tier) WHERE hub_subscription_tier <> 'free';
+
+    -- User journeys — concierge tracking
+    ALTER TABLE hub_user_journeys ADD COLUMN IF NOT EXISTS submitted_at              TIMESTAMP;
+    ALTER TABLE hub_user_journeys ADD COLUMN IF NOT EXISTS concierge_paid_at         TIMESTAMP;
+    ALTER TABLE hub_user_journeys ADD COLUMN IF NOT EXISTS concierge_reviewer_user_id VARCHAR;
+    ALTER TABLE hub_user_journeys ADD COLUMN IF NOT EXISTS full_score_unlocked_at    TIMESTAMP;
+
+    -- Visa types — Fast Track eligibility flag + base price
+    ALTER TABLE hub_visa_types ADD COLUMN IF NOT EXISTS fast_track_eligible BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE hub_visa_types ADD COLUMN IF NOT EXISTS base_gov_fee_kes    INTEGER;
   `);
   await seedHubDataIfEmpty();
+  await seedHubPartnerAgenciesIfEmpty();
+}
+
+// ─── Partner agency seed (idempotent) ────────────────────────────────────
+async function seedHubPartnerAgenciesIfEmpty(): Promise<void> {
+  const { rows } = await pool.query<{ c: string }>(`SELECT COUNT(*)::text AS c FROM hub_partner_agencies`);
+  if (Number(rows[0]?.c ?? 0) > 0) return;
+
+  const agencies = [
+    {
+      name: "Fraser Health BC", blurb: "Fraser Health hires Kenyan-trained registered nurses across British Columbia every month.",
+      countries: ["CA"], roles: ["registered nurse", "personal support worker"], spotlight: 65000, fee: 65000,
+    },
+    {
+      name: "MediCare Recruit UAE", blurb: "MediCare places nurses, radiographers, and lab technicians in Dubai and Abu Dhabi hospitals within 45 days of application.",
+      countries: ["AE"], roles: ["registered nurse", "radiographer", "lab technician", "doctor"], spotlight: 55000, fee: 55000,
+    },
+    {
+      name: "BerlinTech Talent", blurb: "BerlinTech partners with 40+ Berlin startups actively sponsoring EU Blue Cards for software developers and DevOps engineers.",
+      countries: ["DE"], roles: ["software engineer", "software developer", "devops engineer", "data scientist"], spotlight: 75000, fee: 65000,
+    },
+  ];
+  for (const a of agencies) {
+    await pool.query(
+      `INSERT INTO hub_partner_agencies (name, blurb, country_focus_iso2, role_focus, spotlight_fee_per_month_kes, referral_fee_per_lead_kes, verified_at, spotlight_active_from, spotlight_active_until)
+       VALUES ($1,$2,$3,$4,$5,$6, NOW(), CURRENT_DATE, CURRENT_DATE + INTERVAL '30 days')`,
+      [a.name, a.blurb, a.countries, a.roles, a.spotlight, a.fee],
+    );
+  }
+  console.log(`[Hub] Seeded ${agencies.length} demo partner agencies (30-day spotlight active).`);
 }
 
 // ─── Seed data — real, source-cited, easy to extend ─────────────────────────
@@ -466,5 +566,121 @@ export function registerHubRoutes(app: Express): void {
     }
   });
 
-  console.log("[Hub] Routes registered: /api/hub/countries, /api/hub/countries/:slug, /api/hub/plan, /api/hub/journeys");
+  // ── Revenue layer routes ────────────────────────────────────────────────
+
+  // GET /api/hub/me — current tier + vault state (for gating UI)
+  app.get("/api/hub/me", async (req: any, res: Response) => {
+    const userId = sessionUserId(req);
+    if (!userId) return res.json({ signedIn: false, tier: "free" });
+    try {
+      const { rows } = await pool.query<{ tier: string; vault_renews_at: Date | null; email: string; first_name: string }>(
+        `SELECT COALESCE(hub_subscription_tier, 'free') AS tier, hub_vault_renews_at AS vault_renews_at, email, first_name
+           FROM users WHERE id = $1 LIMIT 1`, [userId],
+      );
+      const u = rows[0];
+      const vaultActive = !!u?.vault_renews_at && new Date(u.vault_renews_at) > new Date();
+      res.json({
+        signedIn:   true,
+        tier:       u?.tier ?? "free",
+        vaultActive,
+        vaultRenewsAt: u?.vault_renews_at ?? null,
+        email:      u?.email,
+        firstName:  u?.first_name,
+      });
+    } catch (err: any) {
+      console.error("[Hub] GET /me error:", err?.message);
+      res.status(500).json({ message: "Could not load account." });
+    }
+  });
+
+  // GET /api/hub/partner-agencies?country=CA&role=nurse — sponsored feed
+  // Only shown to travelers with an APPROVED journey (checked in the client),
+  // but the endpoint is intentionally not gated so anon browsing works too.
+  app.get("/api/hub/partner-agencies", async (req: Request, res: Response) => {
+    try {
+      const iso2 = String(req.query.country ?? "").toUpperCase();
+      const role = String(req.query.role ?? "").toLowerCase().trim();
+      const params: any[] = [];
+      let where = `WHERE is_active = true AND (spotlight_active_until IS NULL OR spotlight_active_until >= CURRENT_DATE)`;
+      if (iso2 && iso2.length === 2) {
+        params.push(iso2);
+        where += ` AND $${params.length} = ANY(country_focus_iso2)`;
+      }
+      // Role match via array-contains substring (loose match on any role string)
+      let orderBy = `spotlight_fee_per_month_kes DESC, created_at DESC`;
+      if (role) {
+        params.push(`%${role}%`);
+        // Prioritize agencies whose role_focus array has a matching substring
+        orderBy = `CASE WHEN EXISTS (SELECT 1 FROM unnest(role_focus) r WHERE LOWER(r) LIKE $${params.length}) THEN 0 ELSE 1 END, ${orderBy}`;
+      }
+      const { rows } = await pool.query(
+        `SELECT id, name, blurb, logo_url, contact_whatsapp, contact_email, country_focus_iso2, role_focus
+           FROM hub_partner_agencies ${where}
+           ORDER BY ${orderBy}
+           LIMIT 3`,
+        params,
+      );
+      res.json({ agencies: rows });
+    } catch (err: any) {
+      console.error("[Hub] GET /partner-agencies error:", err?.message);
+      res.status(500).json({ message: "Could not load partner agencies." });
+    }
+  });
+
+  // POST /api/hub/partner-agencies/:id/connect — record a lead + return contact info
+  app.post("/api/hub/partner-agencies/:id/connect", async (req: any, res: Response) => {
+    const userId = sessionUserId(req);
+    if (!userId) return res.status(401).json({ message: "Please sign in to connect." });
+    try {
+      const agencyId = String(req.params.id);
+      const journeyId = req.body?.journeyId ? String(req.body.journeyId) : null;
+      const { rows: aRows } = await pool.query<{ id: string; name: string; contact_whatsapp: string; contact_email: string; referral_fee_per_lead_kes: number }>(
+        `SELECT id, name, contact_whatsapp, contact_email, referral_fee_per_lead_kes FROM hub_partner_agencies WHERE id = $1 AND is_active = true LIMIT 1`, [agencyId],
+      );
+      const agency = aRows[0];
+      if (!agency) return res.status(404).json({ message: "Agency not found." });
+
+      // Record a 'contacted' lead — this is the billable event.
+      await pool.query(
+        `INSERT INTO hub_lead_transactions (user_id, partner_agency_id, journey_id, referral_fee_kes, status)
+         VALUES ($1,$2,$3,$4,'contacted')`,
+        [userId, agencyId, journeyId, agency.referral_fee_per_lead_kes],
+      );
+
+      res.json({
+        agency: {
+          name: agency.name,
+          whatsapp: agency.contact_whatsapp,
+          email: agency.contact_email,
+        },
+      });
+    } catch (err: any) {
+      console.error("[Hub] POST /partner-agencies/:id/connect error:", err?.message);
+      res.status(500).json({ message: "Could not record the connection." });
+    }
+  });
+
+  // POST /api/hub/journeys/:id/unlock-score — one-off KES 650 unlock (score reveal)
+  // Marks a specific journey as fully-scored. Payment fires via the existing
+  // service-order flow (slug: hub_score_unlock). Client calls this AFTER the
+  // payment callback confirms — the payment pipeline should trigger it, but
+  // we also expose it here for defensive manual unlock (admin fixups).
+  app.post("/api/hub/journeys/:id/unlock-score", async (req: any, res: Response) => {
+    const userId = sessionUserId(req);
+    if (!userId) return res.status(401).json({ message: "Please sign in." });
+    try {
+      const { rowCount } = await pool.query(
+        `UPDATE hub_user_journeys SET full_score_unlocked_at = COALESCE(full_score_unlocked_at, NOW()), updated_at = NOW()
+          WHERE id = $1 AND user_id = $2`,
+        [String(req.params.id), userId],
+      );
+      if (!rowCount) return res.status(404).json({ message: "Journey not found." });
+      res.json({ ok: true, unlockedAt: new Date().toISOString() });
+    } catch (err: any) {
+      console.error("[Hub] POST /journeys/:id/unlock-score error:", err?.message);
+      res.status(500).json({ message: "Could not unlock." });
+    }
+  });
+
+  console.log("[Hub] Routes registered: /api/hub/{countries,plan,journeys,me,partner-agencies}");
 }

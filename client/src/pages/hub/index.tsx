@@ -14,7 +14,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Search, MapPin, Sparkles, ArrowRight, Globe } from "lucide-react";
+import { Loader2, Search, MapPin, Sparkles, ArrowRight, Globe, Zap, Lock } from "lucide-react";
 
 interface HubCountry {
   slug: string;
@@ -33,9 +33,17 @@ interface PlanResponse {
     suitabilityScore: number;
     recommendedCountrySlug: string;
     recommendedCountryName: string;
+    recommendedVisaTypeCode: string;
     narrativePlan: string;
     topThreeCountries: Array<{ slug: string; name: string; flag: string; whyThisFits: string; matchScore: number }>;
     gapsToClose: Array<{ item: string; whyItMatters: string; howLong: string }>;
+    fastTrackEligible: boolean;
+    fastTrackReason: string;
+    upsellHints: {
+      unlockFullScore: { priceKes: number; priceUsd: number; reason: string };
+      vault:           { priceKes: number; priceUsd: number; reason: string };
+      concierge:       { priceKes: number; priceUsd: number; reason: string };
+    };
   };
   signedIn: boolean;
 }
@@ -138,11 +146,48 @@ export default function HubHomepage() {
             )}
           </CardContent>
         </Card>
+
+        {/* 2026-08 (revenue-layer spec): honey-yellow reassurance banner sits
+            beneath the search card. Post-it note vibe — no drop shadow, rounded
+            30px corners, quiet outlined button (not filled). Only visible before
+            the traveler runs the plan. */}
+        {!plan && (
+          <div className="mt-4 rounded-[30px] bg-amber-50/80 border border-amber-100 p-5 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center gap-4 justify-between" data-testid="hub-free-score-banner">
+            <div className="flex-1">
+              <div className="text-slate-800 font-serif text-lg" style={{ fontFamily: "Georgia, serif" }}>
+                Get your full 85% Suitability Score — free
+              </div>
+              <p className="text-sm text-slate-600 mt-1 leading-relaxed">
+                No account, no card, no ads. We'll show you where you stand today. If you want the exact roadmap to 100%, that's KES 650 (~$4.99) — otherwise keep exploring at your own pace.
+              </p>
+            </div>
+            <Link href="/services/order/hub_score_unlock" className="flex-shrink-0 w-full sm:w-auto">
+              <Button
+                variant="outline"
+                className="w-full rounded-2xl border-amber-500 text-amber-700 hover:bg-amber-50"
+                data-testid="hub-banner-unlock-cta"
+              >
+                Unlock the 100% Score — $4.99
+              </Button>
+            </Link>
+          </div>
+        )}
       </section>
 
       {/* AI plan result */}
       {plan && (
         <section className="max-w-3xl mx-auto px-4 sm:px-6 pb-12">
+          {/* Fast-Track badge (only if the shortage-list tool flagged eligibility) */}
+          {plan.fastTrackEligible && plan.fastTrackReason && (
+            <div className="mb-4 flex items-start gap-3 p-4 rounded-2xl bg-gradient-to-r from-amber-100 to-yellow-100 border border-amber-200" data-testid="hub-fast-track-badge">
+              <Zap className="h-5 w-5 text-amber-700 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <div className="text-xs font-bold tracking-widest text-amber-800 uppercase">Fast-Track eligible</div>
+                <p className="text-sm text-amber-900 mt-1 leading-relaxed">{plan.fastTrackReason}</p>
+              </div>
+            </div>
+          )}
+
           <Card className="rounded-3xl border-emerald-200 bg-gradient-to-br from-emerald-50 to-white shadow-lg" data-testid="hub-plan-result">
             <CardContent className="p-6 sm:p-8">
               <div className="flex flex-wrap items-center gap-3 mb-4">
@@ -160,18 +205,47 @@ export default function HubHomepage() {
 
               {plan.gapsToClose.length > 0 && (
                 <div className="mt-6 space-y-2">
-                  <div className="text-xs font-semibold tracking-widest text-slate-500 uppercase">Here's what would take you to 100%</div>
-                  {plan.gapsToClose.map((g, i) => (
+                  <div className="text-xs font-semibold tracking-widest text-slate-500 uppercase">A preview of what would take you to 100%</div>
+                  {/* Show the first 2 gaps free, blur the rest behind the unlock upsell */}
+                  {plan.gapsToClose.slice(0, 2).map((g, i) => (
                     <div key={i} className="rounded-2xl bg-white border border-slate-100 p-4">
                       <div className="font-semibold text-slate-800">{g.item}</div>
                       <div className="text-sm text-slate-600 mt-1">{g.whyItMatters}</div>
                       <div className="text-xs text-orange-700 font-medium mt-1">Typically {g.howLong}</div>
                     </div>
                   ))}
+                  {/* 2026-08 (Tony's revenue-layer spec: soft $4.99 unlock).
+                      Outlined button, not aggressive, not filled — a whisper.
+                      Uses the existing service-order flow via the hub_score_unlock slug. */}
+                  {plan.gapsToClose.length > 2 && (
+                    <div className="rounded-2xl border border-dashed border-amber-300 bg-amber-50/40 p-5 relative overflow-hidden" data-testid="hub-score-unlock-card">
+                      <div className="flex items-start gap-3">
+                        <Lock className="h-5 w-5 text-amber-700 flex-shrink-0 mt-0.5" />
+                        <div className="flex-1">
+                          <div className="text-sm font-semibold text-slate-800">
+                            +{plan.gapsToClose.length - 2} more shortcuts to reach 100%
+                          </div>
+                          <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                            {plan.upsellHints.unlockFullScore.reason} Get the full per-step gap analysis and a week-by-week 90-day glide path.
+                          </p>
+                          <Link href={`/services/order/hub_score_unlock?country=${encodeURIComponent(plan.recommendedCountryName)}`}>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="mt-3 rounded-2xl border-amber-500 text-amber-700 hover:bg-amber-50 gap-1.5"
+                              data-testid="hub-unlock-score-cta"
+                            >
+                              Unlock the 100% Score — KES {plan.upsellHints.unlockFullScore.priceKes.toLocaleString()} (~${plan.upsellHints.unlockFullScore.priceUsd})
+                            </Button>
+                          </Link>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
-              <div className="mt-6 flex gap-3">
+              <div className="mt-6 flex gap-3 flex-wrap">
                 <Link href={`/hub/countries/${plan.recommendedCountrySlug}`}>
                   <Button className="rounded-2xl bg-slate-800 hover:bg-slate-900 text-white gap-2" data-testid="hub-cta-country">
                     See the full {plan.recommendedCountryName} journey <ArrowRight className="h-4 w-4" />

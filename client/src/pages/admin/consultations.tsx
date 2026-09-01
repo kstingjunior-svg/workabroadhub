@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Calendar, Clock, MessageSquare, Phone, Mail, User, Search, Filter, CheckCircle, XCircle, AlertCircle, Send, ChevronDown, ChevronUp } from "lucide-react";
 import type { ConsultationBooking } from "@shared/schema";
-import { ref, push, orderByChild, startAt, query as fbQuery, get } from "firebase/database";
+import { ref, push, set, orderByChild, startAt, query as fbQuery, get } from "firebase/database";
 import { rtdb } from "@/lib/firebase";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -86,9 +86,10 @@ export default function AdminConsultationsPage() {
         }
       }
 
-      // Push to Firebase
+      // Push to Firebase (v9 modular API — `newRef.set(...)` is the old
+      // namespaced v8 style and throws "set is not a function" at runtime).
       const newRef = push(signupsRef);
-      await newRef.set({
+      await set(newRef, {
         firstName: name,
         location,
         destination,

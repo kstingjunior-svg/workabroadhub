@@ -55,9 +55,23 @@ export default function UnmatchedPaymentsPage() {
         { event: "*", schema: "public", table: "payments" },
         (payload: any) => {
           console.log("🔥 LIVE UPDATE:", payload);
-          const updated = payload.new as UnmatchedPayment;
+          // 2026-08 audit: payload.new is the FULL payments row, not just
+          // the unmatched-list shape. A row leaves the unmatched list when
+          // it either gets a user_id assigned (matched to a user) OR its
+          // status flips to a terminal one. Check both, not a non-existent
+          // `matched` column.
+          const updated = payload.new as UnmatchedPayment & {
+            user_id?: string | null;
+            status?: string;
+            matched?: boolean;
+          };
+          const nowMatched =
+            updated.matched === true ||
+            (updated.user_id != null && updated.user_id !== "") ||
+            updated.status === "completed" ||
+            updated.status === "refunded";
 
-          if (updated.matched === true) {
+          if (nowMatched) {
             // Payment resolved — drop it from the list immediately
             setPayments(prev => prev.filter(p => p.id !== updated.id));
           } else {

@@ -13,7 +13,7 @@ import { usePageSeo } from "@/hooks/use-page-seo";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, MapPin, CheckCircle2, Clock, Coins, FileText, ExternalLink, ChevronDown, ChevronUp, ArrowRight, Sparkles } from "lucide-react";
+import { Loader2, MapPin, CheckCircle2, Clock, Coins, FileText, ExternalLink, ChevronDown, ChevronUp, ArrowRight, Sparkles, Lock, ShieldCheck } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface Country {
@@ -224,7 +224,43 @@ export default function HubCountryPage() {
           {steps.length === 0 && (
             <div className="text-center py-8 text-slate-500">Loading steps…</div>
           )}
-          {steps.map((s) => {
+          {steps.map((s, stepIdx) => (
+            <div key={`wrap-${s.step_order}`}>
+              {/* 2026-08 (revenue-layer spec): Vault callout after Step 3.
+                  Soft dove-gray border, warm unlocked padlock icon, orange
+                  outlined activate button. Non-blocking — the "keep going
+                  without" line at the bottom acknowledges the free path. */}
+              {stepIdx === 3 && (
+                <div className="mb-4 rounded-3xl border border-slate-200 bg-white p-5 sm:p-6 shadow-sm" data-testid="hub-vault-callout">
+                  <div className="flex items-start gap-4">
+                    <div className="flex-shrink-0 h-10 w-10 rounded-full bg-amber-50 border border-amber-200 flex items-center justify-center">
+                      <Lock className="h-4 w-4 text-amber-700" />
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="font-serif text-lg font-bold text-slate-800" style={{ fontFamily: "Georgia, serif" }}>
+                        Tired of re-uploading your passport every time you switch pathways?
+                      </h4>
+                      <p className="text-sm text-slate-600 mt-2 leading-relaxed">
+                        For KES 3,900 a month (about $29), our Vault stores your passport, your CV, your photo, and every other document once — then auto-fills every application form for you and converts your CV into {country.name === "Germany" ? "Germany's official Europass" : country.name === "Canada" ? "Canada's IRCC" : country.name === "Australia" ? "Australia's DHA"  : "the destination country's official"} format. Most travelers save four hours on their first application alone; the Vault pays for itself before you even submit.
+                      </p>
+                      <div className="mt-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                        <Link href="/services/order/hub_vault_monthly">
+                          <Button
+                            variant="outline"
+                            className="rounded-2xl border-orange-500 text-orange-700 hover:bg-orange-50 gap-1.5"
+                            data-testid="hub-vault-activate"
+                          >
+                            Activate my Vault — KES 3,900/mo
+                          </Button>
+                        </Link>
+                        <span className="text-xs text-slate-500">Cancel anytime, keep your documents forever.</span>
+                      </div>
+                      <p className="text-xs text-slate-400 mt-3">You can keep going without the Vault — you'll just fill each form manually.</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {(() => {
             const isOpen = expandedSteps.has(s.step_order);
             const canDoNow = (s.depends_on_step_orders?.length ?? 0) === 0;
             return (
@@ -282,7 +318,33 @@ export default function HubCountryPage() {
                 </CardContent>
               </Card>
             );
-          })}
+          })()}
+            </div>
+          ))}
+        </div>
+
+        {/* 2026-08 (revenue-layer spec): locked Tracker preview at the bottom
+            of the timeline. Aesthetic lock, not an actual block — the /hub/tracker
+            page IS reachable, but this visual reminds free users that Vault
+            members get the pretty progress-tracked version. */}
+        <div className="mt-6 rounded-3xl border border-dashed border-slate-300 bg-slate-50/70 p-6 flex items-start gap-4" data-testid="hub-tracker-preview-locked">
+          <div className="flex-shrink-0 h-10 w-10 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center">
+            <Lock className="h-4 w-4 text-slate-500" />
+          </div>
+          <div className="flex-1">
+            <div className="font-semibold text-slate-700">Track this journey step-by-step</div>
+            <p className="text-sm text-slate-500 mt-1">Free with any Vault subscription. Every step you tick off updates automatically, and we'll nudge you on WhatsApp if you're falling behind pace.</p>
+            <div className="mt-3 flex flex-wrap gap-2 items-center">
+              <Link href="/services/order/hub_vault_monthly">
+                <Button variant="outline" size="sm" className="rounded-2xl border-orange-500 text-orange-700 hover:bg-orange-50">
+                  Get the Vault + Tracker
+                </Button>
+              </Link>
+              <Link href="/hub/tracker" className="text-xs text-slate-500 hover:text-slate-700 underline">
+                Or open the basic tracker anyway
+              </Link>
+            </div>
+          </div>
         </div>
       </section>
 

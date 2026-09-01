@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { fetchCsrfToken } from "@/lib/queryClient";
+import { StkReadyModal } from "@/components/stk-ready-modal";
 import { useAuth } from "@/hooks/use-auth";
 import { ShareSuccessModal } from "@/components/share-success-modal";
 import type { ShareCardProps } from "@/components/share-success-card";
@@ -553,6 +554,25 @@ export default function ServiceOrderFlow() {
     }
   }
 
+  // 2026-08 (Tony's payment-failure audit): pre-STK Get Ready gate. The
+  // "Pay KES X" button now opens the Get Ready modal instead of firing STK
+  // directly. onConfirmed runs the actual payForService function below.
+  const [readyOpen, setReadyOpen] = useState(false);
+  function openReadyGate() {
+    // Cheap client-side phone validity check first so we don't gate the user
+    // through the modal only to bounce them on invalid phone.
+    const phoneClean = mpesaPhone.replace(/\s+/g, "").trim();
+    if (!/^(?:0|254|\+254)?7\d{8}$/.test(phoneClean) && !/^(?:0|254|\+254)?1\d{8}$/.test(phoneClean)) {
+      toast({
+        title: "Invalid M-Pesa number",
+        description: "Use 07XXXXXXXX, 01XXXXXXXX, or +254XXXXXXXXX",
+        variant: "destructive",
+      });
+      return;
+    }
+    setReadyOpen(true);
+  }
+
   // ── STANDALONE M-PESA STK PUSH ──────────────────────────────────────────────
   // Triggered by the "Pay KES X via M-Pesa" button on the paying stage. Calls
   // /api/payments/initiate with the service slug as the serviceId so the
@@ -1013,7 +1033,7 @@ export default function ServiceOrderFlow() {
               </div>
 
               <Button
-                onClick={payForService}
+                onClick={openReadyGate}
                 disabled={payingNow || stkSent || !mpesaPhone}
                 size="lg"
                 className="w-full bg-green-600 hover:bg-green-700"
@@ -1261,6 +1281,16 @@ export default function ServiceOrderFlow() {
         </Card>
       </div>
       </div>
+
+      {/* 2026-08: pre-STK Get Ready gate */}
+      <StkReadyModal
+        open={readyOpen}
+        onOpenChange={setReadyOpen}
+        onConfirmed={payForService}
+        amountKes={typeof amount === "number" ? amount : 0}
+        phone={mpesaPhone}
+        productName={serviceName || meta?.name}
+      />
     </>
   );
 }
