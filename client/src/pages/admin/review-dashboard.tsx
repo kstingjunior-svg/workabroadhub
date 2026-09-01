@@ -230,7 +230,7 @@ export default function ReviewDashboard() {
                               {order.qualityCheckData && getRiskBadge(order.qualityCheckData)}
                             </div>
                             <p className="text-sm text-muted-foreground">
-                              Order #{order.id.slice(0, 8)} • {formatDate(order.createdAt)}
+                              Order #{order.id?.slice(0, 8) ?? "—"} • {formatDate(order.createdAt)}
                             </p>
                             {order.qualityCheckData?.failConditions?.length > 0 && (
                               <div className="flex flex-wrap gap-1">
@@ -331,7 +331,7 @@ export default function ReviewDashboard() {
               Review: {selectedOrder?.serviceName}
             </DialogTitle>
             <DialogDescription>
-              Order #{selectedOrder?.id.slice(0, 8)} • Quality Score: {selectedOrder?.qualityScore}%
+              Order #{selectedOrder?.id?.slice(0, 8) ?? "—"} • Quality Score: {selectedOrder?.qualityScore}%
             </DialogDescription>
           </DialogHeader>
 

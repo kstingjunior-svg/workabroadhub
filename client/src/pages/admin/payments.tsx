@@ -1692,7 +1692,7 @@ export default function AdminPayments() {
                             {receipt ? (
                               <span className="font-mono text-sm text-green-700 dark:text-green-400">{receipt}</span>
                             ) : (
-                              <span className="font-mono text-xs text-muted-foreground">#{payment.id.slice(0, 8)}</span>
+                              <span className="font-mono text-xs text-muted-foreground">#{payment.id?.slice(0, 8) ?? "unknown"}</span>
                             )}
                           </td>
                           <td className="p-4 hidden lg:table-cell text-sm max-w-[180px]">
@@ -1705,7 +1705,12 @@ export default function AdminPayments() {
                                   {email ? (
                                     <p className="font-medium text-sm leading-tight truncate">{email}</p>
                                   ) : (
-                                    <p className="text-muted-foreground text-xs font-mono truncate">{payment.userId.slice(0, 12)}…</p>
+                                    {/* 2026-08 FIX (Tony's admin/payments crash): orphan M-Pesa
+                                        payments have userId=null (see server/routes.ts:5405 where
+                                        we deliberately create these with needs_review=true for
+                                        admin triage). Unguarded .slice() crashed the entire admin
+                                        page into 'Just a small detour'. Optional-chain + fallback. */}
+                                    <p className="text-muted-foreground text-xs font-mono truncate">{payment.userId?.slice(0, 12) ?? "orphan payment"}…</p>
                                   )}
                                   {name && <p className="text-xs text-muted-foreground leading-tight">{name}</p>}
                                 </div>
@@ -2004,7 +2009,7 @@ export default function AdminPayments() {
                               <div className="font-medium text-xs">{p.userEmail || p.userId}</div>
                               {p.userName && <div className="text-muted-foreground text-xs">{p.userName}</div>}
                             </td>
-                            <td className="p-3 hidden sm:table-cell font-mono text-xs text-muted-foreground">{p.id.slice(0, 12)}…</td>
+                            <td className="p-3 hidden sm:table-cell font-mono text-xs text-muted-foreground">{p.id?.slice(0, 12) ?? "unknown"}…</td>
                             <td className="p-3 font-semibold text-xs">KES {(p.amount || 0).toLocaleString()}</td>
                             <td className="p-3">
                               <Badge variant="outline" className="text-xs border-amber-300 text-amber-600 bg-amber-50 dark:bg-amber-950/30">

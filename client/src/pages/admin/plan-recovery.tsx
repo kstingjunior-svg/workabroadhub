@@ -201,7 +201,7 @@ export default function PlanRecoveryPage() {
                         <tbody>
                           {scan.users.map((u) => (
                             <tr key={u.id} className="border-t">
-                              <td className="px-3 py-2 font-mono text-xs">{u.id.slice(0, 8)}…</td>
+                              <td className="px-3 py-2 font-mono text-xs">{u.id?.slice(0, 8) ?? "—"}…</td>
                               <td className="px-3 py-2">{u.email ?? "—"}</td>
                               <td className="px-3 py-2">
                                 <Badge variant="destructive">{u.plan}</Badge>
@@ -231,8 +231,8 @@ export default function PlanRecoveryPage() {
                         <tbody>
                           {scan.subscriptions.map((s) => (
                             <tr key={s.id} className="border-t">
-                              <td className="px-3 py-2 font-mono text-xs">{s.id.slice(0, 8)}…</td>
-                              <td className="px-3 py-2 font-mono text-xs">{s.user_id.slice(0, 8)}…</td>
+                              <td className="px-3 py-2 font-mono text-xs">{s.id?.slice(0, 8) ?? "—"}…</td>
+                              <td className="px-3 py-2 font-mono text-xs">{s.user_id?.slice(0, 8) ?? "orphan"}…</td>
                               <td className="px-3 py-2">
                                 <Badge variant="destructive">{s.plan}</Badge>
                               </td>

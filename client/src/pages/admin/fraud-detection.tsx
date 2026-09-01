@@ -434,8 +434,8 @@ function MpesaFraudTab() {
                 <TableBody>
                   {fraudPayments.map(p => (
                     <TableRow key={p.id} className="bg-red-50/50 dark:bg-red-950/20" data-testid={`suspicious-row-${p.id}`}>
-                      <TableCell className="text-xs font-mono">{p.id.slice(0, 8)}…</TableCell>
-                      <TableCell className="text-xs font-mono">{p.userId.slice(0, 8)}…</TableCell>
+                      <TableCell className="text-xs font-mono">{p.id?.slice(0, 8) ?? "—"}…</TableCell>
+                      <TableCell className="text-xs font-mono">{p.userId?.slice(0, 8) ?? "orphan"}…</TableCell>
                       <TableCell className="text-xs font-semibold text-red-700">{p.amount.toLocaleString()}</TableCell>
                       <TableCell>{statusBadge(p.status)}</TableCell>
                       <TableCell className="text-xs font-mono text-red-700 max-w-[180px] truncate" title={p.fraudReason ?? ""}>
@@ -880,7 +880,7 @@ export default function AdminFraudDetection() {
                     {flags.map(flag => (
                       <TableRow key={flag.id} data-testid={`flag-row-${flag.id}`}>
                         <TableCell>
-                          <span className="text-sm font-mono">{flag.entityId.slice(0, 8)}...</span>
+                          <span className="text-sm font-mono">{flag.entityId?.slice(0, 8) ?? "—"}...</span>
                           <br />
                           <span className="text-xs text-muted-foreground">{flag.entityType}</span>
                         </TableCell>
@@ -991,7 +991,7 @@ export default function AdminFraudDetection() {
                     {blacklistEntries.map(entry => (
                       <TableRow key={entry.id} data-testid={`blacklist-row-${entry.id}`}>
                         <TableCell>
-                          <span className="text-sm font-mono">{entry.entityId.slice(0, 8)}...</span>
+                          <span className="text-sm font-mono">{entry.entityId?.slice(0, 8) ?? "—"}...</span>
                         </TableCell>
                         <TableCell>
                           <Badge variant="outline">{entry.entityType}</Badge>

@@ -420,7 +420,7 @@ function SubmissionsTab() {
                       {sub.description && <p className="text-sm text-muted-foreground mt-1.5 line-clamp-2">{sub.description}</p>}
                       <p className="text-xs text-muted-foreground mt-1.5">
                         Submitted {new Date(sub.timestamp).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" })}
-                        {" · "}ID: <span className="font-mono">{sub.submittedBy.slice(0, 14)}…</span>
+                        {" · "}ID: <span className="font-mono">{sub.submittedBy?.slice(0, 14) ?? "anon"}…</span>
                       </p>
                     </div>
 

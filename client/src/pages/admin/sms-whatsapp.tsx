@@ -589,7 +589,7 @@ export default function AdminSmsWhatsApp() {
                     <div
                       key={o.orderId}
                       className="flex items-center justify-between p-3 rounded-lg border bg-muted/40"
-                      data-testid={`abandoned-order-${o.orderId.slice(0, 8)}`}
+                      data-testid={`abandoned-order-${o.orderId?.slice(0, 8) ?? "unknown"}`}
                     >
                       <div className="min-w-0">
                         <p className="font-medium text-sm truncate">{o.serviceName}</p>

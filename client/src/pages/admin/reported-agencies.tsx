@@ -201,7 +201,7 @@ export default function AdminReportedAgenciesPage() {
                         </div>
                         <p className="text-sm text-slate-700 font-medium mb-1">"{r.reason}"</p>
                         <p className="text-xs text-slate-400">
-                          Reported by: <span className="font-mono">{r.reportedBy.slice(0, 12)}…</span>
+                          Reported by: <span className="font-mono">{r.reportedBy?.slice(0, 12) ?? "anon"}…</span>
                           {" · "}{new Date(r.timestamp).toLocaleString()}
                         </p>
                       </div>

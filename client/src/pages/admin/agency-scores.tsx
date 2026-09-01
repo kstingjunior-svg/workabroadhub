@@ -349,7 +349,7 @@ export default function AdminAgencyScores() {
                       <TableRow key={score.id} data-testid={`score-row-${score.agencyId}`}>
                         <TableCell>
                           <span className="font-mono text-sm" data-testid={`agency-id-${score.agencyId}`} title={score.agencyId}>
-                            {score.agencyId.length > 12 ? `${score.agencyId.slice(0, 12)}...` : score.agencyId}
+                            {(score.agencyId?.length ?? 0) > 12 ? `${score.agencyId.slice(0, 12)}...` : (score.agencyId ?? "—")}
                           </span>
                         </TableCell>
                         <TableCell>

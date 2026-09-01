@@ -514,7 +514,7 @@ export default function AdminAnalytics() {
                       <tbody>
                         {recentTxns.map((t, i) => (
                           <tr key={t.id} className="border-b last:border-0 hover:bg-muted/30" data-testid={`row-txn-${i}`}>
-                            <td className="py-2 pr-3 font-mono text-xs text-muted-foreground">{t.id.slice(0, 8)}…</td>
+                            <td className="py-2 pr-3 font-mono text-xs text-muted-foreground">{t.id?.slice(0, 8) ?? "—"}…</td>
                             <td className="py-2 pr-3"><MethodBadge method={t.method} /></td>
                             <td className="py-2 pr-3 text-right tabular-nums font-medium">
                               {t.currency !== "KES" ? `$${t.amount} (${fmtKes(t.amountKes)})` : fmtKes(t.amount)}

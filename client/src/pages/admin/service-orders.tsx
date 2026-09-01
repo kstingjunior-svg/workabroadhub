@@ -309,7 +309,7 @@ export default function AdminServiceOrders() {
                           )}
                         </div>
                         <p className="text-sm text-muted-foreground">
-                          Order #{order.id.slice(0, 8)} • {formatDate(order.createdAt)} • {formatPrice(order.amount)}
+                          Order #{order.id?.slice(0, 8) ?? "—"} • {formatDate(order.createdAt)} • {formatPrice(order.amount)}
                           {order.qualityScore !== null && order.qualityScore !== undefined && (
                             <span className="ml-2">• Quality: {order.qualityScore}%</span>
                           )}
@@ -344,7 +344,7 @@ export default function AdminServiceOrders() {
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-lg">Order Details</CardTitle>
-                    <CardDescription>#{selectedOrder.id.slice(0, 8)}</CardDescription>
+                    <CardDescription>#{selectedOrder.id?.slice(0, 8) ?? "—"}</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div>

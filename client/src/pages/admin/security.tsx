@@ -255,7 +255,7 @@ function FraudAlertsTab() {
             <TableBody>
               {fraudAlerts.map((p: any) => (
                 <TableRow key={p.id} data-testid={`row-fraud-${p.id}`}>
-                  <TableCell className="text-xs font-mono">{p.id.slice(0, 8)}…</TableCell>
+                  <TableCell className="text-xs font-mono">{p.id?.slice(0, 8) ?? "—"}…</TableCell>
                   <TableCell className="text-xs">{p.userId}</TableCell>
                   <TableCell className="font-semibold">{p.amount?.toLocaleString()}</TableCell>
                   <TableCell className="text-xs text-red-600 max-w-[220px] break-words">{p.fraudReason ?? "—"}</TableCell>

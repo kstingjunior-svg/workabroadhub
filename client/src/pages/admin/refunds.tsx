@@ -222,9 +222,9 @@ export default function AdminRefunds() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
                           <Badge variant={badgeConf.variant}>{badgeConf.label}</Badge>
-                          <span className="text-xs text-muted-foreground font-mono truncate">{r.id.slice(0, 8)}…</span>
+                          <span className="text-xs text-muted-foreground font-mono truncate">{r.id?.slice(0, 8) ?? "—"}…</span>
                         </div>
-                        <p className="text-sm font-medium truncate">Payment: {r.paymentId.slice(0, 12)}…</p>
+                        <p className="text-sm font-medium truncate">Payment: {r.paymentId?.slice(0, 12) ?? "—"}…</p>
                         <p className="text-xs text-muted-foreground line-clamp-2">{r.reason}</p>
                         {r.adminNotes && (
                           <p className="text-xs text-blue-600 mt-1">Admin: {r.adminNotes}</p>
