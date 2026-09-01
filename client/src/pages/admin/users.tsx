@@ -1020,7 +1020,14 @@ export default function UsersPage() {
                   {stuckPayments?.map(sp => (
                     <div key={sp.paymentId} className="flex items-center justify-between gap-3 p-3 hover:bg-orange-50/60 dark:hover:bg-orange-900/10" data-testid={`row-stuck-${sp.paymentId}`}>
                       <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{sp.userName || sp.userId.slice(0, 10) + "…"}</p>
+                        {/* 2026-08 FIX (Tony's "Just a small detour" on /admin/users):
+                            sp.userId can be NULL for orphan payments (e.g. M-Pesa
+                            landed without a matching user record). Unguarded .slice
+                            threw "Cannot read properties of null (reading 'slice')"
+                            inside Array.map → crashed the entire admin page into the
+                            global ErrorBoundary. Optional-chain + fallback keeps
+                            the row visible so admins can still see + investigate. */}
+                        <p className="text-sm font-medium truncate">{sp.userName || (sp.userId?.slice(0, 10) ?? "orphan") + "…"}</p>
                         <p className="text-xs text-muted-foreground truncate">{sp.userEmail ?? sp.userPhone ?? "—"} · KES {(sp.amount ?? 0).toLocaleString()}</p>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
@@ -1124,7 +1131,7 @@ export default function UsersPage() {
                             <button onClick={() => copyId(user.id)} className="flex items-center gap-1 mt-0.5 text-[10px] text-muted-foreground/50 hover:text-muted-foreground font-mono transition-colors" data-testid={`copy-id-${user.id}`} title="Copy ID">
                               {copiedId === user.id
                                 ? <><CheckCheck className="h-2.5 w-2.5 text-green-500" /><span className="text-green-500">copied</span></>
-                                : <><Copy className="h-2.5 w-2.5" />{user.id.slice(0, 12)}…</>}
+                                : <><Copy className="h-2.5 w-2.5" />{user.id?.slice(0, 12) ?? "no-id"}…</>}
                             </button>
                           </td>
                           <td className="p-3 hidden md:table-cell text-sm text-muted-foreground">{user.firstName} {user.lastName}</td>
