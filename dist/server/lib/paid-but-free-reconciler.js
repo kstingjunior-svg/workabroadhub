@@ -24,6 +24,7 @@ var __importStar = (this && this.__importStar) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.runPaidButFreeReconciler = runPaidButFreeReconciler;
+exports.recoverMyPayment = recoverMyPayment;
 exports.startPaidButFreeReconciler = startPaidButFreeReconciler;
 exports.stopPaidButFreeReconciler = stopPaidButFreeReconciler;
 /**
@@ -60,8 +61,14 @@ exports.stopPaidButFreeReconciler = stopPaidButFreeReconciler;
  *     just hit success — the pipeline is probably still mid-run).
  */
 const db_1 = require("../db");
-const SWEEP_INTERVAL_MS = 15 * 60 * 1000; // every 15 minutes
-const SETTLE_DELAY_MIN = 5; // ignore payments less than 5 min old
+// 2026-08 (Tony's "users pay and aren't let in" fresh report):
+// Cut from 15 min → 2 min. A stuck paying user complaining on WhatsApp
+// waits at most 2 min before we auto-recover them (usually much less —
+// they'll typically be caught within seconds of the next sweep). The
+// settle delay drops from 5 min → 60 seconds so we don't chase a payment
+// pipeline that's still legitimately mid-run, but we don't wait forever.
+const SWEEP_INTERVAL_MS = 2 * 60 * 1000; // every 2 minutes
+const SETTLE_DELAY_MIN = 1; // ignore payments less than 1 min old
 const MAX_LOOKBACK_DAYS = 7; // don't reactivate week-old payments
 const RECOVERY_BATCH_CAP = 50;
 let _timer = null;
@@ -158,6 +165,82 @@ async function runPaidButFreeReconciler() {
     catch (err) {
         console.error("[paid-but-free] sweep failed:", err?.message);
         return { scanned, recovered, errors: errors + 1, durationMs: Date.now() - start };
+    }
+}
+/**
+ * 2026-08 (Tony's "users pay and aren't let in" fix): user-triggered version.
+ * Called from POST /api/payments/recover-mine. Runs the SAME recovery logic
+ * against the calling user's own recent payments only — bypasses the 2-min
+ * sweep so a stuck user gets unblocked the instant they check.
+ *
+ * Returns { recovered: boolean, plan: string, message: string } so the
+ * client can decide whether to reload and refresh the auth cache.
+ */
+async function recoverMyPayment(userId) {
+    if (!userId)
+        return { recovered: false, plan: "free", scanned: 0, message: "Missing user id." };
+    const { rows } = await db_1.pool.query(`
+    SELECT
+      p.id            AS payment_id,
+      p.user_id       AS user_id,
+      p.plan_id       AS plan_id,
+      p.service_id    AS service_id,
+      p.amount        AS amount,
+      p.mpesa_receipt_number AS mpesa_receipt,
+      COALESCE(u.plan, 'free') AS current_plan
+    FROM payments p
+    JOIN users u ON u.id = p.user_id
+    WHERE p.user_id = $1
+      AND p.status IN ('success', 'completed')
+      AND p.plan_id IS NOT NULL
+      AND p.plan_id <> ''
+      AND p.plan_id IN ('trial', 'basic', 'monthly', 'yearly', 'pro', 'pro_referral')
+      AND p.created_at > NOW() - INTERVAL '24 hours'
+      AND COALESCE(u.plan, 'free') = 'free'
+    ORDER BY p.created_at DESC
+    LIMIT 5
+  `, [userId]);
+    if (rows.length === 0) {
+        // Either they haven't paid recently, or they're already activated.
+        const { rows: uRows } = await db_1.pool.query(`SELECT COALESCE(plan,'free') AS plan FROM users WHERE id = $1`, [userId]);
+        const currentPlan = uRows[0]?.plan ?? "free";
+        return {
+            recovered: false,
+            plan: currentPlan,
+            scanned: 0,
+            message: currentPlan === "free"
+                ? "We don't see any recent successful payment on your account. If you just paid, wait 30 seconds and try again — or message us on WhatsApp with your M-Pesa code."
+                : `Your plan is already active: ${currentPlan}. Try refreshing the page.`,
+        };
+    }
+    const { storage } = await Promise.resolve().then(() => __importStar(require("../storage")));
+    const { runPaymentPipeline } = await Promise.resolve().then(() => __importStar(require("../services/paymentPipeline")));
+    const row = rows[0]; // most recent stuck payment
+    try {
+        const payment = await storage.getPaymentById(row.payment_id);
+        const user = await storage.getUserById(row.user_id);
+        if (!payment || !user) {
+            return { recovered: false, plan: "free", scanned: 1, message: "Payment record moved. Please contact support." };
+        }
+        console.warn(`[paid-but-free][manual] RECOVER userId=${userId} paymentId=${row.payment_id} plan=${row.plan_id}`);
+        await runPaymentPipeline({
+            payment, user,
+            method: "mpesa",
+            transactionId: row.mpesa_receipt || row.payment_id,
+            planId: row.plan_id,
+        });
+        const verify = await storage.getUserById(userId);
+        if (verify?.plan && verify.plan !== "free") {
+            return { recovered: true, plan: verify.plan, scanned: 1, message: `Your ${verify.plan} plan is now active. Refresh the page.` };
+        }
+        return {
+            recovered: false, plan: "free", scanned: 1,
+            message: "We tried to activate your plan but the database rejected the update. Our team has been alerted — please message us on WhatsApp with your M-Pesa code and we'll fix it manually.",
+        };
+    }
+    catch (err) {
+        console.error(`[paid-but-free][manual] failed for userId=${userId}: ${err?.message}`);
+        return { recovered: false, plan: "free", scanned: 1, message: "Something went wrong. Please message us on WhatsApp with your M-Pesa code." };
     }
 }
 function startPaidButFreeReconciler() {

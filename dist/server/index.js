@@ -715,6 +715,33 @@ app.use((req, res, next) => {
         catch (err) {
             console.error("[Server] ❌ AutoApply route registration failed:", err?.message);
         }
+        // 2026-08 (Tony's "users pay and aren't let in" fix):
+        // Self-service payment recovery endpoint. Client calls this from the
+        // post-payment success screen the moment M-Pesa confirms — pipeline
+        // sometimes lags behind the callback, so we let the user trigger their
+        // OWN recovery instead of waiting 2 min for the sweep.
+        // Registered here (before registerRoutes catch-all) with the same
+        // pattern as AutoApply + Hub.
+        try {
+            app.post("/api/payments/recover-mine", async (req, res) => {
+                const userId = req?.user?.claims?.sub ?? req?.user?.id ?? req?.session?.customUserId;
+                if (!userId)
+                    return res.status(401).json({ message: "Please sign in first." });
+                try {
+                    const { recoverMyPayment } = await Promise.resolve().then(() => __importStar(require("./lib/paid-but-free-reconciler")));
+                    const result = await recoverMyPayment(String(userId));
+                    return res.json(result);
+                }
+                catch (e) {
+                    console.error("[POST /api/payments/recover-mine] error:", e?.message);
+                    return res.status(500).json({ message: "Could not check your payment right now." });
+                }
+            });
+            console.log("[Server] ✓ POST /api/payments/recover-mine registered");
+        }
+        catch (err) {
+            console.error("[Server] ❌ recover-mine registration failed:", err?.message);
+        }
         // 2026-08: Global Work Visa Hub — self-contained module. Registers BEFORE
         // registerRoutes() for the same catch-all reason as AutoApply above.
         // Owns its own tables (hub_countries, hub_visa_types, hub_application_
