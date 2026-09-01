@@ -307,6 +307,12 @@ export default function UsersPage() {
   // WebSocket can't connect (corporate proxy, browser plugin, etc.).
   const [livePaidSessions, setLivePaidSessions] = useState<ActiveSessionRow[]>([]);
   const [wsPresenceConnected, setWsPresenceConnected] = useState(false);
+  // 2026-08 (Tony's "why 3 online here but 35 on landing?" confusion fix):
+  // Server broadcasts totalOnline (every browser incl. anonymous) + paidOnline
+  // (only PAID signed-in users). Capture both so the widget can show the
+  // full picture — 'Paid users online: 3 (of 35 total visitors)' — instead
+  // of a bare '3 online' number that read as 'only 3 people on the whole site'.
+  const [presenceTotals, setPresenceTotals] = useState<{ totalOnline: number; paidOnline: number }>({ totalOnline: 0, paidOnline: 0 });
   useEffect(() => {
     const proto = window.location.protocol === "https:" ? "wss" : "ws";
     const ws = new WebSocket(`${proto}://${window.location.host}/ws/analytics`);
@@ -316,6 +322,13 @@ export default function UsersPage() {
       try {
         const msg = JSON.parse(evt.data);
         if (msg.type === "presence_update" && Array.isArray(msg.paidUsers)) {
+          // Capture the aggregate counts alongside the paid-users list
+          if (typeof msg.totalOnline === "number" || typeof msg.paidOnline === "number") {
+            setPresenceTotals({
+              totalOnline: Number(msg.totalOnline) || 0,
+              paidOnline:  Number(msg.paidOnline)  || 0,
+            });
+          }
           // 2026-08 FIX (Tony's "Just a small detour" on /admin/users):
           // The WS broadcast occasionally sent a paid user with a null or
           // malformed lastSeen. new Date(null).toISOString() is "1970-01-01…"
@@ -804,10 +817,15 @@ export default function UsersPage() {
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
                   <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500" />
                 </span>
-                Live Sessions
+                Paid Users Online
                 <Badge className="ml-1 bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300 border-green-200 dark:border-green-700 text-xs">
-                  {liveSessions.length} online
+                  {presenceTotals.paidOnline || liveSessions.length} paid
                 </Badge>
+                {presenceTotals.totalOnline > 0 && (
+                  <Badge variant="outline" className="ml-1 text-xs text-muted-foreground">
+                    of {presenceTotals.totalOnline} total
+                  </Badge>
+                )}
               </CardTitle>
               <Button
                 variant="ghost"
@@ -820,7 +838,13 @@ export default function UsersPage() {
                 Refresh
               </Button>
             </div>
-            <CardDescription className="text-xs">Users browsing right now — updates every 30 s</CardDescription>
+            <CardDescription className="text-xs">
+              Paying customers browsing right now (list below).
+              {presenceTotals.totalOnline > 0 && (
+                <> Total site visitors (incl. anonymous):{" "}
+                <strong>{presenceTotals.totalOnline}</strong> — most are free/anonymous browsers on the landing, country hubs, blog, and tools.</>
+              )}
+            </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             {liveSessions.length === 0 ? (
