@@ -1705,11 +1705,11 @@ export default function AdminPayments() {
                                   {email ? (
                                     <p className="font-medium text-sm leading-tight truncate">{email}</p>
                                   ) : (
-                                    {/* 2026-08 FIX (Tony's admin/payments crash): orphan M-Pesa
-                                        payments have userId=null (see server/routes.ts:5405 where
-                                        we deliberately create these with needs_review=true for
-                                        admin triage). Unguarded .slice() crashed the entire admin
-                                        page into 'Just a small detour'. Optional-chain + fallback. */}
+                                    // 2026-08 FIX (Tony's admin/payments crash): orphan M-Pesa
+                                    // payments have userId=null (server/routes.ts:5405 creates
+                                    // these deliberately with needs_review=true for admin triage).
+                                    // Unguarded .slice() crashed the entire admin page into
+                                    // 'Just a small detour'. Optional-chain + fallback.
                                     <p className="text-muted-foreground text-xs font-mono truncate">{payment.userId?.slice(0, 12) ?? "orphan payment"}…</p>
                                   )}
                                   {name && <p className="text-xs text-muted-foreground leading-tight">{name}</p>}
