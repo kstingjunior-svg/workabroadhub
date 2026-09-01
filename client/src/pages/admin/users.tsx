@@ -316,21 +316,40 @@ export default function UsersPage() {
       try {
         const msg = JSON.parse(evt.data);
         if (msg.type === "presence_update" && Array.isArray(msg.paidUsers)) {
+          // 2026-08 FIX (Tony's "Just a small detour" on /admin/users):
+          // The WS broadcast occasionally sent a paid user with a null or
+          // malformed lastSeen. new Date(null).toISOString() is "1970-01-01…"
+          // but new Date("bad string").toISOString() THROWS "Invalid time
+          // value" — that exception crashed the whole admin page into the
+          // global ErrorBoundary ("Just a small detour"). Safe-parse each
+          // date + skip malformed rows.
+          const safeIso = (v: any): string => {
+            try {
+              const d = v != null ? new Date(v) : new Date();
+              if (isNaN(d.getTime())) return new Date().toISOString();
+              return d.toISOString();
+            } catch { return new Date().toISOString(); }
+          };
           setLivePaidSessions(
-            msg.paidUsers.map((p: any) => ({
-              user_id:      p.userId,
-              email:        p.email,
-              phone:        p.phone,
-              first_name:   p.firstName,
-              last_name:    p.lastName,
-              plan:         p.planId,
-              session_id:   p.userId, // one row per user, key by userId
-              current_page: p.currentPage,
-              last_seen:    new Date(p.lastSeen).toISOString(),
-            }))
+            msg.paidUsers
+              .filter((p: any) => p && typeof p.userId === "string" && p.userId.length > 0)
+              .map((p: any) => ({
+                user_id:      p.userId,
+                email:        p.email ?? null,
+                phone:        p.phone ?? null,
+                first_name:   p.firstName ?? null,
+                last_name:    p.lastName ?? null,
+                plan:         p.planId ?? "free",
+                session_id:   p.userId, // one row per user, key by userId
+                current_page: p.currentPage ?? "",
+                last_seen:    safeIso(p.lastSeen),
+              }))
           );
         }
-      } catch { /* malformed message */ }
+      } catch (err) {
+        // Malformed message or shape mismatch — never bubble to ErrorBoundary.
+        console.warn("[admin/users] presence_update parse failed (non-fatal):", (err as any)?.message);
+      }
     };
     ws.onclose = () => { setWsPresenceConnected(false); };
     ws.onerror = () => { setWsPresenceConnected(false); };
