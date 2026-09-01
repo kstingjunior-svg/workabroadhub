@@ -715,6 +715,42 @@ app.use((req, res, next) => {
         catch (err) {
             console.error("[Server] ❌ AutoApply route registration failed:", err?.message);
         }
+        // 2026-08 (Tony's stuck-payments audit): admin-triggered M-Pesa
+        // reconciler. Existing scheduler runs every 5 min automatically, but
+        // admins clicking "Run reconciler now" on the stuck-payments queue want
+        // an immediate response — fire the same runReconciliation() function
+        // on demand and return the result.
+        try {
+            app.post("/api/admin/mpesa/reconcile-now", async (req, res) => {
+                const userId = req?.user?.claims?.sub ?? req?.user?.id ?? req?.session?.customUserId;
+                if (!userId)
+                    return res.status(401).json({ message: "Please sign in first." });
+                try {
+                    // Require admin
+                    const { pool } = await Promise.resolve().then(() => __importStar(require("./db")));
+                    const { rows } = await pool.query(`SELECT is_admin, role FROM users WHERE id = $1 LIMIT 1`, [userId]);
+                    const u = rows[0];
+                    if (!u || (!u.is_admin && u.role !== "ADMIN" && u.role !== "SUPER_ADMIN")) {
+                        return res.status(403).json({ message: "Admins only." });
+                    }
+                    const { runReconciliation } = await Promise.resolve().then(() => __importStar(require("./mpesa-reconciler")));
+                    const result = await runReconciliation();
+                    return res.json({
+                        ok: true,
+                        ...result,
+                        message: `Reconciler run complete: pulled ${result.pulled}, stored ${result.stored}, reconciled ${result.reconciled}. ${result.errors.length ? `Errors: ${result.errors.length}.` : ""}`,
+                    });
+                }
+                catch (e) {
+                    console.error("[POST /api/admin/mpesa/reconcile-now] error:", e?.message);
+                    return res.status(500).json({ message: "Reconciler failed: " + (e?.message || "unknown") });
+                }
+            });
+            console.log("[Server] ✓ POST /api/admin/mpesa/reconcile-now registered");
+        }
+        catch (err) {
+            console.error("[Server] ❌ mpesa reconcile-now registration failed:", err?.message);
+        }
         // 2026-08 (Tony's "users pay and aren't let in" fix):
         // Self-service payment recovery endpoint. Client calls this from the
         // post-payment success screen the moment M-Pesa confirms — pipeline
