@@ -31,6 +31,7 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, Phone, CheckCircle2, AlertCircle, Zap } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { fetchCsrfToken } from "@/lib/queryClient";
+import { StkReadyModal } from "@/components/stk-ready-modal";
 
 interface Props {
   open: boolean;
@@ -85,7 +86,12 @@ export function CvFixLiteInstantPayModal({ open, onOpenChange, cvFile, score }: 
     return /^254[17]\d{8}$/.test(normalisedPhone());
   }
 
-  async function startPaymentFlow() {
+  // 2026-08 (Tony's payment-failure audit): pre-STK Get Ready gate.
+  // Front-of-house click opens the ready modal; the actual STK flow runs
+  // inside onConfirmed via _runPaymentFlow.
+  const [readyOpen, setReadyOpen] = useState(false);
+
+  function startPaymentFlow() {
     if (!cvFile) {
       toast({ title: "CV file missing", description: "Please re-upload your CV first.", variant: "destructive" });
       return;
@@ -94,6 +100,11 @@ export function CvFixLiteInstantPayModal({ open, onOpenChange, cvFile, score }: 
       toast({ title: "Phone number doesn't look right", description: "Use the M-Pesa number you'll pay from (e.g. 0712345678).", variant: "destructive" });
       return;
     }
+    setReadyOpen(true);
+  }
+
+  async function _runPaymentFlow() {
+    if (!cvFile || !phoneValid()) return;
 
     // ── Step 1: create the service order with the CV file ─────────────────
     setStage("creating-order");
@@ -421,6 +432,17 @@ export function CvFixLiteInstantPayModal({ open, onOpenChange, cvFile, score }: 
           );
         })()}
       </DialogContent>
+      {/* 2026-08 (Tony's payment-failure audit): Get Ready gate so users
+          unlock phone, close low-signal apps, and grab PIN before the STK
+          push fires. Cuts silent PIN timeouts. */}
+      <StkReadyModal
+        open={readyOpen}
+        onOpenChange={setReadyOpen}
+        onConfirmed={_runPaymentFlow}
+        amountKes={99}
+        phone={normalisedPhone()}
+        productName="CV Revamp"
+      />
     </Dialog>
   );
 }
