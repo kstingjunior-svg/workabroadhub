@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { X, Check, Crown, Shield, ArrowRight, Phone, Loader2, CheckCircle, AlertCircle, RefreshCw } from "lucide-react";
+import { StkReadyModal } from "@/components/stk-ready-modal";
 import { useUpgradeModal, UpgradeModalTrigger } from "@/contexts/upgrade-modal-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { FeeBreakdown } from "@/components/fee-breakdown";
@@ -233,12 +234,18 @@ export function UpgradeModal() {
     setStep("pay");
   };
 
+  // 2026-08 (Tony's STK failure-rate audit): 208 of 501 monthly failures
+  // came from DS-timeout + No-response — users tapped Pay while their phone
+  // was locked, in another app, or out of network. Show the Get Ready modal
+  // BEFORE firing STK so they have 5 seconds to prepare their phone.
+  const [readyOpen, setReadyOpen] = useState(false);
+
   const handleSendPrompt = () => {
     if (!isValidSafaricomNumber(phone)) {
       toast({ title: "Invalid Phone Number", description: "Enter a valid Safaricom number: 07XXXXXXXX or +254XXXXXXXXX", variant: "destructive" });
       return;
     }
-    payMutation.mutate();
+    setReadyOpen(true);
   };
 
   const handleClose = () => {
@@ -597,6 +604,20 @@ export function UpgradeModal() {
           </div>
         )}
       </div>
+
+      {/* 2026-08: pre-STK Get Ready gate — cuts DS-timeout + No-response failures. */}
+      <StkReadyModal
+        open={readyOpen}
+        onOpenChange={setReadyOpen}
+        onConfirmed={() => payMutation.mutate()}
+        amountKes={proFinalPrice ?? 0}
+        phone={phone}
+        productName={
+          selectedPlan === "trial"   ? "24-hour Trial" :
+          selectedPlan === "monthly" ? "Monthly Plan" :
+                                       "Yearly Pro Plan"
+        }
+      />
     </div>
   );
 }
