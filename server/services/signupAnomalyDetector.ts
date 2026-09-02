@@ -213,7 +213,7 @@ export async function recordSignupEvent(
   if (ipCount >= PER_IP_LIMIT)    { flagged = true; reason = (reason ? reason + "," : "") + `ip_velocity:${ipCount}`; }
 
   // Write audit trail (fire and forget)
-  writeAuditRecord({ ...record, flagged, reason }).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+  writeAuditRecord({ ...record, flagged, reason }).catch((err) => reportRejection(err, 'services/signupAnomalyDetector'));
 
   // Analyse and maybe alert (fire and forget — non-blocking)
   analyzeThreats(ip).catch((err) => {

@@ -155,7 +155,7 @@ Do you want me to start your application now?
 
   // 🔥 CLOSING — user confirmed, send payment link
   if (intent === "closing") {
-    trackEvent(user?.id ?? null, "click_service", { service: "ats_cv_optimization" }).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+    trackEvent(user?.id ?? null, "click_service", { service: "ats_cv_optimization" }).catch((err) => reportRejection(err, 'ai/router'));
 
     return `
 🔥 Let's get you started.

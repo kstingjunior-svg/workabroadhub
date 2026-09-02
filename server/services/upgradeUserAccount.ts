@@ -149,7 +149,7 @@ export async function upgradeUserAccount(opts: UpgradeOptions): Promise<UpgradeR
     await storage.updatePayment(paymentId, {
       status: "failed",
       failReason: `user_not_found:${identity}`,
-    } as any).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+    } as any).catch((err) => reportRejection(err, 'services/upgradeUserAccount'));
     console.error(
       `[Payment][UPGRADE] FAILED | reason=user_not_found | ${identity} ` +
       `| paymentId=${paymentId} | txn=${transactionId} | method=${method.toUpperCase()} | KES=${amountKes}`
@@ -199,7 +199,7 @@ export async function upgradeUserAccount(opts: UpgradeOptions): Promise<UpgradeR
       status: "failed",
       isSuspicious: true,
       fraudReason: `invalid_service_id:${serviceId}`,
-    } as any).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+    } as any).catch((err) => reportRejection(err, 'services/upgradeUserAccount'));
     return {
       success: false,
       planActivated: planType,
@@ -224,13 +224,13 @@ export async function upgradeUserAccount(opts: UpgradeOptions): Promise<UpgradeR
       status: "failed",
       isSuspicious: true,
       fraudReason: `insufficient_amount:required=${minRequired},got=${amountKes}`,
-    } as any).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+    } as any).catch((err) => reportRejection(err, 'services/upgradeUserAccount'));
     await storage.createUserNotification({
       userId: resolvedUserId,
       type: "error",
       title: "Payment Amount Insufficient",
       message: `Your payment of KES ${amountKes} was received but does not meet the KES ${minRequired} required for the ${resolvedPlan} plan. Please contact support.`,
-    }).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+    }).catch((err) => reportRejection(err, 'services/upgradeUserAccount'));
     console.error(
       `[Payment][UPGRADE] FAILED | reason=insufficient_amount | userId=${resolvedUserId} ` +
       `| paymentId=${paymentId} | txn=${transactionId} | method=${method.toUpperCase()} ` +
@@ -299,7 +299,7 @@ export async function upgradeUserAccount(opts: UpgradeOptions): Promise<UpgradeR
     );
 
   // ── 7. Funnel stage: mark as paid ─────────────────────────────────────────
-  storage.updateUserStage(resolvedUserId, "paid").catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+  storage.updateUserStage(resolvedUserId, "paid").catch((err) => reportRejection(err, 'services/upgradeUserAccount'));
 
   // ── 8. In-app notification ────────────────────────────────────────────────
   const planLabel = resolvedPlan.charAt(0).toUpperCase() + resolvedPlan.slice(1);
@@ -312,7 +312,7 @@ export async function upgradeUserAccount(opts: UpgradeOptions): Promise<UpgradeR
         `Your ${planLabel} plan is now active until ${expiresAt.toLocaleDateString("en-KE")}. ` +
         `${method === "mpesa" ? "M-Pesa" : "PayPal"} Ref: ${transactionId}.`,
     })
-    .catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+    .catch((err) => reportRejection(err, 'services/upgradeUserAccount'));
 
   // ── 9. Real-time WebSocket push to user's browser ─────────────────────────
   import("../websocket")
@@ -325,7 +325,7 @@ export async function upgradeUserAccount(opts: UpgradeOptions): Promise<UpgradeR
         transactionId,
       });
     })
-    .catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+    .catch((err) => reportRejection(err, 'services/upgradeUserAccount'));
 
   console.info(
     `[Payment][UPGRADE] SUCCESS | userId=${resolvedUserId} | email=${user.email || "unknown"} ` +
@@ -339,7 +339,7 @@ export async function upgradeUserAccount(opts: UpgradeOptions): Promise<UpgradeR
   db.insert(activityEvents).values({
     type: "upgrade",
     location: upgradeLocation,
-  }).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+  }).catch((err) => reportRejection(err, 'services/upgradeUserAccount'));
 
   // Mirror to Firebase RTDB — subscription + payment record + daily/monthly revenue rollup
   import("./firebaseRtdb").then(({ pushActivityEvent, recordPaymentEvent, trackRevenue }) => {
@@ -362,7 +362,7 @@ export async function upgradeUserAccount(opts: UpgradeOptions): Promise<UpgradeR
       serviceId,
       subscriptionKey:     `${resolvedPlan}_plan`,
       subscriptionExpiryMs: expiresAt.getTime(),
-    }).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+    }).catch((err) => reportRejection(err, 'services/upgradeUserAccount'));
 
     // trackRevenue writes to revenue/daily and revenue/monthly for the Live Dashboard
     trackRevenue({
@@ -371,8 +371,8 @@ export async function upgradeUserAccount(opts: UpgradeOptions): Promise<UpgradeR
       serviceId,
       method,
       reference: transactionId,
-    }).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
-  }).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+    }).catch((err) => reportRejection(err, 'services/upgradeUserAccount'));
+  }).catch((err) => reportRejection(err, 'services/upgradeUserAccount'));
 
   import("./activityLogger").then(({ logActivity }) => {
     logActivity({
@@ -388,7 +388,7 @@ export async function upgradeUserAccount(opts: UpgradeOptions): Promise<UpgradeR
         expiresAt: expiresAt.toISOString(),
       },
     });
-  }).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+  }).catch((err) => reportRejection(err, 'services/upgradeUserAccount'));
 
   // Track CV funnel: 'upgraded' (fires for both M-Pesa and PayPal)
   import("./firebaseRtdb").then(({ trackCvFunnelEvent }) => {
@@ -398,7 +398,7 @@ export async function upgradeUserAccount(opts: UpgradeOptions): Promise<UpgradeR
       amountKes,
       transactionId,
     });
-  }).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+  }).catch((err) => reportRejection(err, 'services/upgradeUserAccount'));
 
   return { success: true, planActivated: resolvedPlan, expiresAt };
 }

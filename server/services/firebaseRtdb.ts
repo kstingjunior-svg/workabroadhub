@@ -982,11 +982,11 @@ export function startFirebasePruneScheduler(maxAgeDays = 30): void {
 
   // Run once at startup (deferred by 2 min so server is fully warm)
   const warmup = setTimeout(() => {
-    pruneFirebaseCollections(maxAgeDays).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+    pruneFirebaseCollections(maxAgeDays).catch((err) => reportRejection(err, 'services/firebaseRtdb'));
   }, 2 * 60 * 1000);
 
   _pruneTimer = setInterval(() => {
-    pruneFirebaseCollections(maxAgeDays).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+    pruneFirebaseCollections(maxAgeDays).catch((err) => reportRejection(err, 'services/firebaseRtdb'));
   }, RUN_EVERY_MS);
 
   console.log(`[RTDB][Prune] Daily scheduler started — retention=${maxAgeDays}d`);

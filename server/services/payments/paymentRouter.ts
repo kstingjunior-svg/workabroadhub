@@ -227,7 +227,7 @@ export async function confirmPayment(
         title: "Payment Confirmed",
         message: `Your ${paymentMethod.toUpperCase()} payment (${transactionRef}) has been confirmed.`,
         type: "order_update",
-      }).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      }).catch((err) => reportRejection(err, 'services/payments/paymentRouter'));
     }
 
     return {

@@ -183,16 +183,16 @@ async function reconcileTransaction(tx: any): Promise<void> {
           const PLAN_DAYS: Record<string, number> = { trial: 1, basic: 1, monthly: 30, yearly: 365, pro: 365, pro_referral: 365 };
           const expiresAt = new Date(Date.now() + (PLAN_DAYS[resolvedTier] ?? 1) * 24 * 60 * 60 * 1000);
           await storage.activateUserPlan(matchedPayment.userId, resolvedTier, matchedPayment.id, expiresAt);
-          await storage.updateUserStage(matchedPayment.userId, "paid").catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+          await storage.updateUserStage(matchedPayment.userId, "paid").catch((err) => reportRejection(err, 'mpesa-reconciler'));
           storage.createUserNotification({
             userId: matchedPayment.userId, type: "success",
             title: `${resolvedTier.charAt(0).toUpperCase() + resolvedTier.slice(1)} Plan Activated`,
             message: `Your M-Pesa payment was confirmed via reconciliation (${transId}). ${resolvedTier} plan active — expires ${expiresAt.toLocaleDateString("en-KE")}.`,
-          }).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+          }).catch((err) => reportRejection(err, 'mpesa-reconciler'));
           const { sendProActivationEmail } = await import("./email");
           const user = await storage.getUserById(matchedPayment.userId).catch(() => null);
           if (user?.email && (resolvedTier === "pro" || resolvedTier === "yearly")) {
-            sendProActivationEmail(user.email, user.firstName, expiresAt, transId).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+            sendProActivationEmail(user.email, user.firstName, expiresAt, transId).catch((err) => reportRejection(err, 'mpesa-reconciler'));
           }
           await db.execute(sql`UPDATE mpesa_pull_transactions SET reconciled = TRUE, reconciled_at = NOW() WHERE transaction_id = ${transId}`);
           return;

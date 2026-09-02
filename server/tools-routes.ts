@@ -588,16 +588,16 @@ export function registerToolsRoutes(
               topCountry: null,
               profession: null,
               topJobs:    [],
-            }).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+            }).catch((err) => reportRejection(err, 'tools-routes'));
           }
           // Track uploaded + analyzed for web flow
           const { trackCvFunnelEvent } = await import("./services/firebaseRtdb");
-          trackCvFunnelEvent(userId!, "uploaded", { source: "web" }).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+          trackCvFunnelEvent(userId!, "uploaded", { source: "web" }).catch((err) => reportRejection(err, 'tools-routes'));
           trackCvFunnelEvent(userId!, "analyzed", {
             source: "web",
             atsScore: aiResult.score ?? null,
             atsGrade: aiResult.grade ?? null,
-          }).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+          }).catch((err) => reportRejection(err, 'tools-routes'));
         } catch { /* non-critical */ }
 
         return res.json({
@@ -1069,8 +1069,8 @@ Return ONLY this JSON (no markdown): { "content": "<numbered Q&A with each quest
 
       // Track download (Step 5 & 6)
       const userId = req.user?.id ?? null;
-      await storage.recordTemplateDownload({ templateId: template.id, userId }).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
-      await storage.recordToolUsage({ userId, toolName: "cv_templates", metadata: { templateId: template.id } }).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      await storage.recordTemplateDownload({ templateId: template.id, userId }).catch((err) => reportRejection(err, 'tools-routes'));
+      await storage.recordToolUsage({ userId, toolName: "cv_templates", metadata: { templateId: template.id } }).catch((err) => reportRejection(err, 'tools-routes'));
 
       // Serve plain-text CV skeleton as downloadable file
       const content = generateTemplatePlaceholder(template);
@@ -1194,7 +1194,7 @@ Return ONLY this JSON (no markdown): { "content": "<numbered Q&A with each quest
             toolName: "job_match",
             metadata: { matchCount: matches.length },
           })
-          .catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+          .catch((err) => reportRejection(err, 'tools-routes'));
 
         return res.json({
           jobs: matches,

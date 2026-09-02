@@ -1295,7 +1295,7 @@ export class DatabaseStorage implements IStorage {
     const [created] = await db.insert(userSubscriptions).values(subscription).returning();
     // Sync denormalised plan field
     if (subscription.plan && subscription.status === "active") {
-      await db.update(users).set({ plan: subscription.plan, updatedAt: new Date() }).where(eq(users.id, subscription.userId)).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      await db.update(users).set({ plan: subscription.plan, updatedAt: new Date() }).where(eq(users.id, subscription.userId)).catch((err) => reportRejection(err, 'storage'));
     }
     return created;
   }
@@ -1412,12 +1412,12 @@ export class DatabaseStorage implements IStorage {
 
       // Subscription exists but is expired AND no recent payment — proceed with downgrade
       console.warn(`[getUserPlan] ${logCtx} → result="free" reason=sub_expired_lazy_downgrade`);
-      db.update(userSubscriptions).set({ status: "expired", updatedAt: new Date() }).where(eq(userSubscriptions.userId, userId)).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      db.update(userSubscriptions).set({ status: "expired", updatedAt: new Date() }).where(eq(userSubscriptions.userId, userId)).catch((err) => reportRejection(err, 'storage'));
       db.update(users).set({ plan: "free", subscriptionStatus: "expired", updatedAt: new Date() }).where(eq(users.id, userId)).catch((err) => {
         console.warn(`[getUserPlan] Could not sync expired plan for userId=${userId}:`, err?.message);
       });
       // Mirror expiry to Supabase subscriptions table
-      import("./supabaseClient").then(({ downgradeSupabaseUser }) => downgradeSupabaseUser(userId)).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      import("./supabaseClient").then(({ downgradeSupabaseUser }) => downgradeSupabaseUser(userId)).catch((err) => reportRejection(err, 'storage'));
       return "free";
     }
 
@@ -1929,7 +1929,7 @@ export class DatabaseStorage implements IStorage {
       .update(users)
       .set({ userStage: stage, updatedAt: new Date() })
       .where(eq(users.id, userId))
-      .catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      .catch((err) => reportRejection(err, 'storage'));
   }
 
   async getNonPayingUsers(limit = 500): Promise<User[]> {

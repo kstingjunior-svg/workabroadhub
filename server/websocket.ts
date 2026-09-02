@@ -83,7 +83,7 @@ export function initWebSocketServer(httpServer: Server, sessionParser?: RequestH
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({ type: "stats_update", ...data, timestamp: Date.now() }));
         }
-      }).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      }).catch((err) => reportRejection(err, 'websocket'));
     }
 
     // 2026-06 REAL-TIME: also send the current presence snapshot so a new

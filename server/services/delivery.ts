@@ -72,7 +72,7 @@ export async function deliverService(payment: any, user: any): Promise<void> {
       await sendWhatsApp(
         phone,
         `✅ Payment Confirmed — KES ${amount.toLocaleString()} received!\n\nHi ${name}, your ATS-optimised CV is being generated right now. We'll message you here the moment it's ready (usually 1-2 minutes).\n\nThank you for choosing WorkAbroad Hub 🌍`,
-      ).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      ).catch((err) => reportRejection(err, 'services/delivery'));
 
       storage.createUserNotification({
         userId: user.id,
@@ -80,7 +80,7 @@ export async function deliverService(payment: any, user: any): Promise<void> {
         title: "CV Generation Started",
         message:
           "Your ATS CV is being generated. You'll get a WhatsApp + email the moment it's ready.",
-      }).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      }).catch((err) => reportRejection(err, 'services/delivery'));
 
       break;
     }
@@ -90,7 +90,7 @@ export async function deliverService(payment: any, user: any): Promise<void> {
       await sendWhatsApp(
         phone,
         `🎯 Interview Coaching Activated!\n\nHi ${name}, thank you for your payment of KES ${amount.toLocaleString()}.\n\nNanjila will reach out shortly on WhatsApp to schedule your session.\n\nPlease reply with:\n1️⃣ Target Job Role\n2️⃣ Target Country\n\nGet ready to land your overseas job! 💼`,
-      ).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      ).catch((err) => reportRejection(err, 'services/delivery'));
 
       storage.createUserNotification({
         userId: user.id,
@@ -98,7 +98,7 @@ export async function deliverService(payment: any, user: any): Promise<void> {
         title: "Interview Coaching Activated",
         message:
           "Check your WhatsApp — Nanjila will reach out to schedule your coaching session.",
-      }).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      }).catch((err) => reportRejection(err, 'services/delivery'));
 
       break;
     }
@@ -113,7 +113,7 @@ export async function deliverService(payment: any, user: any): Promise<void> {
       await sendWhatsApp(
         phone,
         `🚀 Job Alerts Activated!\n\nHi ${name}, you'll now receive verified international jobs directly on WhatsApp.\n\nPayment of KES ${amount.toLocaleString()} confirmed ✅\n\nStay ready — your next opportunity is coming!`,
-      ).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      ).catch((err) => reportRejection(err, 'services/delivery'));
 
       storage.createUserNotification({
         userId: user.id,
@@ -121,7 +121,7 @@ export async function deliverService(payment: any, user: any): Promise<void> {
         title: "Job Alerts Activated",
         message:
           "You'll now receive verified international job alerts directly on WhatsApp.",
-      }).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      }).catch((err) => reportRejection(err, 'services/delivery'));
 
       break;
     }
@@ -185,7 +185,7 @@ export async function deliverService(payment: any, user: any): Promise<void> {
             `- Nanjila 🤖`,
           ].join("\n");
 
-      await sendWhatsApp(phone, waMessage).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      await sendWhatsApp(phone, waMessage).catch((err) => reportRejection(err, 'services/delivery'));
 
       storage.createUserNotification({
         userId: user.id,
@@ -194,7 +194,7 @@ export async function deliverService(payment: any, user: any): Promise<void> {
         message: cvText
           ? `Your ${planLabel} plan is active for 360 days. Your ATS CV has been sent to your WhatsApp.`
           : `Your ${planLabel} plan is active for 360 days. Your ATS CV will arrive on WhatsApp shortly.`,
-      }).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      }).catch((err) => reportRejection(err, 'services/delivery'));
 
       break;
     }
@@ -205,7 +205,7 @@ export async function deliverService(payment: any, user: any): Promise<void> {
       await sendWhatsApp(
         phone,
         `📄 Visa Guide Ready!\n\nHi ${name}, thank you for your payment of KES ${amount.toLocaleString()} ✅\n\nYour comprehensive visa guide is now available in your WorkAbroad Hub dashboard under *My Services*.\n\nFor any questions, reply to this message and Nanjila will assist you 🤝`,
-      ).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      ).catch((err) => reportRejection(err, 'services/delivery'));
 
       storage.createUserNotification({
         userId: user.id,
@@ -213,7 +213,7 @@ export async function deliverService(payment: any, user: any): Promise<void> {
         title: "Visa Guide Unlocked",
         message:
           "Your visa guide is available in your dashboard under My Services.",
-      }).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      }).catch((err) => reportRejection(err, 'services/delivery'));
 
       break;
     }
@@ -224,7 +224,7 @@ export async function deliverService(payment: any, user: any): Promise<void> {
       await sendWhatsApp(
         phone,
         `📞 Consultation Booked!\n\nHi ${name}, your payment of KES ${amount.toLocaleString()} has been received ✅\n\nOur team will contact you within 24 hours on WhatsApp to confirm your consultation slot.\n\nIf you have any questions before then, simply reply to this message.\n\n— WorkAbroad Hub Team 🌍`,
-      ).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      ).catch((err) => reportRejection(err, 'services/delivery'));
 
       storage.createUserNotification({
         userId: user.id,
@@ -232,7 +232,7 @@ export async function deliverService(payment: any, user: any): Promise<void> {
         title: "Consultation Confirmed",
         message:
           "Our team will contact you within 24 hours to confirm your consultation slot.",
-      }).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      }).catch((err) => reportRejection(err, 'services/delivery'));
 
       break;
     }
@@ -461,7 +461,7 @@ export async function deliverService(payment: any, user: any): Promise<void> {
         await sendWhatsApp(
           phone,
           `✅ Payment Confirmed!\n\nHi ${name}, your payment of KES ${amount.toLocaleString()} has been received.\n\nYour service is being processed. Our team will reach out if any further action is needed.\n\n— WorkAbroad Hub 🌍`,
-        ).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+        ).catch((err) => reportRejection(err, 'services/delivery'));
       }
 
       storage.createUserNotification({
@@ -469,7 +469,7 @@ export async function deliverService(payment: any, user: any): Promise<void> {
         type: "info",
         title: "Payment Received",
         message: `Your payment of KES ${amount.toLocaleString()} was received. Your service is being processed.`,
-      }).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      }).catch((err) => reportRejection(err, 'services/delivery'));
 
       break;
     }

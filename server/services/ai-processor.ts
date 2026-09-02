@@ -1339,7 +1339,7 @@ export async function processAndDeliverOrder(orderId: string): Promise<{
         title: "Order Under Expert Review",
         message: `Your ${order.serviceName} is being personally reviewed by our team and will be delivered within 24 hours. We'll notify you as soon as it's ready.`,
         type: "order_update",
-      }).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      }).catch((err) => reportRejection(err, 'services/ai-processor'));
       return { success: false, autoDelivered: false, needsReview: true, error: result.error };
     }
 
@@ -1447,7 +1447,7 @@ export async function processAndDeliverOrder(orderId: string): Promise<{
         title: "Order Under Expert Review",
         message: `Our quality system flagged your ${order.serviceName} for a personal expert review to ensure the highest standard. You'll receive the final deliverable within 24 hours.`,
         type: "order_update",
-      }).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      }).catch((err) => reportRejection(err, 'services/ai-processor'));
 
       return { success: true, autoDelivered: false, needsReview: true };
     }

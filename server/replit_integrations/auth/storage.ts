@@ -80,7 +80,7 @@ class AuthStorage implements IAuthStorage {
 
     // Fire activity event + WebSocket notification for new Replit OIDC signups — fire and forget
     if (isNewSignup) {
-      db.insert(activityEvents).values({ type: "signup", location: null }).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      db.insert(activityEvents).values({ type: "signup", location: null }).catch((err) => reportRejection(err, 'replit_integrations/auth/storage'));
       // Dynamic import to avoid circular-dependency at startup
       import("../../websocket").then(({ broadcastNewUserEvent }) => {
         broadcastNewUserEvent({
@@ -93,7 +93,7 @@ class AuthStorage implements IAuthStorage {
           userAgent: "",
           timestamp: new Date().toISOString(),
         });
-      }).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      }).catch((err) => reportRejection(err, 'replit_integrations/auth/storage'));
     }
 
     if (!adminEmails.length) {

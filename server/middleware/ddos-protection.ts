@@ -25,7 +25,7 @@ function logThreatEvent(eventType: string, ip: string, endpoint: string, ua: str
     endpoint,
     userAgent: ua,
     metadata: meta ?? null,
-  }).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+  }).catch((err) => reportRejection(err, 'middleware/ddos-protection'));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -461,7 +461,7 @@ export function geoRestrictionMiddleware(req: Request, res: Response, next: Next
     }
   } else {
     // Pre-warm the cache for next request (async, non-blocking)
-    lookupGeo(ip).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+    lookupGeo(ip).catch((err) => reportRejection(err, 'middleware/ddos-protection'));
   }
 
   next();

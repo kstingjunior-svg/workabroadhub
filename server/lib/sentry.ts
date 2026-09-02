@@ -84,3 +84,31 @@ export function tagUser(userId: string | null | undefined, email?: string | null
   if (!initialised || !userId) return;
   Sentry.setUser({ id: userId, email: email ?? undefined });
 }
+
+/**
+ * 2026-09 (Sentry rollout): standard helper for fire-and-forget promise
+ * rejections. Replaces the ~140 identical inline
+ *
+ *   .catch((err) => { console.error('[routes] Unhandled rejection:',
+ *                     { error: err?.message, timestamp: ... }); })
+ *
+ * sites that were logging to console only. Now every one both logs (for
+ * grep parity) and reports to Sentry (so we get real dashboards, grouping,
+ * and alerts for the things that used to disappear into the log noise).
+ *
+ * Usage:
+ *   storage.doSomethingFireAndForget(x).catch((err) => reportRejection(err, 'x'));
+ *
+ * Tag is free-form — use whatever short label helps you find it in Sentry
+ * (e.g. 'stripe-webhook', 'email-send', 'referral-credit').
+ */
+export function reportRejection(err: unknown, tag: string = "unhandled-rejection"): void {
+  const msg = (err as any)?.message ?? String(err);
+  console.error(`[unhandled-rejection][${tag}]`, {
+    error: msg,
+    timestamp: new Date().toISOString(),
+  });
+  if (initialised) {
+    Sentry.captureException(err, { tags: { rejection_tag: tag } });
+  }
+}

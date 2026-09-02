@@ -261,7 +261,7 @@ export function registerQueueHandlers(): void {
       await sendWhatsApp(
         job.phone,
         `✅ Payment received! Your ATS CV is being prepared and will be sent to your WhatsApp shortly.`
-      ).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      ).catch((err) => reportRejection(err, 'queue'));
       throw err;
     }
   });

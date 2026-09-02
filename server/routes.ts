@@ -243,19 +243,19 @@ function touchLastActive(userId: string) {
     db.update(users)
       .set({ lastLogin: new Date() })
       .where(eq(users.id, userId))
-      .catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      .catch((err) => reportRejection(err, 'routes'));
     // Advance funnel stage: new → active (only for free-plan users not yet marked paid)
     storage.getUserById(userId).then((u) => {
       if (u && u.plan === "free" && u.userStage === "new") {
-        storage.updateUserStage(userId, "active").catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+        storage.updateUserStage(userId, "active").catch((err) => reportRejection(err, 'routes'));
       }
-    }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+    }).catch((err) => reportRejection(err, 'routes'));
   }
 }
 
 // Mark a user as paid in the funnel — called after any successful payment
 function markUserPaid(userId: string) {
-  storage.updateUserStage(userId, "paid").catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+  storage.updateUserStage(userId, "paid").catch((err) => reportRejection(err, 'routes'));
 }
 
 const initiatePaymentSchema = z.object({
@@ -3313,7 +3313,7 @@ Crawl-delay: 1`);
         // Local DB says paid — backfill Supabase so next request hits the fast path
         import("./supabaseClient").then(({ upgradeUserToPro }) =>
           upgradeUserToPro(user_id)
-        ).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+        ).catch((err) => reportRejection(err, 'routes'));
       }
 
       // ✅ ONLY PRO USERS REACH HERE
@@ -3683,7 +3683,7 @@ Crawl-delay: 1`);
         externalUrl = link?.url;
         // Also increment the click counter for analytics
         if (link) {
-          storage.incrementJobLinkClick(jobId).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+          storage.incrementJobLinkClick(jobId).catch((err) => reportRejection(err, 'routes'));
         }
       } else {
         return res.status(400).json({ message: "Invalid job type. Use: visa, agency, or portal" });
@@ -3904,7 +3904,7 @@ Crawl-delay: 1`);
           country: geo.country,
           deviceType: req.headers["user-agent"]?.includes("Mobile") ? "mobile" : "desktop",
           userAgent: req.headers["user-agent"],
-        }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+        }).catch((err) => reportRejection(err, 'routes'));
       }
 
       res.json({
@@ -4032,7 +4032,7 @@ Crawl-delay: 1`);
       // Fraud gate — block before any processing
       if (await isFraudUser(userId)) {
         const clientIp = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ?? req.socket?.remoteAddress ?? "unknown";
-        flagForManualReview(userId, { action: "payment_attempt_blocked", detail: "initiate endpoint", ip: clientIp }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+        flagForManualReview(userId, { action: "payment_attempt_blocked", detail: "initiate endpoint", ip: clientIp }).catch((err) => reportRejection(err, 'routes'));
         return res.status(403).json({
           message: "Your account has been flagged for review. Please contact support.",
           code:    "ACCOUNT_UNDER_REVIEW",
@@ -4087,7 +4087,7 @@ Crawl-delay: 1`);
         storage.createPaymentAuditLog({
           paymentId: null, event: "ip_rate_limit_exceeded", ip: clientIp,
           metadata: { userId, phone: normalizedPhone },
-        }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+        }).catch((err) => reportRejection(err, 'routes'));
         return res.status(429).json({ message: "Too many payment attempts from this network. Please try again later." });
       }
 
@@ -4097,7 +4097,7 @@ Crawl-delay: 1`);
         storage.createPaymentAuditLog({
           paymentId: null, event: "user_rate_limit_exceeded", ip: clientIp,
           metadata: { userId, phone: normalizedPhone },
-        }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+        }).catch((err) => reportRejection(err, 'routes'));
         return res.status(429).json({
           message: "Too many payment attempts. Please wait a few minutes before trying again."
         });
@@ -4112,9 +4112,9 @@ Crawl-delay: 1`);
         storage.createPaymentAuditLog({
           paymentId: null, event: "bot_abuse_detected", ip: clientIp,
           metadata: { userId, phone: normalizedPhone, attemptCount: ipAttemptCount },
-        }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+        }).catch((err) => reportRejection(err, 'routes'));
         // Escalate: increment IP lockout counter — after 5 increments IP is locked for 30 minutes
-        storage.incrementFailedAttempts(clientIp, "ip").catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+        storage.incrementFailedAttempts(clientIp, "ip").catch((err) => reportRejection(err, 'routes'));
         return res.status(429).json({ message: "Suspicious activity detected. Please contact support." });
       }
 
@@ -4132,7 +4132,7 @@ Crawl-delay: 1`);
           storage.createPaymentAuditLog({
             paymentId: existingStk.id, event: "duplicate_stk_push_blocked", ip: clientIp,
             metadata: { userId, phone: normalizedPhone, existingPaymentId: existingStk.id },
-          }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+          }).catch((err) => reportRejection(err, 'routes'));
           return res.status(409).json({
             hasPendingPayment: true,
             paymentId: existingStk.id,
@@ -4155,7 +4155,7 @@ Crawl-delay: 1`);
           storage.createPaymentAuditLog({
             paymentId: null, event: "duplicate_stk_push_blocked", ip: clientIp,
             metadata: { userId, phone: normalizedPhone },
-          }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+          }).catch((err) => reportRejection(err, 'routes'));
           return res.status(409).json({
             message: "A payment is already in progress for this phone number. Please wait ~2 minutes for it to expire, then try again."
           });
@@ -4274,7 +4274,7 @@ Crawl-delay: 1`);
         event:     "payment_row_created",
         ip:        clientIp,
         metadata:  { phone: normalizedPhone, amount: mpesaAmount, serviceId, planId: subscriptionPlanId, derivedSlug: derivedPlanId },
-      }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      }).catch((err) => reportRejection(err, 'routes'));
 
       // 2026-07 SAFETY NET: this endpoint only CREATES the row. The caller
       // must follow up with /api/mpesa/stk within a few seconds or the
@@ -4431,12 +4431,12 @@ Crawl-delay: 1`);
         merchantRequestId  = stkResponse.MerchantRequestID;
       } catch (mpesaError: any) {
         console.error("[/api/mpesa/stk] STK push failed:", mpesaError.response?.data || mpesaError.message);
-        await storage.updatePayment(payment.id, { status: "failed" } as any).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+        await storage.updatePayment(payment.id, { status: "failed" } as any).catch((err) => reportRejection(err, 'routes'));
         storage.createPaymentAuditLog({
           paymentId: payment.id, event: "stk_push_failed",
           ip: req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket?.remoteAddress || "unknown",
           metadata: { error: mpesaError.message, phone, amount },
-        }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+        }).catch((err) => reportRejection(err, 'routes'));
         // 2026-06: translate Daraja errors into Kenyan-friendly guidance + always
         // ship the Paybill fallback so the user has a path no matter what.
         const { friendlyMpesaError, MPESA_FALLBACK } = await import("./lib/mpesa-error-translator");
@@ -4485,7 +4485,7 @@ Crawl-delay: 1`);
         event:     "stk_push_initiated",
         ip:        req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket?.remoteAddress || "unknown",
         metadata:  { checkoutRequestId: safaricomId, merchantRequestId, phone, amount },
-      }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      }).catch((err) => reportRejection(err, 'routes'));
 
       return res.json({
         success:             true,
@@ -4671,7 +4671,7 @@ Crawl-delay: 1`);
         event: "stk_cancelled_for_retry",
         ip: clientIp,
         metadata: { userId, phone, retryTrigger: "user" },
-      }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      }).catch((err) => reportRejection(err, 'routes'));
 
       const useLiveMpesa = process.env.MPESA_CONSUMER_KEY && process.env.MPESA_CONSUMER_SECRET &&
         process.env.MPESA_SHORTCODE && process.env.MPESA_PASSKEY;
@@ -4733,7 +4733,7 @@ Crawl-delay: 1`);
         event:     "stk_push_initiated",
         ip:        clientIp,
         metadata:  { checkoutRequestId: checkoutId, phone, amount: oldPayment.amount, retryOf: paymentId },
-      }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      }).catch((err) => reportRejection(err, 'routes'));
 
       return res.json({
         success:           true,
@@ -4773,7 +4773,7 @@ Crawl-delay: 1`);
         event: "stk_timeout_expired",
         ip: req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket?.remoteAddress || "unknown",
         metadata: { userId, previousStatus: payment.status, reason: "60s_frontend_timeout" },
-      }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      }).catch((err) => reportRejection(err, 'routes'));
 
       console.log(`[Payment Timeout] paymentId=${paymentId} userId=${userId} ${payment.status} → failed`);
 
@@ -4785,7 +4785,7 @@ Crawl-delay: 1`);
           await notifyPaymentRecovery(phone);
           console.log(`[PaymentRecovery] Recovery message sent → ${phone} (paymentId=${paymentId})`);
         }
-      }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      }).catch((err) => reportRejection(err, 'routes'));
 
       return res.json({ status: "failed", changed: true, message: "Payment timed out and marked as failed." });
     } catch (err: any) {
@@ -4893,7 +4893,7 @@ Crawl-delay: 1`);
             event: "stk_query_recovered",
             ip: req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket?.remoteAddress || "unknown",
             metadata: { checkoutRequestId, receipt, resultCode, planId, recoveredViaStkQuery: true },
-          }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+          }).catch((err) => reportRejection(err, 'routes'));
 
           console.log(`[STK Query] ✅ Recovered payment ${payment.id} → plan=${planId} receipt=${receipt}`);
 
@@ -4986,7 +4986,7 @@ Crawl-delay: 1`);
         txCode,
         amount: payment.amount,
         paymentMethod: "manual_mpesa_paybill",
-      }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      }).catch((err) => reportRejection(err, 'routes'));
 
       res.json({
         status: "pending_manual_verification",
@@ -5104,7 +5104,7 @@ Crawl-delay: 1`);
         type: status === "rejected" ? "warning" : "success",
         title: notifTitle,
         message: notifMsg,
-      }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      }).catch((err) => reportRejection(err, 'routes'));
 
       res.json(updated);
     } catch (error) {
@@ -5294,7 +5294,7 @@ Crawl-delay: 1`);
       const effectiveUserId = user_id ?? userId;
       if (await isFraudUser(effectiveUserId)) {
         const clientIp = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ?? req.socket?.remoteAddress ?? "unknown";
-        flagForManualReview(effectiveUserId, { action: "payment_attempt_blocked", detail: `stk-push amount=${amount}`, ip: clientIp }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+        flagForManualReview(effectiveUserId, { action: "payment_attempt_blocked", detail: `stk-push amount=${amount}`, ip: clientIp }).catch((err) => reportRejection(err, 'routes'));
         return res.status(403).json({
           message: "Your account has been flagged for review. Please contact support.",
           code:    "ACCOUNT_UNDER_REVIEW",
@@ -5712,7 +5712,7 @@ Crawl-delay: 1`);
             pipelineUser = await storage.getUserByPhone(phonePaid).catch(() => null) ?? null;
             if (pipelineUser) {
               console.log(`[MPESA/PAYMENTS CALLBACK] Resolved user by phone=${phonePaid} → userId=${pipelineUser.id}`);
-              await storage.updatePayment(payment.id, { userId: pipelineUser.id } as any).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+              await storage.updatePayment(payment.id, { userId: pipelineUser.id } as any).catch((err) => reportRejection(err, 'routes'));
             }
           }
           if (pipelineUser) {
@@ -5721,7 +5721,7 @@ Crawl-delay: 1`);
               const supabaseUid = phonePaid
                 ? ((await resolveSupabaseUuidFromPhone(phonePaid)) ?? payment.userId)
                 : payment.userId;
-              upgradeUserToPro(supabaseUid).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+              upgradeUserToPro(supabaseUid).catch((err) => reportRejection(err, 'routes'));
               getIO().emit("user_upgraded", { user_id: supabaseUid });
             }
             const { runPaymentPipeline } = await import("./services/paymentPipeline");
@@ -5802,15 +5802,15 @@ Crawl-delay: 1`);
               subscriptionExpiryMs: payment.planId
                 ? planExpiry(payment.planId).getTime()
                 : undefined,
-            }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+            }).catch((err) => reportRejection(err, 'routes'));
             trackRevenue({
               userId:    payment.userId,
               amountKes: Number(finalAmount),
               serviceId: payment.serviceId ?? payment.planId ?? null,
               method:    "mpesa",
               reference: finalReceipt,
-            }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
-          }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+            }).catch((err) => reportRejection(err, 'routes'));
+          }).catch((err) => reportRejection(err, 'routes'));
 
           // 9. Send WhatsApp payment confirmation to the user
           //    Includes a personalised deep-link so they tap straight back to their service.
@@ -5855,7 +5855,7 @@ Crawl-delay: 1`);
             notifyUserPaymentUpdate(payment.userId, {
               type: "payment_update", paymentId: payment.id, status: "failed",
             });
-          }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+          }).catch((err) => reportRejection(err, 'routes'));
         }
 
         console.log(`[MPESA/PAYMENTS CALLBACK] ${payment.id} → ${newStatus} (ResultCode=${ResultCode})${mpesaReceipt ? ` | receipt=${mpesaReceipt}` : ""}`);
@@ -5959,15 +5959,15 @@ Crawl-delay: 1`);
             subscriptionExpiryMs: planId
               ? planExpiry(planId).getTime()
               : undefined,
-          }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+          }).catch((err) => reportRejection(err, 'routes'));
           trackRevenue({
             userId:    payment.userId,
             amountKes: Number(payment.amount),
             serviceId: ppServiceId,
             method:    "paypal",
             reference: captureId || payment.id,
-          }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
-        }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+          }).catch((err) => reportRejection(err, 'routes'));
+        }).catch((err) => reportRejection(err, 'routes'));
 
         // Sync completed payment to Supabase
         console.log('CALLING PAYMENT SYNC NOW');
@@ -5987,8 +5987,8 @@ Crawl-delay: 1`);
         if (planId) await upgradeUserToPro(payment.userId);
         if (planId) {
           const ppWebhookExpiry = new Date(); ppWebhookExpiry.setDate(ppWebhookExpiry.getDate() + 360);
-          syncSubscriptionToSupabase({ user_id: payment.userId, plan_id: "pro", provider: "paypal", status: "active", auto_renew: false, expires_at: ppWebhookExpiry }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
-          redeemAppliedPromo(payment.metadata).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+          syncSubscriptionToSupabase({ user_id: payment.userId, plan_id: "pro", provider: "paypal", status: "active", auto_renew: false, expires_at: ppWebhookExpiry }).catch((err) => reportRejection(err, 'routes'));
+          redeemAppliedPromo(payment.metadata).catch((err) => reportRejection(err, 'routes'));
         }
 
         // 7-8. runPaymentPipeline — processPayment → unlockService → deliverService → notify
@@ -6879,7 +6879,7 @@ Crawl-delay: 1`);
         transactionCode,
         paymentId: payment.id,
         note: note || "",
-      }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      }).catch((err) => reportRejection(err, 'routes'));
 
       // 2026-06 FIX: bust the auth-user cache so the next /api/auth/user
       // call returns the Pro plan immediately. Without this the grant
@@ -7192,7 +7192,7 @@ Crawl-delay: 1`);
         planId,
         note: note || "",
         wasRepair: payment.status === "success" || payment.status === "completed",
-      }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      }).catch((err) => reportRejection(err, 'routes'));
 
       console.log(`[Admin] Payment activated/repaired: paymentId=${paymentId} userId=${payment.userId} plan=${planId} by admin=${adminId} result=${result.success}`);
 
@@ -7832,7 +7832,7 @@ Crawl-delay: 1`);
               title: "Payment Confirmed — Order Processing",
               message: `M-Pesa payment of KES ${amount} confirmed (${receipt}). Your ${order.service_name} is being prepared.`,
               type: "order_update",
-            }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+            }).catch((err) => reportRejection(err, 'routes'));
           } else if ([1032, 1037, 2001].includes(queryRes.ResultCode)) {
             await storage.updateServiceOrder(order.id, { status: "cancelled" });
           }
@@ -7924,7 +7924,7 @@ Crawl-delay: 1`);
         type: "success",
         title: `${planId === "pro" ? "Pro" : "Basic"} Plan Activated!`,
         message: `Your ${planId === "pro" ? "Pro" : "Basic"} plan is now active. M-Pesa Receipt: ${receipt}.`,
-      }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      }).catch((err) => reportRejection(err, 'routes'));
 
       console.log(`[M-Pesa][ManualVerify] Plan ${planId} activated for user ${userId} via receipt ${receipt}`);
       res.json({ success: true, plan: planId, message: `Your ${planId === "pro" ? "Pro" : "Basic"} plan has been activated!` });
@@ -8035,7 +8035,7 @@ Crawl-delay: 1`);
         mpesaReceipt: receipt,
         transactionDate: new Date(),
         status: "success",
-      }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      }).catch((err) => reportRejection(err, 'routes'));
 
       // Activate the plan
       await storage.activateUserPlan(userId, planId, paymentId, oneYear);
@@ -8046,7 +8046,7 @@ Crawl-delay: 1`);
         type: "success",
         title: `${planId === "pro" ? "Pro" : "Basic"} Plan Activated!`,
         message: `Your ${planId === "pro" ? "Pro" : "Basic"} plan is now active until ${oneYear.toLocaleDateString("en-KE")}. M-Pesa Receipt: ${receipt}.`,
-      }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      }).catch((err) => reportRejection(err, 'routes'));
 
       console.log(`[PaymentSuccess] Plan ${planId} activated for user ${userId} | receipt=${receipt} | by=${callerId}`);
       return res.json({ success: true, plan: planId, expiresAt: oneYear, paymentId, message: `${planId === "pro" ? "Pro" : "Basic"} plan activated successfully!` });
@@ -8840,7 +8840,7 @@ Crawl-delay: 1`);
       });
 
       await storage.activateUserPlan(user.id, planId, payment.id, expiresAt);
-      await storage.updateUserStage(user.id, "paid").catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      await storage.updateUserStage(user.id, "paid").catch((err) => reportRejection(err, 'routes'));
 
       // 2026-06 FIX: invalidate the auth-user cache so the user's next
       // /api/auth/user call returns the freshly-granted plan instead of the
@@ -8879,7 +8879,7 @@ Crawl-delay: 1`);
         type: "success",
         title: `${planId === "trial" ? "Trial" : planId === "monthly" ? "Monthly" : "Pro"} Plan Activated`,
         message: `Your ${planId} plan has been activated by the admin team. Expires ${expiresAt.toLocaleDateString("en-KE")}.`,
-      }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      }).catch((err) => reportRejection(err, 'routes'));
 
       // Admin audit log
       await storage.logAdminAction(adminId, "manual_plan_grant", {
@@ -8889,7 +8889,7 @@ Crawl-delay: 1`);
         transactionRef,
         note,
         expiresAt,
-      }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      }).catch((err) => reportRejection(err, 'routes'));
 
       const wasCreated = !!(createIfNotFound && user.createdAt && Date.now() - new Date(user.createdAt).getTime() < 10000);
       console.info(`[ManualGrant] pro granted to userId=${user.id} (${raw}) by admin=${adminId} ref=${transactionRef} created=${wasCreated}`);
@@ -8990,14 +8990,14 @@ Crawl-delay: 1`);
       } as any);
 
       await storage.activateUserPlan(user.id, plan, payment.id, expiresAt);
-      await storage.updateUserStage(user.id, "paid").catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      await storage.updateUserStage(user.id, "paid").catch((err) => reportRejection(err, 'routes'));
 
       storage.createUserNotification({
         userId: user.id,
         type: "success",
         title: "Pro Plan Activated",
         message: `Your Pro plan has been activated. Expires ${expiresAt.toLocaleDateString("en-KE")}.`,
-      }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      }).catch((err) => reportRejection(err, 'routes'));
 
       await storage.logAdminAction(adminId, "admin_upgrade_by_identifier", {
         targetUserId: user.id,
@@ -9006,7 +9006,7 @@ Crawl-delay: 1`);
         plan,
         transactionRef,
         expiresAt,
-      }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      }).catch((err) => reportRejection(err, 'routes'));
 
       console.info(
         `[AdminUpgrade] pro granted to userId=${user.id} (${lookupType}="${raw}") by admin=${adminId} ref=${transactionRef}`
@@ -9107,14 +9107,14 @@ Crawl-delay: 1`);
           const expiresAt = planExpiry(resolvedTier);
           await storage.updatePayment(payment.id, { status: "success" });
           await storage.activateUserPlan(user.id, resolvedTier, payment.id, expiresAt);
-          await storage.updateUserStage(user.id, "paid").catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+          await storage.updateUserStage(user.id, "paid").catch((err) => reportRejection(err, 'routes'));
           storage.createUserNotification({
             userId: user.id, type: "success",
             title: `${resolvedTier.charAt(0).toUpperCase() + resolvedTier.slice(1)} Plan Activated`,
             message: `Your ${resolvedTier} plan has been activated. Expires ${expiresAt.toLocaleDateString("en-KE")}.`,
-          }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+          }).catch((err) => reportRejection(err, 'routes'));
           if (user.email && (resolvedTier === "pro" || resolvedTier === "yearly")) {
-            sendProActivationEmail(user.email, user.firstName, expiresAt, payment.transactionRef).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+            sendProActivationEmail(user.email, user.firstName, expiresAt, payment.transactionRef).catch((err) => reportRejection(err, 'routes'));
           }
           results.push({ userId: user.id, email: user.email ?? null, status: "activated", tier: resolvedTier });
         } catch (e: any) {
@@ -9124,7 +9124,7 @@ Crawl-delay: 1`);
 
       await storage.logAdminAction(adminId, "bulk_stuck_payment_activate", {
         planId, count: results.filter(r => r.status === "activated").length, results,
-      }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      }).catch((err) => reportRejection(err, 'routes'));
 
       const activated = results.filter(r => r.status === "activated").length;
       console.info(`[StuckPayments] Bulk activate: ${activated}/${stuck.length} payments activated by admin=${adminId}`);
@@ -9193,22 +9193,22 @@ Crawl-delay: 1`);
 
       await storage.updatePayment(paymentId, { status: "success" });
       await storage.activateUserPlan(user.id, resolvedTier, paymentId, expiresAt);
-      await storage.updateUserStage(user.id, "paid").catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      await storage.updateUserStage(user.id, "paid").catch((err) => reportRejection(err, 'routes'));
 
       storage.createUserNotification({
         userId: user.id,
         type: "success",
         title: `${resolvedTier.charAt(0).toUpperCase() + resolvedTier.slice(1)} Plan Activated`,
         message: `Your ${resolvedTier} plan has been activated. Expires ${expiresAt.toLocaleDateString("en-KE")}.`,
-      }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      }).catch((err) => reportRejection(err, 'routes'));
 
       if (user.email && (resolvedTier === "pro" || resolvedTier === "yearly")) {
-        sendProActivationEmail(user.email, user.firstName, expiresAt, payment.transactionRef).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+        sendProActivationEmail(user.email, user.firstName, expiresAt, payment.transactionRef).catch((err) => reportRejection(err, 'routes'));
       }
 
       await storage.logAdminAction(adminId, "manual_stuck_payment_activate", {
         paymentId, userId: user.id, planId: resolvedTier, transactionRef: payment.transactionRef, note,
-      }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      }).catch((err) => reportRejection(err, 'routes'));
 
       console.info(`[StuckPayments] Activated ${resolvedTier} for userId=${user.id} (${user.email}) paymentId=${paymentId} by admin=${adminId}`);
       res.json({ success: true, message: `${resolvedTier} plan activated for ${user.email || user.id}`, userId: user.id, planActivated: resolvedTier });
@@ -9303,21 +9303,21 @@ Crawl-delay: 1`);
 
         const expiresAt = planExpiry(resolvedTier);
         await storage.activateUserPlan(user.id, resolvedTier, paymentId, expiresAt);
-        await storage.updateUserStage(user.id, "paid").catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+        await storage.updateUserStage(user.id, "paid").catch((err) => reportRejection(err, 'routes'));
 
         storage.createUserNotification({
           userId: user.id, type: "success",
           title: `${resolvedTier.charAt(0).toUpperCase() + resolvedTier.slice(1)} Plan Activated`,
           message: `Your M-Pesa payment was confirmed by Safaricom (${receipt}). ${resolvedTier} plan active — expires ${expiresAt.toLocaleDateString("en-KE")}.`,
-        }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+        }).catch((err) => reportRejection(err, 'routes'));
 
         if (user.email && (resolvedTier === "pro" || resolvedTier === "yearly")) {
-          sendProActivationEmail(user.email, user.firstName, expiresAt, String(receipt)).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+          sendProActivationEmail(user.email, user.firstName, expiresAt, String(receipt)).catch((err) => reportRejection(err, 'routes'));
         }
 
         await storage.logAdminAction(adminId, "stuck_payment_safaricom_confirmed", {
           paymentId, userId: user.id, receipt: String(receipt), resultCode,
-        }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+        }).catch((err) => reportRejection(err, 'routes'));
 
         console.log(`[StuckPayments] ✓ Payment ${paymentId} confirmed by Safaricom → Pro activated for ${user.email}`);
         return res.json({
@@ -9422,14 +9422,14 @@ Crawl-delay: 1`);
           message: canRetry
             ? 'Your M-Pesa payment session expired. Tap "Retry Payment" to try again.'
             : "Your M-Pesa payment expired. Please start a new payment.",
-        }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+        }).catch((err) => reportRejection(err, 'routes'));
 
         storage.createPaymentAuditLog({
           paymentId: p.id,
           event: "admin_force_timeout",
           ip: String(req.ip || "admin"),
           metadata: { adminId: req.user?.id, minutesOld },
-        }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+        }).catch((err) => reportRejection(err, 'routes'));
 
         resolved++;
       }
@@ -9487,7 +9487,7 @@ Crawl-delay: 1`);
       await storage.logAdminAction(adminId, "unlock_user_payments", {
         targetUserId,
         timestamp: new Date().toISOString(),
-      }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      }).catch((err) => reportRejection(err, 'routes'));
       console.info(`[Admin] Payment lock cleared for userId=${targetUserId} by admin=${adminId}`);
       // Notify user
       storage.createUserNotification({
@@ -9495,7 +9495,7 @@ Crawl-delay: 1`);
         type: "info",
         title: "Payment Access Restored",
         message: "Your payment access has been restored by our team. You can now retry your payment.",
-      }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      }).catch((err) => reportRejection(err, 'routes'));
       res.json({ success: true, message: `Payment lock cleared for user ${targetUserId}` });
     } catch (err: any) {
       res.status(500).json({ message: "Failed to unlock user payments", error: err.message });
@@ -9704,7 +9704,7 @@ Crawl-delay: 1`);
       const activeUsers = getActiveUserCounts();
 
       // Refresh cache in background — don't block the response
-      setImmediate(() => { refreshPlatformStats().catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); }); });
+      setImmediate(() => { refreshPlatformStats().catch((err) => reportRejection(err, 'routes')); });
 
       res.json({
         totalUsers,
@@ -10772,7 +10772,7 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
         activeAuthenticated: active.authenticated,
       };
     });
-  }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+  }).catch((err) => reportRejection(err, 'routes'));
 
   // Combined admin data endpoint - returns users and payments in one call
   app.get("/api/admin/data", isAuthenticated, isAdmin, async (req: any, res) => {
@@ -10966,7 +10966,7 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
           forceUpgrade: !!forceUpgrade,
           originalStatus: payment.status,
         },
-      }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      }).catch((err) => reportRejection(err, 'routes'));
 
       const { upgradeUserAccount } = await import("./services/upgradeUserAccount");
       const result = await upgradeUserAccount({
@@ -10997,7 +10997,7 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
           alreadyProcessed: result.alreadyProcessed,
           success: result.success,
         },
-      }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      }).catch((err) => reportRejection(err, 'routes'));
 
       console.info(
         `[Reprocess] paymentId=${payment.id} | success=${result.success} | alreadyProcessed=${result.alreadyProcessed} | plan=${result.planActivated}`
@@ -11025,7 +11025,7 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
         event: "admin_reprocess_error",
         ip: String(req.ip || "admin"),
         metadata: { adminId: adminUser, error: error.message },
-      }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      }).catch((err) => reportRejection(err, 'routes'));
       res.status(500).json({ message: error.message || "Reprocess failed" });
     }
   });
@@ -11436,7 +11436,7 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
           flagForManualReview(String(recipientUser.id), {
             action: "payout_blocked_admin_attempted",
             detail: `referral=${id} phone=${phone} commission=${referral.commission}`,
-          }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+          }).catch((err) => reportRejection(err, 'routes'));
           return res.status(403).json({
             message: `Payout blocked — recipient (${phone}) is flagged for suspected fraud. Clear the flag in the Fraud dashboard first.`,
             code:    "RECIPIENT_UNDER_REVIEW",
@@ -11460,7 +11460,7 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
         conversationId:  transactionId || undefined,
         originatorConversationId: payoutResult.originatorConversationID || undefined,
         referralId:      String(referral.id),
-      }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      }).catch((err) => reportRejection(err, 'routes'));
 
       const updated = await storage.updateReferralStatus(
         parseInt(id), 
@@ -11504,12 +11504,12 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
         const params: any[] = result.ResultParameters?.ResultParameter || [];
         const receipt = params.find((p: any) => p.Key === "TransactionReceipt")?.Value;
         if (resultCode === 0) {
-          reconcilePayout(conversationId, "confirmed", { resultCode, receipt }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+          reconcilePayout(conversationId, "confirmed", { resultCode, receipt }).catch((err) => reportRejection(err, 'routes'));
         } else {
           reconcilePayout(conversationId, "failed", {
             resultCode,
             errorMsg: result.ResultDesc || `B2C failed code ${resultCode}`,
-          }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+          }).catch((err) => reportRejection(err, 'routes'));
         }
 
         const allReferrals = await storage.getReferrals();
@@ -11552,7 +11552,7 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
       console.warn("[B2C] Timeout for conversationId:", conversationId);
       if (conversationId) {
         // Reconcile payouts audit table
-        reconcilePayout(conversationId, "timed_out").catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+        reconcilePayout(conversationId, "timed_out").catch((err) => reportRejection(err, 'routes'));
 
         const allReferrals = await storage.getReferrals();
         const referral = allReferrals.find(r => r.transactionId === conversationId && r.status === "processing");
@@ -14381,7 +14381,7 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
         title: "Payment Confirmed — Order Processing",
         message: `PayPal payment confirmed (${paymentRef}). Your ${order.serviceName} is now being prepared.`,
         type: "order_update",
-      }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      }).catch((err) => reportRejection(err, 'routes'));
 
       // Sync completed payment to Supabase
       console.log('CALLING PAYMENT SYNC NOW');
@@ -14533,7 +14533,7 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
         title: "Document Revised",
         message: `Your ${order.serviceName} has been updated per your revision request.`,
         type: "success",
-      }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      }).catch((err) => reportRejection(err, 'routes'));
 
       console.log(`[Revision] orderId=${orderId} userId=${userId} | request="${revisionRequest.substring(0, 60)}"`);
       res.json({ success: true, content: revisedContent, message: "Document revised successfully" });
@@ -17374,7 +17374,7 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
       // Send farewell email (fire-and-forget — account already deleted)
       if (farewellEmail) {
         import("./email").then(({ sendAccountDeletedEmail }) => {
-          sendAccountDeletedEmail(farewellEmail, farewellName).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+          sendAccountDeletedEmail(farewellEmail, farewellName).catch((err) => reportRejection(err, 'routes'));
         });
       }
 
@@ -19876,7 +19876,7 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
       // Fraud gate — block before any PayPal order is created
       if (await isFraudUser(userId)) {
         const clientIp = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ?? req.socket?.remoteAddress ?? "unknown";
-        flagForManualReview(userId, { action: "payment_attempt_blocked", detail: "paypal create-order", ip: clientIp }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+        flagForManualReview(userId, { action: "payment_attempt_blocked", detail: "paypal create-order", ip: clientIp }).catch((err) => reportRejection(err, 'routes'));
         return res.status(403).json({
           message: "Your account has been flagged for review. Please contact support.",
           code:    "ACCOUNT_UNDER_REVIEW",
@@ -20126,14 +20126,14 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
             meta: { method: "paypal", transactionId: capture.transactionId, amountUSD: capture.amountUSD, paymentId: payment.id, plan: upgrade.planActivated },
             ip: req.ip || "",
           });
-        }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+        }).catch((err) => reportRejection(err, 'routes'));
 
         // Real-time update to My Payments page
         import("./websocket").then(({ notifyUserPaymentUpdate }) => {
           notifyUserPaymentUpdate(userId, {
             type: "payment_update", paymentId: payment.id, status: "completed",
           });
-        }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+        }).catch((err) => reportRejection(err, 'routes'));
 
         // Sync completed payment to Supabase
         console.log('CALLING PAYMENT SYNC NOW');
@@ -20152,8 +20152,8 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
         });
         await upgradeUserToPro(userId);
         const ppCaptureExpiry = new Date(); ppCaptureExpiry.setDate(ppCaptureExpiry.getDate() + 360);
-        syncSubscriptionToSupabase({ user_id: userId, plan_id: (payment as any).planId || "pro", provider: "paypal", status: "active", auto_renew: false, expires_at: ppCaptureExpiry }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
-        redeemAppliedPromo(payment.metadata).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+        syncSubscriptionToSupabase({ user_id: userId, plan_id: (payment as any).planId || "pro", provider: "paypal", status: "active", auto_renew: false, expires_at: ppCaptureExpiry }).catch((err) => reportRejection(err, 'routes'));
+        redeemAppliedPromo(payment.metadata).catch((err) => reportRejection(err, 'routes'));
       }
 
       // 4. Handle referral if one was stored
@@ -20210,7 +20210,7 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
                   paymentAmount: payment.amount,
                   commission,
                   status: "pending",
-                }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+                }).catch((err) => reportRejection(err, 'routes'));
               }
             }
           }
@@ -21435,7 +21435,7 @@ Tone examples:
         status: messageStatus,
         ...(errorCode ? { errorCode, errorMsg } : {}),
         updatedAt: Date.now(),
-      }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      }).catch((err) => reportRejection(err, 'routes'));
     }
     res.sendStatus(200);
   });
@@ -22517,7 +22517,7 @@ If your instinct says "3,500", STOP and re-read the SERVICES block above.`;
       // 3. Fraud gate — block flagged accounts before any money moves
       if (await isFraudUser(userId)) {
         const clientIp = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ?? req.socket?.remoteAddress ?? "unknown";
-        flagForManualReview(userId, { action: "payment_attempt_blocked", detail: `service=${service_id} amount=${amount}`, ip: clientIp }).catch((err) => { console.error('[routes] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+        flagForManualReview(userId, { action: "payment_attempt_blocked", detail: `service=${service_id} amount=${amount}`, ip: clientIp }).catch((err) => reportRejection(err, 'routes'));
         return res.status(403).json({
           message: "Your account has been flagged for review. Please contact support.",
           code:    "ACCOUNT_UNDER_REVIEW",

@@ -73,7 +73,7 @@ async function writeAuditLog(
     event,
     ip,
     metadata,
-  }).catch((err) => { console.error('[] Unhandled rejection:', { error: err?.message, timestamp: new Date().toISOString() }); });
+  }).catch((err) => reportRejection(err, 'services/verifyPayment'));
 }
 
 // ── M-Pesa Verification ───────────────────────────────────────────────────────
