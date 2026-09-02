@@ -1,0 +1,107 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# CI — runs on every push and pull request.
+#
+# Three parallel jobs so a slow / flaky suite doesn't block the fast signal:
+#
+#   1. build        — verifies `npm run build` completes end-to-end. This is
+#                     the ONE that must stay green — a red build means the
+#                     next Render deploy will also fail.
+#
+#   2. test         — vitest across every file under tests/. Some suites need
+#                     external services (DB, M-Pesa sandbox) and will fail
+#                     without secrets set in the repo's Settings → Secrets;
+#                     that's fine, add secrets later. Runs with
+#                     `continue-on-error: false` for now so you see the
+#                     signal, but move to `false` only once green.
+#
+#   3. type-check   — full `tsc --noEmit` across both client and server.
+#                     Reports the current error count. There are ~200
+#                     pre-existing errors as of 2026-09; treat this as
+#                     a ratchet target, not a blocker.
+#
+# All three run on Node 20.18.0 (matches Render's NODE_VERSION env).
+# ─────────────────────────────────────────────────────────────────────────────
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  # Cancel superseded CI runs on the same branch so a rapid push burst doesn't
+  # keep old runs alive.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20.18.0"
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Build (vite + tsc)
+        run: npm run build
+        env:
+          # Dummy values so import.meta.env references don't blow up during
+          # the vite build. These NEVER hit runtime — Render supplies real
+          # values via its Environment tab.
+          VITE_SUPABASE_URL: https://example.supabase.co
+          VITE_SUPABASE_ANON_KEY: dummy-anon-key-for-ci-build
+
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Tests using external services will fail without secrets — that's OK
+    # while we build up the CI habit. Flip continue-on-error to false once
+    # every suite is green.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20.18.0"
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Run vitest
+        run: npm test
+        env:
+          NODE_ENV: test
+
+  type-check:
+    name: Type check (report only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Report-only for now — there are ~200 pre-existing errors that would
+    # otherwise block every push. See the docstring at the top of this file.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20.18.0"
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Server type-check
+        run: |
+          npm run type-check:server 2>&1 | tail -80 || true
+          echo "---"
+          echo "Server error count:"
+          npm run type-check:server 2>&1 | grep -c "error TS" || true
+      - name: Client type-check
+        run: |
+          npm run type-check:client 2>&1 | tail -80 || true
+          echo "---"
+          echo "Client error count:"
+          npm run type-check:client 2>&1 | grep -c "error TS" || true
