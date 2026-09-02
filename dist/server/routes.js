@@ -4843,6 +4843,12 @@ Crawl-delay: 1`);
             };
             // Carry flash sale breakdown — populated only for service purchases
             const _pr = req._priceResult ?? {};
+            // 2026-09 (type-check un-mute): transactionRef was referenced 5 times
+            // below (row.id, transactionRef column, metadata.initRef, and the
+            // stkPush merchantRequestId) but never declared. Any request that
+            // actually reached this code path threw ReferenceError at runtime.
+            // Match the same "WAH-<nanoid>" shape used by /api/pay above.
+            const transactionRef = `WAH-${(0, nanoid_1.nanoid)(12)}`;
             // Insert the pending row FIRST so a record exists even if STK push fails
             const [payment] = await db_1.db
                 .insert(schema_1.payments)
@@ -7122,8 +7128,22 @@ Crawl-delay: 1`);
                         const RECON_TIERS = new Set(["trial", "basic", "monthly", "yearly", "pro", "pro_referral"]);
                         const candidateTier = payment.planId ? String(payment.planId).toLowerCase() : null;
                         if (candidateTier && RECON_TIERS.has(candidateTier)) {
-                            const { activateUserPlan } = await Promise.resolve().then(() => __importStar(require("./services/upgradeUserAccount")));
-                            await activateUserPlan(payment.userId, candidateTier, payment.id);
+                            // 2026-09 (type-check un-mute): the imported name was
+                            // `activateUserPlan` which doesn't exist — only
+                            // `upgradeUserAccount(opts: UpgradeOptions)` is exported.
+                            // Reconciled M-Pesa payments never actually activated their
+                            // subscription because this line threw TypeError silently
+                            // inside the reconciler's try/catch, and the .catch just
+                            // logged. Users paid, admin saw success, plan never updated.
+                            const { upgradeUserAccount } = await Promise.resolve().then(() => __importStar(require("./services/upgradeUserAccount")));
+                            await upgradeUserAccount({
+                                userId: payment.userId,
+                                planType: candidateTier,
+                                paymentId: payment.id,
+                                transactionId: String(receipt),
+                                method: "mpesa",
+                                amountKes: Number(payment.amount ?? 0),
+                            });
                         }
                         else {
                             console.log(`[Reconcile/STK-query] Service-only payment ${payment.id} — marked success, no plan activation.`);
@@ -7847,11 +7867,14 @@ Crawl-delay: 1`);
     // GET /api/admin/users/:id/payments — payment history for a specific user
     app.get("/api/admin/users/:id/payments", auth_1.isAuthenticated, isAdmin, async (req, res) => {
         try {
+            // 2026-09 (type-check un-mute): was `.from(payments)` — that identifier
+            // is not imported anywhere in this file. Every hit on this admin route
+            // threw ReferenceError. Uses `paymentsTable` (the Drizzle import).
             const userPayments = await db_1.db
                 .select()
-                .from(payments)
-                .where((0, drizzle_orm_1.eq)(payments.userId, req.params.id))
-                .orderBy((0, drizzle_orm_1.desc)(payments.createdAt))
+                .from(schema_1.payments)
+                .where((0, drizzle_orm_1.eq)(schema_1.payments.userId, req.params.id))
+                .orderBy((0, drizzle_orm_1.desc)(schema_1.payments.createdAt))
                 .limit(50);
             res.json(userPayments);
         }
@@ -8999,7 +9022,12 @@ Crawl-delay: 1`);
             if (Number(stillActive[0]?.cnt ?? 0) === 0) {
                 await db_1.pool.query(`UPDATE users SET plan = 'free', subscription_status = 'expired', updated_at = NOW() WHERE id = $1`, [row.user_id]);
                 try {
-                    const { invalidateAuthUserCache } = await Promise.resolve().then(() => __importStar(require("../lib/auth-user-cache")));
+                    // 2026-09 (type-check un-mute): was "../lib/..." — one too many
+                    // dot-dots (this file IS in server/, so the import root is server).
+                    // Every subscription auto-downgrade throwing would leave the cached
+                    // user record stale for up to the TTL, showing the user as still Pro
+                    // in the UI for 5 min after their plan actually expired.
+                    const { invalidateAuthUserCache } = await Promise.resolve().then(() => __importStar(require("./lib/auth-user-cache")));
                     invalidateAuthUserCache(row.user_id);
                 }
                 catch { /* non-fatal */ }
@@ -19851,6 +19879,10 @@ Tone examples:
         });
     }
     app.post("/api/whatsapp/webhook", async (req, res) => {
+        // 2026-09 (type-check un-mute): sendWhatsApp wasn't imported at the top
+        // of this file. Every call to this Twilio webhook threw ReferenceError.
+        // Import lazily so we don't pay Twilio SDK init cost on cold start.
+        const { sendWhatsApp } = await Promise.resolve().then(() => __importStar(require("./sms")));
         const message = req.body.Body;
         const phone = req.body.From.replace("whatsapp:", "");
         const user = await db_1.pool.query("SELECT * FROM users WHERE phone = $1", [phone]);

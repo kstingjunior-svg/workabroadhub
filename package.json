@@ -16,9 +16,11 @@
   },
   "scripts": {
     "dev": "cross-env NODE_ENV=development tsx server/index.ts",
-    "build": "vite build && ( tsc --project tsconfig.server.json || echo '[build] tsc reported issues but proceeding' ) && test -f dist/server/index.js",
+    "build": "vite build && ( tsc --project tsconfig.server.json || echo '[build] tsc reported issues but proceeding — run `npm run type-check:server` locally for the full list' ) && test -f dist/server/index.js",
     "start": "node dist/server/index.js",
     "check": "tsc",
+    "type-check:server": "tsc --noEmit --project tsconfig.server.json",
+    "type-check:client": "tsc --noEmit --project tsconfig.json",
     "check:nuls": "node scripts/check-nuls.mjs",
     "check:dist": "node scripts/check-dist-fresh.mjs",
     "check:all": "npm run check:nuls && npm run check:dist",
