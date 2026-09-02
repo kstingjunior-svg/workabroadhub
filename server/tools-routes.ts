@@ -457,7 +457,12 @@ export function registerToolsRoutes(
           response_format: { type: "json_object" },
         };
 
-        const completion = await openai.chat.completions.create(completionOptions);
+        // 2026-09: 45s hard timeout on the OpenAI call so a stalled upstream
+        // becomes a clear "AI service slow" error rather than the Render
+        // 502 that the client sees as a mystery "ATS check failed".
+        const completion = await openai.chat.completions.create(completionOptions, {
+          timeout: 45_000,
+        } as any);
 
         let aiResult: any = {};
         try {
@@ -606,7 +611,8 @@ export function registerToolsRoutes(
         // when the real problem is our OpenAI key/billing.
         const status = err?.status ?? err?.response?.status;
         const code = err?.code ?? err?.error?.code;
-        console.error(`[ATS Check] status=${status} code=${code} msg=${err?.message}`);
+        const name = err?.name;
+        console.error(`[ATS Check] status=${status} code=${code} name=${name} msg=${err?.message}`, err?.stack?.split("\n").slice(0, 4).join(" | "));
         if (status === 401 || status === 403) {
           return res.status(503).json({
             message: "Our AI service is temporarily offline. Our team has been alerted — please try again in a few minutes.",
@@ -617,7 +623,25 @@ export function registerToolsRoutes(
             message: "Our AI service is at capacity right now. Please wait a minute and try again.",
           });
         }
-        res.status(500).json({ message: "ATS check failed. Please try again." });
+        // 2026-09 (Tony's screenshot: real user hit the generic "please try
+        // again" toast). Surface WHICH stage failed so the client can show
+        // something actionable rather than a dead-end.
+        if (name === "APIConnectionTimeoutError" || code === "ETIMEDOUT" || /timeout/i.test(err?.message ?? "")) {
+          return res.status(504).json({
+            message: "Analysis is taking longer than usual — the AI service is slow right now. Please try again in a moment.",
+          });
+        }
+        if (/pdf-parse|extract|OCR|tesseract/i.test(err?.message ?? "")) {
+          return res.status(422).json({
+            message: "We couldn't read the text inside your CV. Please try a Word (.docx) file, or ensure the PDF is text-based (not a scanned image).",
+          });
+        }
+        res.status(500).json({
+          message: "ATS check failed. Please try again.",
+          // 2026-09: include a short diagnostic tag so admins can grep logs
+          // without users seeing the raw stack.
+          diag: `err:${name ?? "unknown"}${status ? `/${status}` : ""}${code ? `/${code}` : ""}`,
+        });
       }
     }
   );

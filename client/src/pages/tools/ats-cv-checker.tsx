@@ -185,10 +185,14 @@ export default function ATSCVChecker() {
             wrongErr.wrongDocument = body;
             throw wrongErr;
           }
-          throw new Error(body.message ?? "ATS check failed. Please try again.");
+          // 2026-09: server now returns a `diag` tag on generic 500s so admins
+          // can grep logs from a user screenshot. Show it discreetly in the toast.
+          const msg = body.message ?? "ATS check failed. Please try again.";
+          throw new Error(body.diag ? `${msg} (${body.diag})` : msg);
         } catch (parseErr: any) {
           if (parseErr?.wrongDocument) throw parseErr;
-          throw new Error("ATS check failed. Please try again.");
+          if (parseErr?.message && parseErr.message !== "ATS check failed. Please try again.") throw parseErr;
+          throw new Error(`ATS check failed (HTTP ${res.status}). Please try again.`);
         }
       }
       return res.json() as Promise<ATSResult>;
