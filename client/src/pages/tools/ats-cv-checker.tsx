@@ -178,6 +178,17 @@ export default function ATSCVChecker() {
         headers: { "X-CSRF-Token": csrfToken },
       });
       if (!res.ok) {
+        // 2026-09: check Content-Type before parsing. Render's edge gateway
+        // returns an HTML timeout/502 page when the upstream Node app takes
+        // too long; we don't want the user seeing a raw "Unexpected token '<'"
+        // parse error — surface a plain-English timeout message instead.
+        const contentType = res.headers.get("content-type") ?? "";
+        if (!contentType.includes("application/json")) {
+          if (res.status === 502 || res.status === 503 || res.status === 504) {
+            throw new Error("Our AI service is slow right now. Please wait a moment and try again — usually clears within a minute.");
+          }
+          throw new Error(`ATS check failed (server returned HTTP ${res.status}). Please try again in a moment.`);
+        }
         try {
           const body = await res.json();
           if (isWrongDocumentResponse(body)) {
@@ -185,13 +196,11 @@ export default function ATSCVChecker() {
             wrongErr.wrongDocument = body;
             throw wrongErr;
           }
-          // 2026-09: server now returns a `diag` tag on generic 500s so admins
-          // can grep logs from a user screenshot. Show it discreetly in the toast.
           const msg = body.message ?? "ATS check failed. Please try again.";
           throw new Error(body.diag ? `${msg} (${body.diag})` : msg);
         } catch (parseErr: any) {
           if (parseErr?.wrongDocument) throw parseErr;
-          if (parseErr?.message && parseErr.message !== "ATS check failed. Please try again.") throw parseErr;
+          if (parseErr?.message && !parseErr.message.startsWith("Unexpected token")) throw parseErr;
           throw new Error(`ATS check failed (HTTP ${res.status}). Please try again.`);
         }
       }
