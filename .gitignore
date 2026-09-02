@@ -1,5 +1,9 @@
 node_modules/
-# dist/   # commented out: dist/ is committed because Render Free strips it from runtime
+
+# 2026-09: dist/ is built on Render during deploy (render.yaml runs
+# `npm ci && npm run build`). Previously committed as a workaround
+# for an earlier hosting setup; no longer needed.
+dist/
 .local/
 .cache/
 uploads/
