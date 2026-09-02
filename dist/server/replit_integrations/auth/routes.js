@@ -545,10 +545,17 @@ function registerAuthRoutes(app) {
                         console.warn(`[Auth][/api/auth/user] verification-flags fallback failed:`, e?.message);
                     }
                 }
+                // 2026-09 (independent audit): STRIP passwordHash before responding.
+                // Every /api/auth/user request currently shipped the bcrypt hash to
+                // the client and cached it via setCachedUser. Even though bcrypt is
+                // slow, exposing hashes lets attackers run offline cracking on any
+                // weak passwords and lights up cross-service correlation. Never let
+                // this field leave the server.
+                const { passwordHash: _stripHash, ...safeUser } = user;
                 const payload = isAdminUser
-                    ? { ...user, plan: "pro", subscriptionStatus: "active", emailVerified: true, phoneVerified: true, isAdminBypass: true }
+                    ? { ...safeUser, plan: "pro", subscriptionStatus: "active", emailVerified: true, phoneVerified: true, isAdminBypass: true }
                     : {
-                        ...user,
+                        ...safeUser,
                         plan: livePlan,
                         subscriptionStatus: livePlan === "free" ? "expired" : "active",
                         // Always coerce to booleans — never send undefined to the client

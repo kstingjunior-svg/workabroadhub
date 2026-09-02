@@ -1695,7 +1695,9 @@ Crawl-delay: 1`);
             if (!user) {
                 return res.status(404).json({ message: "User not found" });
             }
-            res.json(user);
+            // 2026-09 (independent audit): strip passwordHash before responding.
+            const { passwordHash: _stripHash, ...safeUser } = user;
+            res.json(safeUser);
         }
         catch (error) {
             console.error("Error fetching profile:", error);
@@ -1731,7 +1733,9 @@ Crawl-delay: 1`);
             if (!updatedUser) {
                 return res.status(404).json({ message: "User not found" });
             }
-            res.json(updatedUser);
+            // 2026-09 (independent audit): strip passwordHash before responding.
+            const { passwordHash: _stripHash, ...safeUser } = updatedUser;
+            res.json(safeUser);
         }
         catch (error) {
             console.error("Error updating profile:", error);
@@ -7918,7 +7922,10 @@ Crawl-delay: 1`);
             if (!user) {
                 return res.status(404).json({ message: "User not found" });
             }
-            res.json(user);
+            // 2026-09 (independent audit): strip passwordHash — admins don't need
+            // to see other users' hashes even from the admin panel.
+            const { passwordHash: _stripHash, ...safeUser } = user;
+            res.json(safeUser);
         }
         catch (error) {
             console.error("Error updating user status:", error);
