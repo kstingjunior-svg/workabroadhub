@@ -6,6 +6,7 @@ import { checkPayment } from "./tools/checkPayment";
 import { sendWhatsApp } from "../services/whatsapp";
 import { trackEvent } from "./utils";
 import { pool } from "../db";
+import { reportRejection } from "../lib/sentry";
 export { detectLanguage } from "./utils";
 
 /**

@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { reportRejection } from "./lib/sentry";
 import {
   countries,
   countryGuides,

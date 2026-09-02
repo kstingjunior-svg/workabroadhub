@@ -23,6 +23,7 @@ import {
   subscribeVisitorCount,
   getVisitorCount,
 } from "./lib/presence";
+import { reportRejection } from "./lib/sentry";
 
 // ── Stats provider ────────────────────────────────────────────────────────────
 // Routes register a callback that supplies live stats for the 30s heartbeat.

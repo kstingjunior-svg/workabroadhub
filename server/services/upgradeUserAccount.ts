@@ -22,6 +22,7 @@
 import { storage } from "../storage";
 import { db } from "../db";
 import { activityEvents } from "@shared/schema";
+import { reportRejection } from "../lib/sentry";
 
 const COUNTRY_NAMES: Record<string, string> = {
   KE: "Kenya", UG: "Uganda", TZ: "Tanzania", RW: "Rwanda", ET: "Ethiopia",

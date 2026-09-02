@@ -1,11 +1,5 @@
 node_modules/
-
-# 2026-09: dist/ is now built on Render during deploy (render.yaml's
-# buildCommand is `npm ci && npm run build`, which runs vite + tsc).
-# Previously committed to git as a workaround for an earlier hosting
-# setup; no longer needed. Gitignoring it removes the "rebuild dist,
-# commit, push" ritual and the pre-push stale-dist check.
-dist/
+# dist/   # commented out: dist/ is committed because Render Free strips it from runtime
 .local/
 .cache/
 uploads/

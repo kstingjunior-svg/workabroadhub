@@ -1,6 +1,7 @@
 import { db } from "./db";
 import { sql } from "drizzle-orm";
 import { storage } from "./storage";
+import { reportRejection } from "./lib/sentry";
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000; // every 5 minutes
 const LOOKBACK_MINUTES = 90; // look back 90 minutes per poll

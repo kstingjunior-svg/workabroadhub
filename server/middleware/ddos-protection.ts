@@ -14,6 +14,7 @@
 
 import { Request, Response, NextFunction } from "express";
 import { storage } from "../storage";
+import { reportRejection } from "../lib/sentry";
 
 // Lightweight event tracker — writes directly to storage, avoids circular import with security.ts
 function logThreatEvent(eventType: string, ip: string, endpoint: string, ua: string, meta?: Record<string, unknown>): void {

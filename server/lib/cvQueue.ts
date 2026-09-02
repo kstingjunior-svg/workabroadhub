@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { Queue, Worker } from "bullmq";
 import { redisConnection } from "./redis";
+import { reportRejection } from "../lib/sentry";
 
 const QUEUE_NAME = "cv-generation";
 

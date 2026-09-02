@@ -23,6 +23,7 @@ import type {
 import { mpesaGateway }   from "./mpesaService";
 import { paypalGateway }  from "./paypalService";
 import { storage }        from "../../storage";
+import { reportRejection } from "../../lib/sentry";
 
 // ─── Gateway Registry ────────────────────────────────────────────────────────
 

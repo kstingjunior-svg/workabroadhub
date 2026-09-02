@@ -1,0 +1,433 @@
+"use strict";
+// @ts-nocheck
+/**
+ * extractTextFromBuffer
+ *
+ * Single shared utility for turning an uploaded file buffer into plain text.
+ * Handles PDF, DOCX, plain-text, and unknown formats with a graceful cascade:
+ *
+ *   PDF  → pdfjs-dist (legacy) → BT/ET operator extraction → Tesseract OCR → ""
+ *   DOCX → mammoth extractRawText
+ *   TXT  → UTF-8 decode
+ *   ???  → try each in order: pdfjs-dist → mammoth → raw UTF-8 strip
+ *
+ * Returns:
+ *   { text: string; method: string }
+ *   `text` is always a string (may be empty if nothing worked).
+ *   `method` is a short label useful for logging.
+ *
+ * Callers should check `text.trim().length < MIN_CV_LENGTH` themselves and
+ * surface an appropriate user message.
+ */
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.MIN_CV_LENGTH = void 0;
+exports.extractScore = extractScore;
+exports.isReadableText = isReadableText;
+exports.extractTextFast = extractTextFast;
+exports.extractTextFromBuffer = extractTextFromBuffer;
+exports.MIN_CV_LENGTH = 50; // characters — below this the extraction is considered empty
+/**
+ * Parse the ATS score that the AI bakes into the structured CV output.
+ * Matches "ATS SCORE: 82/100" (case-insensitive, flexible spacing).
+ * Returns null when no score is present (e.g. for the free checker output,
+ * which is JSON rather than the paid-service text format).
+ */
+function extractScore(text) {
+    const m = text.match(/ATS SCORE:\s*(\d{1,3})\s*\/\s*100/i);
+    if (!m)
+        return null;
+    const n = parseInt(m[1], 10);
+    return n >= 0 && n <= 100 ? n : null;
+}
+/**
+ * Decides whether an extracted string contains actual human-readable text.
+ *
+ * Criteria:
+ *  1. At least 40 % of non-whitespace characters must be ASCII letters (a-z/A-Z).
+ *  2. There must be at least 8 "word tokens" of 3+ alphabetical characters.
+ *
+ * This catches the common failure mode where the raw-ASCII-strip fallback
+ * returns binary PDF metadata noise that superficially looks like text.
+ */
+function isReadableText(text) {
+    if (!text || text.trim().length === 0)
+        return false;
+    const noSpace = text.replace(/\s+/g, "");
+    if (noSpace.length === 0)
+        return false;
+    const letterCount = (text.match(/[a-zA-Z]/g) ?? []).length;
+    const letterRatio = letterCount / noSpace.length;
+    const wordTokens = (text.match(/[a-zA-Z]{3,}/g) ?? []).length;
+    return letterRatio >= 0.40 && wordTokens >= 8;
+}
+/**
+ * Conservative BT/ET operator-block extractor.
+ * Only returns text if we can find real word-like sequences from the blocks.
+ * Returns "" (empty) if the result doesn't look human-readable — which lets
+ * callers surface a proper "couldn't parse" error instead of sending garbage to AI.
+ */
+function extractRawPdfText(buf) {
+    try {
+        const raw = buf.toString("latin1");
+        const matches = raw.match(/BT[\s\S]{0,2000}?ET/g) ?? [];
+        const words = [];
+        for (const block of matches) {
+            // Tj / TJ operators carry the actual visible text
+            const tjs = block.match(/\((.*?)\)\s*T[jJ]/g) ?? [];
+            for (const tj of tjs) {
+                const m = tj.match(/\((.*?)\)/);
+                if (m) {
+                    const token = m[1]
+                        .replace(/\\n/g, " ")
+                        .replace(/\\r/g, " ")
+                        .replace(/\\t/g, " ")
+                        .replace(/\\\(/g, "(")
+                        .replace(/\\\)/g, ")")
+                        .replace(/\\/g, "")
+                        .trim();
+                    // Only keep tokens that look like actual words/phrases
+                    if (token.length > 0 && /[a-zA-Z]{2,}/.test(token)) {
+                        words.push(token);
+                    }
+                }
+            }
+        }
+        const candidate = words.join(" ");
+        // Only return if we have genuinely readable content
+        if (isReadableText(candidate) && candidate.length >= exports.MIN_CV_LENGTH) {
+            return candidate;
+        }
+        // All extraction paths exhausted — return empty so callers can show a
+        // proper "we couldn't read your PDF" message instead of sending noise to AI.
+        return "";
+    }
+    catch {
+        return "";
+    }
+}
+/**
+ * pdf-parse extraction — DEPRECATED, kept only to avoid breaking any
+ * downstream importer that might still call it.
+ *
+ * 2026-06 PERMANENT FIX (Tony's daily audit): the installed pdf-parse
+ * (v2.4.5) is a complete rewrite that internally uses pdfjs-dist v5, which
+ * now requires native canvas bindings (DOMMatrix / ImageData / Path2D)
+ * just to LOAD the module in Node.js. Installing canvas on Render is heavy
+ * and brittle; we don't need it. Our pdfjs-dist legacy build (used by
+ * tryPdfJs below) does the same job without canvas and works reliably in
+ * production — every successful CV extraction in the prod logs comes from
+ * that path.
+ *
+ * Old v1 API used to be `const pdfParse = (await import("pdf-parse")).default;`
+ * which only worked because the package exported a function. v2 has no
+ * default export (only the `PDFParse` class), so that call always threw
+ * "pdfParse is not a function" and we silently fell through.
+ *
+ * Rather than wire up the v2 class API and then fail at canvas-polyfill
+ * time, we just stop attempting this path. The cascade below uses
+ * pdfjs-dist as the primary extractor, which is what was always doing the
+ * real work anyway.
+ */
+async function tryPdf(_buf) {
+    // No-op — pdfjs-dist legacy (tryPdfJs) is the primary PDF extractor now.
+    return "";
+}
+async function tryMammoth(buf) {
+    const mammoth = await Promise.resolve().then(() => __importStar(require("mammoth")));
+    const result = await mammoth.extractRawText({ buffer: buf });
+    return result.value ?? "";
+}
+/**
+ * pdfjs-dist extraction — handles compressed / cross-reference-stream PDFs.
+ * Uses the legacy Node.js build (no canvas dependency required).
+ */
+async function tryPdfJs(buf) {
+    try {
+        const { pathToFileURL } = await Promise.resolve().then(() => __importStar(require("url")));
+        const { resolve } = await Promise.resolve().then(() => __importStar(require("path")));
+        const pdfjs = await Promise.resolve(`${"pdfjs-dist/legacy/build/pdf.mjs"}`).then(s => __importStar(require(s)));
+        // v5 requires an explicit workerSrc — point at the bundled worker file
+        if (pdfjs.GlobalWorkerOptions) {
+            const workerPath = resolve(process.cwd(), "node_modules/pdfjs-dist/build/pdf.worker.mjs");
+            pdfjs.GlobalWorkerOptions.workerSrc = pathToFileURL(workerPath).href;
+        }
+        const data = new Uint8Array(buf);
+        const loadingTask = pdfjs.getDocument({ data, useWorkerFetch: false, isEvalSupported: false });
+        const pdf = await loadingTask.promise;
+        const pageTexts = [];
+        for (let p = 1; p <= pdf.numPages; p++) {
+            const page = await pdf.getPage(p);
+            const content = await page.getTextContent();
+            const text = content.items
+                .map((item) => item.str ?? "")
+                .join(" ");
+            pageTexts.push(text);
+        }
+        return pageTexts.join("\n").trim();
+    }
+    catch (err) {
+        console.warn("[extractText] pdfjs-dist failed:", err instanceof Error ? err.message : err);
+        return "";
+    }
+}
+/**
+ * OpenAI file-upload fallback for scanned / image-only PDFs.
+ * Uploads the PDF to OpenAI Files, asks gpt-4o to extract all text (native
+ * document understanding — handles scans, mixed scripts, complex layouts).
+ * Costs a few cents per call but is the most reliable fallback when
+ * pdfjs / Tesseract both fail.
+ *
+ * 2026-08 (Tony's SUSSAN NYABOKE contract): Tesseract failed silently on
+ * a scanned PDF; user saw the generic "couldn't read enough text" error.
+ * This path makes that scenario recover instead of hard-failing.
+ */
+async function tryOpenAIPdfExtract(buf, filename) {
+    try {
+        if (!process.env.OPENAI_API_KEY)
+            return "";
+        const OpenAI = (await Promise.resolve().then(() => __importStar(require("openai")))).default;
+        const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+        const safeName = filename || "document.pdf";
+        console.log(`[extractText] Attempting OpenAI file-upload PDF extract (${buf.length} bytes)…`);
+        // Upload the PDF buffer to OpenAI Files
+        const uploaded = await client.files.create({
+            // openai v6 accepts a Node Buffer wrapped in File (available as global in Node 20+)
+            file: new File([new Uint8Array(buf)], safeName, { type: "application/pdf" }),
+            purpose: "user_data",
+        });
+        try {
+            const resp = await client.chat.completions.create({
+                model: "gpt-4o",
+                temperature: 0,
+                messages: [
+                    {
+                        role: "user",
+                        content: [
+                            { type: "file", file: { file_id: uploaded.id } },
+                            {
+                                type: "text",
+                                text: "Extract ALL readable text from this document verbatim. " +
+                                    "Preserve line breaks. Include headers, tables, signatures, " +
+                                    "stamps, and any handwritten notes if legible. " +
+                                    "Return ONLY the extracted text — no commentary, no summary.",
+                            },
+                        ],
+                    },
+                ],
+                max_tokens: 4000,
+            });
+            const text = (resp.choices?.[0]?.message?.content ?? "").toString().trim();
+            console.log(`[extractText] OpenAI PDF extract returned ${text.length} chars`);
+            return text;
+        }
+        finally {
+            // Best-effort cleanup — don't let a delete failure block the extract
+            client.files.delete(uploaded.id).catch(() => { });
+        }
+    }
+    catch (err) {
+        console.warn("[extractText] OpenAI PDF extract failed:", err instanceof Error ? err.message : err);
+        return "";
+    }
+}
+/**
+ * OCR fallback using Tesseract.js.
+ * Works on scanned image-PDFs and plain image files.
+ * Tesseract v5 internally uses pdfjs to render the first page of a PDF,
+ * so a PDF buffer can be passed directly.
+ * Returns "" on failure so the caller can move to the next fallback.
+ */
+async function tryOCR(buf, filename) {
+    try {
+        const { createWorker } = await Promise.resolve().then(() => __importStar(require("tesseract.js")));
+        console.log("[extractText] Attempting Tesseract OCR…");
+        const worker = await createWorker("eng", 1, {
+            logger: () => { }, // silence progress spam
+            errorHandler: () => { },
+        });
+        const { data } = await worker.recognize(buf);
+        await worker.terminate();
+        const text = (data.text ?? "").trim();
+        console.log(`[extractText] OCR returned ${text.length} chars (confidence: ${Math.round(data.confidence ?? 0)}%)`);
+        return text;
+    }
+    catch (err) {
+        console.warn("[extractText] Tesseract OCR failed:", err instanceof Error ? err.message : err);
+        return "";
+    }
+}
+/**
+ * FAST-ONLY extraction — pdfjs + BT/ET + mammoth + plain-text only.
+ * Never runs Tesseract OCR or OpenAI PDF file-upload (both can take 30-90 s).
+ * Guaranteed to return in under ~2 s for any input.
+ *
+ * 2026-08 (Tony's "Creating order..." infinite spinner long-term fix):
+ * used by /api/services/order/:slug to keep order creation snappy. When
+ * this returns empty, the caller stores the raw file for background
+ * extraction after payment confirms.
+ */
+async function extractTextFast(buffer, mimeType, filename) {
+    const mime = (mimeType ?? "").toLowerCase();
+    const name = (filename ?? "").toLowerCase();
+    const isPdf = mime.includes("pdf") || name.endsWith(".pdf");
+    const isDocx = mime.includes("word") || mime.includes("officedocument") ||
+        name.endsWith(".docx") || name.endsWith(".doc");
+    const isTxt = mime.includes("text") || name.endsWith(".txt") || name.endsWith(".rtf");
+    if (isPdf) {
+        // Only try the two fast paths; skip Tesseract + OpenAI.
+        try {
+            const pdfjsText = await tryPdfJs(buffer);
+            if (pdfjsText.length >= exports.MIN_CV_LENGTH && isReadableText(pdfjsText)) {
+                return { text: pdfjsText, method: "pdfjs-fast" };
+            }
+            const raw = extractRawPdfText(buffer);
+            if (raw.length >= exports.MIN_CV_LENGTH) {
+                return { text: raw, method: "pdf-raw-fast" };
+            }
+            // Return low-quality pdfjs text if any, else empty
+            if (pdfjsText.length >= exports.MIN_CV_LENGTH) {
+                return { text: pdfjsText, method: "pdfjs-fast-lowquality" };
+            }
+            return { text: "", method: "pdf-fast-empty" };
+        }
+        catch {
+            return { text: "", method: "pdf-fast-error" };
+        }
+    }
+    if (isDocx) {
+        try {
+            const text = await tryMammoth(buffer);
+            return { text, method: "mammoth-fast" };
+        }
+        catch {
+            return { text: "", method: "mammoth-fast-error" };
+        }
+    }
+    if (isTxt) {
+        return { text: buffer.toString("utf-8"), method: "utf8-fast" };
+    }
+    return { text: "", method: "unknown-fast-empty" };
+}
+async function extractTextFromBuffer(buffer, mimeType, filename) {
+    const mime = (mimeType ?? "").toLowerCase();
+    const name = (filename ?? "").toLowerCase();
+    const isPdf = mime.includes("pdf") || name.endsWith(".pdf");
+    const isDocx = mime.includes("word") || mime.includes("officedocument") ||
+        name.endsWith(".docx") || name.endsWith(".doc");
+    const isTxt = mime.includes("text") || name.endsWith(".txt") || name.endsWith(".rtf");
+    // ── PDF ───────────────────────────────────────────────────────────────────
+    if (isPdf) {
+        let lowQualityFallback = "";
+        // 2026-06 (Tony's audit): pdf-parse is intentionally NOT attempted
+        // here anymore — see the long comment on `tryPdf` for the reason. The
+        // pdfjs-dist legacy build is the primary extractor.
+        // Attempt 1: pdfjs-dist legacy build — handles compressed / XRef-stream
+        // PDFs, no native canvas required. This was the de-facto primary
+        // extractor in production already (the old pdf-parse attempt always
+        // failed); now it's officially the first try.
+        try {
+            const pdfjsText = await tryPdfJs(buffer);
+            if (pdfjsText.length >= exports.MIN_CV_LENGTH && isReadableText(pdfjsText)) {
+                console.log(`[extractText] pdfjs-dist succeeded (${pdfjsText.length} chars)`);
+                return { text: pdfjsText, method: "pdfjs-dist" };
+            }
+            if (pdfjsText.length >= exports.MIN_CV_LENGTH) {
+                lowQualityFallback = pdfjsText;
+                console.warn("[extractText] pdfjs-dist returned low-quality text — keeping as fallback");
+            }
+        }
+        catch { /* handled inside tryPdfJs */ }
+        // Attempt 2: BT/ET operator extraction (only returns readable text or "")
+        const raw = extractRawPdfText(buffer);
+        if (raw.length >= exports.MIN_CV_LENGTH) {
+            return { text: raw, method: "pdf-raw-fallback" };
+        }
+        // Attempt 3: Tesseract OCR — handles scanned / image-only PDFs
+        const ocrText = await tryOCR(buffer, filename);
+        if (ocrText.length >= exports.MIN_CV_LENGTH && isReadableText(ocrText)) {
+            return { text: ocrText, method: "tesseract-ocr" };
+        }
+        // Attempt 4: OpenAI file-upload native PDF extract — the reliable
+        // fallback for scanned contracts / mixed-script docs where Tesseract
+        // struggles. Costs ~2-5¢ per call so only fires when everything else
+        // failed — worth it for a paid user's document.
+        const openaiText = await tryOpenAIPdfExtract(buffer, filename);
+        if (openaiText.length >= exports.MIN_CV_LENGTH && isReadableText(openaiText)) {
+            return { text: openaiText, method: "openai-pdf-extract" };
+        }
+        // Even if it failed our readability heuristic, keep it as a fallback
+        // if it's substantially longer than what pdfjs got.
+        if (openaiText.length > lowQualityFallback.length && openaiText.length >= exports.MIN_CV_LENGTH) {
+            lowQualityFallback = openaiText;
+        }
+        // Attempt 5: Return the best text we have even if it failed the
+        // readability heuristic — better to send imperfect text to the AI than
+        // nothing. Sourced from the pdfjs-dist / openai attempts above.
+        if (lowQualityFallback.length >= exports.MIN_CV_LENGTH) {
+            console.warn("[extractText] Using low-quality text as last resort");
+            return { text: lowQualityFallback, method: "low-quality-fallback" };
+        }
+        // All local extraction methods exhausted.
+        console.warn("[extractText] All PDF extraction methods failed or returned unreadable text.");
+        return { text: "", method: "pdf-failed" };
+    }
+    // ── DOCX / DOC ────────────────────────────────────────────────────────────
+    if (isDocx) {
+        try {
+            const text = await tryMammoth(buffer);
+            return { text, method: "mammoth" };
+        }
+        catch (err) {
+            console.warn("[extractText] mammoth failed:", err instanceof Error ? err.message : err);
+            return { text: "", method: "mammoth-error" };
+        }
+    }
+    // ── Plain text / RTF ──────────────────────────────────────────────────────
+    if (isTxt) {
+        return { text: buffer.toString("utf-8"), method: "utf8" };
+    }
+    // ── Unknown format: cascade ───────────────────────────────────────────────
+    // 1. pdfjs-dist (was pdf-parse before the v2-API breakage)
+    try {
+        const text = await tryPdfJs(buffer);
+        if (text.trim().length >= exports.MIN_CV_LENGTH && isReadableText(text)) {
+            return { text, method: "pdfjs-guess" };
+        }
+    }
+    catch { /* try next */ }
+    // 2. mammoth
+    try {
+        const text = await tryMammoth(buffer);
+        if (text.trim().length >= exports.MIN_CV_LENGTH)
+            return { text, method: "mammoth-guess" };
+    }
+    catch { /* try next */ }
+    // 3. raw UTF-8 — only return if it looks readable
+    const utf8text = buffer.toString("utf-8").replace(/[^\x20-\x7E\n]/g, " ");
+    if (isReadableText(utf8text))
+        return { text: utf8text, method: "utf8-strip-guess" };
+    return { text: "", method: "unknown-failed" };
+}

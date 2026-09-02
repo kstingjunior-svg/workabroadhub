@@ -1,0 +1,641 @@
+"use strict";
+/**
+ * LinkedIn Optimize routes — 2026-07 (Tony's premium AI workspace).
+ *
+ * Endpoints:
+ *   POST /api/linkedin-optimize/start                → create draft, gate on Pro
+ *   PUT  /api/linkedin-optimize/:id/input            → save user input
+ *   GET  /api/linkedin-optimize/:id/stream           → SSE: progress → scores → rewrite
+ *   POST /api/linkedin-optimize/:id/refine           → chat refine (returns full rewrite)
+ *   GET  /api/linkedin-optimize/:id                  → read draft state
+ *   POST /api/linkedin-optimize/:id/save-version     → snapshot the current output
+ *   GET  /api/linkedin-optimize/:id/report.pdf       → generate the final PDF report
+ *
+ * AI: currently uses OpenAI gpt-4o (streaming). Wrapped behind streamJson()
+ * so we can swap to Anthropic Claude by changing one file when ANTHROPIC_API_KEY
+ * is set. See the note in streamJson().
+ */
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.registerLinkedinOptimizeRoutes = registerLinkedinOptimizeRoutes;
+const multer_1 = __importDefault(require("multer"));
+const db_1 = require("../db");
+const openai_1 = require("../lib/openai");
+const requirePlan_1 = require("../middleware/requirePlan");
+const human_voice_1 = require("../ai/human-voice");
+const extract_text_1 = require("../utils/extract-text");
+const prompts_1 = require("../services/linkedin/prompts");
+const pdfkit_1 = __importDefault(require("pdfkit"));
+const cvUpload = (0, multer_1.default)({
+    storage: multer_1.default.memoryStorage(),
+    limits: { fileSize: 8 * 1024 * 1024 },
+});
+function currentUserId(req) {
+    return (req.user?.claims?.sub ??
+        req.user?.id ??
+        req.session?.customUserId ??
+        null);
+}
+// ─── AI call — swappable between OpenAI + Anthropic ────────────────────────
+//
+// Currently uses gpt-4o non-streaming for JSON responses (cleanest for
+// structured output). If you install @anthropic-ai/sdk and set
+// ANTHROPIC_API_KEY, swap the body of this function to Anthropic — the rest
+// of the module is agnostic.
+async function completeJson(system, user, opts) {
+    // 2026-08: prepend the Master Writing Standard to every LinkedIn AI call so
+    // the About / Headline / Experience sections meet the same content-preservation
+    // and human-voice bar as CV Revamp.
+    const { MASTER_WRITING_STANDARD } = await Promise.resolve().then(() => __importStar(require("../lib/master-writing-standard")));
+    const res = await openai_1.openai.chat.completions.create({
+        model: "gpt-4o",
+        temperature: opts?.temperature ?? 0.55,
+        max_tokens: opts?.maxTokens ?? 4000,
+        response_format: { type: "json_object" },
+        messages: [
+            { role: "system", content: MASTER_WRITING_STANDARD + system },
+            { role: "user", content: user },
+        ],
+    });
+    const raw = res.choices[0]?.message?.content ?? "{}";
+    try {
+        return JSON.parse(raw);
+    }
+    catch (e) {
+        console.error("[linkedin-optimize] JSON parse failed. Raw:", raw.slice(0, 500));
+        throw new Error("AI returned malformed JSON");
+    }
+}
+// ─── SSE helper ────────────────────────────────────────────────────────────
+function sseSend(res, event, data) {
+    res.write(`event: ${event}\n`);
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+}
+// Pace the progress steps so the UI can breathe (not all at once).
+function sleep(ms) {
+    return new Promise((r) => setTimeout(r, ms));
+}
+// ─── Persistence helpers ──────────────────────────────────────────────────
+async function loadDraft(id) {
+    const { rows } = await db_1.pool.query(`SELECT * FROM linkedin_optimizations WHERE id = $1 LIMIT 1`, [id]);
+    return rows[0] ?? null;
+}
+async function saveDraft(id, patch) {
+    const keys = Object.keys(patch);
+    if (keys.length === 0)
+        return;
+    const sets = keys.map((k, i) => `${k} = $${i + 2}`);
+    const values = keys.map((k) => (typeof patch[k] === "object" ? JSON.stringify(patch[k]) : patch[k]));
+    await db_1.pool.query(`UPDATE linkedin_optimizations SET ${sets.join(", ")}, updated_at = NOW() WHERE id = $1`, [id, ...values]);
+}
+// Cleans/strips AI tells across every text field in a rewrite.
+function scrubRewrite(r) {
+    return {
+        headline: (0, human_voice_1.stripAiTells)(r.headline ?? ""),
+        about: (0, human_voice_1.stripAiTells)(r.about ?? ""),
+        experience: (r.experience ?? []).map((e) => ({
+            company: e.company ?? "",
+            role: e.role ?? "",
+            bullets: (e.bullets ?? []).map(human_voice_1.stripAiTells),
+        })),
+        skills: (r.skills ?? []).map((s) => (0, human_voice_1.stripAiTells)(s)),
+        keywords: (r.keywords ?? []).map((k) => (0, human_voice_1.stripAiTells)(k)),
+        targetSummary: (0, human_voice_1.stripAiTells)(r.targetSummary ?? ""),
+    };
+}
+// ─── Routes ────────────────────────────────────────────────────────────────
+function registerLinkedinOptimizeRoutes(app) {
+    /* ─── POST /start — create draft (Pro gate) ───────────────────────────── */
+    app.post("/api/linkedin-optimize/start", requirePlan_1.requireProPlan, async (req, res) => {
+        try {
+            const userId = currentUserId(req);
+            if (!userId)
+                return res.status(401).json({ error: "Unauthorized" });
+            const { rows } = await db_1.pool.query(`INSERT INTO linkedin_optimizations (user_id, status) VALUES ($1, 'draft') RETURNING id`, [userId]);
+            res.json({ id: rows[0].id });
+        }
+        catch (err) {
+            console.error("[linkedin-optimize] start error:", err?.message);
+            res.status(500).json({ error: "Could not start LinkedIn optimization" });
+        }
+    });
+    /* ─── PUT /:id/input — save user input ────────────────────────────────── */
+    app.put("/api/linkedin-optimize/:id/input", requirePlan_1.requireProPlan, async (req, res) => {
+        try {
+            const userId = currentUserId(req);
+            const draft = await loadDraft(req.params.id);
+            if (!draft)
+                return res.status(404).json({ error: "Not found" });
+            if (draft.user_id !== userId)
+                return res.status(403).json({ error: "Forbidden" });
+            const input = (req.body ?? {});
+            await saveDraft(draft.id, {
+                input_json: input,
+                target_role: input.targetRole ?? draft.target_role,
+                target_country: input.targetCountry ?? draft.target_country,
+            });
+            res.json({ ok: true });
+        }
+        catch (err) {
+            console.error("[linkedin-optimize] input save error:", err?.message);
+            res.status(500).json({ error: "Could not save input" });
+        }
+    });
+    /* ─── GET /:id — read state ───────────────────────────────────────────── */
+    app.get("/api/linkedin-optimize/:id", requirePlan_1.requireProPlan, async (req, res) => {
+        try {
+            const userId = currentUserId(req);
+            const draft = await loadDraft(req.params.id);
+            if (!draft)
+                return res.status(404).json({ error: "Not found" });
+            if (draft.user_id !== userId)
+                return res.status(403).json({ error: "Forbidden" });
+            res.json({
+                id: draft.id,
+                input: draft.input_json,
+                scores: draft.scores_json,
+                output: draft.output_json,
+                versions: draft.versions_json ?? [],
+                status: draft.status,
+                lastError: draft.last_error,
+                targetRole: draft.target_role,
+                targetCountry: draft.target_country,
+            });
+        }
+        catch (err) {
+            console.error("[linkedin-optimize] read error:", err?.message);
+            res.status(500).json({ error: "Could not read draft" });
+        }
+    });
+    /* ─── GET /:id/stream — SSE: progress → scores → rewrite ──────────────── */
+    app.get("/api/linkedin-optimize/:id/stream", requirePlan_1.requireProPlan, async (req, res) => {
+        const userId = currentUserId(req);
+        const draft = await loadDraft(req.params.id);
+        if (!draft)
+            return res.status(404).json({ error: "Not found" });
+        if (draft.user_id !== userId)
+            return res.status(403).json({ error: "Forbidden" });
+        // SSE headers
+        res.setHeader("Content-Type", "text/event-stream");
+        res.setHeader("Cache-Control", "no-cache, no-transform");
+        res.setHeader("Connection", "keep-alive");
+        res.setHeader("X-Accel-Buffering", "no"); // disable nginx buffering
+        res.flushHeaders?.();
+        // Keep the connection alive during long-running LLM calls
+        const ka = setInterval(() => { try {
+            res.write(": ping\n\n");
+        }
+        catch { /* ignore */ } }, 15000);
+        req.on("close", () => clearInterval(ka));
+        const input = draft.input_json;
+        try {
+            await saveDraft(draft.id, { status: "analysing", last_error: null });
+            // ── Progress steps — pace them so the animation feels live ──────
+            const steps = [
+                "Reading your profile...",
+                "Detecting ATS keywords...",
+                "Comparing with international recruiter standards...",
+                "Evaluating recruiter visibility...",
+            ];
+            for (const s of steps) {
+                sseSend(res, "step", { message: s });
+                await sleep(700);
+            }
+            // ── Score pass ────────────────────────────────────────────────
+            sseSend(res, "step", { message: "Scoring every section..." });
+            const scorePrompts = (0, prompts_1.buildScorePrompt)(input);
+            const scoresRaw = await completeJson(scorePrompts.system, scorePrompts.user, { temperature: 0.3, maxTokens: 1200 });
+            const scores = scoresRaw;
+            sseSend(res, "scores", scores);
+            await saveDraft(draft.id, { scores_json: scores });
+            // Chain of "section improving" ticks so the score gauge can animate up.
+            const sectionTicks = [
+                { key: "headline", msg: "Improving headline..." },
+                { key: "about", msg: "Optimising About section..." },
+                { key: "experience", msg: "Rewriting achievements..." },
+                { key: "keywords", msg: "Selecting recruiter keywords..." },
+                { key: "skills", msg: "Optimising Skills..." },
+            ];
+            for (const t of sectionTicks) {
+                sseSend(res, "step", { message: t.msg, section: t.key });
+                await sleep(650);
+            }
+            // ── Rewrite pass ─────────────────────────────────────────────
+            sseSend(res, "step", { message: "Final quality review..." });
+            const rewritePrompts = (0, prompts_1.buildRewritePrompt)(input, scores);
+            const rewriteRaw = await completeJson(rewritePrompts.system, rewritePrompts.user, { temperature: 0.55, maxTokens: 2500 });
+            const rewrite = scrubRewrite(rewriteRaw);
+            // Bump the overall score to reflect the rewrite (heuristic: +25 pts,
+            // capped at 96, so the gauge visibly rises but stays credible).
+            const newScores = {
+                ...scores,
+                overall: Math.min(96, (scores.overall ?? 50) + 25),
+            };
+            sseSend(res, "rewrite", rewrite);
+            sseSend(res, "scores", newScores);
+            await saveDraft(draft.id, {
+                scores_json: newScores,
+                output_json: rewrite,
+                status: "optimized",
+            });
+            sseSend(res, "done", { ok: true });
+            res.end();
+        }
+        catch (err) {
+            console.error("[linkedin-optimize] stream error:", err?.message);
+            await saveDraft(draft.id, { status: "error", last_error: err?.message ?? "unknown" }).catch(() => { });
+            sseSend(res, "error", { message: err?.message ?? "AI optimisation failed" });
+            res.end();
+        }
+        finally {
+            clearInterval(ka);
+        }
+    });
+    /* ─── POST /:id/refine — chat refine ─────────────────────────────────── */
+    app.post("/api/linkedin-optimize/:id/refine", requirePlan_1.requireProPlan, async (req, res) => {
+        try {
+            const userId = currentUserId(req);
+            const draft = await loadDraft(req.params.id);
+            if (!draft)
+                return res.status(404).json({ error: "Not found" });
+            if (draft.user_id !== userId)
+                return res.status(403).json({ error: "Forbidden" });
+            const message = String(req.body?.message ?? "").trim();
+            if (!message)
+                return res.status(400).json({ error: "message required" });
+            const input = draft.input_json;
+            const current = (draft.output_json ?? {});
+            const p = (0, prompts_1.buildRefinePrompt)(input, current, message);
+            const rewriteRaw = await completeJson(p.system, p.user, { temperature: 0.55, maxTokens: 2500 });
+            const rewrite = scrubRewrite(rewriteRaw);
+            // Push previous output onto versions_json before overwriting
+            const prevVersions = Array.isArray(draft.versions_json) ? draft.versions_json : [];
+            const nextVersions = [
+                { at: new Date().toISOString(), output: current, note: "before refine" },
+                ...prevVersions,
+            ].slice(0, 10);
+            await saveDraft(draft.id, {
+                output_json: rewrite,
+                versions_json: nextVersions,
+            });
+            res.json({ output: rewrite });
+        }
+        catch (err) {
+            console.error("[linkedin-optimize] refine error:", err?.message);
+            res.status(500).json({ error: "Could not refine. Try again." });
+        }
+    });
+    /* ─── POST /:id/save-version — manual snapshot ────────────────────────── */
+    app.post("/api/linkedin-optimize/:id/save-version", requirePlan_1.requireProPlan, async (req, res) => {
+        try {
+            const userId = currentUserId(req);
+            const draft = await loadDraft(req.params.id);
+            if (!draft)
+                return res.status(404).json({ error: "Not found" });
+            if (draft.user_id !== userId)
+                return res.status(403).json({ error: "Forbidden" });
+            const note = String(req.body?.note ?? "manual snapshot").slice(0, 200);
+            const prevVersions = Array.isArray(draft.versions_json) ? draft.versions_json : [];
+            const nextVersions = [
+                { at: new Date().toISOString(), output: draft.output_json, note },
+                ...prevVersions,
+            ].slice(0, 10);
+            await saveDraft(draft.id, { versions_json: nextVersions });
+            res.json({ ok: true, count: nextVersions.length });
+        }
+        catch (err) {
+            console.error("[linkedin-optimize] save-version error:", err?.message);
+            res.status(500).json({ error: "Could not save version" });
+        }
+    });
+    /* ─── GET /:id/report.pdf — final PDF report ─────────────────────────── */
+    app.get("/api/linkedin-optimize/:id/report.pdf", requirePlan_1.requireProPlan, async (req, res) => {
+        try {
+            const userId = currentUserId(req);
+            const draft = await loadDraft(req.params.id);
+            if (!draft)
+                return res.status(404).json({ error: "Not found" });
+            if (draft.user_id !== userId)
+                return res.status(403).json({ error: "Forbidden" });
+            const input = (draft.input_json ?? {});
+            const scores = (draft.scores_json ?? {});
+            const output = (draft.output_json ?? {});
+            res.setHeader("Content-Type", "application/pdf");
+            res.setHeader("Content-Disposition", `attachment; filename="linkedin-optimization-${draft.id.slice(0, 8)}.pdf"`);
+            const doc = new pdfkit_1.default({ size: "A4", margin: 50 });
+            doc.pipe(res);
+            // ── Header ───────────────────────────────────────────────────
+            doc.fillColor("#0a66c2").fontSize(22).text("LinkedIn Optimization Report", { align: "left" });
+            doc.fillColor("#666").fontSize(11).text(`For: ${input.fullName ?? "Candidate"}   ·   Generated: ${new Date().toLocaleDateString()}`);
+            doc.moveDown(1);
+            // ── Score summary ────────────────────────────────────────────
+            doc.fillColor("#000").fontSize(14).text("Profile score");
+            doc.moveDown(0.3);
+            const rows = [
+                ["Overall", scores.overall],
+                ["Headline", scores.headline],
+                ["About", scores.about],
+                ["Experience", scores.experience],
+                ["Skills", scores.skills],
+                ["Keywords", scores.keywords],
+                ["Recruiter visibility", scores.recruiterVisibility],
+                ["ATS compatibility", scores.atsCompatibility],
+                ["International readiness", scores.internationalReadiness],
+            ];
+            doc.fontSize(11);
+            rows.forEach(([k, v]) => {
+                doc.fillColor("#444").text(`${k}:`, { continued: true, width: 200 });
+                doc.fillColor("#0a66c2").text(` ${v ?? "—"} / 100`);
+            });
+            doc.moveDown(0.8);
+            // ── Headline before/after ────────────────────────────────────
+            section(doc, "Headline");
+            before(doc, input.currentHeadline ?? "—");
+            after(doc, output.headline ?? "—");
+            // ── About ───────────────────────────────────────────────────
+            section(doc, "About");
+            before(doc, input.aboutSection ?? "—");
+            after(doc, output.about ?? "—");
+            // ── Experience ──────────────────────────────────────────────
+            section(doc, "Experience");
+            (output.experience ?? []).forEach((exp) => {
+                doc.fillColor("#000").fontSize(12).text(`${exp.role} @ ${exp.company}`, { continued: false });
+                (exp.bullets ?? []).forEach((b) => doc.fillColor("#444").fontSize(11).text(`  • ${b}`));
+                doc.moveDown(0.4);
+            });
+            // ── Skills + keywords ───────────────────────────────────────
+            section(doc, "Recommended skills");
+            doc.fontSize(11).fillColor("#444").text((output.skills ?? []).join(" · "));
+            doc.moveDown(0.6);
+            section(doc, "Recruiter search keywords");
+            doc.fontSize(11).fillColor("#444").text((output.keywords ?? []).join(" · "));
+            doc.moveDown(0.6);
+            section(doc, "Target focus");
+            doc.fontSize(11).fillColor("#444").text(output.targetSummary ?? "—");
+            doc.end();
+        }
+        catch (err) {
+            console.error("[linkedin-optimize] pdf error:", err?.message);
+            res.status(500).json({ error: "Could not generate PDF" });
+        }
+    });
+    // ══════════════════════════════════════════════════════════════════════
+    // v2 (2026-07): world-class expansion
+    // ══════════════════════════════════════════════════════════════════════
+    /* ─── POST /parse-cv — upload PDF/DOCX, get structured ProfileInput ─── */
+    app.post("/api/linkedin-optimize/parse-cv", requirePlan_1.requireProPlan, cvUpload.single("cv"), async (req, res) => {
+        try {
+            if (!req.file)
+                return res.status(400).json({ error: "No file uploaded" });
+            const filename = req.file.originalname || "upload.pdf";
+            const mime = req.file.mimetype || "application/pdf";
+            let raw = "";
+            try {
+                const r = await (0, extract_text_1.extractTextFromBuffer)(req.file.buffer, mime, filename);
+                raw = typeof r === "string" ? r : (r?.text ?? "");
+            }
+            catch (err) {
+                console.error("[linkedin-optimize] CV extract failed:", err?.message);
+                return res.status(422).json({ error: "Could not read this file. Try a text-based PDF or DOCX." });
+            }
+            if (!raw || raw.length < 120) {
+                return res.status(422).json({ error: "The file has too little text. Try a different CV." });
+            }
+            const p = (0, prompts_1.buildCvParsePrompt)(raw);
+            const parsed = await completeJson(p.system, p.user, { temperature: 0.15, maxTokens: 2000 });
+            res.json({ input: parsed });
+        }
+        catch (err) {
+            console.error("[linkedin-optimize] parse-cv error:", err?.message);
+            res.status(500).json({ error: "Could not parse CV. Please try again or use manual entry." });
+        }
+    });
+    /* ─── POST /:id/headline-variants — 5 headlines to choose from ──────── */
+    app.post("/api/linkedin-optimize/:id/headline-variants", requirePlan_1.requireProPlan, async (req, res) => {
+        try {
+            const userId = currentUserId(req);
+            const draft = await loadDraft(req.params.id);
+            if (!draft)
+                return res.status(404).json({ error: "Not found" });
+            if (draft.user_id !== userId)
+                return res.status(403).json({ error: "Forbidden" });
+            const input = draft.input_json;
+            const p = (0, prompts_1.buildHeadlineVariantsPrompt)(input);
+            const variants = await completeJson(p.system, p.user, { temperature: 0.7, maxTokens: 900 });
+            // scrub tells on each variant
+            const scrubbed = {};
+            for (const [k, v] of Object.entries(variants ?? {})) {
+                scrubbed[k] = (0, human_voice_1.stripAiTells)(String(v ?? ""));
+            }
+            res.json({ variants: scrubbed });
+        }
+        catch (err) {
+            console.error("[linkedin-optimize] headline-variants error:", err?.message);
+            res.status(500).json({ error: "Could not generate headline variants" });
+        }
+    });
+    /* ─── POST /:id/about-tone — rewrite About in a chosen tone ─────────── */
+    app.post("/api/linkedin-optimize/:id/about-tone", requirePlan_1.requireProPlan, async (req, res) => {
+        try {
+            const userId = currentUserId(req);
+            const draft = await loadDraft(req.params.id);
+            if (!draft)
+                return res.status(404).json({ error: "Not found" });
+            if (draft.user_id !== userId)
+                return res.status(403).json({ error: "Forbidden" });
+            const tone = String(req.body?.tone ?? "professional");
+            const valid = ["professional", "leadership", "friendly", "executive", "technical", "international"];
+            if (!valid.includes(tone))
+                return res.status(400).json({ error: "Invalid tone" });
+            const input = draft.input_json;
+            const p = (0, prompts_1.buildAboutTonePrompt)(input, tone);
+            const out = await completeJson(p.system, p.user, { temperature: 0.6, maxTokens: 900 });
+            res.json({ about: (0, human_voice_1.stripAiTells)(String(out?.about ?? "")) });
+        }
+        catch (err) {
+            console.error("[linkedin-optimize] about-tone error:", err?.message);
+            res.status(500).json({ error: "Could not rewrite About" });
+        }
+    });
+    /* ─── POST /:id/keyword-analysis — detected / missing / high-value ── */
+    app.post("/api/linkedin-optimize/:id/keyword-analysis", requirePlan_1.requireProPlan, async (req, res) => {
+        try {
+            const userId = currentUserId(req);
+            const draft = await loadDraft(req.params.id);
+            if (!draft)
+                return res.status(404).json({ error: "Not found" });
+            if (draft.user_id !== userId)
+                return res.status(403).json({ error: "Forbidden" });
+            const p = (0, prompts_1.buildKeywordAnalysisPrompt)(draft.input_json);
+            const analysis = await completeJson(p.system, p.user, { temperature: 0.3, maxTokens: 900 });
+            res.json({ analysis });
+        }
+        catch (err) {
+            console.error("[linkedin-optimize] keyword-analysis error:", err?.message);
+            res.status(500).json({ error: "Could not analyse keywords" });
+        }
+    });
+    /* ─── POST /:id/recruiter-view — what a recruiter sees ──────────────── */
+    app.post("/api/linkedin-optimize/:id/recruiter-view", requirePlan_1.requireProPlan, async (req, res) => {
+        try {
+            const userId = currentUserId(req);
+            const draft = await loadDraft(req.params.id);
+            if (!draft)
+                return res.status(404).json({ error: "Not found" });
+            if (draft.user_id !== userId)
+                return res.status(403).json({ error: "Forbidden" });
+            const input = draft.input_json;
+            const rewrite = (draft.output_json ?? {});
+            const p = (0, prompts_1.buildRecruiterViewPrompt)(input, rewrite.about, rewrite.headline);
+            const view = await completeJson(p.system, p.user, { temperature: 0.35, maxTokens: 700 });
+            res.json({ view });
+        }
+        catch (err) {
+            console.error("[linkedin-optimize] recruiter-view error:", err?.message);
+            res.status(500).json({ error: "Could not simulate recruiter view" });
+        }
+    });
+    /* ─── POST /:id/networking — draft a connection / follow-up message ─ */
+    app.post("/api/linkedin-optimize/:id/networking", requirePlan_1.requireProPlan, async (req, res) => {
+        try {
+            const userId = currentUserId(req);
+            const draft = await loadDraft(req.params.id);
+            if (!draft)
+                return res.status(404).json({ error: "Not found" });
+            if (draft.user_id !== userId)
+                return res.status(403).json({ error: "Forbidden" });
+            const kind = String(req.body?.kind ?? "");
+            if (!["connection_request", "recruiter_intro", "follow_up", "thank_you"].includes(kind)) {
+                return res.status(400).json({ error: "Invalid kind" });
+            }
+            const ctx = req.body?.context ?? {};
+            const p = (0, prompts_1.buildNetworkingPrompt)(draft.input_json, kind, ctx);
+            const out = await completeJson(p.system, p.user, { temperature: 0.6, maxTokens: 500 });
+            res.json({ message: (0, human_voice_1.stripAiTells)(String(out?.message ?? "")) });
+        }
+        catch (err) {
+            console.error("[linkedin-optimize] networking error:", err?.message);
+            res.status(500).json({ error: "Could not draft the message" });
+        }
+    });
+    /* ─── POST /:id/post — generate a LinkedIn post ─────────────────────── */
+    app.post("/api/linkedin-optimize/:id/post", requirePlan_1.requireProPlan, async (req, res) => {
+        try {
+            const userId = currentUserId(req);
+            const draft = await loadDraft(req.params.id);
+            if (!draft)
+                return res.status(404).json({ error: "Not found" });
+            if (draft.user_id !== userId)
+                return res.status(403).json({ error: "Forbidden" });
+            const category = String(req.body?.category ?? "");
+            const validCats = [
+                "career_growth", "certification", "new_job", "networking", "industry_insights", "job_search",
+            ];
+            if (!validCats.includes(category))
+                return res.status(400).json({ error: "Invalid category" });
+            const topic = req.body?.topic ? String(req.body.topic).slice(0, 200) : undefined;
+            const p = (0, prompts_1.buildPostPrompt)(draft.input_json, category, topic);
+            const out = await completeJson(p.system, p.user, { temperature: 0.65, maxTokens: 700 });
+            res.json({
+                post: (0, human_voice_1.stripAiTells)(String(out?.post ?? "")),
+                hashtags: Array.isArray(out?.hashtags) ? out.hashtags : [],
+            });
+        }
+        catch (err) {
+            console.error("[linkedin-optimize] post error:", err?.message);
+            res.status(500).json({ error: "Could not draft the post" });
+        }
+    });
+    /* ─── POST /:id/interview-prep — 5 questions + coached answers ──────── */
+    app.post("/api/linkedin-optimize/:id/interview-prep", requirePlan_1.requireProPlan, async (req, res) => {
+        try {
+            const userId = currentUserId(req);
+            const draft = await loadDraft(req.params.id);
+            if (!draft)
+                return res.status(404).json({ error: "Not found" });
+            if (draft.user_id !== userId)
+                return res.status(403).json({ error: "Forbidden" });
+            const p = (0, prompts_1.buildInterviewPrepPrompt)(draft.input_json);
+            const prep = await completeJson(p.system, p.user, { temperature: 0.55, maxTokens: 1500 });
+            res.json({ prep });
+        }
+        catch (err) {
+            console.error("[linkedin-optimize] interview-prep error:", err?.message);
+            res.status(500).json({ error: "Could not generate interview prep" });
+        }
+    });
+    /* ─── POST /:id/restore-version — restore a saved snapshot ──────────── */
+    app.post("/api/linkedin-optimize/:id/restore-version", requirePlan_1.requireProPlan, async (req, res) => {
+        try {
+            const userId = currentUserId(req);
+            const draft = await loadDraft(req.params.id);
+            if (!draft)
+                return res.status(404).json({ error: "Not found" });
+            if (draft.user_id !== userId)
+                return res.status(403).json({ error: "Forbidden" });
+            const idx = Number(req.body?.index);
+            const versions = Array.isArray(draft.versions_json) ? draft.versions_json : [];
+            if (!Number.isFinite(idx) || idx < 0 || idx >= versions.length) {
+                return res.status(400).json({ error: "Invalid version index" });
+            }
+            const chosen = versions[idx];
+            if (!chosen?.output)
+                return res.status(400).json({ error: "Version has no snapshot" });
+            // Push current output onto history before overwriting
+            const nextVersions = [
+                { at: new Date().toISOString(), output: draft.output_json, note: "auto-saved before restore" },
+                ...versions,
+            ].slice(0, 10);
+            await saveDraft(draft.id, {
+                output_json: chosen.output,
+                versions_json: nextVersions,
+            });
+            res.json({ output: chosen.output });
+        }
+        catch (err) {
+            console.error("[linkedin-optimize] restore-version error:", err?.message);
+            res.status(500).json({ error: "Could not restore version" });
+        }
+    });
+}
+// ─── PDF helpers ────────────────────────────────────────────────────────────
+function section(doc, title) {
+    doc.moveDown(0.6);
+    doc.fillColor("#0a66c2").fontSize(14).text(title);
+    doc.moveDown(0.2);
+}
+function before(doc, text) {
+    doc.fillColor("#999").fontSize(10).text("Before", { continued: false });
+    doc.fillColor("#666").fontSize(11).text(text);
+    doc.moveDown(0.3);
+}
+function after(doc, text) {
+    doc.fillColor("#0a66c2").fontSize(10).text("After", { continued: false });
+    doc.fillColor("#000").fontSize(11).text(text);
+    doc.moveDown(0.4);
+}

@@ -16,6 +16,7 @@ import { db } from "../db";
 import { payments } from "../../shared/schema";
 import { eq } from "drizzle-orm";
 import { storage } from "../storage";
+import { reportRejection } from "../lib/sentry";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 

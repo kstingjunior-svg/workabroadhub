@@ -90,6 +90,7 @@ import {
   capturePayPalOrder,
   kesToUsd,
 } from "./paypal";
+import { reportRejection } from "./lib/sentry";
 
 // Extended validation for career profile
 const careerProfileSchema = insertUserCareerProfileSchema.extend({

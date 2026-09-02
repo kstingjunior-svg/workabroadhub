@@ -4,6 +4,7 @@ import { storage } from "../storage";
 import type { ServiceOrder } from "@shared/schema";
 import { sendWhatsApp } from "./whatsapp";
 import { sendEmail } from "../email";
+import { reportRejection } from "../lib/sentry";
 
 const APP_URL = process.env.APP_URL || "https://workabroadhub.tech";
 

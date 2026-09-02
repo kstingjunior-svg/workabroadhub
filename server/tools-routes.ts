@@ -10,6 +10,7 @@ import { insertJobSchema } from "../shared/schema";
 import { openai } from "./lib/openai";
 import { extractTextFromBuffer, MIN_CV_LENGTH } from "./utils/extract-text";
 import { classifyDocument, checkDocumentType } from "./tools/document-classifier";
+import { reportRejection } from "./lib/sentry";
 
 // ── Multer config (memory storage, 5 MB limit, PDF/DOCX only) ─────────────────
 const upload = multer({

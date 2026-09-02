@@ -13,6 +13,7 @@
  *   revenue/monthly/{YYYY-MM}     — monthly revenue aggregates
  */
 
+import { reportRejection } from "../lib/sentry";
 const DB_URL = process.env.VITE_FIREBASE_DATABASE_URL;
 
 /**

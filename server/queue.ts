@@ -10,6 +10,7 @@
  * - Non-critical database writes
  */
 
+import { reportRejection } from "./lib/sentry";
 interface QueueItem<T = any> {
   id: string;
   type: string;

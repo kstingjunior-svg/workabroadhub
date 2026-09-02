@@ -6,6 +6,7 @@ import { cvQueue } from "../lib/cvQueue";
 import { generateCV } from "./cv";
 import { userCareerProfiles } from "@shared/schema";
 import { eq } from "drizzle-orm";
+import { reportRejection } from "../lib/sentry";
 
 // Normalize raw payment IDs to a canonical slug.
 // Resolution order:

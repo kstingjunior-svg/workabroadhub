@@ -3,6 +3,7 @@ import { users, type User, type UpsertUser } from "@shared/models/auth";
 import { db } from "../../db";
 import { eq, count } from "drizzle-orm";
 import { activityEvents } from "@shared/schema";
+import { reportRejection } from "../../lib/sentry";
 
 // Interface for auth storage operations
 // (IMPORTANT) These user operations are mandatory for Replit Auth.

@@ -18,9 +18,12 @@ if ! node scripts/check-nuls.mjs; then
   exit 1
 fi
 
-# 2026-09: dist-freshness check removed. dist/ is now built on Render
-# during deploy (render.yaml → npm ci && npm run build). The old ritual
-# of "rebuild dist locally, commit it, push" is gone.
+echo "[pre-push] running dist-freshness check..."
+if ! node scripts/check-dist-fresh.mjs; then
+  echo ""
+  echo "Push aborted. dist/server/ is stale. Run 'npx tsc -p tsconfig.server.json' and commit dist/server, or set SKIP_PREPUSH=1 to bypass."
+  exit 1
+fi
 
 echo "[pre-push] all checks passed."
 exit 0

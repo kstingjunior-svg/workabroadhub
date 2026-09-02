@@ -14,6 +14,7 @@
  */
 
 import { sendEmail } from "../email";
+import { reportRejection } from "../lib/sentry";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
