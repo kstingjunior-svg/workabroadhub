@@ -66,10 +66,28 @@ function collectErrors(tsconfig) {
     // Normalise path separators so Windows and Linux runs agree.
     const file = m[1].replace(/\\/g, "/");
     const code = m[4];
-    const msg = m[5].trim();
+    const msg = normaliseMessage(m[5].trim());
     errors.add(`${file}|${code}|${msg}`);
   }
   return errors;
+}
+
+// 2026-09: tsc renders inline structural types with slightly different
+// truncation/wording between environments (different TS versions,
+// terminal widths, --pretty flags). That flapped the ratchet on identical
+// bugs. Collapse anything that looks like an inline type shape to a
+// single placeholder so the identity is stable across environments.
+function normaliseMessage(msg) {
+  return msg
+    // Collapse balanced { ... } (types, object literals) — one level deep
+    // is sufficient in practice; nested don't appear in tsc messages.
+    .replace(/\{[^{}]*\}/g, "{…}")
+    // Collapse quoted single-line type expressions that survived above
+    // (e.g. "'A | B | C'" with unions inside).
+    .replace(/'[^']{40,}'/g, "'…'")
+    // Collapse whitespace runs
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function loadBaseline() {
