@@ -11,8 +11,10 @@
 // change needed.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import crypto from "crypto";
 import { extractFacts } from "./pass1-extractor";
 import { enrichFacts } from "./pass2-enricher";
+import { parseJd, selectStyle, buildStyleSeed } from "./pass3-style-jd";
 import { runScoreGate } from "./pass6-score-gate";
 import type {
   CvFacts, EnrichedFacts, StyleSpec, GenerationResult,
@@ -27,6 +29,19 @@ export interface GenerateInput {
   region?: StyleSpec["region"];
   /** Free-form industry label (drives per-industry banned phrases). */
   industry?: string;
+  /**
+   * Optional stable user identifier — passed to the style seed so
+   * regenerations of the same source CV by the same user produce the same
+   * voice/structure. Two different users on the same source still get
+   * different styles.
+   */
+  userId?: string;
+  /**
+   * Which regeneration this is (0 = first, 1 = user hit "regenerate").
+   * Bumping this rotates the style seed so the user can request a
+   * genuinely different voice by clicking "try again".
+   */
+  generationN?: number;
 }
 
 export async function generateCv(input: GenerateInput): Promise<GenerationResult> {
@@ -37,39 +52,36 @@ export async function generateCv(input: GenerateInput): Promise<GenerationResult
   // ── Pass 1: Extractor ─────────────────────────────────────────────────
   const facts: CvFacts = await extractFacts(cvText);
 
-  // ── Pass 2: Enricher ──────────────────────────────────────────────────
-  // Real Enricher: turns weak achievements into stronger candidates
-  // (outcome_reframed, quantified_estimate) without inventing facts.
-  // This is the single biggest quality lever in the pipeline — before
-  // this landed, verbatim-only enrichment meant the score gate almost
-  // always fell short of the +15 promise on any CV that wasn't already
-  // quantified. Concurrency-bounded so a 6-role senior CV doesn't fire
-  // 48 parallel OpenAI calls.
-  const enriched: EnrichedFacts = await enrichFacts({ facts, concurrency: 4 });
+  // ── Pass 3a: JD parser ────────────────────────────────────────────────
+  // Run in parallel with the Enricher below since both are independent
+  // — cuts total latency by ~2s on JD-tailored requests.
+  const jdPromise = parseJd(jdText ?? "");
 
-  // ── Pass 3 placeholder: deterministic sensible defaults ───────────────
-  // Real Style selector will hash (userId, generationN) into a permutation
-  // table and parse the JD into a JdSpec. Until then, pick sane defaults
-  // from what we can infer.
-  const seniority = inferSeniority(facts);
-  const style: StyleSpec = {
-    voice: seniority === "exec" ? "formal-classic" : "punchy-modern",
-    structure: facts.roles.length >= 3 ? "chronological" : "skills-forward",
-    sectionOrder: [
-      "Summary",
-      "Experience",
-      "Skills",
-      "Education",
-      "Certifications",
-      "Languages",
-    ],
-    region,
-    seniorityBand: seniority,
-    industry,
-    bannedPhrases: DEFAULT_BANNED_PHRASES,
-    // No JD parsing yet — leave jd undefined so Composer skips tailoring.
-    // When Pass 3 lands, parse jdText into JdSpec and attach here.
-  };
+  // ── Pass 2: Enricher ──────────────────────────────────────────────────
+  // Turns weak achievements into stronger candidates
+  // (outcome_reframed, quantified_estimate) without inventing facts.
+  // Concurrency-bounded so a 6-role senior CV doesn't fire 48 parallel
+  // OpenAI calls.
+  const [enriched, jd] = await Promise.all([
+    enrichFacts({ facts, concurrency: 4 }),
+    jdPromise,
+  ]);
+
+  // ── Pass 3b: Style selector ───────────────────────────────────────────
+  // Deterministic + stochastic. Same user+source → same voice
+  // (consistent regenerations). Different users → different voices
+  // (uniqueness). Bump generationN to give the same user a fresh voice.
+  const sourceHash = crypto
+    .createHash("sha256")
+    .update(cvText)
+    .digest("hex")
+    .slice(0, 16);
+  const seed = input.userId
+    ? buildStyleSeed(input.userId, sourceHash, input.generationN ?? 0)
+    : undefined;
+  const style: StyleSpec = selectStyle({
+    facts, jd, region, industry, seed,
+  });
 
   // ── Pass 4 + 6: Composer under Score-gate loop ────────────────────────
   const result = await runScoreGate({
@@ -84,29 +96,14 @@ export async function generateCv(input: GenerateInput): Promise<GenerationResult
   return result;
 }
 
-// ─── Placeholders that live here until their real passes land ────────────
-
-function inferSeniority(facts: CvFacts): StyleSpec["seniorityBand"] {
-  // Rough: years since earliest role start.
-  const starts = facts.roles
-    .map((r) => Date.parse(r.start))
-    .filter((n) => !isNaN(n));
-  if (!starts.length) return "mid";
-  const earliestYear = new Date(Math.min(...starts)).getFullYear();
-  const years = new Date().getFullYear() - earliestYear;
-  const titles = facts.roles.map((r) => r.title.toLowerCase()).join(" ");
-
-  if (/(chief|c\w+o|vp|vice president|founder|director|head of)/.test(titles)) return "exec";
-  if (years >= 10) return "lead";
-  if (years >= 5) return "senior";
-  if (years >= 2) return "mid";
-  return "entry";
-}
+// ─── Shared constants ────────────────────────────────────────────────────
 
 /**
- * Global banned-phrase set. Per-industry additions come from the future
- * cv_banned_phrases table (Postgres). Everything here is an LLM tell or
- * corporate mush that has zero information density in a real CV.
+ * Global banned-phrase set. Per-industry additions come from
+ * pass3-style-jd.ts INDUSTRY_BANNED. Eventually promote both to a
+ * Postgres table (cv_banned_phrases) so admins can edit without a
+ * deploy. Everything here is an LLM tell or corporate mush that has
+ * zero information density in a real CV.
  */
 export const DEFAULT_BANNED_PHRASES: string[] = [
   "results-driven",

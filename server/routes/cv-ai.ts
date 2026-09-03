@@ -84,9 +84,17 @@ export function registerCvAiRoutes(app: Express): void {
           ? req.body.industry.slice(0, 60)
           : "general";
 
+        // Optional regeneration counter — client bumps this when the user
+        // clicks "try a different voice" so the style seed rotates.
+        const generationN = Math.max(0, Math.min(9, Number(req.body?.generationN ?? 0) || 0));
+
         // ── Run the pipeline ───────────────────────────────────────────
         const t0 = Date.now();
-        const result = await generateCv({ cvText, jdText, region, industry });
+        const result = await generateCv({
+          cvText, jdText, region, industry,
+          userId,                  // stable style seed
+          generationN,             // rotate voice on user-requested regens
+        });
         const elapsedMs = Date.now() - t0;
 
         console.log(
@@ -100,6 +108,14 @@ export function registerCvAiRoutes(app: Express): void {
         // review" upsell instead of pretending we hit the target.
         const hitTarget = result.improvement >= 15;
 
+        // Collect any clarifying questions the Enricher emitted for
+        // achievements it couldn't safely quantify — the client can show
+        // these as an inline "make this stronger?" prompt.
+        const clarifyingQuestions = (result.facts.roles as any[])
+          .flatMap((r) => r.enrichedAchievements ?? [])
+          .flatMap((a) => a.clarifyingQuestions ?? [])
+          .slice(0, 6);
+
         res.json({
           ok: true,
           hitTarget,
@@ -112,6 +128,14 @@ export function registerCvAiRoutes(app: Express): void {
           message: hitTarget
             ? `Your CV is stronger by ${result.improvement} ATS points.`
             : `Your original CV was already strong — our AI improved it by ${result.improvement} points. For a larger lift, try our expert review.`,
+          // 2026-09 (Pass 3): surface tailoring info + clarifying questions
+          // so the UI can show "we tailored to N keywords" chip and inline
+          // "make this bullet stronger?" prompts.
+          tailoredTo: result.styleSpec.jd?.keywordsForInjection ?? [],
+          voice: result.styleSpec.voice,
+          structure: result.styleSpec.structure,
+          clarifyingQuestions,
+          generationN,
         });
       } catch (err: any) {
         // Wrong-document detection thrown by the extractor.
