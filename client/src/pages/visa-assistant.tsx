@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -183,6 +183,7 @@ function MessageBubble({ message }: { message: ChatMessage }) {
 export default function VisaAssistantPage() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const queryClient = useQueryClient();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -512,7 +513,7 @@ export default function VisaAssistantPage() {
                     <Card
                       key={p.plan}
                       className={`text-center p-4 ${p.plan === usage?.planId?.toUpperCase() ? "border-blue-400 ring-1 ring-blue-400" : ""} ${p.href ? "cursor-pointer hover:shadow-md transition-shadow" : ""}`}
-                      onClick={() => p.href && (window.location.href = p.href)}
+                      onClick={() => p.href && navigate(p.href)}
                       data-testid={`card-plan-${p.plan.toLowerCase()}`}
                     >
                       <p.icon className={`h-5 w-5 mx-auto mb-1 ${p.color === "purple" ? "text-purple-600" : p.color === "blue" ? "text-blue-600" : "text-gray-500"}`} />

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useLocation } from "wouter";
 import { X, Check, Crown, Shield, ArrowRight, Phone, Loader2, CheckCircle, AlertCircle, RefreshCw } from "lucide-react";
 import { StkReadyModal } from "@/components/stk-ready-modal";
 import { useUpgradeModal, UpgradeModalTrigger } from "@/contexts/upgrade-modal-context";
@@ -78,6 +79,7 @@ export function UpgradeModal() {
   const { toast } = useToast();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const [, navigate] = useLocation();
 
   const [step, setStep] = useState<Step>("compare");
   // 2026-06: modal now offers all 3 paid tiers. Founder feedback — too many
@@ -494,7 +496,7 @@ export function UpgradeModal() {
 
             {/* PAYPAL — first for non-KE users, always visible */}
             <button
-              onClick={() => { handleClose(); window.location.href = "/payment?plan=pro"; }}
+              onClick={() => { handleClose(); navigate("/payment?plan=pro"); }}
               className="w-full py-3.5 rounded-xl font-bold text-sm text-white bg-gradient-to-r from-[#0070ba] to-[#003087] hover:from-[#005a99] hover:to-[#00246b] transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] shadow-md shadow-blue-200 dark:shadow-blue-900/30 flex items-center justify-center gap-2"
               data-testid="btn-pay-paypal"
             >

@@ -395,7 +395,7 @@ function JobCard({
                         className="border p-3 rounded cursor-pointer hover:shadow-sm transition-shadow dark:border-gray-700"
                         onClick={() => {
                           trackEvent("click_similar_job", { category: job.category ?? undefined, country: job.country ?? undefined });
-                          window.location.href = `/job/${sj.id}`;
+                          navigate(`/job/${sj.id}`);
                         }}
                         data-testid={`card-similar-job-${sj.id}`}
                       >

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { ScamReport, ScamWallComment } from "@shared/schema";
@@ -426,6 +426,7 @@ function ScamCard({ report, isVisible, likedIds, onLike, onComment, onShare, onR
 
 export default function ScamWall() {
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const [page, setPage] = useState(1);
   const [allReports, setAllReports] = useState<ScamReport[]>([]);
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
@@ -526,7 +527,7 @@ export default function ScamWall() {
               onLike={id => likeMutation.mutate(id)}
               onComment={r => setCommentTarget(r)}
               onShare={r => setShareTarget(r)}
-              onReport={() => window.location.href = "/report-scam"}
+              onReport={() => navigate("/report-scam")}
             />
           </div>
         ))}

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { LandingNeaSearch } from "@/components/landing-nea-search";
@@ -29,6 +30,12 @@ import { useAuth } from "@/hooks/use-auth";
 export default function Landing() {
   const { t } = useTranslation();
   const { toast } = useToast();
+  // 2026-09 (Tony's back-button fix): use wouter's navigate() for internal
+  // links so the browser's back stack walks page-by-page instead of jumping
+  // to the dashboard. window.location.href = "/foo" does a full reload
+  // which resets history and is why users were landing on the dashboard
+  // when they pressed Back.
+  const [, navigate] = useLocation();
   const { user: currentUser } = useAuth();
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authModalTab, setAuthModalTab] = useState<"login" | "signup">("signup");
@@ -822,7 +829,7 @@ export default function Landing() {
               size="lg"
               className="text-base bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-400 hover:to-blue-400 text-white border-0 shadow-xl shadow-purple-500/30 gap-2"
               onClick={() => {
-                if (currentUser) window.location.href = "/autoapply";
+                if (currentUser) navigate("/autoapply");
                 else {
                   localStorage.setItem("auth_redirect", "/autoapply");
                   openSignUp();
@@ -991,7 +998,7 @@ export default function Landing() {
                     onClick={() => {
                       // Free tools with direct route (CV Health Check → /tools/ats-cv-checker)
                       if (service.href) {
-                        window.location.href = service.href;
+                        navigate(service.href);
                         return;
                       }
 
@@ -1005,10 +1012,10 @@ export default function Landing() {
                       // right for them.
                       const slug = (service as any).slug;
                       if (!slug) {
-                        window.location.href = "/services";
+                        navigate("/services");
                         return;
                       }
-                      window.location.href = `/services/order/${slug}`;
+                      navigate(`/services/order/${slug}`);
                     }}
                     data-testid={`btn-service-${service.title.toLowerCase().replace(/\s+/g, "-")}`}
                   >
