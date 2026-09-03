@@ -265,7 +265,13 @@ export async function stkPush(
       }
     );
 
-    console.log("[M-Pesa] STK Push response:", JSON.stringify(res.data));
+    // 2026-09 (Tony's report — 99 works, 1000/4500 fail):
+    // Explicit high-fidelity per-amount log. Grep Render logs with
+    // `[M-Pesa][AMOUNT]` to see rejection patterns by amount.
+    console.log(
+      `[M-Pesa][AMOUNT=${Math.round(amount)}][SHORTCODE=${shortCode}][PHONE=${formattedPhone}] response:`,
+      JSON.stringify(res.data),
+    );
 
     // 2026-09 EMERGENCY: enforce ResponseCode contract at the source so
     // NO caller (all 17 stkPush() call sites) can silently swallow a
