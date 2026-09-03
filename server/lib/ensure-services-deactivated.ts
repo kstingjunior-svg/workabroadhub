@@ -14,12 +14,17 @@ import { pool } from "../db";
 
 /** Slugs of services that must NEVER show in the public storefront. */
 const DEACTIVATED_SLUGS = [
-  // 2026-09 (Tony's trust audit): remove per-CV upsells that competed with
-  // the AI CV Builder + felt like we were selling recruiter services rather
-  // than delivering them. Existing paid orders still resolve — only the
-  // storefront listing hides.
+  // 2026-09 (Tony's trust audit — round 1): remove per-CV upsells that
+  // competed with the AI CV Builder + felt like we were selling
+  // recruiter services rather than delivering them.
   "ats_cv_optimization",
   "cv_rewrite",
+  // 2026-09 (Tony's trust audit — round 2): the three Monthly
+  // Subscription cards overlapped with core Pro benefits and read as
+  // "pay again for help you already paid for". Removed from storefront.
+  "whatsapp_support",
+  "job_alerts",
+  "emergency_support",
 ];
 
 export async function ensureServicesDeactivated(): Promise<void> {

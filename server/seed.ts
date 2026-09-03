@@ -315,11 +315,20 @@ export async function seedDatabase() {
       features: ["Country-specific housing & cost guide", "Banking & money transfer setup tips", "Worker rights & labor law overview", "Cultural dos and don'ts", "Emergency contacts & embassy details"],
     },
     // --- Support Plans (subscriptions) ---
+    // 2026-09 DEPRECATED — three Monthly Subscription cards
+    // (Premium WhatsApp Support KSh 1000/mo, Premium Job Alerts KSh
+    // 500/mo, Abroad Worker Emergency Support KSh 300/mo) retired from
+    // the storefront on Tony's trust audit. Same reasoning as the
+    // deprecated CV upsells above — they overlap with the core Pro
+    // subscription and read as pay-to-get-help-we-should-already-give.
+    // Kept in seed for reference; isActive=false hides them from
+    // /api/services. Runtime enforcer at
+    // server/lib/ensure-services-deactivated.ts also flips existing rows.
     {
       slug: "whatsapp_support",
       name: "Premium WhatsApp Support",
-      description: "30 days of priority WhatsApp support for all your job search and application questions",
-      price: 1000, currency: "KES", isActive: true, order: 7,
+      description: "[DEPRECATED] 30 days of priority WhatsApp support for all your job search and application questions",
+      price: 1000, currency: "KES", isActive: false, order: 7,
       category: "Support Plans",
       isSubscription: true, subscriptionPeriod: "monthly",
       features: ["30 days priority WhatsApp access", "Answer all application questions", "CV & cover letter quick reviews", "Scam/agency verification on demand", "Response within 2 hours"],
@@ -327,8 +336,8 @@ export async function seedDatabase() {
     {
       slug: "job_alerts",
       name: "Premium Job Alerts",
-      description: "Weekly curated, verified job listings sent directly to your WhatsApp matched to your skills",
-      price: 500, currency: "KES", isActive: true, order: 17,
+      description: "[DEPRECATED] Weekly curated, verified job listings sent directly to your WhatsApp matched to your skills",
+      price: 500, currency: "KES", isActive: false, order: 17,
       category: "Support Plans", badge: "Popular",
       isSubscription: true, subscriptionPeriod: "monthly",
       features: ["Weekly verified job listings via WhatsApp", "Matched to your skills & target country", "Only NEA-licensed agency postings", "Scam-filtered & legitimacy-scored jobs", "Cancel anytime"],
@@ -336,8 +345,8 @@ export async function seedDatabase() {
     {
       slug: "emergency_support",
       name: "Abroad Worker Emergency Support",
-      description: "Already working overseas? Get 24/7 WhatsApp support for workplace disputes and emergencies",
-      price: 300, currency: "KES", isActive: true, order: 18,
+      description: "[DEPRECATED] Already working overseas? Get 24/7 WhatsApp support for workplace disputes and emergencies",
+      price: 300, currency: "KES", isActive: false, order: 18,
       category: "Support Plans", badge: "New",
       isSubscription: true, subscriptionPeriod: "monthly",
       features: ["24/7 WhatsApp emergency response line", "Workplace dispute & rights guidance", "Embassy & consulate contact referrals", "Repatriation assistance coordination", "Priority response within 1 hour"],
