@@ -2975,19 +2975,82 @@ Crawl-delay: 1`);
   // PayPal upgrade route removed — M-Pesa is the only supported payment method.
 
   // GET /api/subscriptions/poll/:paymentId — poll status of a plan upgrade payment
+  //
+  // 2026-09 (Tony's "I keep manually upgrading users" fix):
+  // If the payment is still 'awaiting_payment'/'pending' AND older than 25s,
+  // the callback probably got dropped by Safaricom or lost by our edge.
+  // Actively query Safaricom's stkPushQuery API for the truth, and if
+  // Safaricom says the customer actually paid, mark success + activate
+  // the plan inline. Client sees "success" on its next poll instead of
+  // staying stuck at "pending" forever and needing an admin to fix it.
   app.get("/api/subscriptions/poll/:paymentId", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user?.claims?.sub;
       const { paymentId } = req.params;
-      const payment = await storage.getPaymentById(paymentId);
+      let payment = await storage.getPaymentById(paymentId);
       if (!payment || payment.userId !== userId) return res.status(404).json({ message: "Not found" });
+
+      // ── Auto-recover if the payment is stale ──────────────────────────
+      const isStuck = ["awaiting_payment", "pending"].includes(String(payment.status ?? "").toLowerCase());
+      const ageMs = payment.createdAt ? Date.now() - new Date(payment.createdAt).getTime() : 0;
+      const checkoutId = String((payment as any).transactionRef ?? "").trim();
+      if (isStuck && ageMs > 25_000 && checkoutId && checkoutId.startsWith("ws_")) {
+        try {
+          const { stkQuery } = await import("./mpesa");
+          const q: any = await stkQuery(checkoutId).catch(() => null);
+          if (q && Number(q.ResultCode) === 0) {
+            // Customer paid. Safaricom confirms — activate now.
+            const receipt =
+              q?.CallbackMetadata?.Item?.find((i: any) => i.Name === "MpesaReceiptNumber")?.Value
+              ?? q?.MpesaReceiptNumber
+              ?? `RECON-${Date.now()}`;
+            await storage.updatePayment(payment.id, {
+              status: "success",
+              mpesaCode: String(receipt),
+              mpesaReceiptNumber: String(receipt),
+              verificationStatus: "verified",
+            } as any);
+            const CANONICAL = new Set(["trial","basic","monthly","yearly","pro","pro_referral"]);
+            const sid = String((payment as any).serviceId ?? "").toLowerCase();
+            const resolved =
+              (payment.planId && CANONICAL.has(payment.planId)) ? payment.planId :
+              (sid.startsWith("plan_") && CANONICAL.has(sid.replace("plan_", ""))) ? sid.replace("plan_", "") :
+              (CANONICAL.has(sid) ? sid : null);
+            if (resolved) {
+              const user = await storage.getUserById(payment.userId).catch(() => null);
+              if (user) {
+                const { runPaymentPipeline } = await import("./services/paymentPipeline");
+                await runPaymentPipeline({
+                  payment,
+                  user,
+                  method: "mpesa",
+                  transactionId: String(receipt),
+                  planId: resolved,
+                });
+                console.log(`[Poll/AutoRecover] userId=${userId} paymentId=${paymentId} activated plan=${resolved} via stkQuery`);
+              }
+            }
+            payment = await storage.getPaymentById(paymentId);   // re-read
+          } else if (q && [1032, 1037, 2001].includes(Number(q.ResultCode))) {
+            // Safaricom says failed/cancelled — mark it so the client can retry.
+            await storage.updatePayment(payment.id, {
+              status: "failed",
+              failReason: String(q?.ResultDesc ?? `ResultCode ${q?.ResultCode}`),
+            } as any);
+            payment = await storage.getPaymentById(paymentId);
+          }
+        } catch (recErr: any) {
+          console.warn(`[Poll/AutoRecover] stkQuery failed paymentId=${paymentId}: ${recErr?.message}`);
+        }
+      }
+
       // Map DB status "completed" → "success" so the frontend poll handler recognises it
-      const frontendStatus = payment.status === "completed" ? "success" : payment.status;
+      const frontendStatus = payment?.status === "completed" ? "success" : payment?.status;
       return res.json({
         status: frontendStatus,
-        serviceId: payment.serviceId,
-        receipt: (payment as any).mpesaReceiptNumber || payment.transactionRef || null,
-        planId: payment.serviceId?.startsWith("plan_") ? payment.serviceId.replace("plan_", "") : null,
+        serviceId: payment?.serviceId,
+        receipt: (payment as any)?.mpesaReceiptNumber || payment?.transactionRef || null,
+        planId: payment?.serviceId?.startsWith("plan_") ? payment.serviceId.replace("plan_", "") : null,
       });
     } catch (err: any) {
       res.status(500).json({ message: "Poll failed" });
