@@ -261,6 +261,8 @@ const AdminSupabaseStats = lazyWithRetry(() => import("@/pages/admin/supabase-st
 const CommunityPortals = lazyWithRetry(() => import("@/pages/community-portals"));
 const ToolsHub = lazyWithRetry(() => import("@/pages/tools/index"));
 const ATSCVChecker = lazyWithRetry(() => import("@/pages/tools/ats-cv-checker"));
+// 2026-09: CV Builder & Revamp — six-pass AI pipeline with score guarantee.
+const CvAiBuilder = lazyWithRetry(() => import("@/pages/tools/cv-ai-builder"));
 const JobScamChecker = lazyWithRetry(() => import("@/pages/tools/job-scam-checker"));
 const VisaSponsorshipJobs = lazyWithRetry(() => import("@/pages/tools/visa-sponsorship-jobs"));
 const CVTemplates = lazyWithRetry(() => import("@/pages/tools/cv-templates"));
@@ -578,6 +580,7 @@ const LazyPayPage           = withSuspense(PayPage);
 const LazyCommunityPortals = withSuspense(CommunityPortals);
 const LazyToolsHub = withSuspense(ToolsHub);
 const LazyATSCVChecker = withSuspense(ATSCVChecker);
+const LazyCvAiBuilder = withSuspense(CvAiBuilder);
 const LazyJobScamChecker = withSuspense(JobScamChecker);
 const LazyVisaSponsorshipJobs = withSuspense(VisaSponsorshipJobs);
 const LazyCVTemplates = withSuspense(CVTemplates);
@@ -778,6 +781,7 @@ function AuthenticatedRoutes() {
       <Route path="/tools/job-match" component={JobMatch} />
       <Route path="/tools" component={LazyToolsHub} />
       <Route path="/tools/ats-cv-checker" component={LazyATSCVChecker} />
+      <Route path="/tools/cv-ai-builder" component={LazyCvAiBuilder} />
       <Route path="/tools/job-scam-checker" component={LazyJobScamChecker} />
       <Route path="/tools/visa-sponsorship-jobs" component={LazyVisaSponsorshipJobs} />
       <Route path="/tools/bulk-agency-verify" component={LazyBulkAgencyVerify} />
@@ -932,6 +936,7 @@ function Router() {
         <Route path="/pay" component={LazyPayPage} />
         <Route path="/tools" component={LazyToolsHub} />
         <Route path="/tools/ats-cv-checker" component={LazyATSCVChecker} />
+      <Route path="/tools/cv-ai-builder" component={LazyCvAiBuilder} />
         <Route path="/tools/job-scam-checker" component={LazyJobScamChecker} />
         <Route path="/tools/visa-sponsorship-jobs" component={LazyVisaSponsorshipJobs} />
         <Route path="/tools/bulk-agency-verify" component={LazyBulkAgencyVerify} />

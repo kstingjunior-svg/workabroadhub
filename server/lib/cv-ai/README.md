@@ -58,7 +58,7 @@ regenerating with a saved fact JSON skips Pass 1).
 6. **Postgres additions** — `cv_generations` table + `cv_banned_phrases` per-industry table + `cv_style_variants` permutation table + `embedding vector(1536)` column and pgvector similarity gate.
 7. **`@anthropic-ai/sdk`** — `npm install @anthropic-ai/sdk` needed before Composer's Anthropic path works (it currently no-ops back to OpenAI if the SDK is missing at runtime, so nothing breaks in the interim).
 8. **`tools-routes.ts` refactor** — the free `/api/tools/ats-check` endpoint has its own inline OpenAI call that duplicates `ats-scorer.ts`. Both currently use the same `ATS_ANALYSIS_ENGINE` prompt so scores are identical. Refactor the endpoint to call `scoreCv()` too, so there's literally one code path — then version drift can't happen.
-9. **Client UI** — the endpoint is server-only. A React page to drive it (upload / paste / paste JD / show result + score delta) is next.
+9. ~~**Client UI**~~ — DONE (`client/src/pages/tools/cv-ai-builder.tsx`, routed at `/tools/cv-ai-builder`). Drag-drop or paste, optional JD, region + industry, then a score-delta banner and copy/download of the rewritten CV. Honest UI — surfaces `hitTarget=false` with the "expert review" upsell instead of hiding it.
 
 ## The endpoint
 
