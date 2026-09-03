@@ -22,6 +22,7 @@
 
 import type { EnrichedFacts, StyleSpec, AtsScore, GenerationResult } from "./types";
 import { composeCv } from "./pass4-composer";
+import { lintCv } from "./pass5-ats-linter";
 
 /** Minimum score improvement we promise the user. */
 export const MIN_LIFT = 15;
@@ -63,7 +64,16 @@ export async function runScoreGate(input: ScoreGateInput): Promise<GenerationRes
   let retries = 0;
 
   for (let attempt = 1; attempt <= MAX_RETRIES + 1; attempt++) {
-    const md = await composeCv(facts, styleForAttempt);
+    // Pass 4 → Pass 5 → Pass 6:
+    //   Composer writes prose → Linter normalises for ATS safety →
+    //   Scorer measures. We score the LINTED version so any parser-hostile
+    //   drift the Composer accidentally introduces gets corrected before
+    //   affecting the score. Never score raw Composer output.
+    const raw = await composeCv(facts, styleForAttempt);
+    const { cleaned: md, changes: lintChanges } = lintCv(raw);
+    if (lintChanges.length) {
+      console.log(`[cv-ai/pass6] Pass 5 corrections on attempt ${attempt}: ${lintChanges.join("; ")}`);
+    }
     const scored = await score(md, jdText);
 
     // Track the best attempt we've seen, in case we exhaust retries and

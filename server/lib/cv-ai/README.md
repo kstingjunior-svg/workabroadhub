@@ -11,7 +11,7 @@ failures are debuggable and A/B-testable in isolation.
 | 2 | Enricher | `gpt-4o` | `pass2-enricher.ts` | ~$0.02-0.04 |
 | 3 | Style + JD spec | code + `gpt-4o-mini` | `pass3-style-jd.ts` | ~$0.005 |
 | 4 | Composer | **Claude Sonnet** (fallback `gpt-4o`) | `pass4-composer.ts` | ~$0.06-0.10 |
-| 5 | ATS-safety linter | pure code (no LLM) | *(not built yet)* | $0 |
+| 5 | ATS-safety linter | pure code (no LLM) | `pass5-ats-linter.ts` | $0 |
 | 6 | Score gate | code + retry into Pass 4 | `pass6-score-gate.ts` | 0-2× Composer |
 | — | ATS Scorer adapter | `gpt-4o` (same engine as `/tools/ats-cv-checker`) | `ats-scorer.ts` | ~$0.03-0.06 per call |
 
@@ -52,7 +52,7 @@ regenerating with a saved fact JSON skips Pass 1).
 
 1. ~~**Pass 2 Enricher**~~ — DONE (`pass2-enricher.ts`). Produces up to 3 confidence-graded rewrites per achievement + `clarifyingQuestions[]` for missing quant. Concurrency-bounded so senior CVs don't fire 40+ parallel OpenAI calls. Composer's rules already respect the confidence levels — no Composer change needed.
 2. ~~**Pass 3 Style + JD parser**~~ — DONE (`pass3-style-jd.ts`). `parseJd()` extracts must-have/nice-to-have hard skills, tone, employer archetype, and the keyword-injection list. `selectStyle()` produces a stable voice/structure/section-order + banned-phrases for the user (same user+source = same style, different users = different styles). Response now surfaces `tailoredTo[]`, `voice`, `structure`, `clarifyingQuestions[]` to the client.
-3. **Pass 5 ATS-safety linter** — enforces standard section names, no tables/columns, safe date formats. Non-LLM, straightforward but requires the CV markdown parser.
+3. ~~**Pass 5 ATS-safety linter**~~ — DONE (`pass5-ats-linter.ts`). Non-LLM deterministic pass wired into `runScoreGate` before each score call, so linted output is what gets measured. Rewrites 20+ non-standard section aliases, strips tables/HTML/emoji/zero-width chars, normalises bullets + date separators, promotes candidate name to h1, collapses blank runs. Every correction is logged so we can spot Composer prompt drift.
 4. ~~**`AtsScorer` adapter**~~ — DONE.
 5. ~~**Orchestrator + HTTP route**~~ — DONE. `POST /api/cv-ai/generate` is live and callable.
 6. **Postgres additions** — `cv_generations` table + `cv_banned_phrases` per-industry table + `cv_style_variants` permutation table + `embedding vector(1536)` column and pgvector similarity gate.
