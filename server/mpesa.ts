@@ -218,7 +218,31 @@ export async function stkPush(
     // orders). The legacy /api/mpesa/callback only activates Pro Plan and never
     // triggers service-order AI gen — keep all Safaricom callbacks on the new path.
     const callbackUrl = overrideCallbackUrl || `${getCallbackBaseUrl()}/api/payments/mpesa/callback`;
-    console.log("[M-Pesa] STK Push → phone:", formattedPhone, "| amount:", amount, "| accountRef:", accountRef, "| callback:", callbackUrl);
+
+    // 2026-09 EMERGENCY (Tony's report — 7k+ users, STK prompt not arriving):
+    // Safaricom Daraja silently rejects STK pushes when field lengths
+    // exceed their documented caps. Enforce them here so no caller can
+    // accidentally violate the spec. If a caller passed something longer,
+    // truncate + log so we notice.
+    //
+    // Spec caps (Safaricom Daraja API reference):
+    //   TransactionDesc   max 13 characters
+    //   AccountReference  max 12 characters
+    //   AccountReference  cannot contain spaces
+    const safeDesc = String(description ?? "Payment").slice(0, 13);
+    let safeRef = String(accountRef ?? "WAH")
+      .replace(/\s+/g, "")   // spaces cause silent Daraja rejection
+      .slice(0, 12);
+    if (!safeRef) safeRef = "WAH";
+    if (safeDesc !== description || safeRef !== accountRef) {
+      console.warn(
+        `[M-Pesa] Truncated over-length fields:` +
+        (safeDesc !== description ? ` desc="${description}" → "${safeDesc}"` : "") +
+        (safeRef  !== accountRef  ? ` ref="${accountRef}" → "${safeRef}"` : ""),
+      );
+    }
+
+    console.log("[M-Pesa] STK Push → phone:", formattedPhone, "| amount:", amount, "| accountRef:", safeRef, "| desc:", safeDesc, "| callback:", callbackUrl);
 
     const res = await axios.post(
       `${MPESA_BASE_URL}/mpesa/stkpush/v1/processrequest`,
@@ -232,8 +256,8 @@ export async function stkPush(
         PartyB: shortCode,
         PhoneNumber: formattedPhone,
         CallBackURL: callbackUrl,
-        AccountReference: accountRef,
-        TransactionDesc: description,
+        AccountReference: safeRef,
+        TransactionDesc: safeDesc,
       },
       {
         headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
@@ -242,6 +266,25 @@ export async function stkPush(
     );
 
     console.log("[M-Pesa] STK Push response:", JSON.stringify(res.data));
+
+    // 2026-09 EMERGENCY: enforce ResponseCode contract at the source so
+    // NO caller (all 17 stkPush() call sites) can silently swallow a
+    // rejected push. Safaricom returns ResponseCode="0" only when the
+    // request is accepted for delivery to the subscriber's handset;
+    // any other code means the prompt did NOT go out.
+    const rc = String(res.data?.ResponseCode ?? "");
+    if (rc !== "0") {
+      const desc = String(res.data?.ResponseDescription ?? res.data?.errorMessage ?? "unknown Safaricom rejection");
+      const err: any = new Error(`Safaricom rejected the STK push (code=${rc}): ${desc}`);
+      err.darajaResponseCode = rc;
+      err.darajaResponseDesc = desc;
+      err.response = { data: res.data };
+      throw err;
+    }
+    if (!res.data?.CheckoutRequestID) {
+      throw new Error("Safaricom accepted the request but returned no CheckoutRequestID — the prompt did not go out.");
+    }
+
     return res.data;
   });
 }

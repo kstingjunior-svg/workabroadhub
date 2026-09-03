@@ -2824,7 +2824,26 @@ Crawl-delay: 1`);
         let merchantRequestId: string;
         try {
           const { stkPush } = await import("./mpesa");
-          const stkResponse = await stkPush(normalizedPhone, chargeAmount, `${plan.planName} Plan - WorkAbroad Hub`, `WAH-${Date.now()}`);
+          // 2026-09 EMERGENCY: Safaricom Daraja rejects fields over their
+          // documented max lengths WITHOUT firing the STK push, and
+          // (before commit 56d6b353) we consumed the response without
+          // checking ResponseCode, so users saw NOTHING happen.
+          //
+          // Hard limits (from Safaricom Daraja spec):
+          //   TransactionDesc:   max 13 characters
+          //   AccountReference:  max 12 characters
+          //
+          // Old code passed:
+          //   desc = `${plan.planName} Plan - WorkAbroad Hub`   e.g. 28 chars
+          //   ref  = `WAH-${Date.now()}`                        17 chars
+          // ...both over the cap. Safaricom silently rejected every request.
+          //
+          // Fix: truncate both to the safe cap. paymentId gets stored in
+          // the DB row anyway (line ~2870 below) so we don't need to
+          // encode the timestamp into the account reference for lookup.
+          const safeDesc = String(`${plan.planName} Plan`).slice(0, 13);
+          const safeRef  = `WAH${String(Date.now()).slice(-9)}`;   // "WAH" + 9 digits = 12 chars
+          const stkResponse = await stkPush(normalizedPhone, chargeAmount, safeDesc, safeRef);
           // 2026-09 EMERGENCY: previously we consumed CheckoutRequestID
           // without checking ResponseCode. Safaricom sometimes accepts a
           // request into the queue but never fires the STK push to the
