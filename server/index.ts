@@ -789,6 +789,11 @@ app.use((req, res, next) => {
     // server/lib/cv-ai/README.md for the pipeline design.
     try {
       const { registerCvAiRoutes } = await import("./routes/cv-ai");
+      const { bootstrapCvAiSchema } = await import("./lib/cv-ai/db-bootstrap");
+      // Bootstrap schema idempotently BEFORE registering routes so the
+      // uniqueness gate has its table on first request. Failures are
+      // logged but not fatal — pipeline degrades cleanly.
+      await bootstrapCvAiSchema();
       registerCvAiRoutes(app);
       console.log("[Server] ✓ CV AI routes registered (before /api catch-all)");
     } catch (err: any) {

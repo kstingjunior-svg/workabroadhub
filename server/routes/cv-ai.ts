@@ -10,9 +10,11 @@
 // autoapply-routes.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import crypto from "crypto";
 import type { Express, Request, Response } from "express";
 import multer from "multer";
 import { generateCv } from "../lib/cv-ai/orchestrator";
+import { checkUniqueness, saveGeneration, SIMILARITY_THRESHOLD } from "../lib/cv-ai/uniqueness-gate";
 import { reportRejection } from "../lib/sentry";
 
 const upload = multer({
@@ -102,6 +104,37 @@ export function registerCvAiRoutes(app: Express): void {
           `(+${result.improvement}) retries=${result.retries} in ${elapsedMs}ms`,
         );
 
+        // 2026-09: uniqueness gate + persistence.
+        // Embed the result, check against last 100 CVs in same
+        // industry+seniority bucket. Fire-and-forget save so DB write
+        // failures never block the user's response.
+        const sourceHash = crypto.createHash("sha256").update(cvText).digest("hex").slice(0, 16);
+        const jdHash = jdText
+          ? crypto.createHash("sha256").update(jdText).digest("hex").slice(0, 16)
+          : null;
+        const uniqueness = await checkUniqueness({
+          cvMarkdown: result.cvMarkdown,
+          industry: result.styleSpec.industry,
+          seniorityBand: result.styleSpec.seniorityBand,
+        });
+        if (!uniqueness.isUnique) {
+          console.warn(
+            `[cv-ai/uniqueness] near-duplicate sim=${uniqueness.closestSim.toFixed(3)} ` +
+            `closest=${uniqueness.closestId} bucket=${result.styleSpec.industry}/${result.styleSpec.seniorityBand}`,
+          );
+        }
+        // Fire-and-forget save. Awaiting would add ~50ms and gain nothing
+        // for the user; a failed save is a lost audit row, not a lost CV.
+        saveGeneration({
+          userId,
+          sourceHash,
+          jdHash,
+          result,
+          hitTarget: result.improvement >= 15,
+          generationMs: elapsedMs,
+          embedding: uniqueness.embedding,
+        }).catch(() => { /* already logged inside saveGeneration */ });
+
         // 2026-09: honest response shape. If the score gate couldn't hit
         // the promised +15 lift, we surface the best attempt AND a flag
         // the client can use to show the "already-strong CV — try expert
@@ -136,6 +169,13 @@ export function registerCvAiRoutes(app: Express): void {
           structure: result.styleSpec.structure,
           clarifyingQuestions,
           generationN,
+          // 2026-09: uniqueness signal. Client can show a "regenerate for
+          // more variety" nudge when this is true; today we just surface
+          // the flag + measurement so we can iterate on Composer prompts
+          // if it fires too often.
+          uniquenessWarning: !uniqueness.isUnique,
+          closestSimilarity: Number(uniqueness.closestSim.toFixed(3)),
+          neighboursCompared: uniqueness.neighbourCount,
         });
       } catch (err: any) {
         // Wrong-document detection thrown by the extractor.
