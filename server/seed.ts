@@ -117,19 +117,26 @@ export async function seedDatabase() {
       category: "CV & Documents",
       features: ["Grammar & spelling fix", "Professional formatting", "Structure improvement", "Delivered in 3 minutes", "Best for entry-level CVs"],
     },
+    // 2026-09 DEPRECATED — 'Recruiter-Friendly CV' (ats_cv_optimization)
+    // and 'Country-Specific CV Rewrite' (cv_rewrite) removed from the
+    // storefront on Tony's trust audit. Kept in the seed for historical
+    // reference + so existing paid orders still resolve, but isActive is
+    // now false so /api/services (public) hides them. See
+    // server/lib/ensure-services-deactivated.ts for the on-boot enforcer
+    // that also flips existing rows in prod.
     {
       slug: "ats_cv_optimization",
       name: "ATS CV Optimization",
-      description: "Get your CV optimized to pass Applicant Tracking Systems used by major employers",
-      price: 499, currency: "KES", isActive: true, order: 4,
+      description: "[DEPRECATED] Get your CV optimized to pass Applicant Tracking Systems used by major employers",
+      price: 499, currency: "KES", isActive: false, order: 4,
       category: "CV & Documents", badge: "Popular",
       features: ["ATS keyword analysis & scoring", "Format optimized for recruiter systems", "Industry-specific keyword injection", "Before/after comparison report", "Delivered in Word & PDF"],
     },
     {
       slug: "cv_rewrite",
       name: "Country-Specific CV Rewrite",
-      description: "Professional CV rewrite tailored to your target country's format and expectations",
-      price: 699, currency: "KES", isActive: true, order: 5,
+      description: "[DEPRECATED] Professional CV rewrite tailored to your target country's format and expectations",
+      price: 699, currency: "KES", isActive: false, order: 5,
       category: "CV & Documents", badge: "Our pick",
       features: ["Target country format (UAE, UK, Canada, EU)", "Professional rewrite by career expert", "Highlight transferable skills", "ATS-safe formatting", "Word & PDF formats"],
     },

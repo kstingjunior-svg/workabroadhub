@@ -1229,6 +1229,17 @@ app.use((req, res, next) => {
         m.seedApplicationPacks?.().catch(console.error);
         m.seedPlans?.().catch(console.error);
 
+        // 2026-09 (Tony's trust audit): actively deactivate storefront
+        // services that were retired. seedDatabase() only INSERTs-if-
+        // missing, so flipping isActive: false in the seed doesn't
+        // touch existing prod rows — this UPDATE does. Runs AFTER
+        // seedDatabase so it operates on the fully-seeded table.
+        setTimeout(() => {
+          import("./lib/ensure-services-deactivated")
+            .then(({ ensureServicesDeactivated }) => ensureServicesDeactivated())
+            .catch((e) => console.error("[Server] ensureServicesDeactivated failed:", e?.message));
+        }, 3000);
+
         // Restored seeds (Batch C): fraud rules, visa jobs, indexes, NEA sync,
         // service prices. All non-blocking — failures logged but won't crash
         // boot.
