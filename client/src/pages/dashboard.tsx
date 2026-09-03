@@ -41,7 +41,9 @@ import { FounderNote } from "@/components/founder-note";
 import { WeveBeenWhereYouAre } from "@/components/weve-been-where-you-are";
 import { DashboardSuccessStories } from "@/components/dashboard-success-stories";
 import { DashboardBestMatch } from "@/components/dashboard-best-match";
-import { DashboardVisaJobsLocked } from "@/components/dashboard-visa-jobs-locked";
+// 2026-09 REMOVED — DashboardVisaJobsLocked killed trust ("we're selling
+// jobs, not helping you get them"). See comment at the former render site.
+// import { DashboardVisaJobsLocked } from "@/components/dashboard-visa-jobs-locked";
 import { DashboardKenyaCareersCard } from "@/components/dashboard-kenya-careers-card";
 import { DashboardKaziKaribuCard } from "@/components/dashboard-kazi-karibu-card";
 import { DashboardIeltsPrepCard } from "@/components/dashboard-ielts-prep-card";
@@ -1362,14 +1364,15 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* ── VISA-SPONSORED JOBS (locked for non-Pro users) ───────────────
-            Replaces the old "live people browsing / total members" widgets.
-            Real visa-sponsored roles (drivers, cleaners, nannies, healthcare,
-            construction, hospitality) from Saudi Arabia, UAE, Qatar, Canada,
-            UK, Australia. Non-Pro users see locked cards with "Upgrade to
-            apply" overlay → drives Pro upgrades from a position of value,
-            not pressure. Pro/admin users get direct portal apply links. */}
-        <DashboardVisaJobsLocked />
+        {/* 2026-09 REMOVED — <DashboardVisaJobsLocked /> section.
+            Tony's trust audit: showing sample visa-sponsored jobs with
+            "Upgrade to apply" overlays + a "All 50 jobs unlock with Pro
+            for KES 4,500" upsell right below reads as though we're
+            selling the jobs themselves, not the career-support services.
+            That collapses trust — WorkAbroad Hub finds and supports
+            people applying to legitimate overseas roles; it does not
+            broker jobs. Removed the whole section so the dashboard flow
+            reads: Career Services → Pro upgrade → Kenya Careers. */}
 
         {/* ── KENYA CAREERS — local-employer jobs (Phase 1) ────────────────
             2026-06: pairs with the visa-sponsored card above so users see
