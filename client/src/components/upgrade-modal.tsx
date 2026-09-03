@@ -106,8 +106,24 @@ export function UpgradeModal() {
     staleTime: 30_000,
     enabled: state.open,
   });
-  const planPrice = (id: string): number | undefined =>
-    allPlans?.find((p) => (p.planId ?? p.plan_id) === id)?.price;
+  // 2026-09 EMERGENCY (Tony: "KES 1000 not going through"): if /api/plans
+  // omits any tier row (stale cache, admin toggle, DB hiccup), planPrice()
+  // returned undefined → proFinalPrice undefined → the green 'Send M-Pesa
+  // Prompt' button was rendered disabled with disabled:opacity-60. Users
+  // saw a faded-but-visible button, tapped it, nothing happened.
+  //
+  // Fallback to the canonical prices from ensure-plans-seeded.ts so the
+  // button is NEVER disabled purely because /api/plans came back short.
+  const CANONICAL_FALLBACKS: Record<string, number> = {
+    trial:   99,
+    monthly: 1000,
+    pro:     4500,
+    yearly:  4500,
+  };
+  const planPrice = (id: string): number =>
+    allPlans?.find((p) => (p.planId ?? p.plan_id) === id)?.price
+    ?? CANONICAL_FALLBACKS[id]
+    ?? 0;
   const trialPrice   = planPrice("trial");
   const monthlyPrice = planPrice("monthly");
   const yearlyPrice  = planPrice("pro");
@@ -513,7 +529,12 @@ export function UpgradeModal() {
 
             <button
               onClick={handleSendPrompt}
-              disabled={payMutation.isPending || !proFinalPrice}
+              // 2026-09: was `!proFinalPrice` which disabled the button when
+              // /api/plans returned an incomplete list. Server is
+              // authoritative on price anyway (resolvePrice inside
+              // /api/subscriptions/upgrade), so we don't need the client
+              // to have a canonical price — we just need the tap to fire.
+              disabled={payMutation.isPending}
               className="w-full py-3.5 rounded-xl font-bold text-sm text-white bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] shadow-md shadow-green-200 dark:shadow-green-900/30 flex items-center justify-center gap-2"
               data-testid="btn-send-mpesa-prompt"
             >
