@@ -22671,8 +22671,40 @@ If your instinct says "3,500", STOP and re-read the SERVICES block above.`;
         service:           { id: service.id, name: service.name, amount: amountKES },
       });
     } catch (err: any) {
-      console.error("[POST /api/pay]", err?.message);
-      res.status(500).json({ message: "Failed to initiate payment. Please try again." });
+      // 2026-09 (M-Pesa audit): was returning a generic
+      // "Failed to initiate payment" — swallowing Safaricom's actual
+      // rejection reason (invalid MSISDN, insufficient funds prompt
+      // limit, shortcode config, etc.). With mpesa.ts::stkPush now
+      // throwing on non-zero ResponseCode + attaching
+      // err.darajaResponseCode / err.darajaResponseDesc / err.response.data,
+      // route the error through the same friendlyMpesaError translator
+      // every other STK path uses so users see actionable text (retry,
+      // paybill fallback, fix your phone number) instead of a dead-end.
+      console.error("[POST /api/pay]", {
+        message: err?.message,
+        darajaCode: err?.darajaResponseCode,
+        darajaDesc: err?.darajaResponseDesc,
+      });
+      try {
+        const { friendlyMpesaError, MPESA_FALLBACK } = await import("./lib/mpesa-error-translator");
+        const friendly = friendlyMpesaError(err?.response?.data || err);
+        return res.status(502).json({
+          success:      false,
+          message:      friendly.message,
+          title:        friendly.title,
+          nextStep:     friendly.next_step,
+          retrySafe:    friendly.retry_safe,
+          offerPaybill: friendly.offer_paybill,
+          badPhone:     friendly.bad_phone,
+          darajaCode:   friendly.daraja_code,
+          paybillFallback: {
+            paybill: MPESA_FALLBACK.paybill,
+            account: MPESA_FALLBACK.accountKey,
+          },
+        });
+      } catch {
+        return res.status(500).json({ message: err?.message || "Failed to initiate payment. Please try again." });
+      }
     }
   });
 
