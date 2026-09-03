@@ -9160,8 +9160,25 @@ Crawl-delay: 1`);
         }
       }
 
+      // 2026-09 (stuck-payments audit): was `{ planId, ... }` referencing an
+      // UNDECLARED planId variable — @ts-nocheck at the top of this file
+      // hid the bug from the compiler. At runtime the identifier reference
+      // threw ReferenceError inside the log-payload construction, escaped
+      // the .catch() (which only catches Promise rejections, not argument-
+      // evaluation errors), fell to the outer try/catch, and every click
+      // of the admin "Activate All" button 500'd. Result: 186 stuck
+      // payments (KES 45,980) accumulated because there was no working
+      // recovery path. Report the summary tier-by-tier instead — more
+      // useful than a single planId anyway since the loop can activate
+      // trial + monthly + pro all in one run.
+      const requestedPlanId = String(req.body?.planId ?? "auto");
+      const tierBreakdown: Record<string, number> = {};
+      for (const r of results) if (r.tier) tierBreakdown[r.tier] = (tierBreakdown[r.tier] ?? 0) + 1;
       await storage.logAdminAction(adminId, "bulk_stuck_payment_activate", {
-        planId, count: results.filter(r => r.status === "activated").length, results,
+        requestedPlanId,
+        tierBreakdown,
+        count: results.filter(r => r.status === "activated").length,
+        results,
       }).catch((err) => reportRejection(err, 'routes'));
 
       const activated = results.filter(r => r.status === "activated").length;
