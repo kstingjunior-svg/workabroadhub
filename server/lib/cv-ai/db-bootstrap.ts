@@ -18,13 +18,29 @@ import { pool } from "../../db";
 let bootstrapped = false;
 let vectorEnabled = false;
 
+// 2026-09 EMERGENCY: hard 15s timeout wrapper. Every DDL statement in
+// here MUST complete within this budget or we bail — because prior to
+// this the caller in server/index.ts awaited us and a hung Supabase
+// call blocked server startup, taking every route (including /dashboard
+// and every M-Pesa path) offline behind an Express 'Cannot GET' response.
+// Even now that we're called fire-and-forget, don't leak an infinite
+// Promise onto the process — bound it.
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`[cv-ai/db] ${label} timed out after ${ms}ms`)), ms),
+    ),
+  ]);
+}
+
 export async function bootstrapCvAiSchema(): Promise<{ vectorEnabled: boolean }> {
   if (bootstrapped) return { vectorEnabled };
 
   try {
     // 1. pgvector — soft-required. If it fails, uniqueness gate turns off.
     try {
-      await pool.query(`CREATE EXTENSION IF NOT EXISTS vector`);
+      await withTimeout(pool.query(`CREATE EXTENSION IF NOT EXISTS vector`), 8000, "CREATE EXTENSION vector");
       vectorEnabled = true;
     } catch (err: any) {
       console.warn(
@@ -35,7 +51,7 @@ export async function bootstrapCvAiSchema(): Promise<{ vectorEnabled: boolean }>
     }
 
     // 2. Main table. Embedding column only added if vector is available.
-    await pool.query(`
+    await withTimeout(pool.query(`
       CREATE TABLE IF NOT EXISTS cv_generations (
         id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         user_id        text,
@@ -55,7 +71,7 @@ export async function bootstrapCvAiSchema(): Promise<{ vectorEnabled: boolean }>
         generation_ms  integer,
         created_at     timestamptz NOT NULL DEFAULT NOW()
       )
-    `);
+    `), 8000, "CREATE TABLE cv_generations");
 
     // 3. Embedding column — only if pgvector loaded. ALTER IF NOT EXISTS
     // makes this safe on re-run.

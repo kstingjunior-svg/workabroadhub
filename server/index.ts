@@ -789,13 +789,24 @@ app.use((req, res, next) => {
     // server/lib/cv-ai/README.md for the pipeline design.
     try {
       const { registerCvAiRoutes } = await import("./routes/cv-ai");
-      const { bootstrapCvAiSchema } = await import("./lib/cv-ai/db-bootstrap");
-      // Bootstrap schema idempotently BEFORE registering routes so the
-      // uniqueness gate has its table on first request. Failures are
-      // logged but not fatal — pipeline degrades cleanly.
-      await bootstrapCvAiSchema();
+      // 2026-09 EMERGENCY (Tony's report — /dashboard returned 'Cannot GET'
+      // + M-Pesa flow broke): the previous version awaited
+      // bootstrapCvAiSchema() here. That's a Supabase CREATE EXTENSION +
+      // CREATE TABLE roundtrip which can hang under contention or when
+      // pgvector needs superuser to enable, stalling server startup
+      // BEFORE serveStatic() below could register the SPA fallback.
+      // Result: every route including /dashboard returned Express's
+      // default 'Cannot GET' text, and payments broke because the client
+      // never loaded.
+      //
+      // Fix: register the routes NOW (never blocks), fire bootstrap in
+      // the background. First CV AI request may see 'uniqueness disabled'
+      // for a few seconds — trivial. Payments unaffected.
       registerCvAiRoutes(app);
-      console.log("[Server] ✓ CV AI routes registered (before /api catch-all)");
+      import("./lib/cv-ai/db-bootstrap")
+        .then(({ bootstrapCvAiSchema }) => bootstrapCvAiSchema())
+        .catch((err) => console.error("[Server] CV AI schema bootstrap deferred failure:", err?.message));
+      console.log("[Server] ✓ CV AI routes registered (bootstrap deferred, non-blocking)");
     } catch (err: any) {
       console.error("[Server] ❌ CV AI route registration failed:", err?.message);
     }
