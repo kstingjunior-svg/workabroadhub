@@ -8,7 +8,7 @@ failures are debuggable and A/B-testable in isolation.
 | # | Pass | Model | File | Cost |
 |---|------|-------|------|------|
 | 1 | Extractor | `gpt-4o-mini` | `pass1-extractor.ts` | ~$0.001 |
-| 2 | Enricher | `gpt-4o` | *(not built yet)* | ~$0.02 |
+| 2 | Enricher | `gpt-4o` | `pass2-enricher.ts` | ~$0.02-0.04 |
 | 3 | Style + JD spec | code + `gpt-4o-mini` | *(not built yet)* | ~$0.005 |
 | 4 | Composer | **Claude Sonnet** (fallback `gpt-4o`) | `pass4-composer.ts` | ~$0.06-0.10 |
 | 5 | ATS-safety linter | pure code (no LLM) | *(not built yet)* | $0 |
@@ -50,7 +50,7 @@ regenerating with a saved fact JSON skips Pass 1).
 
 ## What's still needed to ship
 
-1. **Pass 2 Enricher** — turns "managed a team" into `[verbatim, quantified_estimate, outcome_reframed]` candidates. Blocks meaningful quality gains until built. (Orchestrator currently wraps each achievement as `verbatim` only.)
+1. ~~**Pass 2 Enricher**~~ — DONE (`pass2-enricher.ts`). Produces up to 3 confidence-graded rewrites per achievement + `clarifyingQuestions[]` for missing quant. Concurrency-bounded so senior CVs don't fire 40+ parallel OpenAI calls. Composer's rules already respect the confidence levels — no Composer change needed.
 2. **Pass 3 Style + JD parser** — deterministic style-hash + JD analyzer. (Orchestrator currently picks voice/structure from a small heuristic — see `orchestrator.ts` `inferSeniority`.)
 3. **Pass 5 ATS-safety linter** — enforces standard section names, no tables/columns, safe date formats. Non-LLM, straightforward but requires the CV markdown parser.
 4. ~~**`AtsScorer` adapter**~~ — DONE.

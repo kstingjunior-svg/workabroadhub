@@ -12,6 +12,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { extractFacts } from "./pass1-extractor";
+import { enrichFacts } from "./pass2-enricher";
 import { runScoreGate } from "./pass6-score-gate";
 import type {
   CvFacts, EnrichedFacts, StyleSpec, GenerationResult,
@@ -36,20 +37,15 @@ export async function generateCv(input: GenerateInput): Promise<GenerationResult
   // ── Pass 1: Extractor ─────────────────────────────────────────────────
   const facts: CvFacts = await extractFacts(cvText);
 
-  // ── Pass 2 placeholder: no-op enrichment ──────────────────────────────
-  // Real Enricher will expand each achievement into (verbatim / quantified /
-  // reframed) candidates. Until it lands, wrap each achievement as-is so
-  // the Composer's confidence-gated rules still work.
-  const enriched: EnrichedFacts = {
-    ...facts,
-    roles: facts.roles.map((r) => ({
-      ...r,
-      enrichedAchievements: r.achievements.map((a) => ({
-        original: a,
-        rewrites: [{ text: a, confidence: "verbatim" as const }],
-      })),
-    })),
-  };
+  // ── Pass 2: Enricher ──────────────────────────────────────────────────
+  // Real Enricher: turns weak achievements into stronger candidates
+  // (outcome_reframed, quantified_estimate) without inventing facts.
+  // This is the single biggest quality lever in the pipeline — before
+  // this landed, verbatim-only enrichment meant the score gate almost
+  // always fell short of the +15 promise on any CV that wasn't already
+  // quantified. Concurrency-bounded so a 6-role senior CV doesn't fire
+  // 48 parallel OpenAI calls.
+  const enriched: EnrichedFacts = await enrichFacts({ facts, concurrency: 4 });
 
   // ── Pass 3 placeholder: deterministic sensible defaults ───────────────
   // Real Style selector will hash (userId, generationN) into a permutation
