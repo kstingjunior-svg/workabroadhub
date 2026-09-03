@@ -22195,7 +22195,21 @@ Tone examples:
         }
         try {
           const { extractCvInsights, getJobMatches } = await import("./services/jobMatchingService");
-          const [insights, matches] = await Promise.all([extractCvInsights(cvText), getJobMatches(cvText)]);
+          // 2026-09 (Tony's Nanjila-can't-read-CVs report): 40s soft
+          // timeout on the analysis pipeline. Previously unbounded — CVs
+          // with unusual formatting could push OpenAI past Render's 60s
+          // edge timeout, which returned HTML to the client and
+          // triggered the client's outer catch ('Oops — something went
+          // wrong'). Now we bail at 40s with a helpful degraded reply.
+          const withTimeout = <T,>(p: Promise<T>, ms: number, label: string): Promise<T> =>
+            Promise.race([
+              p,
+              new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)),
+            ]);
+          const [insights, matches] = await Promise.all([
+            withTimeout(extractCvInsights(cvText), 25_000, "extractCvInsights"),
+            withTimeout(getJobMatches(cvText),     25_000, "getJobMatches"),
+          ]);
 
           // ── Compute honest ATS/CV quality score ───────────────────────────
           let cvScore = 0;
@@ -22295,8 +22309,28 @@ Tone examples:
             } catch {}
           }
           return res.json({ text: reply, sessionId, jobMatches: relevantMatches, audioUrl });
-        } catch {
-          return res.json({ text: "I received your CV but had trouble analyzing it right now. Please try again in a moment. 🙏", sessionId });
+        } catch (analysisErr: any) {
+          // 2026-09 (Tony's Nanjila-can't-read-CVs report): this catch was
+          // `catch {}` — every failure in the CV analysis pipeline
+          // (extractCvInsights, getJobMatches, live price lookup, TTS
+          // build) got silently discarded and every failing user saw the
+          // exact same 'try again' text with zero server signal to
+          // diagnose from. Log the real error so Render logs pinpoint
+          // whether it's OpenAI, Postgres, ElevenLabs, or something else.
+          console.error("[Nanjila CV] analysis failed:", {
+            error: analysisErr?.message,
+            code: analysisErr?.code,
+            name: analysisErr?.name,
+            stack: analysisErr?.stack?.split("\n").slice(0, 5).join(" | "),
+          });
+          try {
+            const { reportRejection } = await import("./lib/sentry");
+            reportRejection(analysisErr, "nanjila/cv-analysis");
+          } catch {}
+          return res.json({
+            text: "I received your CV but had trouble analyzing it right now. Please try again in a moment. 🙏",
+            sessionId,
+          });
         }
       }
 
