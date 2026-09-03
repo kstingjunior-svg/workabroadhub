@@ -2825,8 +2825,26 @@ Crawl-delay: 1`);
         try {
           const { stkPush } = await import("./mpesa");
           const stkResponse = await stkPush(normalizedPhone, chargeAmount, `${plan.planName} Plan - WorkAbroad Hub`, `WAH-${Date.now()}`);
+          // 2026-09 EMERGENCY: previously we consumed CheckoutRequestID
+          // without checking ResponseCode. Safaricom sometimes accepts a
+          // request into the queue but never fires the STK push to the
+          // user's phone (throttle, upstream congestion, bad shortcode,
+          // sandbox-vs-prod mismatch) — ResponseCode !== "0" in that case.
+          // Old code responded { success: true } to the client, user's
+          // phone stayed silent, support inbox filled up with 'kwanini
+          // Prompt haiji?'. Now we throw so the friendly-error branch
+          // below returns a real message.
+          const rc = String((stkResponse as any)?.ResponseCode ?? "");
+          if (rc !== "0") {
+            const desc = String((stkResponse as any)?.ResponseDescription ?? "Safaricom did not accept the request");
+            console.error(`[STK Push] Non-zero ResponseCode=${rc} desc=${desc} phone=${normalizedPhone}`);
+            throw new Error(`Safaricom rejected the request (${rc}): ${desc}`);
+          }
           checkoutId        = stkResponse.CheckoutRequestID;
           merchantRequestId = stkResponse.MerchantRequestID;
+          if (!checkoutId) {
+            throw new Error("Safaricom returned no CheckoutRequestID — the prompt was not sent.");
+          }
         } catch (err: any) {
           logActivity({ event: "payment_failed", userId, email: initiatingUser.email, meta: { method: "mpesa", planId, error: err.message }, ip: clientIp });
           // 2026-06: same Kenyan-friendly translation as /api/mpesa/stk.
