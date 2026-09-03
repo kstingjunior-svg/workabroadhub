@@ -783,6 +783,18 @@ app.use((req, res, next) => {
       console.error("[Server] ❌ AutoApply route registration failed:", err?.message);
     }
 
+    // 2026-09: CV AI pipeline (Extractor → Composer → Score-gate). Same
+    // "register BEFORE /api catch-all" pattern as AutoApply + Hub because
+    // registerRoutes() below installs the 404 catch-all for /api. See
+    // server/lib/cv-ai/README.md for the pipeline design.
+    try {
+      const { registerCvAiRoutes } = await import("./routes/cv-ai");
+      registerCvAiRoutes(app);
+      console.log("[Server] ✓ CV AI routes registered (before /api catch-all)");
+    } catch (err: any) {
+      console.error("[Server] ❌ CV AI route registration failed:", err?.message);
+    }
+
     // 2026-08 (Tony's stuck-payments audit): admin-triggered M-Pesa
     // reconciler. Existing scheduler runs every 5 min automatically, but
     // admins clicking "Run reconciler now" on the stuck-payments queue want

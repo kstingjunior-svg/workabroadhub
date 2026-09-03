@@ -50,13 +50,44 @@ regenerating with a saved fact JSON skips Pass 1).
 
 ## What's still needed to ship
 
-1. **Pass 2 Enricher** — turns "managed a team" into `[verbatim, quantified_estimate, outcome_reframed]` candidates. Blocks meaningful quality gains until built.
-2. **Pass 3 Style + JD parser** — deterministic style-hash + JD analyzer. Currently a placeholder — Composer runs with a hand-built StyleSpec today.
+1. **Pass 2 Enricher** — turns "managed a team" into `[verbatim, quantified_estimate, outcome_reframed]` candidates. Blocks meaningful quality gains until built. (Orchestrator currently wraps each achievement as `verbatim` only.)
+2. **Pass 3 Style + JD parser** — deterministic style-hash + JD analyzer. (Orchestrator currently picks voice/structure from a small heuristic — see `orchestrator.ts` `inferSeniority`.)
 3. **Pass 5 ATS-safety linter** — enforces standard section names, no tables/columns, safe date formats. Non-LLM, straightforward but requires the CV markdown parser.
-4. ~~**`AtsScorer` adapter**~~ — DONE (`ats-scorer.ts`). Pass 6 defaults to it automatically; tests can still inject a stub via `score:` option.
-5. **Postgres additions** — `cv_generations` table + `cv_banned_phrases` per-industry table + `cv_style_variants` permutation table + `embedding vector(1536)` column and pgvector similarity gate.
-6. **`@anthropic-ai/sdk`** — `npm install @anthropic-ai/sdk` needed before Composer's Anthropic path works (it currently no-ops back to OpenAI if the SDK is missing at runtime, so nothing breaks in the interim).
-7. **`tools-routes.ts` refactor** — the free `/api/tools/ats-check` endpoint has its own inline OpenAI call that duplicates `ats-scorer.ts`. Both currently use the same `ATS_ANALYSIS_ENGINE` prompt so scores are identical. Refactor the endpoint to call `scoreCv()` too, so there's literally one code path — then version drift can't happen.
+4. ~~**`AtsScorer` adapter**~~ — DONE.
+5. ~~**Orchestrator + HTTP route**~~ — DONE. `POST /api/cv-ai/generate` is live and callable.
+6. **Postgres additions** — `cv_generations` table + `cv_banned_phrases` per-industry table + `cv_style_variants` permutation table + `embedding vector(1536)` column and pgvector similarity gate.
+7. **`@anthropic-ai/sdk`** — `npm install @anthropic-ai/sdk` needed before Composer's Anthropic path works (it currently no-ops back to OpenAI if the SDK is missing at runtime, so nothing breaks in the interim).
+8. **`tools-routes.ts` refactor** — the free `/api/tools/ats-check` endpoint has its own inline OpenAI call that duplicates `ats-scorer.ts`. Both currently use the same `ATS_ANALYSIS_ENGINE` prompt so scores are identical. Refactor the endpoint to call `scoreCv()` too, so there's literally one code path — then version drift can't happen.
+9. **Client UI** — the endpoint is server-only. A React page to drive it (upload / paste / paste JD / show result + score delta) is next.
+
+## The endpoint
+
+`POST /api/cv-ai/generate` — see `server/routes/cv-ai.ts`.
+
+Request (multipart):
+- `cv` (file, PDF or DOCX) OR `cvText` (string in JSON body)
+- `jobDescription` (optional, ≥40 chars to trigger JD-tailoring)
+- `region` (optional, one of KE / UK / CA / AU / UAE / US / EU; default KE)
+- `industry` (optional, free-form; default "general")
+
+Response:
+```json
+{
+  "ok": true,
+  "hitTarget": true,
+  "improvement": 22,
+  "inputScore": 61,
+  "outputScore": 83,
+  "retries": 0,
+  "cvMarkdown": "# Jane Doe\n\n## Summary\n...",
+  "elapsedMs": 18420,
+  "message": "Your CV is stronger by 22 ATS points."
+}
+```
+
+If the score gate can't hit +15 after retries, `hitTarget=false` and the
+message becomes "Your original CV was already strong — try our expert
+review" — never a fake number.
 
 ## Order of implementation
 
