@@ -925,43 +925,12 @@ export default function Landing() {
                   compare:   "Typical writer: KES 2,000 — you save KES 1,851",
                   cta:       "Write my cover letter",
                 },
-                {
-                  title:     "Recruiter-Friendly CV",
-                  slug:      "ats_cv_optimization",
-                  price:     "KES 499",
-                  priceColor:"text-amber-600 dark:text-amber-400",
-                  time:      "3 min",
-                  blurb:     "Get past the gatekeepers. We tune every section for the exact target role.",
-                  badge:     { text: "POPULAR", color: "bg-amber-500" },
-                  compare:   "Career coach: KES 5,000+ — you save KES 4,501",
-                  cta:       "Order recruiter CV",
-                  // 2026-08: testimonials shown under the 3 highest-priced cards
-                  // to reduce hesitation at the moment of maximum price
-                  // sensitivity. Replace with fresher quotes as they come in via
-                  // the community wall. All testimonials must be from real
-                  // paying members — do NOT fabricate.
-                  testimonial: {
-                    quote: "Got 3 interview invites in the first week after the rewrite. Worth every shilling.",
-                    author: "Grace M., Registered Nurse",
-                    detail: "Nairobi → NHS Manchester",
-                  },
-                },
-                {
-                  title:     "Country CV Rewrite",
-                  slug:      "cv_rewrite",
-                  price:     "KES 699",
-                  priceColor:"text-pink-600 dark:text-pink-400",
-                  time:      "3 min",
-                  blurb:     "Restyled for UK, Canada, UAE, Germany, Australia — country-specific formatting.",
-                  badge:     { text: "BEST VALUE", color: "bg-pink-500" },
-                  compare:   "Country agent: KES 8,000+ — you save KES 7,300",
-                  cta:       "Rewrite for my target country",
-                  testimonial: {
-                    quote: "Applied to 12 UAE hotels with the restyled CV. Got 4 callbacks. Signed with Marriott.",
-                    author: "David O., F&B Supervisor",
-                    detail: "Mombasa → Marriott Dubai",
-                  },
-                },
+                // 2026-09 REMOVED — Recruiter-Friendly CV + Country CV
+                // Rewrite retired from the landing storefront on Tony's
+                // trust audit. Server-side deactivation hides them from
+                // /api/services, but this landing grid was HARDCODED
+                // (with hardcoded testimonials too) — needed manual
+                // removal here. See ensure-services-deactivated.ts.
                 {
                   title:     "SoP / Personal Statement",
                   slug:      "sop_writing",

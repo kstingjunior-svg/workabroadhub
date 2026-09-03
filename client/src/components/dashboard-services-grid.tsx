@@ -72,29 +72,12 @@ const SERVICES: ServiceCard[] = [
     socialProof: "Pro subscribers: free",
     priceAnchor: "Writer: KES 3,000+ · You save KES 2,700",
   },
-  {
-    slug: "ats_cv_optimization",
-    emoji: "🎯",
-    name: "Recruiter-Friendly CV",
-    desc: "Get past the gatekeepers. We tune your CV with the words recruiters search for.",
-    price: 499,
-    badge: "Popular",
-    bgColor: "bg-amber-50 dark:bg-amber-950/30 border-amber-300 dark:border-amber-700",
-    textColor: "text-amber-700 dark:text-amber-300",
-    socialProof: "🔥 Most ordered",
-    priceAnchor: "Career coach: KES 5,000+ · You save KES 4,501",
-  },
-  {
-    slug: "cv_rewrite",
-    emoji: "🌍",
-    name: "Country CV Rewrite",
-    desc: "Restyled for UK, Canada, UAE, Germany, AU formats.",
-    price: 699,
-    badge: "Best Value",
-    bgColor: "bg-rose-50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-800",
-    textColor: "text-rose-700 dark:text-rose-300",
-    priceAnchor: "Country agent: KES 8,000+ · You save KES 7,300",
-  },
+  // 2026-09 REMOVED — Recruiter-Friendly CV (ats_cv_optimization) and
+  // Country CV Rewrite (cv_rewrite) retired from the storefront on
+  // Tony's trust audit. The server-side deactivation (ensure-services-
+  // deactivated.ts) hides them from /api/services, but this grid was
+  // HARDCODED — deactivating in the DB did nothing here. Removed both
+  // hardcoded entries so the dashboard grid stops rendering them.
   {
     slug: "linkedin_optimization",
     emoji: "💼",
