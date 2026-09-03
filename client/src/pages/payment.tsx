@@ -214,9 +214,25 @@ export default function Payment() {
   });
 
   // Amount is always derived from the pricing engine — never hardcoded.
-  const paymentAmount: number = resolvedPrice?.finalPrice ?? 0;
-  const basePaymentAmount: number | null = resolvedPrice?.basePrice ?? null;
-  const priceReady = !priceLoading && paymentAmount > 0;
+  //
+  // 2026-09 EMERGENCY (Tony's KES 1000 report): if /api/price fails
+  // (network glitch, plans not seeded, brief upstream 400), paymentAmount
+  // stayed at 0, priceReady stayed false forever, every click of Pay just
+  // toasted "Loading price..." — user was stuck. Server-side resolvePrice
+  // is still authoritative when the STK fires, so a client fallback to
+  // the canonical prices is safe: worst case, we display the canonical
+  // amount, and the server corrects it on submit.
+  const CANONICAL_PRICE_FALLBACK: Record<string, number> = {
+    trial:   99,
+    monthly: 1000,
+    pro:     4500,
+    yearly:  4500,
+    pro_referral: 3600,
+  };
+  const canonicalFallback = CANONICAL_PRICE_FALLBACK[effectivePlanId] ?? 0;
+  const paymentAmount: number = resolvedPrice?.finalPrice ?? canonicalFallback;
+  const basePaymentAmount: number | null = resolvedPrice?.basePrice ?? (canonicalFallback || null);
+  const priceReady = paymentAmount > 0;
 
   // selectedPlan — referenced later in JSX/toasts but was never declared.
   // Derive from the plans query + URL plan id (or "pro" default).

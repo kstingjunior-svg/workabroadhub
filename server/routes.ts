@@ -2758,8 +2758,28 @@ Crawl-delay: 1`);
       // pro_referral uses the base pro plan record but with a 20% discounted price
       const basePlanId = planId === "pro_referral" ? "pro" : planId;
 
-      const plan = await storage.getPlanById(basePlanId);
-      if (!plan) return res.status(404).json({ message: "Plan not found" });
+      let plan = await storage.getPlanById(basePlanId);
+      if (!plan) {
+        // 2026-09 (KES 1000 upgrade payment audit): the admin flows already
+        // have a canonical fallback for missing plan rows — the primary
+        // upgrade path didn't, so a single ensurePlansSeeded() boot failure
+        // meant every user who selected Monthly saw 'Plan not found'.
+        // Fall back to the canonical seed + kick a background re-seed.
+        const { getCanonicalPlanPrice, ensurePlansSeeded } = await import("./lib/ensure-plans-seeded");
+        const fallbackPrice = getCanonicalPlanPrice(basePlanId);
+        if (fallbackPrice != null) {
+          console.warn(`[Subscribe] plans["${basePlanId}"] missing — using canonical KES ${fallbackPrice} + kicking re-seed.`);
+          ensurePlansSeeded().catch((e) => console.error("[Subscribe] background ensurePlansSeeded failed:", e?.message));
+          plan = {
+            planId: basePlanId,
+            planName: basePlanId.charAt(0).toUpperCase() + basePlanId.slice(1),
+            price: fallbackPrice,
+            billingPeriod: basePlanId === "trial" ? "daily" : basePlanId === "monthly" ? "monthly" : "yearly",
+          } as any;
+        } else {
+          return res.status(404).json({ message: "Plan not found" });
+        }
+      }
 
       const normalizedPhone = normalizePhone(phoneNumber, "KE") ?? phoneNumber;
       if (!/^254[71]\d{8}$/.test(normalizedPhone)) {
