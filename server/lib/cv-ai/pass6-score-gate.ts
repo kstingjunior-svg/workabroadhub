@@ -42,11 +42,19 @@ export interface ScoreGateInput {
   style: StyleSpec;
   inputCvText: string;        // original source CV — for input score baseline
   jdText?: string;
-  score: AtsScorer;
+  /**
+   * Custom scorer — pass a stub in tests, or a Next.js-side wrapper if the
+   * scoring engine moves. Defaults to the WorkAbroadHub ATS engine so the
+   * trust guarantee holds for every real caller without ceremony.
+   */
+  score?: AtsScorer;
 }
 
 export async function runScoreGate(input: ScoreGateInput): Promise<GenerationResult> {
-  const { facts, style, inputCvText, jdText, score } = input;
+  const { facts, style, inputCvText, jdText } = input;
+  // Lazy import so tests can pass their own scorer without loading OpenAI.
+  const score: AtsScorer =
+    input.score ?? (await import("./ats-scorer")).scoreCv;
 
   const inputScore = await score(inputCvText, jdText);
 

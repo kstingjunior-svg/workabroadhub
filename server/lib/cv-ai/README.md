@@ -13,6 +13,7 @@ failures are debuggable and A/B-testable in isolation.
 | 4 | Composer | **Claude Sonnet** (fallback `gpt-4o`) | `pass4-composer.ts` | ~$0.06-0.10 |
 | 5 | ATS-safety linter | pure code (no LLM) | *(not built yet)* | $0 |
 | 6 | Score gate | code + retry into Pass 4 | `pass6-score-gate.ts` | 0-2× Composer |
+| — | ATS Scorer adapter | `gpt-4o` (same engine as `/tools/ats-cv-checker`) | `ats-scorer.ts` | ~$0.03-0.06 per call |
 
 **Happy path total:** ~$0.12–0.18 per CV.
 **Hard-case retries:** up to ~$0.35.
@@ -52,9 +53,10 @@ regenerating with a saved fact JSON skips Pass 1).
 1. **Pass 2 Enricher** — turns "managed a team" into `[verbatim, quantified_estimate, outcome_reframed]` candidates. Blocks meaningful quality gains until built.
 2. **Pass 3 Style + JD parser** — deterministic style-hash + JD analyzer. Currently a placeholder — Composer runs with a hand-built StyleSpec today.
 3. **Pass 5 ATS-safety linter** — enforces standard section names, no tables/columns, safe date formats. Non-LLM, straightforward but requires the CV markdown parser.
-4. **`AtsScorer` adapter** — Pass 6 takes it as a dependency. Wire it to `server/lib/ats-analysis-engine.ts` — the ATS engine already used by `/tools/ats-cv-checker` — so both flows use the exact same scoring, which is the whole point of the trust guarantee.
+4. ~~**`AtsScorer` adapter**~~ — DONE (`ats-scorer.ts`). Pass 6 defaults to it automatically; tests can still inject a stub via `score:` option.
 5. **Postgres additions** — `cv_generations` table + `cv_banned_phrases` per-industry table + `cv_style_variants` permutation table + `embedding vector(1536)` column and pgvector similarity gate.
 6. **`@anthropic-ai/sdk`** — `npm install @anthropic-ai/sdk` needed before Composer's Anthropic path works (it currently no-ops back to OpenAI if the SDK is missing at runtime, so nothing breaks in the interim).
+7. **`tools-routes.ts` refactor** — the free `/api/tools/ats-check` endpoint has its own inline OpenAI call that duplicates `ats-scorer.ts`. Both currently use the same `ATS_ANALYSIS_ENGINE` prompt so scores are identical. Refactor the endpoint to call `scoreCv()` too, so there's literally one code path — then version drift can't happen.
 
 ## Order of implementation
 
