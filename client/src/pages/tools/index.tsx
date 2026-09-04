@@ -435,7 +435,7 @@ export default function ToolsHub() {
                 </div>
               </div>
               <div className="flex gap-2">
-                <a href="/" className="flex-1">
+                <Link href="/" className="flex-1">
                   <Button
                     size="sm"
                     className="w-full h-9 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 border-0"
@@ -444,8 +444,8 @@ export default function ToolsHub() {
                     Sign Up Free
                     <ChevronRight className="h-3 w-3" />
                   </Button>
-                </a>
-                <a href="/" className="flex-1">
+                </Link>
+                <Link href="/" className="flex-1">
                   <Button
                     variant="outline"
                     size="sm"
@@ -454,7 +454,7 @@ export default function ToolsHub() {
                   >
                     Log In
                   </Button>
-                </a>
+                </Link>
               </div>
               <p className="text-[10px] text-muted-foreground text-center mt-3">
                 Free to join · No monthly fees · KES 450 per referral · M-Pesa payout

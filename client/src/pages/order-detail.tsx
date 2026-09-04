@@ -302,7 +302,7 @@ export default function OrderDetail() {
               </div>
               <p className="text-xs text-muted-foreground mt-3">
                 Trouble downloading? Also available on your{" "}
-                <a href="/my-documents" className="text-primary hover:underline">My Documents</a> page.
+                <Link href="/my-documents" className="text-primary hover:underline">My Documents</Link> page.
               </p>
             </CardContent>
           </Card>

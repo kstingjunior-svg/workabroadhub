@@ -9,7 +9,7 @@
  *   3. DONE       — download buttons (PDF + Word)
  */
 import { useEffect, useRef, useState } from "react";
-import { useRoute, useLocation } from "wouter";
+import { useRoute, useLocation, Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1198,7 +1198,7 @@ export default function ServiceOrderFlow() {
               {downloadErrorMsg && (
                 <div className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-md px-3 py-2 max-w-sm mx-auto">
                   {downloadErrorMsg}{" "}
-                  <a href="/my-documents" className="underline font-semibold">Open My Documents</a> instead.
+                  <Link href="/my-documents" className="underline font-semibold">Open My Documents</Link> instead.
                 </div>
               )}
               <div className="pt-3 flex flex-col sm:flex-row items-center justify-center gap-2">

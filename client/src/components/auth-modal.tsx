@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PhoneInput } from "@/components/phone-input";
 import { Label } from "@/components/ui/label";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { queryClient } from "@/lib/queryClient";
 
 type Tab = "login" | "signup";
@@ -1047,13 +1047,10 @@ export function AuthModal({
 
           {tab === "login" && (
             <p className="text-center text-sm text-muted-foreground -mt-1">
-              <a
-                href="/forgot-password"
-                className="text-primary hover:underline"
-                data-testid="link-forgot-password"
-              >
+              <Link href="/forgot-password" className="text-primary hover:underline"
+                data-testid="link-forgot-password">
                 Forgot your password?
-              </a>
+              </Link>
             </p>
           )}
 

@@ -188,7 +188,7 @@ export default function FAQPage() {
               {searchResults.length === 0 ? (
                 <div className="text-center py-12 text-slate-400">
                   <Search className="h-8 w-8 mx-auto mb-3 opacity-30" />
-                  <p>No results found. Try different keywords or <a href="/contact" className="text-teal-600 underline">contact us</a>.</p>
+                  <p>No results found. Try different keywords or <Link href="/contact" className="text-teal-600 underline">contact us</Link>.</p>
                 </div>
               ) : (
                 <Accordion type="single" collapsible className="space-y-3">

@@ -136,7 +136,7 @@ export default function TermsOfService() {
               </ul>
               <p><strong>All payments are:</strong></p>
               <ul>
-                <li>Final and non-refundable, unless explicitly stated otherwise in our <a href="/refund-policy">Refund Policy</a></li>
+                <li>Final and non-refundable, unless explicitly stated otherwise in our <Link href="/refund-policy">Refund Policy</Link></li>
                 <li>Subject to Safaricom M-Pesa terms and conditions</li>
               </ul>
               <p>By making a payment, you acknowledge and agree that:</p>
@@ -156,11 +156,11 @@ export default function TermsOfService() {
               <ul>
                 <li>A proven system error occurred</li>
                 <li>Payment was debited without service access being granted</li>
-                <li>Your request is submitted within 7 days and no consultation was initiated (see <a href="/refund-policy">Refund Policy</a>)</li>
+                <li>Your request is submitted within 7 days and no consultation was initiated (see <Link href="/refund-policy">Refund Policy</Link>)</li>
               </ul>
               <p>
                 Payment disputes must be reported within 48 hours of payment. Any decision on refunds
-                by WorkAbroad Hub shall be final. For full details, see our <a href="/refund-policy">Refund Policy</a>.
+                by WorkAbroad Hub shall be final. For full details, see our <Link href="/refund-policy">Refund Policy</Link>.
               </p>
 
               <h2>6. Third-Party Links and Content</h2>

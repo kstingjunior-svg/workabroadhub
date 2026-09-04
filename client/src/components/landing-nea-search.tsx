@@ -21,6 +21,7 @@
 import { useState, useEffect } from "react";
 import { Search, Shield, AlertTriangle, CheckCircle2, Database, Loader2, XCircle } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "wouter";
 
 interface Agency {
   id: string;
@@ -287,13 +288,10 @@ export function LandingNeaSearch() {
             {stats?.totalAgencies ?? "—"} tracked
           </span>
         </div>
-        <a
-          href="/nea-agencies"
-          className="font-bold text-emerald-700 dark:text-emerald-400 hover:underline whitespace-nowrap"
-          data-testid="link-browse-all-agencies"
-        >
+        <Link href="/nea-agencies" className="font-bold text-emerald-700 dark:text-emerald-400 hover:underline whitespace-nowrap"
+          data-testid="link-browse-all-agencies">
           Browse all →
-        </a>
+        </Link>
       </div>
     </div>
   );

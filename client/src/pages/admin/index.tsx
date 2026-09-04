@@ -35,6 +35,7 @@ import {
   ChevronUp,
   Phone,
 } from "lucide-react";
+import { Link } from "wouter";
 
 function planLabel(plan: string | null | undefined): string {
   const p = (plan || "").toLowerCase();
@@ -690,26 +691,26 @@ export default function AdminDashboard() {
         {/* Quick links row */}
         <div className="flex gap-2 flex-wrap">
           <Button variant="outline" size="sm" asChild data-testid="link-funnel-dashboard">
-            <a href="/admin/funnel" className="flex items-center gap-1.5">
+            <Link href="/admin/funnel" className="flex items-center gap-1.5">
               <TrendingUp className="h-4 w-4 text-purple-500" /> Conversion Funnel
-            </a>
+            </Link>
           </Button>
           <Button variant="outline" size="sm" asChild>
-            <a href="/admin/analytics" className="flex items-center gap-1.5">Analytics</a>
+            <Link href="/admin/analytics" className="flex items-center gap-1.5">Analytics</Link>
           </Button>
           <Button variant="outline" size="sm" asChild>
-            <a href="/admin/plans" className="flex items-center gap-1.5">Plans</a>
+            <Link href="/admin/plans" className="flex items-center gap-1.5">Plans</Link>
           </Button>
           <Button variant="outline" size="sm" asChild data-testid="link-moderation">
-            <a href="/admin/moderation" className="flex items-center gap-1.5">
+            <Link href="/admin/moderation" className="flex items-center gap-1.5">
               <ShieldCheck className="h-4 w-4 text-teal-500" /> Moderation Queue
-            </a>
+            </Link>
           </Button>
           {/* 2026-06: cleanup tool for users wrongly granted plan access by service payments */}
           <Button variant="outline" size="sm" asChild data-testid="link-plan-recovery">
-            <a href="/admin/plan-recovery" className="flex items-center gap-1.5">
+            <Link href="/admin/plan-recovery" className="flex items-center gap-1.5">
               <ShieldCheck className="h-4 w-4 text-amber-600" /> Plan Recovery
-            </a>
+            </Link>
           </Button>
         </div>
 
@@ -725,7 +726,7 @@ export default function AdminDashboard() {
                   <CardDescription>Latest payment transactions</CardDescription>
                 </div>
                 <Button variant="outline" size="sm" asChild>
-                  <a href="/admin/payments" data-testid="link-view-all-payments">View All</a>
+                  <Link href="/admin/payments" data-testid="link-view-all-payments">View All</Link>
                 </Button>
               </div>
             </CardHeader>
@@ -806,7 +807,7 @@ export default function AdminDashboard() {
                   <CardDescription>Latest registered users</CardDescription>
                 </div>
                 <Button variant="outline" size="sm" asChild>
-                  <a href="/admin/users" data-testid="link-view-all-users">View All</a>
+                  <Link href="/admin/users" data-testid="link-view-all-users">View All</Link>
                 </Button>
               </div>
             </CardHeader>

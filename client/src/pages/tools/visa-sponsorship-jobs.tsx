@@ -476,7 +476,7 @@ export default function VisaSponsorshipJobs() {
         description: (
           <span>
             <strong>{job.title}</strong> at {job.company} saved.{" "}
-            <a href="/application-tracker" className="underline font-medium text-teal-600">View Tracker →</a>
+            <Link href="/application-tracker" className="underline font-medium text-teal-600">View Tracker →</Link>
           </span>
         ) as any,
       });
@@ -955,7 +955,7 @@ export default function VisaSponsorshipJobs() {
             <span className="text-xs text-muted-foreground">·</span>
             <Link href="/services"><span className="text-xs text-blue-600 dark:text-blue-400 underline underline-offset-2">Career Consultation</span></Link>
             <span className="text-xs text-muted-foreground">·</span>
-            <a href="/"><span className="text-xs text-blue-600 dark:text-blue-400 underline underline-offset-2">Sign Up Free</span></a>
+            <Link href="/"><span className="text-xs text-blue-600 dark:text-blue-400 underline underline-offset-2">Sign Up Free</span></Link>
           </div>
         </div>
       </div>

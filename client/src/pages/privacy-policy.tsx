@@ -239,7 +239,7 @@ export default function PrivacyPolicy() {
               <div className="p-4 bg-blue-50 dark:bg-blue-950/30 rounded-xl border border-blue-200 dark:border-blue-800 not-prose mt-6">
                 <p className="text-sm text-blue-800 dark:text-blue-200">
                   <strong>Google Play Data Safety:</strong> See our full{" "}
-                  <a href="/data-safety" className="underline text-blue-700 dark:text-blue-300">Data Safety disclosure page</a>{" "}
+                  <Link href="/data-safety" className="underline text-blue-700 dark:text-blue-300">Data Safety disclosure page</Link>{" "}
                   for answers to the Google Play Store Data Safety form, a complete list of third-party services, and user rights under KDPA 2019.
                 </p>
               </div>

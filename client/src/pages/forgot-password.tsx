@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { ArrowLeft, Loader2, Check, Mail } from "lucide-react";
 
 export default function ForgotPassword() {
@@ -145,11 +145,11 @@ export default function ForgotPassword() {
         </div>
 
         <p className="text-center text-xs text-[#7A8A9A] mt-5 space-x-3">
-          <a href="/privacy-policy" className="hover:text-[#1A2530] transition-colors">Privacy Policy</a>
+          <Link href="/privacy-policy" className="hover:text-[#1A2530] transition-colors">Privacy Policy</Link>
           <span>·</span>
-          <a href="/terms-of-service" className="hover:text-[#1A2530] transition-colors">Terms</a>
+          <Link href="/terms-of-service" className="hover:text-[#1A2530] transition-colors">Terms</Link>
           <span>·</span>
-          <a href="/contact" className="hover:text-[#1A2530] transition-colors">Help</a>
+          <Link href="/contact" className="hover:text-[#1A2530] transition-colors">Help</Link>
         </p>
       </div>
     </div>

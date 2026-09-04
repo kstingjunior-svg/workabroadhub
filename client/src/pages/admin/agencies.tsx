@@ -25,6 +25,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import AdminLayout from "@/components/admin-layout";
 import { Plus, Edit, Trash2, Loader2, Search, Upload, AlertTriangle, FileSpreadsheet, Download } from "lucide-react";
+import { Link } from "wouter";
 
 interface NeaAgency {
   id: string;
@@ -273,12 +274,12 @@ export default function AdminAgencies() {
                 Reports ({pendingReports.length})
               </Button>
             )}
-            <a href="/api/admin/nea-agencies/download" download>
+            <Link href="/api/admin/nea-agencies/download" download>
               <Button variant="outline" data-testid="button-download-agencies">
                 <Download className="h-4 w-4 mr-2" />
                 Export CSV
               </Button>
-            </a>
+            </Link>
             <Dialog open={isBulkOpen} onOpenChange={setIsBulkOpen}>
               <DialogTrigger asChild>
                 <Button variant="outline" data-testid="button-bulk-upload">

@@ -160,11 +160,11 @@ export default function AdminLayout({ children, title }: AdminLayoutProps) {
           <p className="text-gray-600 dark:text-gray-300 mb-6">
             Your session has expired. Please sign in again to access the admin panel.
           </p>
-          <a href="/" className="block w-full">
+          <Link href="/" className="block w-full">
             <Button className="w-full" data-testid="button-relogin">
               Sign In Again
             </Button>
-          </a>
+          </Link>
         </div>
       </div>
     );

@@ -560,13 +560,10 @@ export default function ATSCVChecker() {
                           🎯 Fix My CV for KES 99
                           <ChevronRight className="h-4 w-4" />
                         </button>
-                        <a
-                          href="/services"
-                          className="text-xs text-center sm:text-left text-muted-foreground hover:text-foreground transition-colors px-2 py-2"
-                          data-testid="link-tripwire-see-all"
-                        >
+                        <Link href="/services" className="text-xs text-center sm:text-left text-muted-foreground hover:text-foreground transition-colors px-2 py-2"
+                          data-testid="link-tripwire-see-all">
                           See all options →
-                        </a>
+                        </Link>
                       </div>
                     </div>
                   </div>

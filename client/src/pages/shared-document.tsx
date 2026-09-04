@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams, useLocation } from "wouter";
+import { useParams, useLocation, Link } from "wouter";
 import { Loader2, Download, Globe, Share2, ArrowRight, FileDown } from "lucide-react";
 
 type SharedDoc = {
@@ -107,13 +107,10 @@ export default function SharedDocument() {
             <span className="text-xl">🌍</span>
             <span className="text-sm font-bold text-[#1A2530] group-hover:text-[#2A3A4A] transition-colors">WorkAbroad Hub</span>
           </button>
-          <a
-            href="/"
-            className="flex items-center gap-1.5 text-xs font-semibold text-[#1A2530] border border-[#E2DDD5] px-3.5 py-1.5 rounded-full hover:border-[#1A2530] bg-white transition-colors"
-            data-testid="link-get-started"
-          >
+          <Link href="/" className="flex items-center gap-1.5 text-xs font-semibold text-[#1A2530] border border-[#E2DDD5] px-3.5 py-1.5 rounded-full hover:border-[#1A2530] bg-white transition-colors"
+            data-testid="link-get-started">
             Get Started <ArrowRight className="h-3 w-3" />
-          </a>
+          </Link>
         </div>
       </div>
 
@@ -192,13 +189,10 @@ export default function SharedDocument() {
               WorkAbroad Hub helps Kenyans build verified overseas careers — CV rewrites, cover letters, visa guidance, and more.
             </p>
           </div>
-          <a
-            href="/"
-            className="flex items-center gap-2 bg-[#1A2530] text-white text-sm font-bold px-6 py-3 rounded-full hover:bg-[#2A3A4A] transition-colors whitespace-nowrap flex-shrink-0"
-            data-testid="btn-cta-getstarted"
-          >
+          <Link href="/" className="flex items-center gap-2 bg-[#1A2530] text-white text-sm font-bold px-6 py-3 rounded-full hover:bg-[#2A3A4A] transition-colors whitespace-nowrap flex-shrink-0"
+            data-testid="btn-cta-getstarted">
             Get Started → <Globe className="h-4 w-4" />
-          </a>
+          </Link>
         </div>
 
         {/* Footer */}

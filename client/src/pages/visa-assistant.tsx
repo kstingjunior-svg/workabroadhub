@@ -338,11 +338,11 @@ export default function VisaAssistantPage() {
                   <p className="text-gray-500 mb-6 text-sm">
                     Free accounts get 3 questions a day. Basic gets 20. Pro — ask away, no limit.
                   </p>
-                  <a href="/">
+                  <Link href="/">
                     <Button className="bg-blue-600 hover:bg-blue-700 text-white w-full" data-testid="button-login-visa-assistant">
                       Sign In Free <ArrowRight className="ml-2 h-4 w-4" />
                     </Button>
-                  </a>
+                  </Link>
                   <p className="text-xs text-gray-400 mt-3">No credit card required for free account</p>
                 </CardContent>
               </Card>

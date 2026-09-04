@@ -96,7 +96,7 @@ export default function AboutPage() {
         <div className="max-w-4xl mx-auto flex items-start gap-3">
           <Shield className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
           <p className="text-sm text-amber-800">
-            <strong>Important:</strong> WorkAbroad Hub is a <strong>career consultation service</strong>, not a recruitment agency. We do not place workers, charge placement/visa fees, or guarantee employment outcomes. We are not affiliated with any specific employer or foreign government. Always verify any agency through the official <a href="/nea-agencies" className="underline font-medium">public licence register</a>.
+            <strong>Important:</strong> WorkAbroad Hub is a <strong>career consultation service</strong>, not a recruitment agency. We do not place workers, charge placement/visa fees, or guarantee employment outcomes. We are not affiliated with any specific employer or foreign government. Always verify any agency through the official <Link href="/nea-agencies" className="underline font-medium">public licence register</Link>.
           </p>
         </div>
       </section>
@@ -213,7 +213,7 @@ export default function AboutPage() {
             </div>
             <div className="bg-white rounded-lg p-4 border border-blue-100">
               <div className="font-semibold mb-1">No Guarantee Policy</div>
-              <p className="text-slate-500 text-xs">We do not guarantee job placement, visa approval, or any specific employment outcome. See our full <a href="/terms-of-service" className="underline text-blue-600">Terms of Service</a>.</p>
+              <p className="text-slate-500 text-xs">We do not guarantee job placement, visa approval, or any specific employment outcome. See our full <Link href="/terms-of-service" className="underline text-blue-600">Terms of Service</Link>.</p>
             </div>
           </div>
         </div>

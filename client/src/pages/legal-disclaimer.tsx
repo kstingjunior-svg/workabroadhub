@@ -85,7 +85,7 @@ export default function LegalDisclaimer() {
               <p>Once payment is made:</p>
               <ul>
                 <li>It is deemed voluntary and informed</li>
-                <li>It is non-refundable, except where required by law or proven system failure (see our <a href="/refund-policy">Refund Policy</a>)</li>
+                <li>It is non-refundable, except where required by law or proven system failure (see our <Link href="/refund-policy">Refund Policy</Link>)</li>
               </ul>
 
               <h2>4. Third-Party Risks & User Responsibility</h2>
@@ -150,7 +150,7 @@ export default function LegalDisclaimer() {
               <p>
                 Any person claiming to represent WorkAbroad Hub outside official channels should be treated
                 as a potential fraudster. Report suspicious activity immediately via our{" "}
-                <a href="/report-abuse">abuse reporting page</a>.
+                <Link href="/report-abuse">abuse reporting page</Link>.
               </p>
 
               <h2>9. Regulatory & Compliance Notice</h2>
@@ -160,7 +160,7 @@ export default function LegalDisclaimer() {
               </p>
               <p>
                 We process personal data in accordance with the Kenya Data Protection Act, 2019.
-                Full details are outlined in our <a href="/privacy-policy">Privacy Policy</a>.
+                Full details are outlined in our <Link href="/privacy-policy">Privacy Policy</Link>.
               </p>
 
               <h2>10. Acceptance & Legal Effect</h2>
@@ -172,7 +172,7 @@ export default function LegalDisclaimer() {
               </ul>
               <p>
                 These terms are governed by the laws of the Republic of Kenya. For full terms, see our{" "}
-                <a href="/terms-of-service">Terms of Service</a>.
+                <Link href="/terms-of-service">Terms of Service</Link>.
               </p>
             </CardContent>
           </Card>
@@ -194,11 +194,11 @@ export default function LegalDisclaimer() {
 
           <div className="text-center text-sm text-muted-foreground space-y-2">
             <p>
-              <a href="/terms-of-service" className="text-primary underline" data-testid="link-terms">Terms of Service</a>
+              <Link href="/terms-of-service" className="text-primary underline" data-testid="link-terms">Terms of Service</Link>
               {" | "}
-              <a href="/privacy-policy" className="text-primary underline" data-testid="link-privacy">Privacy Policy</a>
+              <Link href="/privacy-policy" className="text-primary underline" data-testid="link-privacy">Privacy Policy</Link>
               {" | "}
-              <a href="/refund-policy" className="text-primary underline" data-testid="link-refund">Refund Policy</a>
+              <Link href="/refund-policy" className="text-primary underline" data-testid="link-refund">Refund Policy</Link>
             </p>
             <p>Operated by Exovia Connect, Kenya</p>
           </div>

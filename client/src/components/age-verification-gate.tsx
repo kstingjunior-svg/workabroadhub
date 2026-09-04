@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Shield, AlertTriangle } from "lucide-react";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 
 const AGE_VERIFIED_KEY = "workabroad-age-verified";
 
@@ -63,9 +63,9 @@ export function AgeVerificationGate({ children }: AgeVerificationGateProps) {
               </Button>
               <p className="text-xs text-muted-foreground">
                 You can still view our{" "}
-                <a href="/privacy-policy" className="text-primary underline">Privacy Policy</a>{" "}
+                <Link href="/privacy-policy" className="text-primary underline">Privacy Policy</Link>{" "}
                 and{" "}
-                <a href="/terms-of-service" className="text-primary underline">Terms of Service</a>.
+                <Link href="/terms-of-service" className="text-primary underline">Terms of Service</Link>.
               </p>
             </div>
           </CardContent>
@@ -91,9 +91,9 @@ export function AgeVerificationGate({ children }: AgeVerificationGateProps) {
           <div className="bg-muted/50 rounded-lg p-4 text-xs text-muted-foreground leading-relaxed">
             <p>
               By confirming, you declare that you are 18 years of age or older and agree to our{" "}
-              <a href="/terms-of-service" className="text-primary underline">Terms of Service</a>{" "}
+              <Link href="/terms-of-service" className="text-primary underline">Terms of Service</Link>{" "}
               and{" "}
-              <a href="/privacy-policy" className="text-primary underline">Privacy Policy</a>.
+              <Link href="/privacy-policy" className="text-primary underline">Privacy Policy</Link>.
             </p>
           </div>
 

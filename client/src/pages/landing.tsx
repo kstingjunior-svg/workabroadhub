@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { LandingNeaSearch } from "@/components/landing-nea-search";
@@ -273,12 +273,12 @@ export default function Landing() {
               <a href="#countries" className="text-sm text-muted-foreground hover:text-foreground transition-colors font-medium touch-target-min flex items-center" data-testid="link-countries" role="menuitem">Countries</a>
               <a href="#how-it-works" className="text-sm text-muted-foreground hover:text-foreground transition-colors font-medium touch-target-min flex items-center" data-testid="link-how-it-works-nav" role="menuitem">How It Works</a>
               <a href="#pricing" className="text-sm text-muted-foreground hover:text-foreground transition-colors font-medium touch-target-min flex items-center" data-testid="link-pricing" role="menuitem">Pricing</a>
-              <a href="/faq" className="text-sm text-muted-foreground hover:text-foreground transition-colors font-medium touch-target-min flex items-center" data-testid="link-faq" role="menuitem">FAQ</a>
-              <a href="/about" className="text-sm text-muted-foreground hover:text-foreground transition-colors font-medium touch-target-min flex items-center" data-testid="link-about" role="menuitem">About</a>
-              <a href="/contact" className="text-sm text-muted-foreground hover:text-foreground transition-colors font-medium touch-target-min flex items-center" data-testid="link-contact-nav" role="menuitem">Contact</a>
-              <a href="/visa-guides" className="text-sm text-muted-foreground hover:text-foreground transition-colors font-medium touch-target-min flex items-center" data-testid="link-visa-guides-nav" role="menuitem">Educational Guides</a>
-              <a href="/visa-assistant" className="text-sm font-semibold text-blue-600 hover:text-blue-700 transition-colors touch-target-min flex items-center gap-1" data-testid="link-visa-assistant-nav" role="menuitem">✨ AI Assistant</a>
-              <a href="/green-card" className="text-sm text-muted-foreground hover:text-foreground transition-colors font-medium touch-target-min flex items-center" data-testid="link-green-card-nav" role="menuitem">🇺🇸 Green Card</a>
+              <Link href="/faq" className="text-sm text-muted-foreground hover:text-foreground transition-colors font-medium touch-target-min flex items-center" data-testid="link-faq" role="menuitem">FAQ</Link>
+              <Link href="/about" className="text-sm text-muted-foreground hover:text-foreground transition-colors font-medium touch-target-min flex items-center" data-testid="link-about" role="menuitem">About</Link>
+              <Link href="/contact" className="text-sm text-muted-foreground hover:text-foreground transition-colors font-medium touch-target-min flex items-center" data-testid="link-contact-nav" role="menuitem">Contact</Link>
+              <Link href="/visa-guides" className="text-sm text-muted-foreground hover:text-foreground transition-colors font-medium touch-target-min flex items-center" data-testid="link-visa-guides-nav" role="menuitem">Educational Guides</Link>
+              <Link href="/visa-assistant" className="text-sm font-semibold text-blue-600 hover:text-blue-700 transition-colors touch-target-min flex items-center gap-1" data-testid="link-visa-assistant-nav" role="menuitem">✨ AI Assistant</Link>
+              <Link href="/green-card" className="text-sm text-muted-foreground hover:text-foreground transition-colors font-medium touch-target-min flex items-center" data-testid="link-green-card-nav" role="menuitem">🇺🇸 Green Card</Link>
             </div>
             <div className="flex items-center gap-3">
               <LanguageSelector />
@@ -486,14 +486,11 @@ export default function Landing() {
                   >
                     Create a free account →
                   </button>
-                  <a
-                    href="/agency-portal"
-                    className="text-sm underline underline-offset-2 hover:text-emerald-700 transition-colors"
+                  <Link href="/agency-portal" className="text-sm underline underline-offset-2 hover:text-emerald-700 transition-colors"
                     style={{ color: '#5C6A7A' }}
-                    data-testid="button-hero-agency-cta"
-                  >
+                    data-testid="button-hero-agency-cta">
                     Are you a recruiter? List your agency →
-                  </a>
+                  </Link>
                   <a
                     href="#how-it-works"
                     className="text-sm underline underline-offset-2 hover:text-emerald-700 transition-colors"
@@ -559,17 +556,14 @@ export default function Landing() {
                     are the two sides of the community-fraud loop — one protects
                     you before you pay, the other protects the next Kenyan
                     after you got burned. Route: /report-scam (public, no auth). */}
-                <a
-                  href="/report-scam"
-                  className="mt-4 flex items-center justify-center gap-2 w-full py-4 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold text-base shadow-sm transition"
-                  data-testid="link-report-agency-landing"
-                >
+                <Link href="/report-scam" className="mt-4 flex items-center justify-center gap-2 w-full py-4 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold text-base shadow-sm transition"
+                  data-testid="link-report-agency-landing">
                   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
                     <line x1="4" y1="22" x2="4" y2="15"/>
                   </svg>
                   Report a fake or fraudulent agency
-                </a>
+                </Link>
                 <p className="text-xs text-center text-gray-500 dark:text-gray-400 mt-2 leading-relaxed">
                   Got scammed or nearly scammed? Your report protects other Kenyans. Anonymous option available.
                 </p>
@@ -669,7 +663,7 @@ export default function Landing() {
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 mb-10">
 
               {/* 1 — ATS CV Checker */}
-              <a href="/tools/ats-cv-checker" data-testid="link-tool-ats" className="group">
+              <Link href="/tools/ats-cv-checker" data-testid="link-tool-ats" className="group">
                 <div className="h-full bg-white dark:bg-slate-800 rounded-2xl border border-blue-100 dark:border-slate-700 p-5 shadow-sm hover:shadow-lg hover:border-blue-300 dark:hover:border-blue-600 transition-all duration-300 flex flex-col">
                   <div className="h-12 w-12 bg-blue-100 dark:bg-blue-900/50 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
                     <FileText className="h-6 w-6 text-blue-600 dark:text-blue-400" />
@@ -685,10 +679,10 @@ export default function Landing() {
                     Check My CV <ArrowRight className="h-4 w-4" />
                   </div>
                 </div>
-              </a>
+              </Link>
 
               {/* 2 — Job Scam Checker */}
-              <a href="/tools/job-scam-checker" data-testid="link-tool-scam" className="group">
+              <Link href="/tools/job-scam-checker" data-testid="link-tool-scam" className="group">
                 <div className="h-full bg-white dark:bg-slate-800 rounded-2xl border border-red-100 dark:border-slate-700 p-5 shadow-sm hover:shadow-lg hover:border-red-300 dark:hover:border-red-700 transition-all duration-300 flex flex-col">
                   <div className="h-12 w-12 bg-red-100 dark:bg-red-900/40 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
                     <ShieldAlert className="h-6 w-6 text-red-600 dark:text-red-400" />
@@ -704,10 +698,10 @@ export default function Landing() {
                     Scan Advert <ArrowRight className="h-4 w-4" />
                   </div>
                 </div>
-              </a>
+              </Link>
 
               {/* 3 — Visa Screening (NEW) */}
-              <a href="/tools/visa-check" data-testid="link-tool-visa-check" className="group">
+              <Link href="/tools/visa-check" data-testid="link-tool-visa-check" className="group">
                 <div className="h-full bg-white dark:bg-slate-800 rounded-2xl border border-indigo-100 dark:border-slate-700 p-5 shadow-sm hover:shadow-lg hover:border-indigo-300 dark:hover:border-indigo-700 transition-all duration-300 flex flex-col">
                   <div className="h-12 w-12 bg-indigo-100 dark:bg-indigo-900/40 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
                     <ScanLine className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
@@ -723,10 +717,10 @@ export default function Landing() {
                     Screen Now <ArrowRight className="h-4 w-4" />
                   </div>
                 </div>
-              </a>
+              </Link>
 
               {/* 4 — Offer Letter Screener (NEW) */}
-              <a href="/tools/offer-check" data-testid="link-tool-offer-check" className="group">
+              <Link href="/tools/offer-check" data-testid="link-tool-offer-check" className="group">
                 <div className="h-full bg-white dark:bg-slate-800 rounded-2xl border border-orange-100 dark:border-slate-700 p-5 shadow-sm hover:shadow-lg hover:border-orange-300 dark:hover:border-orange-700 transition-all duration-300 flex flex-col">
                   <div className="h-12 w-12 bg-orange-100 dark:bg-orange-900/40 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
                     <FileText className="h-6 w-6 text-orange-600 dark:text-orange-400" />
@@ -742,10 +736,10 @@ export default function Landing() {
                     Screen Offer <ArrowRight className="h-4 w-4" />
                   </div>
                 </div>
-              </a>
+              </Link>
 
               {/* 5 — Visa Sponsorship Jobs */}
-              <a href="/tools/visa-sponsorship-jobs" data-testid="link-tool-jobs" className="group">
+              <Link href="/tools/visa-sponsorship-jobs" data-testid="link-tool-jobs" className="group">
                 <div className="h-full bg-white dark:bg-slate-800 rounded-2xl border border-teal-100 dark:border-slate-700 p-5 shadow-sm hover:shadow-lg hover:border-teal-300 dark:hover:border-teal-700 transition-all duration-300 flex flex-col">
                   <div className="h-12 w-12 bg-teal-100 dark:bg-teal-900/40 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
                     <Briefcase className="h-6 w-6 text-teal-600 dark:text-teal-400" />
@@ -761,10 +755,10 @@ export default function Landing() {
                     Browse Jobs <ArrowRight className="h-4 w-4" />
                   </div>
                 </div>
-              </a>
+              </Link>
 
               {/* 6 — CV Templates */}
-              <a href="/tools/cv-templates" data-testid="link-tool-templates" className="group">
+              <Link href="/tools/cv-templates" data-testid="link-tool-templates" className="group">
                 <div className="h-full bg-white dark:bg-slate-800 rounded-2xl border border-purple-100 dark:border-slate-700 p-5 shadow-sm hover:shadow-lg hover:border-purple-300 dark:hover:border-purple-700 transition-all duration-300 flex flex-col">
                   <div className="h-12 w-12 bg-purple-100 dark:bg-purple-900/40 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
                     <Download className="h-6 w-6 text-purple-600 dark:text-purple-400" />
@@ -780,19 +774,19 @@ export default function Landing() {
                     Get Templates <ArrowRight className="h-4 w-4" />
                   </div>
                 </div>
-              </a>
+              </Link>
 
             </div>
 
             {/* Bottom CTA strip */}
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-2">
-              <a href="/tools" data-testid="link-all-tools">
+              <Link href="/tools" data-testid="link-all-tools">
                 <Button size="lg" className="gap-2 bg-blue-600 hover:bg-blue-700 text-white px-8 shadow-md shadow-blue-200 dark:shadow-blue-900/30">
                   <Wrench className="h-4 w-4" />
                   Explore All Free Tools
                   <ArrowRight className="h-4 w-4" />
                 </Button>
-              </a>
+              </Link>
               <p className="text-xs text-muted-foreground">No sign-up required · 100% free</p>
             </div>
 
@@ -1027,13 +1021,10 @@ export default function Landing() {
 
             {/* "See all" + secondary payment reassurance */}
             <div className="mt-8 text-center space-y-3">
-              <a
-                href="/services"
-                className="inline-flex items-center gap-1 text-purple-600 dark:text-purple-400 font-semibold hover:underline"
-                data-testid="link-see-all-services"
-              >
+              <Link href="/services" className="inline-flex items-center gap-1 text-purple-600 dark:text-purple-400 font-semibold hover:underline"
+                data-testid="link-see-all-services">
                 See all 9 career services <ArrowRight className="h-4 w-4" />
-              </a>
+              </Link>
               <p className="text-xs text-slate-500 dark:text-slate-400">
                 💳 M-Pesa · PayPal · Card &nbsp;·&nbsp; 🔒 Refund within 24h if we can&apos;t deliver &nbsp;·&nbsp; ⚡ Delivered in 3 minutes
               </p>
@@ -1070,7 +1061,7 @@ export default function Landing() {
               </div>
               <p className="text-center text-[11px] text-slate-400 mt-3">
                 Companies where WorkAbroad Hub members have been hired since 2024. Verify at{" "}
-                <a href="/trust" className="underline hover:text-slate-600 dark:hover:text-slate-300">/trust</a>.
+                <Link href="/trust" className="underline hover:text-slate-600 dark:hover:text-slate-300">/trust</Link>.
               </p>
             </div>
           </div>
@@ -1135,10 +1126,10 @@ export default function Landing() {
 
                 <div className="flex flex-col sm:flex-row gap-4 pt-2 items-start">
                   <Button size="lg" className="text-base px-8 py-6 h-auto bg-gradient-to-r from-emerald-500 via-cyan-500 to-blue-500 hover:from-emerald-400 hover:via-cyan-400 hover:to-blue-400 border-0 shadow-lg shadow-emerald-500/30 font-semibold text-base" asChild data-testid="button-agency-portal-cta">
-                    <a href="/agency-portal">
+                    <Link href="/agency-portal">
                       <Building2 className="mr-2 h-5 w-5" />
                       Claim my agency profile →
-                    </a>
+                    </Link>
                   </Button>
                   <div className="text-xs text-blue-200/70 sm:py-3">
                     Free to list · Verification in 24h<br/>
@@ -1368,10 +1359,10 @@ export default function Landing() {
                 
                 <div className="flex flex-col sm:flex-row gap-4 pt-4">
                   <Button size="lg" className="text-base px-8 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 border-0 shadow-lg" asChild data-testid="button-verify-agencies">
-                    <a href="/nea-agencies">
+                    <Link href="/nea-agencies">
                       <Shield className="mr-2 h-5 w-5" />
                       Verify an Agency
-                    </a>
+                    </Link>
                   </Button>
                 </div>
               </div>
@@ -1468,10 +1459,10 @@ export default function Landing() {
                   </div>
                   <div className="flex-shrink-0 w-full lg:w-auto">
                     <Button size="lg" className="w-full lg:w-auto min-w-[240px] text-lg py-6 shadow-lg shadow-primary/25" asChild data-testid="button-pricing-cta">
-                      <a href="/pricing">
+                      <Link href="/pricing">
                         Get Started Now
                         <ArrowRight className="ml-2 h-5 w-5" />
-                      </a>
+                      </Link>
                     </Button>
                     <p className="text-center text-sm text-muted-foreground mt-4">
                       Secure payment via M-Pesa (Kenya) or PayPal (worldwide)
@@ -1691,10 +1682,10 @@ export default function Landing() {
             
             <div className="mt-12 text-center">
               <Button size="lg" className="text-base px-8 py-6 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-lg" asChild data-testid="button-how-it-works-cta">
-                <a href="/pricing">
+                <Link href="/pricing">
                   Start Your Journey Today
                   <ArrowRight className="ml-2 h-5 w-5" />
-                </a>
+                </Link>
               </Button>
             </div>
           </div>
@@ -1862,14 +1853,14 @@ export default function Landing() {
             <div className="space-y-4">
               <h4 className="font-semibold text-white">Resources</h4>
               <ul className="space-y-2 text-sm">
-                <li><a href="/nea-agencies" className="text-slate-400 hover:text-white transition-colors" data-testid="link-footer-nea">Agency Licence Checker</a></li>
-                <li><a href="/student-visas" className="text-slate-400 hover:text-white transition-colors" data-testid="link-footer-student-visas">Student Educational Guide</a></li>
-                <li><a href="/visa-assistant" className="text-slate-400 hover:text-white transition-colors" data-testid="link-footer-visa-assistant">✨ AI Visa Assistant</a></li>
-                <li><a href="/visa-guides" className="text-slate-400 hover:text-white transition-colors" data-testid="link-footer-visa-guides">Visa &amp; Immigration Guides</a></li>
-                <li><a href="/green-card" className="text-slate-400 hover:text-white transition-colors" data-testid="link-footer-green-card">🇺🇸 Green Card (DV Lottery) Guide</a></li>
-                <li><a href="/faq" className="text-slate-400 hover:text-white transition-colors" data-testid="link-footer-faq">Frequently Asked Questions</a></li>
-                <li><a href="/about" className="text-slate-400 hover:text-white transition-colors" data-testid="link-footer-about">About Us</a></li>
-                <li><a href="/contact" className="text-slate-400 hover:text-white transition-colors" data-testid="link-footer-contact">Contact & Support</a></li>
+                <li><Link href="/nea-agencies" className="text-slate-400 hover:text-white transition-colors" data-testid="link-footer-nea">Agency Licence Checker</Link></li>
+                <li><Link href="/student-visas" className="text-slate-400 hover:text-white transition-colors" data-testid="link-footer-student-visas">Student Educational Guide</Link></li>
+                <li><Link href="/visa-assistant" className="text-slate-400 hover:text-white transition-colors" data-testid="link-footer-visa-assistant">✨ AI Visa Assistant</Link></li>
+                <li><Link href="/visa-guides" className="text-slate-400 hover:text-white transition-colors" data-testid="link-footer-visa-guides">Visa &amp; Immigration Guides</Link></li>
+                <li><Link href="/green-card" className="text-slate-400 hover:text-white transition-colors" data-testid="link-footer-green-card">🇺🇸 Green Card (DV Lottery) Guide</Link></li>
+                <li><Link href="/faq" className="text-slate-400 hover:text-white transition-colors" data-testid="link-footer-faq">Frequently Asked Questions</Link></li>
+                <li><Link href="/about" className="text-slate-400 hover:text-white transition-colors" data-testid="link-footer-about">About Us</Link></li>
+                <li><Link href="/contact" className="text-slate-400 hover:text-white transition-colors" data-testid="link-footer-contact">Contact & Support</Link></li>
               </ul>
             </div>
             
@@ -1906,16 +1897,16 @@ export default function Landing() {
           <div className="pt-8 border-t border-slate-800">
             <div className="flex flex-col md:flex-row items-center justify-between gap-4">
               <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-6 text-sm text-slate-400">
-                <a href="/about" className="hover:text-white transition-colors" data-testid="link-footer-about-legal">About Us</a>
-                <a href="/contact" className="hover:text-white transition-colors" data-testid="link-footer-contact-legal">Contact</a>
-                <a href="/faq" className="hover:text-white transition-colors" data-testid="link-footer-faq-legal">FAQ</a>
-                <a href="/terms-of-service" className="hover:text-white transition-colors" data-testid="link-terms">Terms of Service</a>
-                <a href="/privacy-policy" className="hover:text-white transition-colors" data-testid="link-privacy">Privacy Policy</a>
-                <a href="/refund-policy" className="hover:text-white transition-colors" data-testid="link-refund-policy">Refund Policy</a>
-                <a href="/legal-disclaimer" className="hover:text-white transition-colors" data-testid="link-legal-disclaimer">Legal Disclaimer</a>
-                <a href="/data-safety" className="hover:text-white transition-colors" data-testid="link-data-safety">Data Safety</a>
-                <a href="/report-abuse" className="hover:text-white transition-colors" data-testid="link-report-abuse">Report Abuse</a>
-                <a href="/agency-portal" className="hover:text-white transition-colors" data-testid="link-agency-portal-footer">Agency Portal</a>
+                <Link href="/about" className="hover:text-white transition-colors" data-testid="link-footer-about-legal">About Us</Link>
+                <Link href="/contact" className="hover:text-white transition-colors" data-testid="link-footer-contact-legal">Contact</Link>
+                <Link href="/faq" className="hover:text-white transition-colors" data-testid="link-footer-faq-legal">FAQ</Link>
+                <Link href="/terms-of-service" className="hover:text-white transition-colors" data-testid="link-terms">Terms of Service</Link>
+                <Link href="/privacy-policy" className="hover:text-white transition-colors" data-testid="link-privacy">Privacy Policy</Link>
+                <Link href="/refund-policy" className="hover:text-white transition-colors" data-testid="link-refund-policy">Refund Policy</Link>
+                <Link href="/legal-disclaimer" className="hover:text-white transition-colors" data-testid="link-legal-disclaimer">Legal Disclaimer</Link>
+                <Link href="/data-safety" className="hover:text-white transition-colors" data-testid="link-data-safety">Data Safety</Link>
+                <Link href="/report-abuse" className="hover:text-white transition-colors" data-testid="link-report-abuse">Report Abuse</Link>
+                <Link href="/agency-portal" className="hover:text-white transition-colors" data-testid="link-agency-portal-footer">Agency Portal</Link>
               </div>
               <p className="text-sm text-slate-300 font-medium">
                 Built in Nairobi, for Kenyans going global. 🇰🇪✈️
@@ -1950,14 +1941,11 @@ export default function Landing() {
                 <FileCheck className="h-3.5 w-3.5 text-purple-400" />
                 <span>KRA PIN <span className="font-mono text-slate-300">{import.meta.env.VITE_KRA_PIN || "P051234567X"}</span></span>
               </div>
-              <a
-                href="/verify-us"
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/20 font-medium transition-colors"
-                data-testid="link-verify-us"
-              >
+              <Link href="/verify-us" className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/20 font-medium transition-colors"
+                data-testid="link-verify-us">
                 <ExternalLink className="h-3 w-3" />
                 Verify us →
-              </a>
+              </Link>
             </div>
             {/* Legal Disclaimer */}
             <div className="mt-4 p-4 bg-slate-800/50 rounded-xl">

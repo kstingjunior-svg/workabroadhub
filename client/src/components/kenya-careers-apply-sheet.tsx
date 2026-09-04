@@ -15,7 +15,7 @@
  * about phone contact than a polished CV.
  */
 import { useEffect, useRef, useState } from "react";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { CheckCircle2, Upload, Loader2, X, Sparkles, BadgeCheck, AlertCircle, Lock, FileBadge2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -229,7 +229,7 @@ export function KenyaCareersApplySheet({
                 Sign in to apply
               </Button>
               <p className="text-xs text-center text-muted-foreground mt-2">
-                Don't have an account? <a href="/signup" className="underline text-emerald-700 dark:text-emerald-300">Create one in 30 seconds</a>
+                Don't have an account? <Link href="/signup" className="underline text-emerald-700 dark:text-emerald-300">Create one in 30 seconds</Link>
               </p>
             </div>
           )}

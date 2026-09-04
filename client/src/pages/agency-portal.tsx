@@ -531,10 +531,10 @@ export default function AgencyPortal() {
               </div>
               <div className="space-y-4 pt-4">
                 <Button size="lg" className="w-full sm:w-auto px-8" asChild data-testid="button-login-agency">
-                  <a href="/">
+                  <Link href="/">
                     <LogIn className="mr-2 h-5 w-5" />
                     Sign In to Continue
-                  </a>
+                  </Link>
                 </Button>
                 <p className="text-sm text-muted-foreground">
                   Don't have an account? Signing in will create one automatically.

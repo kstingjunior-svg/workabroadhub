@@ -18,6 +18,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import { Link } from "wouter";
 
 interface PaymentRow {
   paymentId:    string;
@@ -215,7 +216,7 @@ export default function AccountPaymentStatus() {
           <CardContent className="p-0">
             {data.payments.length === 0 ? (
               <div className="p-6 text-center text-sm text-muted-foreground">
-                No payments on record yet. <a href="/pricing" className="text-primary underline">Go to pricing</a> to start.
+                No payments on record yet. <Link href="/pricing" className="text-primary underline">Go to pricing</Link> to start.
               </div>
             ) : (
               <ul className="divide-y">

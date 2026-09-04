@@ -33,6 +33,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Download, CheckCircle2, X, Loader2 } from "lucide-react";
+import { Link } from "wouter";
 
 /**
  * Mobile-safe download helper.
@@ -296,7 +297,7 @@ export function DeliveryBanner({ stage, orderId, serviceName, errorMessage }: De
         {downloadError && (
           <div className="max-w-3xl mx-auto px-3 pb-2 -mt-1">
             <p className="text-[11px] text-emerald-50 bg-red-700/60 rounded px-2 py-1 inline-block">
-              {downloadError} If it keeps failing, go to <a href="/my-documents" className="underline font-semibold">My Documents</a> or refresh this page.
+              {downloadError} If it keeps failing, go to <Link href="/my-documents" className="underline font-semibold">My Documents</Link> or refresh this page.
             </p>
           </div>
         )}
