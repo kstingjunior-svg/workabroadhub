@@ -2811,6 +2811,27 @@ Crawl-delay: 1`);
         );
         if (trialCheck[0]?.has_trial) {
           console.warn(`[Trial][Security] Repeat trial blocked userId=${userId} phone=${normalizedPhone} attemptedPlan=${basePlanId}`);
+          // 2026-09 (Tony's mbuguisa fix — measurement): fire an analytics
+          // event every time the trial gate blocks. Lets us see how many
+          // users hit this and whether the new lock-screen UX converts
+          // them to Monthly. Fire-and-forget — never blocks the response.
+          // NOTE: this runs BEFORE the main handler resolves clientIp /
+          // initiatingUser, so we compute a lightweight version inline.
+          const blockedClientIp = String(req.headers["x-forwarded-for"] ?? "").split(",")[0]?.trim()
+                                  || req.socket?.remoteAddress || "unknown";
+          import("./services/activityLogger").then(({ logActivity }) => {
+            logActivity({
+              event: "payment_blocked_trial_used",
+              userId,
+              meta: {
+                attemptedPlan: basePlanId,
+                phone: normalizedPhone,
+                userAgent: String(req.headers["user-agent"] ?? "").slice(0, 200),
+                referer: String(req.headers["referer"] ?? "").slice(0, 200),
+              },
+              ip: blockedClientIp,
+            });
+          }).catch(() => { /* logging must never break the response */ });
           return res.status(403).json({
             message: "The KES 99 trial is a one-time offer per user. Please upgrade to Monthly (KES 1,000) or Yearly (KES 4,500) to continue.",
             code:    "TRIAL_ALREADY_USED",
@@ -5219,13 +5240,70 @@ Crawl-delay: 1`);
       const updated = await storage.updateRefundRequest(id, updateData as any);
       if (!updated) return res.status(404).json({ error: "Refund request not found" });
 
+      // 2026-09 CRITICAL FIX (Tony's payment audit): the refund endpoint
+      // used to update ONLY the refund_requests row — it never touched the
+      // payment row, the user_subscriptions row, or users.plan. Result:
+      // admin refunded a KES 4,500 yearly, user's phone got the credit,
+      // and the user KEPT their Pro access for the rest of the year.
+      // Textbook revenue leak.
+      //
+      // On status === 'processed' (money actually returned), we now:
+      //   1. Flip the source payment row to status='refunded' + stamp
+      //      refundedAt so it stops looking successful in admin views
+      //      and stops being picked up by paid-but-free-reconciler.
+      //   2. Expire the user's active user_subscriptions row.
+      //   3. Downgrade users.plan to 'free' + subscription_status to
+      //      'refunded'. Denormalised fields the gate checks read from.
+      //   4. Invalidate the auth cache so their NEXT request sees them
+      //      as free — no stale-cache Pro access.
+      // Fire-and-forget with try/catch on each step so a partial failure
+      // doesn't strand the refund; admin will see anything that fails.
+      if (status === "processed") {
+        const paymentId = (updated as any).paymentId ?? (updated as any).payment_id;
+        try {
+          if (paymentId) {
+            await storage.updatePayment(paymentId, {
+              status: "refunded",
+              refundedAt: new Date(),
+              deliveryStatus: "refunded",
+              updatedAt: new Date(),
+            } as any);
+            console.log(`[Refund] payment=${paymentId} marked refunded (admin=${adminId})`);
+          }
+          // Expire active subscription for this user
+          await pool.query(
+            `UPDATE user_subscriptions
+               SET status = 'refunded', updated_at = now()
+             WHERE user_id = $1 AND status = 'active'`,
+            [updated.userId],
+          );
+          // Downgrade denormalised fields
+          await pool.query(
+            `UPDATE users SET plan = 'free', subscription_status = 'refunded', updated_at = now()
+              WHERE id = $1`,
+            [updated.userId],
+          );
+          try {
+            const { invalidateAuthUserCache } = await import("./lib/auth-user-cache");
+            invalidateAuthUserCache(updated.userId);
+          } catch { /* best-effort */ }
+          console.log(`[Refund] userId=${updated.userId} downgraded to free after refund of payment=${paymentId}`);
+        } catch (revokeErr: any) {
+          console.error(`[Refund] REVOKE FAILED for userId=${updated.userId} payment=${paymentId}: ${revokeErr?.message}`);
+          try {
+            const { reportRejection } = await import("./lib/sentry");
+            reportRejection(revokeErr, "refund-revoke");
+          } catch { /* swallow */ }
+        }
+      }
+
       // Phase 12: Notify the user of the decision
       const notifTitle = status === "approved" ? "Refund Approved" : status === "rejected" ? "Refund Rejected" : "Refund Processed";
       const notifMsg = status === "approved"
         ? "Your refund request has been approved and will be processed shortly."
         : status === "rejected"
         ? `Your refund request was not approved. ${adminNotes ? "Reason: " + adminNotes : ""}`
-        : "Your refund has been processed via M-Pesa. Please check your phone for the credit.";
+        : "Your refund has been processed via M-Pesa. Please check your phone for the credit. Your Pro access has ended.";
       storage.createUserNotification({
         userId: updated.userId,
         type: status === "rejected" ? "warning" : "success",
@@ -20209,7 +20287,11 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
 
       if (!payment) {
         // Fallback: create the record if none exists (legacy flow)
-        const kesAmount = Math.round(parseFloat(capture.amountUSD) * 130);
+        // 2026-09 (currency-label audit): store BOTH the raw USD charge
+        // AND the KES equivalent so receipts, admin reports, and dispute
+        // paperwork show the actual currency PayPal charged.
+        const amountUSD = parseFloat(capture.amountUSD);
+        const kesAmount = Math.round(amountUSD * 130);
         payment = await storage.createPayment({
           userId,
           amount: kesAmount || 0,
@@ -20218,7 +20300,15 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
           transactionRef: capture.transactionId,
           status: "pending",
           serviceId: "main_subscription",
-          metadata: JSON.stringify({ paypalOrderId, payerEmail: capture.payerEmail, amountUSD: capture.amountUSD }),
+          metadata: JSON.stringify({
+            paypalOrderId,
+            payerEmail: capture.payerEmail,
+            amountUSD:  capture.amountUSD,        // raw string PayPal returned
+            amountUsdNumeric: amountUSD,          // parsed for admin queries
+            fxUsdToKes: 130,                      // conversion rate we used
+            chargedCurrency: "USD",               // authoritative — what was actually charged
+            recordedCurrency: "KES",              // what we store as amount for reporting
+          }),
         });
       }
 

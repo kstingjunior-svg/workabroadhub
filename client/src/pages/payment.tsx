@@ -678,6 +678,24 @@ export default function Payment() {
         });
         return;
       }
+      // 2026-09 (mbuguisa fix, /payment page parity with upgrade-modal):
+      // 403 TRIAL_ALREADY_USED — user is trying to buy the KES 99 trial
+      // a second time. Instead of the generic 'Payment Failed' toast
+      // (which they dismiss and re-try), send them straight to the
+      // Monthly plan on this same page. URL rewrites to ?plan=monthly
+      // so the entire page re-renders with the correct price/label.
+      const errCode = (error?.body?.code ?? error?.code ?? "").toString();
+      const errMsg = (error?.body?.message ?? error?.message ?? "").toString();
+      if (errCode === "TRIAL_ALREADY_USED" || errMsg.includes("one-time offer")) {
+        toast({
+          title: "You've already used your KES 99 trial",
+          description: "Switching you to the Monthly plan (KES 1,000 · 30 days) — much cheaper per day than paying KES 99 daily.",
+          duration: 6000,
+        });
+        // Hard nav so the /api/price query re-fires with the new plan.
+        setTimeout(() => { window.location.href = "/payment?plan=monthly"; }, 800);
+        return;
+      }
       // 2026-06: surface the structured Kenyan-friendly M-Pesa error from
       // the server (title / nextStep / paybillFallback) via the rich card
       // instead of a 5-second toast. The card stays on screen until the
