@@ -60,7 +60,7 @@ const UPGRADE_MODAL_PRO_LIST = [
 
 const MAX_POLL_MS = 70_000;
 
-type Step = "compare" | "pay" | "pending" | "success";
+type Step = "compare" | "pay" | "pending" | "success" | "trial_used";
 
 function formatPhone(raw: string): string {
   const digits = raw.replace(/\D/g, "");
@@ -244,7 +244,20 @@ export function UpgradeModal() {
         toast({ title: "Payment Already In Progress", description: "Check your phone for the M-Pesa prompt.", variant: "destructive" });
         return;
       }
-      toast({ title: "Could Not Send Prompt", description: error.message || "Something went wrong. Please try again.", variant: "destructive" });
+      // 2026-09 (Tony's mbuguisa report): users who used the KES 99 trial
+      // and try to buy it again get a 403 TRIAL_ALREADY_USED. Server
+      // returns the message but the client was showing a small toast the
+      // user could dismiss and forget. Now we swap to a dedicated 'step'
+      // that occupies the modal with a big Monthly upgrade CTA and no
+      // ambiguity about what to do next. Stops the "I can't pay" WhatsApp
+      // messages that end up as manual admin grants.
+      const errCode = (error?.body?.code ?? error?.code ?? "").toString();
+      const errMsg = (error?.body?.message ?? error?.message ?? "").toString();
+      if (errCode === "TRIAL_ALREADY_USED" || errMsg.includes("one-time offer")) {
+        setStep("trial_used");
+        return;
+      }
+      toast({ title: "Could Not Send Prompt", description: errMsg || "Something went wrong. Please try again.", variant: "destructive" });
     },
   });
 
@@ -623,6 +636,76 @@ export function UpgradeModal() {
               data-testid="btn-close-success"
             >
               Start My Career Consultation →
+            </button>
+          </div>
+        )}
+
+        {/* ── STEP: trial_used ────────────────────────────────────────────
+            2026-09 (Tony's mbuguisa report): when the server rejects a
+            repeat trial purchase with TRIAL_ALREADY_USED, show a full
+            in-modal card explaining WHY and pushing them to the Monthly
+            (KES 1000, 30 days) plan with a big one-tap CTA. Replaces the
+            dismissible toast users were ignoring and messaging Tony
+            about instead. */}
+        {step === "trial_used" && (
+          <div className="p-6 sm:p-8 flex flex-col items-center text-center space-y-5">
+            <div className="h-16 w-16 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+              <AlertCircle className="h-9 w-9 text-amber-600 dark:text-amber-400" />
+            </div>
+            <div>
+              <h3 className="text-xl font-bold text-foreground">You've already used your KES 99 trial</h3>
+              <p className="text-sm text-muted-foreground mt-2 max-w-sm">
+                The 24-hour trial is a one-time offer per person.
+                To keep using WorkAbroad Hub, choose a longer plan below —
+                <strong className="text-foreground"> much cheaper per day</strong> than paying KES 99 daily.
+              </p>
+            </div>
+
+            {/* Monthly card — the recommended default */}
+            <div className="w-full rounded-2xl border-2 border-blue-400 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/40 dark:to-indigo-950/40 p-5 shadow-lg shadow-blue-100 dark:shadow-blue-900/30">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-blue-600 text-white">RECOMMENDED</span>
+                <span className="text-[11px] text-blue-700 dark:text-blue-300 font-medium">30 days</span>
+              </div>
+              <div className="text-left">
+                <div className="text-2xl font-black text-blue-700 dark:text-blue-300">
+                  KES {(monthlyPrice ?? 1000).toLocaleString("en-KE")}
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  ≈ KES {Math.round((monthlyPrice ?? 1000) / 30)}/day · saves you KES{" "}
+                  {(99 * 30 - (monthlyPrice ?? 1000)).toLocaleString("en-KE")} vs 30 daily trials
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setSelectedPlan("monthly");
+                  setStep("pay");
+                }}
+                className="mt-4 w-full py-3 rounded-xl font-bold text-sm text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 transition-all shadow-md flex items-center justify-center gap-2"
+                data-testid="btn-trial-used-choose-monthly"
+              >
+                Continue with Monthly Plan <ArrowRight className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Yearly secondary offer */}
+            <button
+              onClick={() => {
+                setSelectedPlan("pro");
+                setStep("pay");
+              }}
+              className="w-full py-3 rounded-xl font-bold text-sm bg-white dark:bg-gray-900 border-2 border-amber-300 dark:border-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-all text-amber-900 dark:text-amber-200 flex items-center justify-center gap-2"
+              data-testid="btn-trial-used-choose-yearly"
+            >
+              👑 Or get Yearly — KES {(yearlyPrice ?? 4500).toLocaleString("en-KE")} · save even more
+            </button>
+
+            <button
+              onClick={handleClose}
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors pt-1"
+              data-testid="btn-trial-used-close"
+            >
+              Not now
             </button>
           </div>
         )}
