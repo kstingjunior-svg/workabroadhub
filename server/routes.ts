@@ -22938,6 +22938,29 @@ If your instinct says "3,500", STOP and re-read the SERVICES block above.`;
       }
       cooldown.set(normalizedPhone, Date.now());
 
+      // 2026-09 (duplicate-charge protection — parity with
+      // /api/subscriptions/upgrade): block if this user has an M-Pesa
+      // payment already in flight from the last 90s. Cooldown is a
+      // per-phone check; this is a per-user check. Same user with a
+      // different phone still counts as duplicate intent.
+      const { rows: payInflightRows } = await pool.query<{ id: string; created_at: Date }>(
+        `SELECT id, created_at FROM payments
+          WHERE user_id = $1
+            AND method = 'mpesa'
+            AND status IN ('awaiting_payment', 'pending')
+            AND created_at > NOW() - INTERVAL '90 seconds'
+          ORDER BY created_at DESC LIMIT 1`,
+        [userId],
+      );
+      if (payInflightRows[0]) {
+        const ageSec = Math.floor((Date.now() - new Date(payInflightRows[0].created_at).getTime()) / 1000);
+        return res.status(409).json({
+          message: `You already have an M-Pesa prompt in flight (${ageSec}s ago). Check your phone or wait ~90s before trying again.`,
+          code: "DUPLICATE_PAYMENT_IN_FLIGHT",
+          existingPaymentId: payInflightRows[0].id,
+        });
+      }
+
       // 4. Fire STK push via the existing unified endpoint logic
       const transactionRef = `WAH-${nanoid(12)}`;
       const amountKES = Math.round(Number(amount));
