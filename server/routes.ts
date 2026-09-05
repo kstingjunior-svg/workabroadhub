@@ -20415,9 +20415,45 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
             : null,
         });
         await upgradeUserToPro(userId);
-        const ppCaptureExpiry = new Date(); ppCaptureExpiry.setDate(ppCaptureExpiry.getDate() + 360);
-        syncSubscriptionToSupabase({ user_id: userId, plan_id: (payment as any).planId || "pro", provider: "paypal", status: "active", auto_renew: false, expires_at: ppCaptureExpiry }).catch((err) => reportRejection(err, 'routes'));
+        // 2026-09 (PayPal audit fix — parity with webhook path): was hardcoded
+        // 360d + fallback to 'pro'. Use the derivedPlan we resolved above
+        // + planExpiry(derivedPlan) so Supabase-side shows the actual tier
+        // and duration, same as local Postgres.
+        const ppCaptureExpiry = planExpiry(derivedPlan);
+        syncSubscriptionToSupabase({
+          user_id: userId,
+          plan_id: derivedPlan,
+          provider: "paypal",
+          status: "active",
+          auto_renew: false,
+          expires_at: ppCaptureExpiry,
+        }).catch((err) => reportRejection(err, 'routes'));
         redeemAppliedPromo(payment.metadata).catch((err) => reportRejection(err, 'routes'));
+
+        // 2026-09 (parity with M-Pesa callback): send WhatsApp payment
+        // receipt to the user's stored phone. M-Pesa users have always
+        // received this — PayPal users only got an email. Both channels
+        // now get parity so PayPal users don't message support asking
+        // "did my payment go through?"
+        (async () => {
+          try {
+            const user = await storage.getUserById(userId).catch(() => null);
+            const phone = user?.phone?.trim();
+            if (!phone) return;   // no phone on file — email is enough
+            const { sendWhatsAppPaymentConfirmation } = await import("./sms");
+            const { planLabel } = await import("./utils/plans");
+            await sendWhatsAppPaymentConfirmation({
+              phone,
+              serviceLabel: planLabel(derivedPlan),
+              amountKes:    kesAmount,
+              receipt:      capture.transactionId,
+              userId,
+              serviceCode:  derivedPlan,
+            });
+          } catch (waErr: any) {
+            console.warn(`[PayPal WhatsApp] confirmation send failed for userId=${userId}: ${waErr?.message}`);
+          }
+        })();
       }
 
       // 4. Handle referral if one was stored
