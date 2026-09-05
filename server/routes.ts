@@ -5633,6 +5633,32 @@ Crawl-delay: 1`);
     // 1. Always acknowledge immediately so Safaricom stops retrying
     res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted" });
 
+    // 2026-09 SECURITY: source-IP verification. A copy of SAFARICOM_IPS
+    // was defined 700 lines below (unreferenced) — the callback accepted
+    // POSTs from ANY IP. An attacker who guessed a valid CheckoutRequestID
+    // could POST a forged 'success' callback and unlock plans for arbitrary
+    // users (mitigated somewhat by the amount-fraud gate downstream, but
+    // a guessing attack + matching a known trial price is trivial).
+    // Toggle-off escape hatch: MPESA_CALLBACK_IP_WHITELIST_DISABLED=1 if
+    // Safaricom changes ranges and we need an emergency bypass.
+    if (String(process.env.MPESA_CALLBACK_IP_WHITELIST_DISABLED || "").trim() !== "1") {
+      const SAFARICOM_IP_PREFIXES = [
+        "196.201.214.", "196.201.212.", "196.201.213.",
+        "41.215.160.",
+        "127.0.0.1", "::1",   // localhost for testing
+      ];
+      const xfwd = String(req.headers["x-forwarded-for"] || "").split(",")[0]?.trim();
+      const sourceIp = xfwd || req.socket?.remoteAddress || "";
+      const allowed = SAFARICOM_IP_PREFIXES.some((prefix) => sourceIp.startsWith(prefix));
+      if (!allowed) {
+        console.error(
+          `[MPESA/PAYMENTS CALLBACK][SECURITY] Rejected callback from non-Safaricom IP=${sourceIp} ` +
+          `xff="${xfwd}" ua="${String(req.headers["user-agent"] || "").slice(0, 100)}"`,
+        );
+        return;   // silent drop — we've already 200'd Safaricom above
+      }
+    }
+
     const stk = req.body?.Body?.stkCallback;
     if (!stk) {
       console.error("[MPESA/PAYMENTS CALLBACK] Invalid payload — missing Body.stkCallback");
