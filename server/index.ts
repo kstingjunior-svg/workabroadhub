@@ -872,6 +872,124 @@ app.use((req, res, next) => {
       console.error("[Server] ❌ recover-mine registration failed:", err?.message);
     }
 
+    // 2026-09 (Tony's PayPal audit): admin endpoints to find + fix historic
+    // PayPal payments where the pre-fix bug gave a full-year Pro to users
+    // who paid less. Two endpoints:
+    //   GET  /api/admin/paypal/inflated  — DRY RUN, returns the list
+    //   POST /api/admin/paypal/inflated/shorten — apply fix by shortening
+    //     each row's end_date to what the tier actually pays for
+    // Both require admin. Never touches anyone who paid full yearly.
+    try {
+      app.get("/api/admin/paypal/inflated", async (req: any, res: any) => {
+        const userId = req?.user?.claims?.sub ?? req?.user?.id ?? (req?.session as any)?.customUserId;
+        if (!userId) return res.status(401).json({ message: "Sign in required." });
+        try {
+          const { pool } = await import("./db");
+          const { rows: adminRows } = await pool.query<{ is_admin: boolean; role: string }>(
+            `SELECT is_admin, role FROM users WHERE id = $1 LIMIT 1`, [userId],
+          );
+          const u = adminRows[0];
+          if (!u || (!u.is_admin && u.role !== "ADMIN" && u.role !== "SUPER_ADMIN")) {
+            return res.status(403).json({ message: "Admin only." });
+          }
+          const { rows } = await pool.query(`
+            SELECT
+              u.id AS user_id, u.email, u.first_name, u.last_name,
+              s.id AS subscription_id, s.plan, s.end_date AS current_end_date,
+              p.id AS payment_id, p.amount AS paid_kes, p.method, p.created_at AS paid_at
+            FROM user_subscriptions s
+            JOIN users u ON u.id = s.user_id
+            LEFT JOIN payments p ON p.id = s.payment_id
+            WHERE p.method = 'paypal'
+              AND s.status = 'active'
+              AND s.plan IN ('pro', 'yearly')
+              AND s.end_date > NOW() + INTERVAL '30 days'
+              AND p.amount < 4500
+            ORDER BY s.end_date DESC
+            LIMIT 500
+          `);
+          return res.json({
+            ok: true,
+            count: rows.length,
+            explanation:
+              "These users paid <KES 4500 via PayPal but received 365-day Pro under the pre-fix bug. " +
+              "POST /api/admin/paypal/inflated/shorten to shorten each end_date to the correct duration for what they paid.",
+            rows,
+          });
+        } catch (e: any) {
+          console.error("[GET /api/admin/paypal/inflated]", e?.message);
+          return res.status(500).json({ message: e?.message || "Query failed." });
+        }
+      });
+
+      app.post("/api/admin/paypal/inflated/shorten", async (req: any, res: any) => {
+        const userId = req?.user?.claims?.sub ?? req?.user?.id ?? (req?.session as any)?.customUserId;
+        if (!userId) return res.status(401).json({ message: "Sign in required." });
+        try {
+          const { pool } = await import("./db");
+          const { rows: adminRows } = await pool.query<{ is_admin: boolean; role: string }>(
+            `SELECT is_admin, role FROM users WHERE id = $1 LIMIT 1`, [userId],
+          );
+          const u = adminRows[0];
+          if (!u || (!u.is_admin && u.role !== "ADMIN" && u.role !== "SUPER_ADMIN")) {
+            return res.status(403).json({ message: "Admin only." });
+          }
+          // Amount → correct duration in days
+          const durationFor = (kes: number): number =>
+            kes >= 4500 ? 365
+            : kes >= 3600 ? 365    // referral discount
+            : kes >= 1000 ? 30     // monthly
+            : 1;                    // trial
+
+          const { rows } = await pool.query(`
+            SELECT s.id AS subscription_id, s.user_id, p.amount AS paid_kes, p.created_at AS paid_at
+            FROM user_subscriptions s
+            JOIN payments p ON p.id = s.payment_id
+            WHERE p.method = 'paypal'
+              AND s.status = 'active'
+              AND s.plan IN ('pro', 'yearly')
+              AND s.end_date > NOW() + INTERVAL '30 days'
+              AND p.amount < 4500
+          `);
+          let updated = 0;
+          const changes: { subscriptionId: string; userId: string; paidKes: number; newEnd: string }[] = [];
+          for (const r of rows) {
+            const days = durationFor(Number(r.paid_kes));
+            const newEnd = new Date(new Date(r.paid_at).getTime() + days * 86_400_000);
+            // Never move an end_date INTO the past — leaves user with time
+            // they've already consumed. If the corrected end is behind
+            // now, expire instead of setting a negative window.
+            if (newEnd.getTime() > Date.now()) {
+              await pool.query(
+                `UPDATE user_subscriptions SET end_date = $1, updated_at = NOW() WHERE id = $2`,
+                [newEnd, r.subscription_id],
+              );
+              changes.push({ subscriptionId: r.subscription_id, userId: r.user_id, paidKes: Number(r.paid_kes), newEnd: newEnd.toISOString() });
+            } else {
+              await pool.query(
+                `UPDATE user_subscriptions SET status = 'expired', updated_at = NOW() WHERE id = $1`,
+                [r.subscription_id],
+              );
+              await pool.query(
+                `UPDATE users SET plan = 'free', subscription_status = 'expired', updated_at = NOW() WHERE id = $1`,
+                [r.user_id],
+              );
+              changes.push({ subscriptionId: r.subscription_id, userId: r.user_id, paidKes: Number(r.paid_kes), newEnd: "EXPIRED" });
+            }
+            updated++;
+          }
+          console.warn(`[admin/paypal/inflated] admin=${userId} shortened ${updated} PayPal-inflated subs`);
+          return res.json({ ok: true, updated, changes });
+        } catch (e: any) {
+          console.error("[POST /api/admin/paypal/inflated/shorten]", e?.message);
+          return res.status(500).json({ message: e?.message || "Fix failed." });
+        }
+      });
+      console.log("[Server] ✓ GET/POST /api/admin/paypal/inflated registered");
+    } catch (err: any) {
+      console.error("[Server] ❌ paypal/inflated registration failed:", err?.message);
+    }
+
     // 2026-08: Global Work Visa Hub — self-contained module. Registers BEFORE
     // registerRoutes() for the same catch-all reason as AutoApply above.
     // Owns its own tables (hub_countries, hub_visa_types, hub_application_

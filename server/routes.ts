@@ -2856,6 +2856,32 @@ Crawl-delay: 1`);
         return res.status(429).json({ message: "Too many payment attempts. Please wait a few minutes." });
       }
 
+      // 2026-09 (duplicate-charge protection): if this user has an
+      // in-flight STK push initiated in the last 90s that hasn't yet
+      // succeeded or failed, refuse to fire a second one. Prevents the
+      // double-charge scenario where a user has /payment open in one tab
+      // AND opens the upgrade modal in another, taps both, and gets two
+      // PIN prompts / two charges. The 60s per-phone cooldown catches
+      // most cases, but userId is a tighter binding (same user, two
+      // phones would still count as duplicate intent).
+      const { rows: inflightRows } = await pool.query<{ id: string; created_at: Date; status: string }>(
+        `SELECT id, created_at, status FROM payments
+          WHERE user_id = $1
+            AND method = 'mpesa'
+            AND status IN ('awaiting_payment', 'pending')
+            AND created_at > NOW() - INTERVAL '90 seconds'
+          ORDER BY created_at DESC LIMIT 1`,
+        [userId],
+      );
+      if (inflightRows[0]) {
+        const ageSec = Math.floor((Date.now() - new Date(inflightRows[0].created_at).getTime()) / 1000);
+        return res.status(409).json({
+          message: `You already have an M-Pesa prompt in flight (${ageSec}s ago). Check your phone or wait ~90 seconds before trying again.`,
+          code: "DUPLICATE_PAYMENT_IN_FLIGHT",
+          existingPaymentId: inflightRows[0].id,
+        });
+      }
+
       // Fetch user email so the payment record is always linked by both userId AND email
       const initiatingUser = await storage.getUserById(userId);
       if (!initiatingUser?.email) {
