@@ -20314,7 +20314,24 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
 
       // 3. ── PROVIDER VERIFICATION ────────────────────────────────────────────
       // Confirm the capture with PayPal before upgrading the user.
-      const kesAmount = payment.amount || Math.round(parseFloat(capture.amountUSD) * 130);
+      //
+      // 2026-09 SECURITY (audit): was `payment.amount || Math.round(usd*130)`
+      // — if the DB row's amount was 0/missing/NULL, the fraud check
+      // compared PayPal's captured amount to itself (kesAmount and
+      // capture.amountUSD*130 are the same value), always passed, and
+      // upgraded the user regardless of what they actually paid. Now we
+      // fail loudly if payment.amount isn't a positive number — the
+      // create-order endpoint above is authoritative on amount, so an
+      // empty row here means the record was tampered with or never got
+      // its price set. Refuse to upgrade in that case.
+      const kesAmount = Number(payment.amount ?? 0);
+      if (!kesAmount || kesAmount <= 0) {
+        console.error(`[PayPal][Security] Refusing capture — payment ${payment.id} has invalid amount=${payment.amount}. Cannot verify against PayPal capture.`);
+        return res.status(402).json({
+          message: "Payment amount could not be verified. Please contact support.",
+          code: "PAYPAL_AMOUNT_MISSING",
+        });
+      }
       const { verifyPayPalPayment } = await import("./services/verifyPayment");
       const paypalVerify = await verifyPayPalPayment({
         paymentId: payment.id,
