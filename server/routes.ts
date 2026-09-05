@@ -2793,18 +2793,24 @@ Crawl-delay: 1`);
       // an attacker has to buy a new SIM to abuse it. Doesn't catch a
       // sufficiently determined attacker with new email + new phone, but
       // raises the cost from "free" to "SIM card + reg fee" per re-trial.
-      if (basePlanId === "trial") {
+      // 2026-09 hardening: also block if a 'basic' payment exists (basic
+      // is the legacy alias for trial — same KES 99 / 24h product). Prior
+      // check only saw 'plan_id = trial' / 'service_id = plan_trial', so a
+      // user could buy 'basic' then bypass the gate to also buy 'trial'
+      // as a second 24h period.
+      if (basePlanId === "trial" || basePlanId === "basic") {
         const { rows: trialCheck } = await pool.query<{ has_trial: boolean }>(
           `SELECT EXISTS(
              SELECT 1 FROM payments
              WHERE (user_id = $1 OR phone = $2)
                AND status IN ('success','completed')
-               AND (plan_id = 'trial' OR service_id = 'plan_trial')
+               AND (plan_id IN ('trial', 'basic')
+                    OR service_id IN ('plan_trial', 'plan_basic'))
            ) AS has_trial`,
           [userId, normalizedPhone],
         );
         if (trialCheck[0]?.has_trial) {
-          console.warn(`[Trial][Security] Repeat trial blocked userId=${userId} phone=${normalizedPhone}`);
+          console.warn(`[Trial][Security] Repeat trial blocked userId=${userId} phone=${normalizedPhone} attemptedPlan=${basePlanId}`);
           return res.status(403).json({
             message: "The KES 99 trial is a one-time offer per user. Please upgrade to Monthly (KES 1,000) or Yearly (KES 4,500) to continue.",
             code:    "TRIAL_ALREADY_USED",
