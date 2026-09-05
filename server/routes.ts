@@ -6107,8 +6107,21 @@ Crawl-delay: 1`);
         });
         if (planId) await upgradeUserToPro(payment.userId);
         if (planId) {
-          const ppWebhookExpiry = new Date(); ppWebhookExpiry.setDate(ppWebhookExpiry.getDate() + 360);
-          syncSubscriptionToSupabase({ user_id: payment.userId, plan_id: "pro", provider: "paypal", status: "active", auto_renew: false, expires_at: ppWebhookExpiry }).catch((err) => reportRejection(err, 'routes'));
+          // 2026-09 (PayPal audit fix): was hardcoded plan_id: 'pro' + 360d
+          // for every PayPal payment, causing Supabase side to say 'pro
+          // yearly' even when the user actually bought trial (KES 99, 24h)
+          // or monthly (KES 1000, 30d). Local Postgres got the right tier
+          // via runPaymentPipeline below; Supabase drifted. Now uses the
+          // real planId + planExpiry() (same map runPaymentPipeline uses).
+          const ppWebhookExpiry = planExpiry(planId);
+          syncSubscriptionToSupabase({
+            user_id: payment.userId,
+            plan_id: planId,
+            provider: "paypal",
+            status: "active",
+            auto_renew: false,
+            expires_at: ppWebhookExpiry,
+          }).catch((err) => reportRejection(err, 'routes'));
           redeemAppliedPromo(payment.metadata).catch((err) => reportRejection(err, 'routes'));
         }
 
@@ -20231,9 +20244,26 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
       }
 
       // 4. ── AUTO-UNLOCK via centralized upgradeUserAccount ─────────────────
-      // All payments upgrade to "pro" — single plan system
+      // 2026-09 CRITICAL FIX (Tony's payment audit): was hardcoded to "pro"
+      // for every PayPal capture, giving 365 days of Pro (KES 4,500) to
+      // ANY PayPal payment — including trial (KES 99, 24h) and monthly
+      // (KES 1,000, 30d). Users paying via PayPal for a monthly plan
+      // received a full year for a fraction of the cost. Massive revenue
+      // leak + wrong subscription duration in DB.
+      //
+      // Derive the actual tier the user paid for from the payment row's
+      // planId/serviceId. Only fall back to "pro" if we can't resolve
+      // anything — and log a warning so we can audit those.
       const svcId = payment.serviceId || "main_subscription";
-      const derivedPlan: "pro" = "pro";
+      const CANONICAL = new Set(["trial", "basic", "monthly", "yearly", "pro", "pro_referral"]);
+      const sidLower = String(svcId).toLowerCase();
+      const derivedPlan: "trial" | "basic" | "monthly" | "yearly" | "pro" | "pro_referral" =
+        (payment.planId && CANONICAL.has(payment.planId)) ? payment.planId :
+        (sidLower.startsWith("plan_") && CANONICAL.has(sidLower.replace("plan_", ""))) ? sidLower.replace("plan_", "") as any :
+        (CANONICAL.has(sidLower) ? sidLower as any : "pro");
+      if (derivedPlan === "pro" && !payment.planId && !sidLower.startsWith("plan_")) {
+        console.warn(`[PayPal] Could not derive plan from payment ${payment.id} (serviceId="${svcId}", planId="${payment.planId}") — defaulting to yearly pro. Audit this — user may have overpaid or underpaid.`);
+      }
       const upgrade = await upgradeUserAccount({
         userId,
         email: capture.payerEmail || (payment as any).email || undefined,
@@ -20244,7 +20274,7 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
         method: "paypal",
         paymentSource: "web",
         amountKes: kesAmount,
-        extraMeta: { paypalOrderId, payerEmail: capture.payerEmail, amountUSD: capture.amountUSD, verificationStatus: paypalVerify.status },
+        extraMeta: { paypalOrderId, payerEmail: capture.payerEmail, amountUSD: capture.amountUSD, verificationStatus: paypalVerify.status, derivedPlan },
       });
 
       if (upgrade.alreadyProcessed) {

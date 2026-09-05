@@ -31,15 +31,28 @@ const COUNTRY_NAMES: Record<string, string> = {
   DE: "Germany", NL: "Netherlands", FR: "France", SE: "Sweden", NO: "Norway",
 };
 
+/**
+ * 2026-09 CRITICAL FIX (PayPal audit): planType was constrained to just "pro"
+ * — the interface literally rejected any other tier. Every caller was forced
+ * to pass "pro" regardless of what the user actually bought, so PayPal users
+ * paying for trial (KES 99, 24h) or monthly (KES 1000, 30d) always received
+ * full yearly Pro (KES 4500, 365 days). Massive revenue leak. Widened to the
+ * full canonical set that PLAN_MIN_AMOUNTS + PLAN_DURATION_DAYS already
+ * support internally.
+ */
+export type CanonicalPlanTier =
+  | "trial" | "basic" | "monthly" | "yearly" | "pro" | "pro_referral";
+
 export interface UpgradeOptions {
   userId: string;
   email?: string;           // payer email from payment record — used for email-first user lookup
   phone?: string;           // payer phone (normalized 254XXXXXXXXX) — used as third-level lookup fallback
-  planType: "pro";
+  planType: CanonicalPlanTier;
   transactionId: string;
   paymentId: string;
   serviceId?: string;
   method: "mpesa" | "paypal";
+  paymentSource?: "web" | "admin" | "reconciler" | "webhook";
   amountKes: number;
   extraMeta?: Record<string, unknown>;
   /**
