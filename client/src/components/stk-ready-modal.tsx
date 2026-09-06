@@ -1,35 +1,20 @@
 /**
- * StkReadyModal — pre-STK "Get Ready" checklist + 5-second countdown.
+ * StkReadyModal — one-tap M-Pesa payment confirmation.
  *
- * 2026-08 (Tony's payment-failure audit): 208 of 501 monthly STK failures
- * came from DS-timeout + No-response (78% of all failures). Root cause is
- * NOT our code — users tap "Pay KES X" while their phone is locked, in
- * another app, or out of network. By the time they realise the STK arrived,
- * Safaricom has already timed out.
+ * 2026-09 (Tony): the earlier 3-item checklist + 5-second countdown was
+ * confusing users — the labels were unreadable in dark mode and the
+ * intermediate step buried the actual "Pay" action. Simplified down to
+ * a one-screen confirmation that shows the amount + phone number and a
+ * single "Pay Now" button that fires the STK push immediately.
  *
- * This modal buys 5 seconds of setup time and shows a 3-item checklist so
- * the user has a moment to unlock their phone, close M-Pesa, and confirm
- * network before we fire. Aggressive countdown auto-advances so users who
- * already know what they're doing aren't slowed down.
- *
- * Usage — wrap any STK button:
- *
- *   const [readyOpen, setReadyOpen] = useState(false);
- *   ...
- *   <Button onClick={() => setReadyOpen(true)}>Pay KES 99</Button>
- *   <StkReadyModal
- *     open={readyOpen}
- *     onOpenChange={setReadyOpen}
- *     onConfirmed={() => paymentMutation.mutate(...)}
- *     amountKes={99}
- *     phone={phoneNumber}
- *     productName="Trial Plan"
- *   />
+ * IMPORTANT — the public API (props) is unchanged so every caller keeps
+ * working without edits: payment.tsx, upgrade-modal.tsx, service-order-flow.tsx,
+ * cv-fix-lite-instant-pay.tsx, service-order.tsx. Do not rename or drop props.
  */
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, Circle, Smartphone, Signal, KeyRound, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 interface Props {
   open:          boolean;
@@ -38,42 +23,26 @@ interface Props {
   amountKes:     number;
   phone?:        string | null;
   productName?:  string;
-  /** Countdown length in seconds. Defaults to 5. */
+  /** Retained for backwards-compat with existing callers; no longer used. */
   countdownSec?: number;
 }
-
-const CHECKLIST = [
-  { key: "unlock",  icon: Smartphone, label: "Unlock your phone" },
-  { key: "network", icon: Signal,     label: "Confirm you have M-Pesa network" },
-  { key: "ready",   icon: KeyRound,   label: "Have your M-Pesa PIN ready" },
-];
 
 export function StkReadyModal({
   open, onOpenChange, onConfirmed,
   amountKes, phone, productName,
-  countdownSec = 5,
 }: Props) {
-  const [seconds, setSeconds] = useState(countdownSec);
-  const [checked, setChecked] = useState<Set<string>>(new Set());
-  const [firing, setFiring]   = useState(false);
+  const [firing, setFiring] = useState(false);
 
-  // Reset every time the modal opens
+  // Reset the firing lock every time the modal re-opens.
   useEffect(() => {
-    if (!open) return;
-    setSeconds(countdownSec);
-    setChecked(new Set());
-    setFiring(false);
-    const t = setInterval(() => {
-      setSeconds((s) => (s <= 1 ? 0 : s - 1));
-    }, 1000);
-    return () => clearInterval(t);
-  }, [open, countdownSec]);
+    if (open) setFiring(false);
+  }, [open]);
 
   const fire = () => {
     if (firing) return;
     setFiring(true);
     onConfirmed();
-    // Give the parent mutation a beat to actually POST before closing us
+    // Give the parent mutation a beat to actually POST before closing us.
     setTimeout(() => onOpenChange(false), 300);
   };
 
@@ -90,40 +59,7 @@ export function StkReadyModal({
           </DialogDescription>
         </DialogHeader>
 
-        {/* Checklist — tap to tick, purely for user reassurance (not enforced). */}
-        <div className="space-y-2 mt-2">
-          {CHECKLIST.map((item) => {
-            const isDone = checked.has(item.key);
-            const Icon = item.icon;
-            return (
-              <button
-                key={item.key}
-                onClick={() => {
-                  setChecked((prev) => {
-                    const next = new Set(prev);
-                    isDone ? next.delete(item.key) : next.add(item.key);
-                    return next;
-                  });
-                }}
-                className={`w-full flex items-center gap-3 p-3 rounded-2xl border transition text-left ${
-                  isDone
-                    ? "bg-emerald-50 border-emerald-200 text-emerald-800"
-                    : "bg-white border-slate-200 hover:bg-slate-50 text-slate-900"
-                }`}
-                data-testid={`stk-ready-check-${item.key}`}
-              >
-                {isDone
-                  ? <CheckCircle2 className="h-5 w-5 text-emerald-600 flex-shrink-0" />
-                  : <Circle className="h-5 w-5 text-slate-500 flex-shrink-0" />}
-                <Icon className={`h-4 w-4 flex-shrink-0 ${isDone ? "text-emerald-700" : "text-slate-700"}`} />
-                <span className="text-sm font-medium">{item.label}</span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Warm reassurance line */}
-        <p className="text-xs text-muted-foreground text-center mt-1 leading-relaxed">
+        <p className="text-xs text-muted-foreground text-center mt-2 leading-relaxed">
           The M-Pesa prompt will pop up on your phone within a few seconds. Enter your PIN quickly — it expires in about 60 seconds.
         </p>
 
@@ -136,25 +72,16 @@ export function StkReadyModal({
           >
             {firing
               ? <><Loader2 className="h-5 w-5 animate-spin" /> Sending STK…</>
-              : seconds > 0
-                ? <>I'm ready — send it now ({seconds}s)</>
-                : <>I'm ready — send it now</>}
+              : <>Pay Now</>}
           </Button>
           <button
             onClick={() => onOpenChange(false)}
             className="text-xs text-muted-foreground hover:text-foreground text-center pt-1"
             data-testid="stk-ready-cancel"
           >
-            Cancel — I'll pay later
+            Cancel
           </button>
         </div>
-
-        {/* Auto-advance when countdown hits 0 AND user hasn't clicked yet */}
-        {seconds === 0 && !firing && (
-          <div className="text-center text-xs text-emerald-700 font-medium pt-1">
-            Ready to fire — tap the button above.
-          </div>
-        )}
       </DialogContent>
     </Dialog>
   );
