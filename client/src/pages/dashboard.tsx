@@ -1351,6 +1351,77 @@ export default function Dashboard() {
         <DashboardServicesGrid />
         <DashboardProUpsell />
 
+        {/* ── JOB DESTINATIONS — 9-country grid ────────────────────────────
+            2026-09 (Tony): moved to the top of the scroll so the country
+            grid is the first thing under the hero. Users were scrolling
+            past the banners + Kenya/Kazi/IELTS cards and missing the
+            highest-value action on the page. */}
+        <div data-testid="section-destinations">
+          <div className="mb-3">
+            <h3 className="text-sm font-bold text-gray-900 dark:text-white">🌍 Job Destinations</h3>
+            <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+              Tap a country to open its verified job portals
+            </p>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2.5">
+            {[
+              { flag: "🇬🇧", code: "GB", slug: "uk",        name: "UK",        desc: "NHS hiring",         tone: "from-blue-500/10 to-red-500/10" },
+              { flag: "🇦🇪", code: "AE", slug: "uae",       name: "UAE",       desc: "Tax-free salary",    tone: "from-green-500/10 to-red-500/10" },
+              { flag: "🇨🇦", code: "CA", slug: "canada",    name: "Canada",    desc: "PR pathway",         tone: "from-red-500/10 to-white/0" },
+              { flag: "🇦🇺", code: "AU", slug: "australia", name: "Australia", desc: "482 Skilled visa",   tone: "from-blue-500/10 to-yellow-500/10" },
+              { flag: "🇸🇦", code: "SA", slug: "uae",       name: "Saudi",     desc: "Vision 2030 hiring", tone: "from-green-700/10 to-emerald-500/10" },
+              { flag: "🇩🇪", code: "DE", slug: "europe",    name: "Germany",   desc: "EU Blue Card",       tone: "from-black/10 to-yellow-500/10" },
+              { flag: "🇺🇸", code: "US", slug: "usa",       name: "USA",       desc: "H-1B / EB-3",        tone: "from-blue-500/10 to-red-500/10" },
+              { flag: "🇶🇦", code: "QA", slug: "uae",       name: "Qatar",     desc: "Tax-free Gulf",      tone: "from-purple-700/10 to-amber-500/10" },
+              { flag: "🇧🇭", code: "BH", slug: "uae",       name: "Bahrain",   desc: "Hospitality + GCC",  tone: "from-red-500/10 to-white/0" },
+              { flag: "🇱🇺", code: "LU", slug: "luxembourg", name: "Luxembourg", desc: "Skilled only · 800k+/mo", tone: "from-sky-500/10 to-red-500/10" },
+              { flag: "🇹🇷", code: "TR", slug: "turkey",     name: "Turkey",     desc: "Hospitality + Tourism",   tone: "from-red-600/15 to-red-400/5" },
+              { flag: "🇮🇪", code: "IE", slug: "ireland",     name: "Ireland",     desc: "Nurse + care hiring",       tone: "from-green-500/10 to-orange-500/10" },
+              { flag: "🇳🇱", code: "NL", slug: "netherlands", name: "Netherlands", desc: "Skilled + tech visa",       tone: "from-orange-500/10 to-blue-500/10" },
+              { flag: "🇳🇿", code: "NZ", slug: "new-zealand", name: "New Zealand", desc: "Skilled + care + farm",     tone: "from-blue-600/10 to-red-500/10" },
+              { flag: "🇵🇱", code: "PL", slug: "poland",      name: "Poland",      desc: "EU work permit growth",     tone: "from-red-600/15 to-white/0" },
+              { flag: "🇰🇼", code: "KW", slug: "kuwait",      name: "Kuwait",      desc: "Care + drivers + hotels",   tone: "from-green-700/10 to-red-500/10" },
+              { flag: "🇴🇲", code: "OM", slug: "oman",        name: "Oman",        desc: "Hospitality + Gulf salary", tone: "from-red-500/10 to-green-500/10" },
+            ].map((c) => (
+              <Link
+                key={c.name}
+                href={`/country/${c.slug}`}
+                data-testid={`dest-${c.name.toLowerCase()}`}
+                className="group relative flex flex-col gap-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-3 shadow-sm hover:shadow-lg hover:border-teal-300 dark:hover:border-teal-700 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200"
+              >
+                <div className={`absolute inset-0 rounded-2xl bg-gradient-to-br ${c.tone} opacity-50 group-hover:opacity-80 transition-opacity pointer-events-none`} />
+                <div className="relative flex items-center gap-2">
+                  <span className="text-2xl leading-none">{c.flag}</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[10px] font-mono text-gray-500 dark:text-gray-400 leading-none">{c.code}</div>
+                    <div className="text-sm font-bold text-gray-900 dark:text-white leading-tight truncate">{c.name}</div>
+                  </div>
+                </div>
+                <p className="relative text-[11px] text-gray-600 dark:text-gray-400 leading-tight truncate">{c.desc}</p>
+              </Link>
+            ))}
+
+            <Link
+              href="/scout-jobs"
+              data-testid="dest-scout-jobs"
+              className="group relative flex flex-col gap-1 bg-gradient-to-br from-teal-500 to-cyan-600 border-2 border-teal-400 dark:border-teal-500 rounded-2xl p-3 shadow-md hover:shadow-xl hover:scale-[1.03] active:scale-[0.98] transition-all duration-200 overflow-hidden"
+            >
+              <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent pointer-events-none" />
+              <div className="relative flex items-center gap-2">
+                <span className="text-2xl leading-none">🎯</span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[10px] font-mono text-white/70 leading-none">NEW</div>
+                  <div className="text-sm font-bold text-white leading-tight truncate">Job Scout</div>
+                </div>
+              </div>
+              <p className="relative text-[11px] text-white/90 leading-tight truncate">
+                Direct jobs from scouts abroad
+              </p>
+            </Link>
+          </div>
+        </div>
+
         {/* Agency alert + urgency banners for free users */}
         {!isPaid && (
           <div className="space-y-2">
@@ -1392,87 +1463,8 @@ export default function Dashboard() {
             if demand is real before committing to the 6-12 week build. */}
         <DashboardIeltsPrepCard />
 
-        {/* ── JOB DESTINATIONS — 9-country grid (RIGHT UNDER 50 JOBS) ─────
-            User feedback: this is the conversion hot-spot. Show every
-            country inline, no "View all" detour. Each tile deep-links
-            directly into that country's dashboard so users hit portals
-            in one click. Gulf countries (Saudi/Qatar/Bahrain) map to the
-            UAE/Arab Countries dashboard which covers the GCC region;
-            Germany maps to Europe.  */}
-        <div data-testid="section-destinations">
-          <div className="mb-3">
-            <h3 className="text-sm font-bold text-gray-900 dark:text-white">🌍 Job Destinations</h3>
-            <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
-              Tap a country to open its verified job portals
-            </p>
-          </div>
-
-          <div className="grid grid-cols-3 gap-2.5">
-            {[
-              { flag: "🇬🇧", code: "GB", slug: "uk",        name: "UK",        desc: "NHS hiring",         tone: "from-blue-500/10 to-red-500/10" },
-              { flag: "🇦🇪", code: "AE", slug: "uae",       name: "UAE",       desc: "Tax-free salary",    tone: "from-green-500/10 to-red-500/10" },
-              { flag: "🇨🇦", code: "CA", slug: "canada",    name: "Canada",    desc: "PR pathway",         tone: "from-red-500/10 to-white/0" },
-              { flag: "🇦🇺", code: "AU", slug: "australia", name: "Australia", desc: "482 Skilled visa",   tone: "from-blue-500/10 to-yellow-500/10" },
-              { flag: "🇸🇦", code: "SA", slug: "uae",       name: "Saudi",     desc: "Vision 2030 hiring", tone: "from-green-700/10 to-emerald-500/10" },
-              { flag: "🇩🇪", code: "DE", slug: "europe",    name: "Germany",   desc: "EU Blue Card",       tone: "from-black/10 to-yellow-500/10" },
-              { flag: "🇺🇸", code: "US", slug: "usa",       name: "USA",       desc: "H-1B / EB-3",        tone: "from-blue-500/10 to-red-500/10" },
-              { flag: "🇶🇦", code: "QA", slug: "uae",       name: "Qatar",     desc: "Tax-free Gulf",      tone: "from-purple-700/10 to-amber-500/10" },
-              { flag: "🇧🇭", code: "BH", slug: "uae",       name: "Bahrain",   desc: "Hospitality + GCC",  tone: "from-red-500/10 to-white/0" },
-              // 2026-06 (Tony's "ship it"): Luxembourg, with the salary floor
-              // visible in the desc so users self-select before paying.
-              { flag: "🇱🇺", code: "LU", slug: "luxembourg", name: "Luxembourg", desc: "Skilled only · 800k+/mo", tone: "from-sky-500/10 to-red-500/10" },
-              // 2026-07: Turkey added as a supported destination.
-              { flag: "🇹🇷", code: "TR", slug: "turkey",     name: "Turkey",     desc: "Hospitality + Tourism",   tone: "from-red-600/15 to-red-400/5" },
-              // 2026-07 Tier 1: highest Kenya-to-country hiring pipelines.
-              { flag: "🇮🇪", code: "IE", slug: "ireland",     name: "Ireland",     desc: "Nurse + care hiring",       tone: "from-green-500/10 to-orange-500/10" },
-              { flag: "🇳🇱", code: "NL", slug: "netherlands", name: "Netherlands", desc: "Skilled + tech visa",       tone: "from-orange-500/10 to-blue-500/10" },
-              { flag: "🇳🇿", code: "NZ", slug: "new-zealand", name: "New Zealand", desc: "Skilled + care + farm",     tone: "from-blue-600/10 to-red-500/10" },
-              { flag: "🇵🇱", code: "PL", slug: "poland",      name: "Poland",      desc: "EU work permit growth",     tone: "from-red-600/15 to-white/0" },
-              { flag: "🇰🇼", code: "KW", slug: "kuwait",      name: "Kuwait",      desc: "Care + drivers + hotels",   tone: "from-green-700/10 to-red-500/10" },
-              { flag: "🇴🇲", code: "OM", slug: "oman",        name: "Oman",        desc: "Hospitality + Gulf salary", tone: "from-red-500/10 to-green-500/10" },
-            ].map((c) => (
-              <Link
-                key={c.name}
-                href={`/country/${c.slug}`}
-                data-testid={`dest-${c.name.toLowerCase()}`}
-                className="group relative flex flex-col gap-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-3 shadow-sm hover:shadow-lg hover:border-teal-300 dark:hover:border-teal-700 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200"
-              >
-                <div className={`absolute inset-0 rounded-2xl bg-gradient-to-br ${c.tone} opacity-50 group-hover:opacity-80 transition-opacity pointer-events-none`} />
-                <div className="relative flex items-center gap-2">
-                  <span className="text-2xl leading-none">{c.flag}</span>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-[10px] font-mono text-gray-500 dark:text-gray-400 leading-none">{c.code}</div>
-                    <div className="text-sm font-bold text-gray-900 dark:text-white leading-tight truncate">{c.name}</div>
-                  </div>
-                </div>
-                <p className="relative text-[11px] text-gray-600 dark:text-gray-400 leading-tight truncate">{c.desc}</p>
-              </Link>
-            ))}
-
-            {/* ── 2026-07 (Tony's sketch): JOB SCOUT tile ─────────────────
-                Visually distinct from the country tiles so users notice it.
-                Scouts (individuals already in destination countries) pay
-                KES 200 to list direct job openings. Not registered agents;
-                real people who know of real jobs.  */}
-            <Link
-              href="/scout-jobs"
-              data-testid="dest-scout-jobs"
-              className="group relative flex flex-col gap-1 bg-gradient-to-br from-teal-500 to-cyan-600 border-2 border-teal-400 dark:border-teal-500 rounded-2xl p-3 shadow-md hover:shadow-xl hover:scale-[1.03] active:scale-[0.98] transition-all duration-200 overflow-hidden"
-            >
-              <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent pointer-events-none" />
-              <div className="relative flex items-center gap-2">
-                <span className="text-2xl leading-none">🎯</span>
-                <div className="min-w-0 flex-1">
-                  <div className="text-[10px] font-mono text-white/70 leading-none">NEW</div>
-                  <div className="text-sm font-bold text-white leading-tight truncate">Job Scout</div>
-                </div>
-              </div>
-              <p className="relative text-[11px] text-white/90 leading-tight truncate">
-                Direct jobs from scouts abroad
-              </p>
-            </Link>
-          </div>
-        </div>
+        {/* Job Destinations grid moved above the banners — see the block
+            directly under <DashboardProUpsell />. */}
 
         {/* ── THIN WELCOME WIDGET ─────────────────────────────────────────
             One-row greeting. Big celebratory hero + CareerReadiness +
