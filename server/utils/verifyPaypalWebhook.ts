@@ -136,6 +136,16 @@ export async function verifyPayPalWebhook(
   headers: Record<string, string | string[] | undefined>,
 ): Promise<boolean> {
   if (!WEBHOOK_ID) {
+    // 2026-09 SECURITY: previously returned TRUE (skip verification) when
+    // WEBHOOK_ID was missing — labelled 'dev mode'. In production this is
+    // a silent security bypass. If admin forgot to set PAYPAL_WEBHOOK_ID
+    // in Render env, any attacker who knew the payload shape could POST
+    // forged webhooks and unlock Pro for arbitrary users.
+    // Now: fail CLOSED in production, only fail-open in dev.
+    if ((process.env.NODE_ENV || "").toLowerCase() === "production") {
+      console.error("[PAYPAL VERIFY] PAYPAL_WEBHOOK_ID not set in production — REJECTING webhook. Set the env var in Render to enable PayPal callbacks.");
+      return false;
+    }
     console.warn("[PAYPAL VERIFY] PAYPAL_WEBHOOK_ID not set — skipping verification (dev mode)");
     return true;
   }

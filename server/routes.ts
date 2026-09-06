@@ -20139,6 +20139,31 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
       const userId = req.user?.claims?.sub as string;
       const { amount: clientAmount, description, serviceId: rawServiceId, refCode, promoCode } = req.body;
 
+      // 2026-09 (duplicate-charge protection — parity with M-Pesa):
+      // Refuse a second PayPal order if the same user has one from the
+      // last 5 minutes that hasn't been captured yet. PayPal orders
+      // stay valid for 3 hours on their side, so a user tapping "Pay
+      // with PayPal" twice would otherwise create two orders and could
+      // capture both. 5 min is a generous grace vs the PayPal SDK's
+      // typical 30s complete window.
+      const { rows: ppInflightRows } = await pool.query<{ id: string; created_at: Date }>(
+        `SELECT id, created_at FROM payments
+          WHERE user_id = $1
+            AND method = 'paypal'
+            AND status IN ('pending', 'awaiting_payment')
+            AND created_at > NOW() - INTERVAL '5 minutes'
+          ORDER BY created_at DESC LIMIT 1`,
+        [userId],
+      );
+      if (ppInflightRows[0]) {
+        const ageSec = Math.floor((Date.now() - new Date(ppInflightRows[0].created_at).getTime()) / 1000);
+        return res.status(409).json({
+          message: `You already have a PayPal order in flight (${ageSec}s ago). Complete or cancel it before starting a new one.`,
+          code: "DUPLICATE_PAYPAL_ORDER_IN_FLIGHT",
+          existingPaymentId: ppInflightRows[0].id,
+        });
+      }
+
       // Fraud gate — block before any PayPal order is created
       if (await isFraudUser(userId)) {
         const clientIp = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ?? req.socket?.remoteAddress ?? "unknown";
