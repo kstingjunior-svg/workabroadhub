@@ -108,14 +108,14 @@ export function StkReadyModal({
                 className={`w-full flex items-center gap-3 p-3 rounded-2xl border transition text-left ${
                   isDone
                     ? "bg-emerald-50 border-emerald-200 text-emerald-800"
-                    : "bg-white border-slate-200 hover:bg-slate-50"
+                    : "bg-white border-slate-200 hover:bg-slate-50 text-slate-900"
                 }`}
                 data-testid={`stk-ready-check-${item.key}`}
               >
                 {isDone
                   ? <CheckCircle2 className="h-5 w-5 text-emerald-600 flex-shrink-0" />
-                  : <Circle className="h-5 w-5 text-slate-400 flex-shrink-0" />}
-                <Icon className="h-4 w-4 text-slate-500 flex-shrink-0" />
+                  : <Circle className="h-5 w-5 text-slate-500 flex-shrink-0" />}
+                <Icon className={`h-4 w-4 flex-shrink-0 ${isDone ? "text-emerald-700" : "text-slate-700"}`} />
                 <span className="text-sm font-medium">{item.label}</span>
               </button>
             );
