@@ -1357,7 +1357,7 @@ export default function Dashboard() {
             <AgencyAlertBanner dismissable showLink />
             <UrgencyBanner />
             {recMessage && (
-              <div className="bg-yellow-100 p-3 rounded">
+              <div className="bg-yellow-100 dark:bg-yellow-900/30 text-yellow-900 dark:text-yellow-100 border border-yellow-300 dark:border-yellow-700 p-3 rounded text-sm font-medium">
                 {recMessage}
               </div>
             )}
