@@ -287,7 +287,10 @@ export function registerScoutJobsRoutes(app: Express): void {
   });
 
   /* ─── POST /api/scout-jobs/mpesa-callback — Safaricom result ─────────── */
-  app.post("/api/scout-jobs/mpesa-callback", async (req: Request, res: Response) => {
+  // 2026-09 SECURITY: safaricomIpGuard blocks forged callbacks from non-
+  // Safaricom IPs. See server/middleware/safaricomIpGuard.ts.
+  const { safaricomIpGuard: sjGuard } = await import("../middleware/safaricomIpGuard");
+  app.post("/api/scout-jobs/mpesa-callback", sjGuard, async (req: Request, res: Response) => {
     try {
       const cb = req.body?.Body?.stkCallback;
       if (!cb) return res.json({ ResultCode: 0, ResultDesc: "no callback body" });

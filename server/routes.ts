@@ -5629,35 +5629,14 @@ Crawl-delay: 1`);
 
   // ── POST /api/payments/mpesa/callback — Safaricom callback for the unified STK push ─
   // CSRF exempt — registered in middleware/csrf.ts
-  app.post("/api/payments/mpesa/callback", async (req, res) => {
+  // 2026-09 SECURITY: safaricomIpGuard middleware (see server/middleware/
+  // safaricomIpGuard.ts) drops requests from non-Safaricom IPs BEFORE
+  // this handler runs. Attackers guessing CheckoutRequestIDs can no
+  // longer forge success callbacks.
+  const { safaricomIpGuard } = await import("./middleware/safaricomIpGuard");
+  app.post("/api/payments/mpesa/callback", safaricomIpGuard, async (req, res) => {
     // 1. Always acknowledge immediately so Safaricom stops retrying
     res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted" });
-
-    // 2026-09 SECURITY: source-IP verification. A copy of SAFARICOM_IPS
-    // was defined 700 lines below (unreferenced) — the callback accepted
-    // POSTs from ANY IP. An attacker who guessed a valid CheckoutRequestID
-    // could POST a forged 'success' callback and unlock plans for arbitrary
-    // users (mitigated somewhat by the amount-fraud gate downstream, but
-    // a guessing attack + matching a known trial price is trivial).
-    // Toggle-off escape hatch: MPESA_CALLBACK_IP_WHITELIST_DISABLED=1 if
-    // Safaricom changes ranges and we need an emergency bypass.
-    if (String(process.env.MPESA_CALLBACK_IP_WHITELIST_DISABLED || "").trim() !== "1") {
-      const SAFARICOM_IP_PREFIXES = [
-        "196.201.214.", "196.201.212.", "196.201.213.",
-        "41.215.160.",
-        "127.0.0.1", "::1",   // localhost for testing
-      ];
-      const xfwd = String(req.headers["x-forwarded-for"] || "").split(",")[0]?.trim();
-      const sourceIp = xfwd || req.socket?.remoteAddress || "";
-      const allowed = SAFARICOM_IP_PREFIXES.some((prefix) => sourceIp.startsWith(prefix));
-      if (!allowed) {
-        console.error(
-          `[MPESA/PAYMENTS CALLBACK][SECURITY] Rejected callback from non-Safaricom IP=${sourceIp} ` +
-          `xff="${xfwd}" ua="${String(req.headers["user-agent"] || "").slice(0, 100)}"`,
-        );
-        return;   // silent drop — we've already 200'd Safaricom above
-      }
-    }
 
     const stk = req.body?.Body?.stkCallback;
     if (!stk) {
@@ -6352,7 +6331,7 @@ Crawl-delay: 1`);
   // KES 99 CV Fix Lite payments to silently grant 30 days of Pro. That bug
   // is now neutralised.
   // ──────────────────────────────────────────────────────────────────────────
-  app.post("/api/mpesa/callback", async (req, res) => {
+  app.post("/api/mpesa/callback", safaricomIpGuard, async (req, res) => {
     const stkCallback = req.body?.Body?.stkCallback;
     const checkoutId = stkCallback?.CheckoutRequestID;
     const resultCode = stkCallback?.ResultCode;
@@ -7766,7 +7745,7 @@ Crawl-delay: 1`);
   });
 
   // Pull callback endpoint — Safaricom pushes transactions here if registered
-  app.post("/api/mpesa/pull/callback", async (req: any, res) => {
+  app.post("/api/mpesa/pull/callback", safaricomIpGuard, async (req: any, res) => {
     try {
       const transactions: any[] = req.body?.Response || (Array.isArray(req.body) ? req.body : [req.body]);
       console.log(`[PullCallback] Received ${transactions.length} transaction(s) from Safaricom`);
@@ -11775,7 +11754,7 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
   });
 
   // M-Pesa B2C callback endpoints
-  app.post("/api/mpesa/b2c/result", async (req, res) => {
+  app.post("/api/mpesa/b2c/result", safaricomIpGuard, async (req, res) => {
     try {
       const result = req.body?.Result;
       console.log("[B2C] Result callback:", JSON.stringify(result, null, 2));
@@ -11833,7 +11812,7 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
     res.json({ ResultCode: 0, ResultDesc: "Accepted" });
   });
 
-  app.post("/api/mpesa/b2c/timeout", async (req, res) => {
+  app.post("/api/mpesa/b2c/timeout", safaricomIpGuard, async (req, res) => {
     try {
       const conversationId = req.body?.Result?.OriginatorConversationID;
       console.warn("[B2C] Timeout for conversationId:", conversationId);
