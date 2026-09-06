@@ -17,7 +17,6 @@ import { useTranslation } from "react-i18next";
 import { useEffect, useState, useRef } from "react";
 
 import { FreePreviewJobs } from "@/components/free-preview-jobs";
-import { DashboardJobRecommendations } from "@/components/dashboard-job-recommendations";
 import { UpgradePrompt } from "@/components/upgrade-prompt";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { NotificationBell } from "@/components/notification-bell";
@@ -2187,8 +2186,11 @@ export default function Dashboard() {
           />
         )}
 
-        {/* AI JOB RECOMMENDATIONS */}
-        <DashboardJobRecommendations />
+        {/* 2026-09 REMOVED (Tony): <DashboardJobRecommendations />
+            The "RECOMMENDED JOBS · BASED ON YOUR BROWSING" section was
+            surfacing sample listings (Google H-1B, Amazon, JPMorgan) that
+            we don't actually broker — same trust problem that killed the
+            visa-jobs-locked block earlier. Removed entirely. */}
 
         {/* LOCKED JOBS PREVIEW — free users only */}
         {!isPaid && (
