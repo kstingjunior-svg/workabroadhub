@@ -25,6 +25,7 @@ import { storage } from "../storage";
 import { stkPush, isMpesaAvailable, getCallbackBaseUrl } from "../mpesa";
 import { createPayPalOrder, capturePayPalOrder, isPayPalConfigured } from "../paypal";
 import { stripHtml } from "../lib/html-sanitizer";
+import { safaricomIpGuard } from "../middleware/safaricomIpGuard";
 
 // 2026-08 SECURITY (Tony's fake-email report): every payment initiator
 // must confirm the caller's users.email_verified = true. Users signing up
@@ -289,8 +290,7 @@ export function registerScoutJobsRoutes(app: Express): void {
   /* ─── POST /api/scout-jobs/mpesa-callback — Safaricom result ─────────── */
   // 2026-09 SECURITY: safaricomIpGuard blocks forged callbacks from non-
   // Safaricom IPs. See server/middleware/safaricomIpGuard.ts.
-  const { safaricomIpGuard: sjGuard } = await import("../middleware/safaricomIpGuard");
-  app.post("/api/scout-jobs/mpesa-callback", sjGuard, async (req: Request, res: Response) => {
+  app.post("/api/scout-jobs/mpesa-callback", safaricomIpGuard, async (req: Request, res: Response) => {
     try {
       const cb = req.body?.Body?.stkCallback;
       if (!cb) return res.json({ ResultCode: 0, ResultDesc: "no callback body" });

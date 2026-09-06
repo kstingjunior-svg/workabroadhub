@@ -40,6 +40,7 @@ import { storage } from "../storage";
 import { stkPush, isMpesaAvailable } from "../mpesa";
 import { createPayPalOrder, capturePayPalOrder, isPayPalConfigured } from "../paypal";
 import { renderDocx, renderPdf } from "../services/document-renderer";
+import { safaricomIpGuard } from "../middleware/safaricomIpGuard";
 
 // 2026-08 SECURITY (Tony's fake-email report): every payment initiator
 // must confirm the caller's users.email_verified = true. Signed-in users
@@ -324,8 +325,7 @@ export function registerWriteFromScratchRoutes(app: Express): void {
 
   /* ─── POST /api/write-from-scratch/mpesa-callback ───────────────────── */
   // 2026-09 SECURITY: safaricomIpGuard drops forged callbacks.
-  const { safaricomIpGuard: wfsGuard } = await import("../middleware/safaricomIpGuard");
-  app.post("/api/write-from-scratch/mpesa-callback", wfsGuard, async (req, res) => {
+  app.post("/api/write-from-scratch/mpesa-callback", safaricomIpGuard, async (req, res) => {
     // Always ACK Safaricom immediately; do work best-effort. If we return
     // non-OK Safaricom retries, which risks double-processing.
     try {
