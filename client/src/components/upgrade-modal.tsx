@@ -82,6 +82,27 @@ export function UpgradeModal() {
   const [, navigate] = useLocation();
 
   const [step, setStep] = useState<Step>("compare");
+  const [, setLocation] = useLocation();
+
+  // 2026-09 (Tony): every failure path — STK timeout, cancelled/failed
+  // callback, network error, unknown backend error — closes this modal
+  // and drops the user back on /pricing to start a fresh attempt. No
+  // "Try Again" popup, no in-modal retry, no destructive toast that
+  // strands them in a broken state. TRIAL_ALREADY_USED is the only
+  // deliberate exception because it's a policy gate, not a payment
+  // failure, and it has its own dedicated screen.
+  // NOTE: don't call stopPolling here — resetting step→'compare' and
+  // paymentId→null makes the poll useEffect below tear its own interval
+  // down on next tick. Calling stopPolling directly would create a
+  // temporal-dead-zone reference (it's declared later in the file).
+  const bailToPricing = useCallback(() => {
+    setStep("compare");
+    setPhone("");
+    setPaymentId(null);
+    setReceipt(null);
+    closeUpgradeModal();
+    setLocation("/pricing");
+  }, [setLocation, closeUpgradeModal]);
   // 2026-06: modal now offers all 3 paid tiers. Founder feedback — too many
   // signups cancelled when only KES 4,500 was shown. Default to Monthly
   // (Kenya's most-loved entry point), let user click through to Trial or Yearly.
@@ -183,8 +204,9 @@ export function UpgradeModal() {
       setSecondsLeft(remaining);
       if (elapsed >= MAX_POLL_MS) {
         stopPolling();
-        setStep("compare");
-        toast({ title: "Prompt Timed Out", description: "No response from Safaricom. Please try again.", variant: "destructive" });
+        // 2026-09 (Tony): no failure popup — drop the user on /pricing so
+        // they can start a fresh attempt from the plan selector.
+        bailToPricing();
       }
     };
 
@@ -207,8 +229,8 @@ export function UpgradeModal() {
         queryClient.invalidateQueries({ queryKey: ["/api/user/plan"] });
       } else if (data.status === "failed" || data.status === "cancelled") {
         stopPolling();
-        setStep("compare");
-        toast({ title: "Payment Cancelled", description: "M-Pesa payment was cancelled or failed. Please try again.", variant: "destructive" });
+        // 2026-09 (Tony): no failure popup — bail to /pricing.
+        bailToPricing();
       }
     },
   });
@@ -236,28 +258,17 @@ export function UpgradeModal() {
       setStep("pending");
     },
     onError: (error: any) => {
-      if (error?.isCsrfError) {
-        toast({ title: "Security token refreshed", description: "Please tap 'Send Prompt' again.", variant: "destructive" });
-        return;
-      }
-      if (error?.status === 409 || error?.message?.includes("pending")) {
-        toast({ title: "Payment Already In Progress", description: "Check your phone for the M-Pesa prompt.", variant: "destructive" });
-        return;
-      }
-      // 2026-09 (Tony's mbuguisa report): users who used the KES 99 trial
-      // and try to buy it again get a 403 TRIAL_ALREADY_USED. Server
-      // returns the message but the client was showing a small toast the
-      // user could dismiss and forget. Now we swap to a dedicated 'step'
-      // that occupies the modal with a big Monthly upgrade CTA and no
-      // ambiguity about what to do next. Stops the "I can't pay" WhatsApp
-      // messages that end up as manual admin grants.
+      // 2026-09 (Tony): keep TRIAL_ALREADY_USED as a dedicated in-modal
+      // gate — it's a policy screen, not a failure popup — but every
+      // other error path bails to /pricing with no toast. See
+      // bailToPricing() for the reasoning.
       const errCode = (error?.body?.code ?? error?.code ?? "").toString();
       const errMsg = (error?.body?.message ?? error?.message ?? "").toString();
       if (errCode === "TRIAL_ALREADY_USED" || errMsg.includes("one-time offer")) {
         setStep("trial_used");
         return;
       }
-      toast({ title: "Could Not Send Prompt", description: errMsg || "Something went wrong. Please try again.", variant: "destructive" });
+      bailToPricing();
     },
   });
 
@@ -619,23 +630,18 @@ export function UpgradeModal() {
             <div className="h-20 w-20 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
               <CheckCircle className="h-10 w-10 text-green-500" />
             </div>
+            {/* 2026-09 (Tony): success screen simplified to a single line
+                per spec — no extra CTAs, no receipt clutter, no marketing
+                copy. Just the confirmation the plan is active. */}
             <div>
-              <h3 className="text-xl font-bold text-foreground">You're now Pro! 🎉</h3>
-              <p className="text-sm text-muted-foreground mt-2">
-                Your WorkAbroad Hub Pro access is active. All premium features are unlocked.
-              </p>
-              {receipt && (
-                <p className="text-xs text-muted-foreground mt-2">
-                  M-Pesa receipt: <span className="font-mono font-semibold text-foreground">{receipt}</span>
-                </p>
-              )}
+              <h3 className="text-xl font-bold text-foreground">You have been upgraded to Pro user.</h3>
             </div>
             <button
               onClick={handleClose}
               className="w-full py-3 rounded-xl font-bold text-sm text-white bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 transition-all shadow-md"
               data-testid="btn-close-success"
             >
-              Start My Career Consultation →
+              Continue
             </button>
           </div>
         )}
