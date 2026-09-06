@@ -272,8 +272,26 @@ export function UpgradeModal() {
     },
   });
 
-  const handleUpgradeClick = () => {
-    setStep("pay");
+  // 2026-09 (Tony): the upgrade-modal used to run its own inline
+  // /api/subscriptions/upgrade flow — separate from the payment page
+  // that the pricing button uses. That divergence meant every failure
+  // mode had to be hand-wired twice, and my earlier bailToPricing()
+  // added a silent redirect on any error which felt like "the button
+  // does nothing" from the user's seat.
+  //
+  // Now the modal hands off to the exact same payment page the pricing
+  // grid uses: navigate("/payment?plan=<id>&method=mpesa") and close.
+  // The payment page owns the STK Push, polling, verification, plan
+  // activation, TRIAL_ALREADY_USED handling, PayPal, receipts — all of
+  // it. This modal becomes a plan picker only.
+  const handleUpgradeClick = (method: "mpesa" | "paypal" = "mpesa") => {
+    const qs = new URLSearchParams({ plan: selectedPlan, method });
+    closeUpgradeModal();
+    setStep("compare");
+    setPhone("");
+    setPaymentId(null);
+    setReceipt(null);
+    setLocation(`/payment?${qs.toString()}`);
   };
 
   // 2026-08 (Tony's STK failure-rate audit): 208 of 501 monthly failures
@@ -445,7 +463,7 @@ export function UpgradeModal() {
 
             {/* Single proceed button at full width — uses whichever tier the user picked */}
             <button
-              onClick={handleUpgradeClick}
+              onClick={() => handleUpgradeClick("mpesa")}
               disabled={!proFinalPrice}
               className={`w-full text-sm font-bold py-3 rounded-xl transition-all duration-200 hover:scale-[1.01] active:scale-[0.99] text-white shadow-lg disabled:opacity-50 disabled:cursor-not-allowed mb-5 ${
                 selectedPlan === "trial"   ? "bg-gradient-to-r from-green-600 to-emerald-600 shadow-green-200 dark:shadow-green-900/40" :
