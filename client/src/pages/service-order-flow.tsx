@@ -409,12 +409,30 @@ export default function ServiceOrderFlow() {
       if (jobDescription) form.append("jobDescription", jobDescription);
       if (targetCountry)  form.append("targetCountry", targetCountry);
       if (extraInput)     form.append("extraInput", extraInput);
-      // Guest fields — server ignores these when a session cookie is present.
-      if (isAnonymous) {
-        form.append("guestName",  guestName.trim());
-        form.append("guestEmail", guestEmail.trim().toLowerCase());
-        form.append("guestPhone", guestPhone.trim());
-      }
+      // Guest fields.
+      //
+      // 2026-09 (Tony's "Order couldn't be created" screenshot): the server
+      // was returning 400 for logged-in users when their session lookup
+      // failed mid-request (Render worker restart mid-upload, cookie
+      // rotation, cache miss after a deploy). The client thought
+      // isAnonymous=false so it didn't ship guest fields; the server saw
+      // no session and demanded them → 400 with no way for the user to
+      // recover.
+      //
+      // Fix: ALWAYS send name/email/phone. For guests they come from the
+      // form inputs; for logged-in users we fall back to their profile.
+      // The server ignores these fields when a session IS valid, so this
+      // costs nothing for the happy path and unblocks the mid-request
+      // deauth case.
+      const effectiveName  = isAnonymous ? guestName.trim()
+                                         : (user?.firstName || user?.email?.split("@")[0] || "Customer");
+      const effectiveEmail = isAnonymous ? guestEmail.trim().toLowerCase()
+                                         : (user?.email || "").toLowerCase();
+      const effectivePhone = isAnonymous ? guestPhone.trim()
+                                         : ((user as any)?.phone || guestPhone.trim() || "0700000000");
+      if (effectiveName)  form.append("guestName",  effectiveName);
+      if (effectiveEmail) form.append("guestEmail", effectiveEmail);
+      if (effectivePhone) form.append("guestPhone", effectivePhone);
       // 2026-07 (photo embed): attach optional headshot for top-right
       // placement in the delivered PDF/DOCX. Named "photo" per multer field.
       if (photoBlob) {
