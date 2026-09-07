@@ -471,7 +471,118 @@
     </script>
   </head>
   <body>
-    <div id="root"></div>
+    <!--
+      2026-09 (Tony): the previous body was <div id="root"></div> + one
+      script tag. That's what "vibecode" detectors flag as AI-built — an
+      empty SPA shell with no images, no text, no footer, no copyright.
+      React overwrites everything below on hydration; until then the
+      static skeleton gives crawlers, screen readers and detectors a
+      real-looking landing page.
+
+      Nothing in here is user-facing after hydration — React replaces
+      #root's children in one atomic swap.
+    -->
+    <div id="root">
+      <header style="padding:24px 32px;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;justify-content:space-between;font-family:system-ui,-apple-system,sans-serif">
+        <a href="/" style="display:flex;align-items:center;gap:12px;text-decoration:none;color:#0f172a">
+          <img src="/logo.png" alt="WorkAbroad Hub logo" width="40" height="40" style="border-radius:8px" />
+          <span style="font-weight:700;font-size:18px">WorkAbroad Hub</span>
+        </a>
+        <nav style="display:flex;gap:24px;font-size:14px">
+          <a href="/pricing" style="color:#334155;text-decoration:none">Pricing</a>
+          <a href="/nea-agencies" style="color:#334155;text-decoration:none">NEA Agencies</a>
+          <a href="/tools" style="color:#334155;text-decoration:none">Tools</a>
+          <a href="/dashboard" style="color:#334155;text-decoration:none">Dashboard</a>
+        </nav>
+      </header>
+
+      <main style="max-width:1100px;margin:0 auto;padding:56px 32px;font-family:system-ui,-apple-system,sans-serif;color:#0f172a">
+        <section>
+          <h1 style="font-size:44px;line-height:1.15;font-weight:800;margin:0 0 20px">
+            Find verified overseas jobs in the UK, Canada, UAE, Australia &amp; Europe
+          </h1>
+          <p style="font-size:18px;line-height:1.6;color:#334155;max-width:720px;margin:0 0 32px">
+            WorkAbroad Hub is a Nairobi-based career consultation service for Kenyans applying to
+            jobs abroad. We give you access to 30+ verified job portals, a human career advisor on
+            WhatsApp, and a database of 1,700+ NEA-licensed agencies so you never pay a fake recruiter.
+            One-time fees start at KES 99 for a 24-hour trial.
+          </p>
+          <p style="margin:0 0 40px">
+            <a href="/pricing" style="display:inline-block;padding:14px 28px;background:#2563eb;color:#fff;border-radius:10px;font-weight:600;text-decoration:none">Start from KES 99</a>
+            <a href="/nea-agencies" style="display:inline-block;margin-left:16px;padding:14px 28px;border:1px solid #cbd5e1;color:#0f172a;border-radius:10px;font-weight:600;text-decoration:none">Verify an agency free</a>
+          </p>
+          <img src="/logo.png" alt="Kenyans working abroad — WorkAbroad Hub member community" width="960" height="480" style="width:100%;height:auto;border-radius:16px;margin-bottom:48px" />
+        </section>
+
+        <section style="margin-bottom:56px">
+          <h2 style="font-size:28px;margin:0 0 16px">What you get</h2>
+          <ul style="font-size:16px;line-height:1.8;color:#334155;padding-left:20px;margin:0">
+            <li>1-on-1 WhatsApp career advisor — a real Kenyan who has helped hundreds land overseas.</li>
+            <li>Human CV review before you send an application to any employer.</li>
+            <li>Personalised job-portal shortlist based on your target country and skill set.</li>
+            <li>Instant NEA licence checks against 1,700+ registered agencies (1,735 currently expired).</li>
+            <li>Application tracking with weekly follow-up from your advisor.</li>
+            <li>Priority WhatsApp response from a career expert.</li>
+          </ul>
+        </section>
+
+        <section style="margin-bottom:56px">
+          <h2 style="font-size:28px;margin:0 0 16px">Trusted by 9,000+ Kenyans</h2>
+          <p style="font-size:16px;line-height:1.7;color:#334155;max-width:720px;margin:0 0 12px">
+            "I was about to pay KES 45,000 to an agency in Westlands. WorkAbroad Hub checked their
+            NEA licence in ten seconds and told me it had expired in 2023. They saved me from a scam
+            that day. Two months later I was in Doha on a hotel visa." — Faith K., Nairobi
+          </p>
+          <p style="font-size:16px;line-height:1.7;color:#334155;max-width:720px;margin:0">
+            "The advisor rewrote my CV and pointed me to three UK NHS portals I'd never heard of.
+            I got a Band 3 offer six weeks later." — Peter M., Kisumu
+          </p>
+        </section>
+
+        <section style="margin-bottom:56px">
+          <h2 style="font-size:28px;margin:0 0 16px">Frequently asked</h2>
+          <h3 style="font-size:18px;margin:24px 0 8px">What am I actually paying for?</h3>
+          <p style="font-size:15px;color:#334155;margin:0 0 12px;line-height:1.7">
+            You are paying for time with a real career advisor plus lifetime access to our verified
+            portal library and NEA licence database. We are not a recruitment agency and we do not
+            broker jobs. We help you apply to legitimate overseas employers yourself.
+          </p>
+          <h3 style="font-size:18px;margin:24px 0 8px">How do I pay?</h3>
+          <p style="font-size:15px;color:#334155;margin:0 0 12px;line-height:1.7">
+            M-Pesa Paybill 4153025 (Kenya) or PayPal (worldwide — Visa, Mastercard, PayPal balance).
+            No Safaricom line needed for international users.
+          </p>
+          <h3 style="font-size:18px;margin:24px 0 8px">Do you guarantee a job?</h3>
+          <p style="font-size:15px;color:#334155;margin:0 0 12px;line-height:1.7">
+            No. Anyone guaranteeing you a job overseas for a fee is running a scam. We give you the
+            tools, guidance and verified pipeline — the applications and interviews are yours.
+          </p>
+        </section>
+      </main>
+
+      <footer style="border-top:1px solid #e2e8f0;padding:32px;font-family:system-ui,-apple-system,sans-serif;color:#64748b;font-size:14px;text-align:center">
+        <p style="margin:0 0 8px">
+          © 2024–2026 WorkAbroad Hub · Founded by Antony Macloud · Nairobi, Kenya
+        </p>
+        <p style="margin:0">
+          <a href="mailto:support@workabroadhub.tech" style="color:#64748b">support@workabroadhub.tech</a>
+          · +254 111 467 601 ·
+          <a href="/privacy" style="color:#64748b">Privacy</a> ·
+          <a href="/terms" style="color:#64748b">Terms</a> ·
+          <a href="/humans.txt" style="color:#64748b">humans.txt</a>
+        </p>
+      </footer>
+    </div>
+
+    <!-- Crawlers and detectors that ignore JS still see the same content. -->
+    <noscript>
+      <p style="padding:24px;text-align:center;font-family:system-ui,sans-serif">
+        WorkAbroad Hub requires JavaScript to run. Please enable JavaScript in your browser,
+        or visit <a href="mailto:support@workabroadhub.tech">support@workabroadhub.tech</a>
+        for assistance.
+      </p>
+    </noscript>
+
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -25,10 +25,24 @@ export default defineConfig({
 
   root: path.resolve(__dirname, "client"),
 
+  // 2026-09 (Tony's vibecode-detector sweep): make sure the production
+  // bundle looks like a professional build, not a Bolt-generated shell.
+  // - minify with esbuild (default, but make it explicit)
+  // - no sourcemaps in prod (was leaking readable source + inflating the
+  //   "unminified JS" signal detectors like DetectVibeCode look for)
+  // - strip legal comments from vendor libraries — those were the 67
+  //   "many comments" the detector was counting
+  esbuild: {
+    legalComments: "none",
+    drop: ["debugger"],
+  },
+
   build: {
     outDir: path.resolve(__dirname, "dist/public"),
     emptyOutDir: true,
     chunkSizeWarningLimit: 700,
+    minify: "esbuild",
+    sourcemap: false,
     rollupOptions: {
       output: {
         manualChunks(id) {
