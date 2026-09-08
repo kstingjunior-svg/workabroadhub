@@ -182,6 +182,17 @@ export default function PricingPage() {
     staleTime: 30 * 1000,
   });
 
+  // 2026-09 (Tony's KES-99-abuse follow-up): server owns the "have you
+  // already used the trial?" answer. Hide the KES 99 card up-front for
+  // returning users instead of surfacing it and then rejecting the
+  // purchase with a 403. Endpoint is public; falls back to eligible=true
+  // on any error (real gate lives inside /api/subscriptions/upgrade).
+  const { data: trialEligibility } = useQuery<{ eligible: boolean; code: string }>({
+    queryKey: ["/api/subscriptions/trial-eligibility"],
+    staleTime: 60 * 1000,
+  });
+  const trialEligible = trialEligibility?.eligible ?? true;
+
   const PLANS: PlanConfig[] = PLAN_UI.map((ui) => {
     // 2026-08 (P0): API returns camelCase `planId`; previously we matched
     // against snake_case `plan_id` → every lookup silently failed → every
@@ -198,6 +209,12 @@ export default function PricingPage() {
       extra.urgency = `Try before you commit — just KES ${price}`;
     }
     return { ...ui, price, ...extra };
+  }).filter((plan) => {
+    // Hide the KES 99 trial card once the user has consumed their
+    // one-time trial. The primary gate is server-side; this just cleans
+    // up the UI so they never see a KES 99 button they can't use.
+    if (plan.id === "trial" && !trialEligible) return false;
+    return true;
   });
 
   const currentPlanId = userPlan?.planId ?? "free";
@@ -297,16 +314,18 @@ export default function PricingPage() {
             </div>
           ) : (
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
-              <Button
-                size="lg"
-                variant="outline"
-                className="border-white/50 text-white bg-white/10 hover:bg-white/20 font-semibold h-12 px-6 text-sm"
-                onClick={() => goToPayment("trial")}
-                data-testid="btn-hero-trial"
-              >
-                <Clock className="h-4 w-4 mr-2" />
-                Try 1 Day — KES 99
-              </Button>
+              {trialEligible && (
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="border-white/50 text-white bg-white/10 hover:bg-white/20 font-semibold h-12 px-6 text-sm"
+                  onClick={() => goToPayment("trial")}
+                  data-testid="btn-hero-trial"
+                >
+                  <Clock className="h-4 w-4 mr-2" />
+                  Try 1 Day — KES 99
+                </Button>
+              )}
               <Button
                 size="lg"
                 className="bg-white text-amber-700 hover:bg-amber-50 font-bold shadow-xl shadow-amber-900/30 px-8 text-base h-12"

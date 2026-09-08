@@ -129,6 +129,18 @@ export function UpgradeModal() {
     staleTime: 30_000,
     enabled: state.open,
   });
+
+  // 2026-09 (Tony's KES-99-abuse follow-up): hide the trial card once the
+  // user has consumed their one-time trial. Server owns the answer via
+  // GET /api/subscriptions/trial-eligibility; falls back to eligible=true
+  // if the endpoint errors. Real enforcement lives inside /api/subscriptions/upgrade.
+  const { data: trialEligibility } = useQuery<{ eligible: boolean; code: string }>({
+    queryKey: ["/api/subscriptions/trial-eligibility"],
+    staleTime: 60 * 1000,
+    enabled: state.open,
+  });
+  const trialEligible = trialEligibility?.eligible ?? true;
+
   // 2026-09 EMERGENCY (Tony: "KES 1000 not going through"): if /api/plans
   // omits any tier row (stale cache, admin toggle, DB hiccup), planPrice()
   // returned undefined → proFinalPrice undefined → the green 'Send M-Pesa
@@ -380,7 +392,11 @@ export function UpgradeModal() {
                 </div>
               </div>
 
-              {/* Trial plan — KES 99 / 1 day */}
+              {/* Trial plan — KES 99 / 1 day
+                  2026-09 (Tony's KES-99-abuse follow-up): hidden entirely
+                  once the user has consumed their one-time trial. Server
+                  authority via /api/subscriptions/trial-eligibility. */}
+              {trialEligible && (
               <button
                 type="button"
                 onClick={() => setSelectedPlan("trial")}
@@ -405,6 +421,7 @@ export function UpgradeModal() {
                   {selectedPlan === "trial" ? "✓ Selected" : "Tap to pick"}
                 </div>
               </button>
+              )}
 
               {/* Monthly plan — KES 1,000 / 30 days — DEFAULT */}
               <button

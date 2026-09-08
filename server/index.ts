@@ -807,6 +807,22 @@ app.use((req, res, next) => {
         .then(({ bootstrapCvAiSchema }) => bootstrapCvAiSchema())
         .catch((err) => console.error("[Server] CV AI schema bootstrap deferred failure:", err?.message));
       console.log("[Server] ✓ CV AI routes registered (bootstrap deferred, non-blocking)");
+
+      // 2026-09 (Tony's KES-99-abuse follow-up): register the trial
+      // eligibility endpoint so the pricing page + upgrade modal can
+      // hide the KES 99 card up-front for users who've already used
+      // their trial. Also fire-and-forget the DB unique-index bootstrap
+      // that closes the last race-condition gap. See server/lib/trial-gate.ts.
+      // Using .then() (not top-level await) so the CJS build doesn't
+      // choke — bit us before on scout-jobs / write-from-scratch.
+      import("./lib/trial-gate")
+        .then(({ registerTrialEligibilityRoute, bootstrapTrialGuards }) => {
+          registerTrialEligibilityRoute(app);
+          bootstrapTrialGuards().catch((err) =>
+            console.error("[trial-gate] bootstrap error (non-fatal):", err?.message),
+          );
+        })
+        .catch((err) => console.error("[Server] trial-gate registration failed:", err?.message));
     } catch (err: any) {
       console.error("[Server] ❌ CV AI route registration failed:", err?.message);
     }
