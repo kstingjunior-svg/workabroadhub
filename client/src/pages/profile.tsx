@@ -493,7 +493,7 @@ export default function Profile() {
           <Card>
             <CardHeader>
               <CardTitle>Account Information</CardTitle>
-              <CardDescription>Your basic account details from Replit Auth</CardDescription>
+              <CardDescription>Your basic account details</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid sm:grid-cols-2 gap-4">

@@ -61,7 +61,7 @@ export default function DataSafetyPage() {
           <Row
             label="Name & email address"
             value={<YES />}
-            note="Collected via Replit Auth (OpenID Connect) for account creation and login"
+            note="Collected during sign-up and login (email + password or Google sign-in via OpenID Connect) for account creation and access."
           />
           <Row
             label="Phone number"
@@ -96,7 +96,7 @@ export default function DataSafetyPage() {
 
         <Section icon={Lock} title="Data Security">
           <Row label="Data encrypted in transit?" value={<YES />} note="All communication uses HTTPS / TLS 1.2+" />
-          <Row label="Data encrypted at rest?" value={<YES />} note="Database hosted on encrypted Replit PostgreSQL infrastructure" />
+          <Row label="Data encrypted at rest?" value={<YES />} note="Database hosted on encrypted managed PostgreSQL infrastructure" />
           <Row label="Secure session management?" value={<YES />} note="Server-side sessions with HttpOnly cookies; CSRF protection on all mutations" />
           <Row label="Rate limiting and abuse protection?" value={<YES />} note="Per-IP rate limiting, DDoS protection, bot detection, and fraud detection engine" />
           <Row label="API keys exposed to client?" value={<NO />} note="All API keys are stored as server-side environment secrets only" />
@@ -118,7 +118,7 @@ export default function DataSafetyPage() {
             { name: "OpenAI (ChatGPT / GPT-4o-mini)", data: "Anonymised CV text, job descriptions, questions typed into any AI tool (name/phone/email stripped)", purpose: "AI Career Advisor + all AI tools (CV checker, cover letter generator, scam checker, offer check, visa check, interview practice, career match, write-from-scratch, Nanjila chat). Not used to train OpenAI models. Retained by OpenAI 30 days for abuse monitoring then deleted." },
             { name: "Supabase", data: "Anonymised user records and analytics events", purpose: "Secondary database mirror for real-time analytics and redundancy" },
             { name: "Google Firebase (Realtime Database)", data: "Anonymised user ID and notification payloads", purpose: "Real-time notification delivery and live dashboard updates" },
-            { name: "Replit Infrastructure", data: "Encrypted primary database and session storage", purpose: "App hosting and primary data storage" },
+            { name: "Managed Cloud Infrastructure", data: "Encrypted primary database and session storage", purpose: "App hosting and primary data storage" },
           ].map(({ name, data, purpose }) => (
             <div key={name} className="py-2 border-b last:border-0">
               <p className="text-sm font-semibold">{name}</p>

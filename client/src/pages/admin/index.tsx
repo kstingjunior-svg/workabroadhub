@@ -276,7 +276,7 @@ export default function AdminDashboard() {
             queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
             toast({
               title: "New user signed up",
-              description: `${msg.firstName || msg.email} joined via ${msg.method === "replit" ? "Replit" : "email"}`,
+              description: `${msg.firstName || msg.email} joined via ${msg.method === "replit" ? "Google" : "email"}`,
             });
           }
         } catch {}
