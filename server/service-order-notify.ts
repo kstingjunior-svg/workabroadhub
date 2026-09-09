@@ -51,11 +51,9 @@ export async function notifyOrderNeedsReview(orderId: string): Promise<void> {
     const serviceName  = order.service_name || "document";
     const appOrigin    = (process.env.APP_ORIGIN || "https://workabroadhub.tech").replace(/\/$/, "");
     const orderUrl     = `${appOrigin}/order/${orderId}`;
-    const supportPhone = (process.env.WHATSAPP_SUPPORT_NUMBER || process.env.ADMIN_PHONE_NUMBER || "")
-      .replace(/^\+?/, "");
-    const supportLine  = supportPhone
-      ? `\n\nQuestions? WhatsApp us on wa.me/${supportPhone} — Tony reads every message personally.`
-      : `\n\nQuestions? Reply here — Tony reads every message personally.`;
+    // 2026-09 (Tony): WhatsApp completely stripped from customer copy —
+    // Twilio doesn't cover Kenya WhatsApp so any promise here becomes a lie.
+    const supportLine  = `\n\nQuestions? Reply to your confirmation email — Tony reads every message personally.`;
 
     // ── Email ────────────────────────────────────────────────────────────────
     if (user.email) {
@@ -108,22 +106,10 @@ You paid for quality, and quality is what we'll deliver.
       }
     }
 
-    // ── WhatsApp ─────────────────────────────────────────────────────────────
-    if (user.phone) {
-      try {
-        const { sendWhatsApp } = await import("./services/whatsapp");
-        const waMessage =
-          `Hi ${firstName}, this is WorkAbroad Hub.\n\n` +
-          `Our AI produced a first draft of your *${serviceName}* but the result didn't match the quality we promise you. Rather than send you something less than perfect, we've flagged it for personal review.\n\n` +
-          `You'll get your polished ${serviceName.toLowerCase()} *within 4 hours* — same day, no extra charge.\n\n` +
-          `Your original is safe. Nothing was lost.\n\n` +
-          `Status: ${orderUrl}` +
-          supportLine;
-        await sendWhatsApp(user.phone, waMessage);
-      } catch (waErr: any) {
-        console.warn(`[notifyOrderNeedsReview] WhatsApp failed for ${orderId}: ${waErr?.message}`);
-      }
-    }
+    // 2026-09 (Tony): WhatsApp send removed — Twilio doesn't support
+    // Kenya WhatsApp. Email is the sole customer-facing channel until we
+    // switch BSPs. Africa's Talking SMS is used for short verification
+    // codes only, not long delivery messages like this one.
 
     // ── In-app notification ──────────────────────────────────────────────────
     try {

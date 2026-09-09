@@ -291,7 +291,7 @@ export async function deliverService(payment: any, user: any): Promise<void> {
     case "assisted_apply": {
       await sendWhatsApp(
         phone,
-        `📦 Assisted Apply Confirmed — KES ${amount.toLocaleString()} received!\n\nHi ${name}, we're preparing your 5 tailored application kits right now.\n\nEach kit includes a custom CV + cover letter for a real overseas employer that's currently hiring, plus step-by-step submission instructions.\n\nYou'll get the full PDF via WhatsApp and email in ~3 minutes.\n\n— WorkAbroad Hub 🌍`,
+        `📦 Assisted Apply Confirmed — KES ${amount.toLocaleString()} received!\n\nHi ${name}, we're preparing your 5 tailored application kits right now.\n\nEach kit includes a custom CV + cover letter for a real overseas employer that's currently hiring, plus step-by-step submission instructions.\n\nYou'll get the full PDF via email in ~3 minutes.\n\n— WorkAbroad Hub 🌍`,
       ).catch((err) => { console.error('[deliverService] WhatsApp failed:', { error: err?.message, timestamp: new Date().toISOString() }); });
 
       storage.createUserNotification({

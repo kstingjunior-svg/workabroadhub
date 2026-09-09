@@ -1423,7 +1423,7 @@ export async function processAndDeliverOrder(orderId: string): Promise<{
                 </a>
               </p>
               <p style="color:#64748b;font-size:13px;margin-top:24px">
-                Need revisions? Reply to this email or WhatsApp us and we'll be happy to help.<br>
+                Need revisions? Just reply to this email and we'll be happy to help.<br>
                 — The WorkAbroad Hub Team
               </p>
             </div>

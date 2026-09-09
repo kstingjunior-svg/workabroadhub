@@ -125,7 +125,7 @@ function mapErrorForUser(raw: string): string {
     (lower.includes("429") && lower.includes("exceeded")) ||
     lower.includes("check your plan")
   ) {
-    return "We're catching up on high demand right now. Your payment is safe. Our team has been alerted and your document will be delivered within the hour — you'll get an email and WhatsApp the moment it's ready. If you'd prefer a refund, reply to your confirmation email.";
+    return "We're catching up on high demand right now. Your payment is safe. Our team has been alerted and your document will be delivered within the hour — you'll get an email the moment it's ready. If you'd prefer a refund, reply to your confirmation email.";
   }
 
   // Rate limit — transient, will self-heal on the retry sweep.
@@ -144,7 +144,7 @@ function mapErrorForUser(raw: string): string {
     lower.includes("etimedout") ||
     lower.includes("econnreset")
   ) {
-    return "That took longer than expected. Your payment is safe. We're already retrying — you'll get your document by email and WhatsApp the moment it's ready.";
+    return "That took longer than expected. Your payment is safe. We're already retrying — you'll get your document by email the moment it's ready.";
   }
 
   // Empty / invalid AI response — retry sweep handles it.
@@ -177,7 +177,7 @@ function mapErrorForUser(raw: string): string {
   }
 
   // Default fallback — polite but concrete about payment safety.
-  return "Something didn't go through on our side. Your payment is safe. Our team has been alerted and your document will be delivered within the hour by email and WhatsApp. If you'd prefer a refund, reply to your confirmation email and we'll process it right away.";
+  return "Something didn't go through on our side. Your payment is safe. Our team has been alerted and your document will be delivered within the hour by email. If you'd prefer a refund, reply to your confirmation email and we'll process it right away.";
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

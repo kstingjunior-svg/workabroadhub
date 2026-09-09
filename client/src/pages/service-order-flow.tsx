@@ -1267,7 +1267,7 @@ export default function ServiceOrderFlow() {
                   We're on it — your payment is safe
                 </h3>
                 <p className="text-sm text-muted-foreground leading-relaxed">
-                  {errorMsg || "We had a small hiccup processing your order. Our team has been alerted and your document will be delivered within the hour by email and WhatsApp."}
+                  {errorMsg || "We had a small hiccup processing your order. Our team has been alerted and your document will be delivered within the hour by email."}
                 </p>
               </div>
               <div className="rounded-lg bg-teal-50 dark:bg-teal-950/20 border border-teal-200/60 dark:border-teal-900/40 px-4 py-3 text-left space-y-1.5">
