@@ -823,6 +823,13 @@ app.use((req, res, next) => {
           );
         })
         .catch((err) => console.error("[Server] trial-gate registration failed:", err?.message));
+
+      // 2026-09 (Tony's production-reliability audit): diagnostic +
+      // one-click repair endpoints. GET reports every stuck-customer
+      // category in one JSON; POST runs the existing reconcilers.
+      import("./routes/payment-audit")
+        .then(({ registerPaymentAuditRoutes }) => registerPaymentAuditRoutes(app))
+        .catch((err) => console.error("[Server] payment-audit registration failed:", err?.message));
     } catch (err: any) {
       console.error("[Server] ❌ CV AI route registration failed:", err?.message);
     }
