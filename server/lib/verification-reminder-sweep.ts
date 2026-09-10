@@ -75,8 +75,9 @@ function buildEmail(opts: {
   email: string;
   hoursLeftLabel: string;
   urgency: "gentle" | "reminder" | "warning" | "final";
+  freshCode?: string | null;
 }) {
-  const { name, email, hoursLeftLabel, urgency } = opts;
+  const { name, email, hoursLeftLabel, urgency, freshCode } = opts;
   const verifyUrl = `https://workabroadhub.tech/account/verify?email=${encodeURIComponent(email)}`;
 
   const bannerColor =
@@ -101,8 +102,14 @@ function buildEmail(opts: {
       </div>
       <p>Hi ${escapeHtml(name)},</p>
       <p>${openingLine}</p>
-      <p><b>What to do:</b> tap the button below, or open the app and enter the 6-digit code we sent when you signed up. If you can't find the code, request a new one on the verification page.</p>
+      ${freshCode ? `
+      <p><b>Your fresh verification code:</b></p>
+      <p style="font-size:32px;font-weight:700;letter-spacing:8px;background:#f0fdf4;color:#15803d;text-align:center;padding:16px;border-radius:8px;margin:16px 0;">${escapeHtml(freshCode)}</p>
+      <p style="font-size:13px;color:#475569;margin:0 0 16px;">Type these 6 numbers on the verification page — it works for 30 minutes. No need to hunt through spam for the original.</p>
+      ` : `
+      <p><b>What to do:</b> tap the button below to open the verification page, then request a fresh 6-digit code and enter it.</p>
       <p><b>Can't find our email?</b> Check your <b>Spam</b> or <b>Promotions</b> folder — the code comes from <code>noreply@workabroadhub.tech</code>.</p>
+      `}
       <p style="margin:24px 0;">
         <a href="${verifyUrl}"
            style="display:inline-block;background:${bannerColor};color:#fff;font-weight:600;font-size:14px;
@@ -118,7 +125,10 @@ function buildEmail(opts: {
       </p>
     </div>`;
 
-  const text = `Hi ${name},\n\n${openingLine.replace(/<[^>]+>/g, "")}\n\nVerify here: ${verifyUrl}\n\nCan't find our email? Check your Spam or Promotions folder — the code comes from noreply@workabroadhub.tech.\n\nSigned up by mistake? No action needed — the account will be automatically deleted within ${hoursLeftLabel}.\n\n— Tony & the WorkAbroadHub team, Nairobi`;
+  const codeBlock = freshCode
+    ? `\n\nYour fresh verification code: ${freshCode}\nType these 6 numbers on the verification page — it works for 30 minutes.\n`
+    : `\n\nCan't find our email? Check your Spam or Promotions folder — the code comes from noreply@workabroadhub.tech.\n`;
+  const text = `Hi ${name},\n\n${openingLine.replace(/<[^>]+>/g, "")}${codeBlock}\nVerify here: ${verifyUrl}\n\nSigned up by mistake? No action needed — the account will be automatically deleted within ${hoursLeftLabel}.\n\n— Tony & the WorkAbroadHub team, Nairobi`;
 
   return { html, text };
 }
@@ -172,11 +182,28 @@ export async function runVerificationLifecycleSweep(): Promise<SweepResult> {
 
       for (const user of rows) {
         const name = (user.first_name || "").trim() || "there";
+
+        // 2026-09 (Tony: "clients are not seeing codes"): mint a FRESH
+        // code and embed it in the reminder. Rate-limited to
+        // MAX_CODES_PER_HOUR per email so we can't spam the DB. If we're
+        // over the limit or the mint fails for any reason, fall back to
+        // the old "check spam / request a new one" copy — never block
+        // the reminder itself.
+        let freshCode: string | null = null;
+        try {
+          const { mintEmailVerificationCode } = await import("../services/identityVerification");
+          const minted = await mintEmailVerificationCode(user.id, user.email);
+          if (minted.ok) freshCode = minted.code;
+        } catch (err: any) {
+          console.warn(`[verification-reminder] mint failed for ${user.email}: ${err?.message}`);
+        }
+
         const { html, text } = buildEmail({
           name,
           email: user.email,
           hoursLeftLabel: tier.hoursLeftLabel,
           urgency: tier.urgency,
+          freshCode,
         });
 
         try {

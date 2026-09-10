@@ -132,6 +132,36 @@ export async function sendEmailVerificationCode(
 }
 
 /**
+ * 2026-09 (Tony: "clients are not seeing codes"): expose the code-mint
+ * step WITHOUT sending an email. The verification-reminder sweep uses this
+ * to embed a freshly-minted code directly in the reminder body so a user
+ * who missed / lost the original code doesn't need to hunt through spam
+ * or click "resend" — the reminder itself IS the code.
+ *
+ * Same DB behaviour as sendEmailVerificationCode: rate-limit check,
+ * invalidate prior codes, hash + store, 30 min TTL. Just no email send.
+ * Caller is responsible for delivering the returned code somehow.
+ */
+export async function mintEmailVerificationCode(
+  userId: string,
+  email: string,
+): Promise<{ ok: true; code: string } | { ok: false; reason: "rate_limited" }> {
+  const dest = email.trim().toLowerCase();
+  if (await exceededRateLimit(dest, "email")) {
+    return { ok: false, reason: "rate_limited" };
+  }
+  await invalidatePriorCodes(userId, "email");
+  const code = generateCode();
+  const expiresAt = new Date(Date.now() + CODE_TTL_MS);
+  await pool.query(
+    `INSERT INTO verification_codes (user_id, channel, destination, code_hash, expires_at)
+     VALUES ($1, 'email', $2, $3, $4)`,
+    [userId, dest, sha256(code), expiresAt],
+  );
+  return { ok: true, code };
+}
+
+/**
  * Generate + send an SMS verification code via Twilio.
  */
 export async function sendSmsVerificationCode(
