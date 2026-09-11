@@ -1577,48 +1577,31 @@ CRITICAL LENGTH REQUIREMENT — READ CAREFULLY (do not violate):
                 `[quality-guard] orderId=${orderId} retry FAILED ratio=${retryRatio.toFixed(2)} — ` +
                 `flagging for human review, not delivering`
               );
+              // 2026-09 (Tony's mandate): the customer must never see a
+              // "wait 4 hours" screen. Even when the guardrail's length
+              // ratio is out of the ideal window, deliver the best
+              // attempt NOW. Flag refund_requested + needs_human_review
+              // in the DB so admin still sees this order in the queue
+              // and can polish it internally, but we never block the
+              // download. output stays as cleanedRetry — the "least bad"
+              // attempt — and delivery proceeds through the normal
+              // completed → notifyOrderCompleted path below.
+              output = cleanedRetry;
               await pool.query(
-                // 2026-08 (Tony bug fix): was leaving status='processing' which
-                // caused the client polling loop to hang forever showing
-                // "Generating your CV Revamp...". Now transitions to
-                // 'awaiting_review' — a terminal status the client can render
-                // as "being personally reviewed, expect within 4 hours".
-                // 2026-08 Fix B: also flag refund_requested = true. Guardrail
-                // firing means the user got a substandard first attempt —
-                // regardless of whether we manually rewrite for them free,
-                // admin should have the queue of "these people paid but got
-                // less than promised" for accounting. Refunds get processed
-                // via the existing refunds admin view.
                 `UPDATE service_orders
-                 SET status = 'awaiting_review',
-                     output_text = $2,
-                     needs_human_review = true,
-                     human_review_notes = $3,
+                 SET needs_human_review = true,
+                     human_review_notes = $2,
                      refund_requested = true,
                      updated_at = NOW()
                  WHERE id = $1`,
                 [
                   orderId,
-                  cleanedRetry,
-                  `auto-flagged: length ratio ${retryRatio.toFixed(2)} outside [${MIN_RATIO}, ${MAX_RATIO}] on retry. Input=${inputLen} Output=${cleanedRetry.length}. Original attempt also failed at ${ratio.toFixed(2)}. Needs manual review before delivery.`
+                  `auto-flagged (INTERNAL, customer already got the file): length ratio ${retryRatio.toFixed(2)} outside [${MIN_RATIO}, ${MAX_RATIO}] on retry. Input=${inputLen} Output=${cleanedRetry.length}. Original attempt also failed at ${ratio.toFixed(2)}. Consider a manual touch-up + refund review.`
                 ]
               );
-
-              // Notify user their CV is being personally reviewed (not
-              // delivered as usual). Prevents the "you sent me garbage"
-              // complaint and buys us time to fix or human-rewrite.
-              try {
-                const { notifyOrderNeedsReview } = await import("./service-order-notify");
-                await notifyOrderNeedsReview(orderId).catch(() => {});
-              } catch {
-                // Fallback: at least log so Tony can WhatsApp the user manually
-                console.warn(
-                  `[quality-guard] orderId=${orderId} needs manual outreach — ` +
-                  `notifyOrderNeedsReview module missing`
-                );
-              }
-              return;   // stop here — do NOT mark completed, do NOT deliver
-            }
+              // Do NOT return — fall through to the normal completed
+              // path so the download link is emitted and the customer
+              // is redirected to their file.
           }
         } catch (retryErr: any) {
           console.error(`[quality-guard] retry threw: ${retryErr?.message} — keeping original output`);
@@ -1645,30 +1628,27 @@ CRITICAL LENGTH REQUIREMENT — READ CAREFULLY (do not violate):
         // touch-up we don't have bandwidth to do at scale.
         const pre = await preflightScoreCV(output, 55);
         if (pre.ok && !pre.passed) {
+          // 2026-09 (Tony's mandate): flag internally, deliver externally.
+          // Customer never sees a "wait" screen — admin sees the order
+          // in the refund_requested queue for a polish pass.
           console.warn(
-            `[ats-preflight] orderId=${orderId} FAILED — score=${pre.score} < 55. ` +
-            `Kicking to awaiting_review. Weaknesses: ${pre.weaknesses.join(" | ")}`,
+            `[ats-preflight] orderId=${orderId} INTERNAL FLAG — score=${pre.score} < 55 ` +
+            `but delivering anyway per no-wait-screen policy. Weaknesses: ${pre.weaknesses.join(" | ")}`,
           );
           await pool.query(
             `UPDATE service_orders
-             SET status = 'awaiting_review',
-                 output_text = $2,
-                 needs_human_review = true,
-                 human_review_notes = $3,
+             SET needs_human_review = true,
+                 human_review_notes = $2,
                  refund_requested = true,
                  updated_at = NOW()
              WHERE id = $1`,
             [
               orderId,
-              output,
-              `auto-flagged: ATS preflight score ${pre.score} < 55. Weaknesses: ${pre.weaknesses.join("; ")}. Suggestion: ${pre.suggestion}. Needs manual review before delivery.`,
+              `auto-flagged (INTERNAL, customer already got the file): ATS preflight score ${pre.score} < 55. Weaknesses: ${pre.weaknesses.join("; ")}. Suggestion: ${pre.suggestion}. Consider a manual touch-up + refund review.`,
             ],
           );
-          try {
-            const { notifyOrderNeedsReview } = await import("./service-order-notify");
-            await notifyOrderNeedsReview(orderId).catch(() => {});
-          } catch {}
-          return;
+          // Delivery proceeds through the normal completed path below —
+          // do NOT return, do NOT call notifyOrderNeedsReview.
         }
         if (pre.ok) {
           console.log(`[ats-preflight] orderId=${orderId} PASSED — score=${pre.score}`);
