@@ -1128,7 +1128,6 @@ export default function ServiceOrderFlow() {
               admin needs to touch up an order, they do it INTERNALLY
               from the refund_requested queue without ever forcing the
               customer to wait. */}
-          )}
 
           {stage === "done" && orderId && (
             <CardContent className="text-center py-8 space-y-4">
