@@ -1602,6 +1602,7 @@ CRITICAL LENGTH REQUIREMENT — READ CAREFULLY (do not violate):
               // Do NOT return — fall through to the normal completed
               // path so the download link is emitted and the customer
               // is redirected to their file.
+            }
           }
         } catch (retryErr: any) {
           console.error(`[quality-guard] retry threw: ${retryErr?.message} — keeping original output`);
