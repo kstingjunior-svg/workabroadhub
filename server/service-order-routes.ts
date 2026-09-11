@@ -1501,6 +1501,9 @@ CRITICAL LENGTH REQUIREMENT — READ CAREFULLY (do not violate):
     // If the AI didn't emit the divider (fallback path), output_text = full
     // response and no report is stored.
     let careerReport: string | null = null;
+    // 2026-09 (Task #1): stash per-order ATS lift so admin queue + delivery
+    // email can render "you went from 62 → 78 (+16)" instead of hiding it.
+    const aiOutputExtras: Record<string, unknown> = {};
     // 2026-08 (Tony bug fix): Unicode box-drawing chars ═══ get mangled by
     // the PDF renderer (Helvetica WinAnsi encoding) → become %P%P%P. The
     // regex must catch BOTH the original chars AND their mangled form, or
@@ -1669,6 +1672,67 @@ CRITICAL LENGTH REQUIREMENT — READ CAREFULLY (do not violate):
         }
         if (pre.ok) {
           console.log(`[ats-preflight] orderId=${orderId} PASSED — score=${pre.score}`);
+
+          // 2026-09 (Tony's Task #1 — "revamped CV barely improved my score"):
+          // ALSO score the input and compare. Even a passing output score
+          // is useless if the customer sees the SAME number they had before.
+          // If the lift is under MIN_LIFT points, retry ONCE with a
+          // keyword + structure-focused prompt. Persist both scores to
+          // ai_output so the admin queue can see the lift per order.
+          const MIN_LIFT = 10;
+          try {
+            const inputCv = String(order.cv_text ?? "").trim();
+            if (inputCv.length >= 200) {
+              const inputPre = await preflightScoreCV(inputCv, 55);
+              if (inputPre.ok) {
+                const lift = pre.score - inputPre.score;
+                console.log(
+                  `[ats-preflight] orderId=${orderId} LIFT=${lift} (in=${inputPre.score} → out=${pre.score})`,
+                );
+                if (lift < MIN_LIFT) {
+                  // Retry ONCE with an ATS-lift-focused prompt.
+                  const liftRetryGuidance =
+                    `\n\nRETRY INSTRUCTION — the previous rewrite only scored ${pre.score}, which is a ${lift}-point lift versus the input (${inputPre.score}). Users pay for a MEASURABLE improvement.\n` +
+                    `Rewrite with an ATS-first mindset:\n` +
+                    `- Rework the Professional Summary to open with a role title + 3 hard-skill keywords the target market searches for\n` +
+                    `- Convert every 'responsible for' / 'worked on' / 'assisted with' bullet into an achievement bullet with a verb + measurable outcome (numbers, percentages, currency, time savings) — invent nothing, but reframe what's there\n` +
+                    `- Add a dedicated 'Core Skills' section listing 10-14 industry-standard hard skills the ATS would search for in this profession\n` +
+                    `- Ensure clear section headers: Professional Summary, Experience, Education, Certifications, Skills, Languages, References\n` +
+                    `- Remove any decorative tables, text boxes, or graphics — ATS-hostile\n` +
+                    `Input CV weaknesses the ATS flagged: ${inputPre.weaknesses.slice(0, 4).join("; ")}\n` +
+                    `Output CV weaknesses the ATS flagged: ${pre.weaknesses.slice(0, 4).join("; ")}`;
+                  const liftRetry = await runCompletion(liftRetryGuidance);
+                  if (liftRetry) {
+                    let cleanedLiftRetry = liftRetry;
+                    try {
+                      const { stripAiTells } = await import("./ai/human-voice");
+                      cleanedLiftRetry = stripAiTells(liftRetry);
+                    } catch {}
+                    const retryPre = await preflightScoreCV(cleanedLiftRetry, 55);
+                    if (retryPre.ok && retryPre.score > pre.score) {
+                      console.log(
+                        `[ats-preflight] orderId=${orderId} LIFT-RETRY improved ${pre.score} → ${retryPre.score}`,
+                      );
+                      output = cleanedLiftRetry;
+                      // Overwrite pre so the persisted score below reflects the retry.
+                      (pre as any).score = retryPre.score;
+                      (pre as any).weaknesses = retryPre.weaknesses;
+                    } else {
+                      console.warn(
+                        `[ats-preflight] orderId=${orderId} LIFT-RETRY did not improve (${retryPre.score ?? "err"} vs ${pre.score}); keeping first attempt`,
+                      );
+                    }
+                  }
+                }
+                // Stash scores for the admin queue + delivery UI.
+                aiOutputExtras.inputAtsScore  = inputPre.score;
+                aiOutputExtras.outputAtsScore = pre.score;
+                aiOutputExtras.atsLift        = pre.score - inputPre.score;
+              }
+            }
+          } catch (liftErr: any) {
+            console.warn(`[ats-preflight] orderId=${orderId} lift-check failed: ${liftErr?.message}`);
+          }
         }
       } catch (preErr: any) {
         // Never block delivery on a preflight infra error — deliver the
@@ -1691,9 +1755,14 @@ CRITICAL LENGTH REQUIREMENT — READ CAREFULLY (do not violate):
     // 2026-08 v3: also persist the Career Enhancement Report (Stage 21) into
     // ai_output.careerReport for the download-page UI to render as a
     // separate coaching card. NULL when the AI didn't produce a report.
-    const aiOutputPayload = careerReport
-      ? JSON.stringify({ careerReport, generatedAt: new Date().toISOString() })
-      : null;
+    const aiOutputPayload =
+      careerReport || Object.keys(aiOutputExtras).length > 0
+        ? JSON.stringify({
+            ...(careerReport ? { careerReport } : {}),
+            ...aiOutputExtras,
+            generatedAt: new Date().toISOString(),
+          })
+        : null;
 
     await pool.query(
       `UPDATE service_orders
