@@ -28,6 +28,7 @@
  */
 
 import type { Express, Request, Response } from "express";
+import { requireToolCredit } from "./tool-pay";
 import multer from "multer";
 import crypto from "crypto";
 import { pool } from "../db";
@@ -357,7 +358,7 @@ async function extractFromImage(buffer: Buffer, mime: string): Promise<string> {
 // ── Register route ──────────────────────────────────────────────────────────
 
 export function registerIeltsVerifyRoute(app: Express): void {
-  app.post("/api/tools/ielts-verify", upload.single("file"), async (req: Request, res: Response) => {
+  app.post("/api/tools/ielts-verify", requireToolCredit("ielts_verify"), upload.single("file"), async (req: Request, res: Response) => {
     try {
       if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
@@ -454,6 +455,7 @@ export function registerIeltsVerifyRoute(app: Express): void {
   // ═══════════════════════════════════════════════════════════════════════
   app.post(
     "/api/tools/ielts-verify-ai",
+    requireToolCredit("ielts_verify"),
     (req: any, res, next) => upload.single("file")(req, res, (err: any) => {
       if (!err) return next();
       const isSize = err?.code === "LIMIT_FILE_SIZE";

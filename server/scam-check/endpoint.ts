@@ -7,6 +7,7 @@
  */
 
 import type { Express, Request, Response } from "express";
+import { requireToolCredit } from "../tools/tool-pay";
 import multer from "multer";
 import rateLimit from "express-rate-limit";
 
@@ -41,6 +42,7 @@ export function registerScamCheckRoute(app: Express): void {
   app.post(
     "/api/tools/job-scam-check",
     scamLimiter,
+    requireToolCredit("job_scam_check"),
     (req: any, res, next) => upload.single("file")(req, res, (err: any) => {
       if (!err) return next();
       const isSize = err?.code === "LIMIT_FILE_SIZE";

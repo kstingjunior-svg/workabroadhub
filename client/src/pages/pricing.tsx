@@ -382,6 +382,38 @@ export default function PricingPage() {
           </p>
         </div>
 
+        {/* ── TRIAL-USED UPSELL — 2026-09 ─────────────────────────────────
+            Server says this visitor already consumed the one-time KES 99
+            trial (via /api/subscriptions/trial-eligibility). Instead of a
+            silently missing card, suggest the two real upgrade paths. */}
+        {!trialEligible && (
+          <div className="mb-6 rounded-2xl border-2 border-amber-300 bg-amber-50 p-5 text-center" data-testid="trial-used-upsell">
+            <p className="text-sm font-bold text-amber-900 mb-1">
+              You've already used your one-time KES 99 trial.
+            </p>
+            <p className="text-sm text-amber-800 mb-4">
+              Ready for the full experience? Get 30 days for <strong>KES 1,000</strong>, or a full year for <strong>KES 4,500</strong> — the best value.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <Button
+                variant="outline"
+                className="border-amber-400 bg-white text-amber-800 hover:bg-amber-100 font-semibold"
+                onClick={() => goToPayment("monthly")}
+                data-testid="btn-upsell-monthly"
+              >
+                Monthly — KES 1,000
+              </Button>
+              <Button
+                className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-semibold"
+                onClick={() => goToPayment("pro")}
+                data-testid="btn-upsell-yearly"
+              >
+                Yearly — KES 4,500 · Best Value
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* ── 3-TIER PLAN CARDS ── */}
         {plansLoading && (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 items-start mb-4">
@@ -576,11 +608,11 @@ export default function PricingPage() {
                 size="lg"
                 variant="outline"
                 className="border-green-500 text-green-700 hover:bg-green-50 dark:hover:bg-green-900/20 font-semibold h-12 px-8"
-                onClick={() => goToPayment("trial")}
+                onClick={() => goToPayment(trialEligible ? "trial" : "monthly")}
                 data-testid="btn-cta-trial"
               >
                 <Clock className="h-4 w-4 mr-2" />
-                Try 1 Day — KES 99
+                {trialEligible ? "Try 1 Day — KES 99" : "Go Monthly — KES 1,000"}
               </Button>
               <Button
                 size="lg"
@@ -668,11 +700,11 @@ export default function PricingPage() {
                 size="lg"
                 variant="outline"
                 className="border-white/60 text-white bg-white/15 hover:bg-white/25 font-semibold h-12 px-7"
-                onClick={() => goToPayment("trial")}
+                onClick={() => goToPayment(trialEligible ? "trial" : "monthly")}
                 data-testid="btn-bottom-trial"
               >
                 <Clock className="h-4 w-4 mr-2" />
-                Try 1 Day — KES 99
+                {trialEligible ? "Try 1 Day — KES 99" : "Go Monthly — KES 1,000"}
               </Button>
               <Button
                 size="lg"
@@ -706,10 +738,10 @@ export default function PricingPage() {
           <div className="flex gap-2 shrink-0">
             <Button
               className="bg-white/20 border border-white/40 text-white hover:bg-white/30 font-semibold h-9 px-4 text-xs"
-              onClick={() => goToPayment("trial")}
+              onClick={() => goToPayment(trialEligible ? "trial" : "monthly")}
               data-testid="btn-sticky-trial"
             >
-              Try KES 99
+              {trialEligible ? "Try KES 99" : "KES 1,000/mo"}
             </Button>
             <Button
               className="bg-white text-amber-700 hover:bg-amber-50 font-bold h-9 px-4 text-xs"

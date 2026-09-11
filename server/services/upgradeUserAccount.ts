@@ -20,7 +20,7 @@
  */
 
 import { storage } from "../storage";
-import { db } from "../db";
+import { db, pool } from "../db";
 import { activityEvents } from "@shared/schema";
 import { reportRejection } from "../lib/sentry";
 
@@ -259,6 +259,61 @@ export async function upgradeUserAccount(opts: UpgradeOptions): Promise<UpgradeR
     };
   }
 
+  // ── 3b. ONE-TIME-TRIAL GATE at grant time (2026-09 defence-in-depth) ──────
+  // The initiation endpoints (/api/subscriptions/upgrade and PayPal
+  // create-order) refuse repeat trials up-front, and trial-gate.ts's
+  // unique partial indexes stop a second successful trial row from
+  // committing. This check closes the remaining gap: an async grant path
+  // (PayPal capture, STK callback, recovery sweep, reconciler) activating
+  // a SECOND trial for a user/phone that already consumed one. It runs the
+  // same predicate as isTrialConsumed() but excludes the payment being
+  // processed right now, so a legitimate FIRST trial always passes.
+  if (resolvedPlan === "trial" || resolvedPlan === "basic") {
+    try {
+      const { rows: priorTrial } = await pool.query<{ consumed: boolean }>(
+        `SELECT EXISTS(
+           SELECT 1 FROM payments
+            WHERE ($1::text IS NOT NULL AND user_id = $1
+                   OR $2::text IS NOT NULL AND phone = $2)
+              AND id::text <> $3::text
+              AND status IN ('success', 'completed')
+              AND (plan_id IN ('trial', 'basic')
+                   OR service_id IN ('plan_trial', 'plan_basic'))
+         ) AS consumed`,
+        [resolvedUserId ?? null, user.phone ?? null, String(paymentId)],
+      );
+      if (priorTrial[0]?.consumed) {
+        console.error(
+          `[Upgrade][SECURITY] Repeat-trial grant BLOCKED: userId=${resolvedUserId} ` +
+          `phone=${user.phone ?? "n/a"} paymentId=${paymentId} txn=${transactionId} method=${method}`
+        );
+        await storage.updatePayment(paymentId, {
+          status: "failed",
+          isSuspicious: true,
+          fraudReason: "repeat_trial_blocked_at_grant",
+        } as any).catch((err) => reportRejection(err, 'services/upgradeUserAccount'));
+        await storage.createUserNotification({
+          userId: resolvedUserId,
+          type: "error",
+          title: "Trial Already Used",
+          message: "The KES 99 trial is a one-time offer per person, so this payment was not applied to a second trial. Upgrade to Monthly (KES 1,000) or Yearly (KES 4,500) for continued access — or contact support about this payment.",
+        }).catch((err) => reportRejection(err, 'services/upgradeUserAccount'));
+        return {
+          success: false,
+          planActivated: resolvedPlan,
+          expiresAt: new Date(),
+          blocked: true,
+          error: "The KES 99 trial can only be used once per person. Upgrade to Monthly (KES 1,000) or Yearly (KES 4,500) to continue.",
+        };
+      }
+    } catch (gateErr: any) {
+      // If THIS check itself errors we continue — the unique partial index
+      // on payments still refuses a duplicate successful trial row below.
+      console.error("[Upgrade][trial-gate] grant-time check failed (continuing):", gateErr?.message);
+      reportRejection(gateErr, 'services/upgradeUserAccount');
+    }
+  }
+
   // ── 4. Mark payment as completed — stamp email + planId for full audit trail ──
   try {
     await storage.updatePayment(paymentId, {
@@ -271,6 +326,29 @@ export async function upgradeUserAccount(opts: UpgradeOptions): Promise<UpgradeR
       `[Upgrade] Payment ${paymentId} completed: userId=${resolvedUserId} email=${user.email} plan=${resolvedPlan} txn=${transactionId}`
     );
   } catch (err: any) {
+    // 2026-09: if the trial-gate unique partial index rejected this update
+    // (unique_violation 23505 on a trial/basic plan), a successful trial
+    // already exists for this user/phone — do NOT proceed to activation.
+    // Previously this catch swallowed the error and activated anyway,
+    // which silently bypassed the index layer.
+    if ((resolvedPlan === "trial" || resolvedPlan === "basic") && err?.code === "23505") {
+      console.error(
+        `[Upgrade][SECURITY] Trial unique-index violation on payment ${paymentId} ` +
+        `(userId=${resolvedUserId}) — refusing second trial activation.`
+      );
+      await storage.updatePayment(paymentId, {
+        status: "failed",
+        isSuspicious: true,
+        fraudReason: "repeat_trial_blocked_by_index",
+      } as any).catch((e2) => reportRejection(e2, 'services/upgradeUserAccount'));
+      return {
+        success: false,
+        planActivated: resolvedPlan,
+        expiresAt: new Date(),
+        blocked: true,
+        error: "The KES 99 trial can only be used once per person. Upgrade to Monthly (KES 1,000) or Yearly (KES 4,500) to continue.",
+      };
+    }
     console.error(`[Upgrade] Failed to update payment record ${paymentId}:`, err.message);
   }
 

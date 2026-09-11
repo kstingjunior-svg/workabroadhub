@@ -21,6 +21,7 @@ import {
   Mail, Globe, Building2, DollarSign, Briefcase,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useToolPayment, TOOL_SCAN_PRICE_KES } from "@/hooks/use-tool-payment";
 import { fetchCsrfToken } from "@/lib/queryClient";
 
 interface SubScore { key: string; label: string; score: number; detail: string; }
@@ -92,13 +93,14 @@ const VERDICT_STYLES = {
 
 export default function OfferCheckPage() {
   usePageSeo({
-    title:       "Free Offer Letter Verifier — Check If Your Overseas Job Offer Is Real | WorkAbroad Hub",
+    title:       "Offer Letter Verifier (KES 100/check) — Is Your Overseas Job Offer Real? | WorkAbroad Hub",
     description: "Upload any overseas job-offer letter and get an instant AI verification report. Detects fake employer stamps, wrong salary formats, forged visa paperwork, and language patterns used by scammers.",
     path:        "/tools/offer-check",
     keywords:    ["offer letter verify kenya", "fake job offer check", "verify overseas offer", "employment letter check kenya"],
   });
 
   const { toast } = useToast();
+  const pay = useToolPayment("offer_check");
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [file, setFile] = useState<File | null>(null);
@@ -138,6 +140,13 @@ export default function OfferCheckPage() {
 
   async function handleVerify() {
     if (!file) return;
+    // 2026-09 (Tony's monetisation directive): KES 100 per scan. If no paid
+    // credit is held, collect payment first — handleVerify re-runs
+    // automatically the moment M-Pesa confirms.
+    if (!pay.scanToken) {
+      pay.requestScan(() => handleVerify());
+      return;
+    }
     setLoading(true);
     setResult(null);
     // 2026-09 (Tony's screenshot: "Network issue — check your connection"
@@ -153,7 +162,7 @@ export default function OfferCheckPage() {
       return fetch("/api/tools/offer-verify", {
         method: "POST",
         credentials: "include",
-        headers: { "X-CSRF-Token": csrf },
+        headers: { "X-CSRF-Token": csrf, "x-scan-token": pay.scanToken ?? "" },
         body: form,
       });
     }
@@ -183,6 +192,14 @@ export default function OfferCheckPage() {
     }
     try {
       const data = await res.json();
+      if (res.status === 402) {
+        // Credit missing/expired/used — server is the gate; re-collect payment.
+        setLoading(false);
+        pay.handle402(data);
+        return;
+      }
+      // The gate consumed the credit for this scan — one payment, one check.
+      pay.consumeToken();
       if (!data.ok) {
         toast({ title: "Couldn't verify", description: data.message || "Please try again with a clearer image.", variant: "destructive" });
       } else {
@@ -220,7 +237,12 @@ export default function OfferCheckPage() {
           <p className="text-sm text-gray-600 dark:text-gray-400 max-w-lg mx-auto leading-relaxed">
             Our AI reads the letter, checks the employer, benchmarks the salary against real market rates, flags scam patterns, and shows you where to verify with the government.
           </p>
+          <p className="text-xs font-semibold text-teal-700 dark:text-teal-300">
+            KES {TOOL_SCAN_PRICE_KES} per check · paid via M-Pesa · one payment = one scan
+          </p>
         </div>
+
+        <pay.PayModal />
 
         {!result && (
           <Card className="border-2 border-dashed border-teal-300 dark:border-teal-800">

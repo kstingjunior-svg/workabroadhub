@@ -5903,6 +5903,26 @@ Crawl-delay: 1`);
             })();
           }
 
+          // 2026-09 TOOL-SCAN FAST-PATH (Tony's monetisation directive):
+          // a KES 100 pay-per-scan payment (server/tools/tool-pay.ts). The
+          // success row IS the scan credit — there is no plan to activate
+          // and no service to unlock or deliver, so skip the fulfilment
+          // work item and the whole payment pipeline. requireToolCredit()
+          // consumes the credit atomically when the scan actually runs.
+          try {
+            const tmeta: any = typeof payment.metadata === "string"
+              ? JSON.parse(payment.metadata)
+              : (payment.metadata ?? {});
+            if (tmeta?.isToolScan === true) {
+              console.log(`[MPESA/PAYMENTS CALLBACK] Tool-scan credit confirmed: paymentId=${payment.id} tool=${tmeta.tool ?? "?"}`);
+              getIO().emit("new_payment", {
+                amount: amountPaid != null ? Math.round(amountPaid) : (payment.amount ?? 0),
+                phone:  phonePaid || null,
+              });
+              return;
+            }
+          } catch { /* metadata parse fail — fall through to normal flow */ }
+
           // Service request — raise a fulfilment work item for this service
           createServiceRequest(
             String(payment.userId),
@@ -20246,6 +20266,36 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
           console.error(`[PayPal][Security] Plan "${planId}" not found in DB or has no price — rejecting create-order`);
           return res.status(400).json({ message: `Plan "${planId}" is not available for PayPal payment.` });
         }
+        // 2026-09 SECURITY: one-time-trial gate for the PAYPAL initiation
+        // path — mirrors the /api/subscriptions/upgrade STK gate. Without
+        // this, a user who already consumed the KES 99 trial could start a
+        // PayPal order for plan_trial and reach capture/grant.
+        if (planId === "trial" || planId === "basic") {
+          const { isTrialConsumed } = await import("./lib/trial-gate");
+          const payer = await storage.getUserById(userId).catch(() => null);
+          if (await isTrialConsumed({ userId, phone: payer?.phone ?? null })) {
+            console.warn(`[Trial][Security] Repeat trial blocked (PayPal create-order) userId=${userId} phone=${payer?.phone ?? "n/a"} attemptedPlan=${planId}`);
+            import("./services/activityLogger").then(({ logActivity }) => {
+              logActivity({
+                event: "payment_blocked_trial_used",
+                userId,
+                meta: {
+                  attemptedPlan: planId,
+                  method: "paypal",
+                  userAgent: String(req.headers["user-agent"] ?? "").slice(0, 200),
+                  referer: String(req.headers["referer"] ?? "").slice(0, 200),
+                },
+                ip: String(req.headers["x-forwarded-for"] ?? "").split(",")[0]?.trim()
+                    || req.socket?.remoteAddress || "unknown",
+              });
+            }).catch(() => { /* logging must never break the response */ });
+            return res.status(403).json({
+              message: "The KES 99 trial is a one-time offer per user. Please upgrade to Monthly (KES 1,000) or Yearly (KES 4,500) to continue.",
+              code:    "TRIAL_ALREADY_USED",
+              upgradeUrl: "/pricing",
+            });
+          }
+        }
         verifiedAmount = resolvedPaypal.finalPrice;
         paypalServiceName = planLabel(planId);
       } else {
@@ -21489,6 +21539,12 @@ Rules:
   // benchmark, country rules) into one investigation report.
   const { registerScamCheckRoute } = await import("./scam-check/endpoint");
   registerScamCheckRoute(app);
+
+  // 2026-09 (Tony's monetisation directive): KES 100 pay-per-scan for the
+  // verification tools (offer letter, visa, IELTS, job-scam). The ATS CV
+  // checker stays free. See server/tools/tool-pay.ts.
+  const { registerToolPayRoutes } = await import("./tools/tool-pay");
+  registerToolPayRoutes(app);
 
   // 2026-07: Community Fraud Intelligence Platform — structured scam
   // reports with auto cross-referencing (shared phones/emails/bank

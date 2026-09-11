@@ -21,6 +21,7 @@ import {
   Phone, Mail, Globe, FileText, GraduationCap,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useToolPayment, TOOL_SCAN_PRICE_KES } from "@/hooks/use-tool-payment";
 import { fetchCsrfToken } from "@/lib/queryClient";
 
 interface SubScore { key: string; label: string; score: number; detail: string; }
@@ -86,13 +87,14 @@ const VERDICT_STYLES = {
 
 export default function IeltsVerifyPage() {
   usePageSeo({
-    title:       "Free IELTS Certificate Verification — Verify Any TRF Report | WorkAbroad Hub",
+    title:       "IELTS Verification (KES 100/check) — Verify Any TRF Report | WorkAbroad Hub",
     description: "Upload your IELTS Test Report Form (TRF) and get instant AI verification. Detects forged certificates, wrong band-score formats, invalid centre codes, and other IELTS fraud signals.",
     path:        "/tools/ielts-verify",
     keywords:    ["ielts verification kenya", "verify ielts trf", "fake ielts check", "ielts certificate verify"],
   });
 
   const { toast } = useToast();
+  const pay = useToolPayment("ielts_verify");
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [file, setFile] = useState<File | null>(null);
@@ -127,6 +129,13 @@ export default function IeltsVerifyPage() {
 
   async function handleVerify() {
     if (!file) return;
+    // 2026-09 (Tony's monetisation directive): KES 100 per scan. If no paid
+    // credit is held, collect payment first — handleVerify re-runs
+    // automatically the moment M-Pesa confirms.
+    if (!pay.scanToken) {
+      pay.requestScan(() => handleVerify());
+      return;
+    }
     setLoading(true);
     setResult(null);
     try {
@@ -137,10 +146,18 @@ export default function IeltsVerifyPage() {
       const res = await fetch("/api/tools/ielts-verify-ai", {
         method: "POST",
         credentials: "include",
-        headers: { "X-CSRF-Token": csrf },
+        headers: { "X-CSRF-Token": csrf, "x-scan-token": pay.scanToken ?? "" },
         body: form,
       });
       const data = await res.json();
+      if (res.status === 402) {
+        // Credit missing/expired/used — server is the gate; re-collect payment.
+        setLoading(false);
+        pay.handle402(data);
+        return;
+      }
+      // The gate consumed the credit for this scan — one payment, one check.
+      pay.consumeToken();
       if (!data.ok) {
         toast({ title: "Couldn't verify", description: data.message || "Please try again with a clearer image.", variant: "destructive" });
       } else {
@@ -173,7 +190,12 @@ export default function IeltsVerifyPage() {
           <p className="text-sm text-gray-600 dark:text-gray-400 max-w-lg mx-auto leading-relaxed">
             Our AI reads the Test Report Form, checks band-score math, formatting, and security features, and shows you exactly where to verify officially.
           </p>
+          <p className="text-xs font-semibold text-teal-700 dark:text-teal-300">
+            KES {TOOL_SCAN_PRICE_KES} per check · paid via M-Pesa · one payment = one scan
+          </p>
         </div>
+
+        <pay.PayModal />
 
         {!result && (
           <Card className="border-2 border-dashed border-teal-300 dark:border-teal-800">

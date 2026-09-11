@@ -649,13 +649,13 @@ export default function Landing() {
             <div className="text-center mb-12 space-y-3">
               <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded-full text-sm font-semibold border border-blue-200 dark:border-blue-700">
                 <Wrench className="h-4 w-4" />
-                Free Tools for Overseas Job Seekers
+                Job-Seeker Toolkit
               </div>
               <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-slate-900 dark:text-white">
                 Everything you need to <span className="text-blue-600 dark:text-blue-400">land your overseas job</span>
               </h2>
               <p className="text-muted-foreground max-w-xl mx-auto text-sm sm:text-base">
-                Six free tools built specifically for Kenyans applying for jobs abroad — no sign-in required to get started.
+                Professional verification tools for Kenyans applying abroad — from KES 100 per check, no subscription needed.
               </p>
             </div>
 
@@ -668,8 +668,8 @@ export default function Landing() {
                   <div className="h-12 w-12 bg-blue-100 dark:bg-blue-900/50 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
                     <FileText className="h-6 w-6 text-blue-600 dark:text-blue-400" />
                   </div>
-                  <div className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-blue-600 dark:text-blue-400 mb-1.5">
-                    <Sparkles className="h-3 w-3" /> AI Powered
+                  <div className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-emerald-600 dark:text-emerald-400 mb-1.5">
+                    <CheckCircle className="h-3 w-3" /> Always Free
                   </div>
                   <h3 className="font-bold text-slate-900 dark:text-white text-base mb-2 leading-tight">Check ATS CV</h3>
                   <p className="text-xs text-muted-foreground leading-relaxed flex-1 mb-4">
@@ -687,8 +687,8 @@ export default function Landing() {
                   <div className="h-12 w-12 bg-red-100 dark:bg-red-900/40 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
                     <ShieldAlert className="h-6 w-6 text-red-600 dark:text-red-400" />
                   </div>
-                  <div className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-green-600 dark:text-green-400 mb-1.5">
-                    <CheckCircle className="h-3 w-3" /> Always Free
+                  <div className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-red-600 dark:text-red-400 mb-1.5">
+                    <Sparkles className="h-3 w-3" /> KES 100 / Check
                   </div>
                   <h3 className="font-bold text-slate-900 dark:text-white text-base mb-2 leading-tight">Check Job Scams</h3>
                   <p className="text-xs text-muted-foreground leading-relaxed flex-1 mb-4">
@@ -707,7 +707,7 @@ export default function Landing() {
                     <ScanLine className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
                   </div>
                   <div className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-indigo-600 dark:text-indigo-400 mb-1.5">
-                    <Sparkles className="h-3 w-3" /> New · Free
+                    <Sparkles className="h-3 w-3" /> KES 100 / Check
                   </div>
                   <h3 className="font-bold text-slate-900 dark:text-white text-base mb-2 leading-tight">Screen a Visa</h3>
                   <p className="text-xs text-muted-foreground leading-relaxed flex-1 mb-4">
@@ -726,7 +726,7 @@ export default function Landing() {
                     <FileText className="h-6 w-6 text-orange-600 dark:text-orange-400" />
                   </div>
                   <div className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-orange-600 dark:text-orange-400 mb-1.5">
-                    <Sparkles className="h-3 w-3" /> New · Free
+                    <Sparkles className="h-3 w-3" /> KES 100 / Check
                   </div>
                   <h3 className="font-bold text-slate-900 dark:text-white text-base mb-2 leading-tight">Screen an Offer Letter</h3>
                   <p className="text-xs text-muted-foreground leading-relaxed flex-1 mb-4">
@@ -783,11 +783,11 @@ export default function Landing() {
               <Link href="/tools" data-testid="link-all-tools">
                 <Button size="lg" className="gap-2 bg-blue-600 hover:bg-blue-700 text-white px-8 shadow-md shadow-blue-200 dark:shadow-blue-900/30">
                   <Wrench className="h-4 w-4" />
-                  Explore All Free Tools
+                  Explore All Tools
                   <ArrowRight className="h-4 w-4" />
                 </Button>
               </Link>
-              <p className="text-xs text-muted-foreground">No sign-up required · 100% free</p>
+              <p className="text-xs text-muted-foreground">ATS CV check free · verification tools KES 100 each</p>
             </div>
 
           </div>

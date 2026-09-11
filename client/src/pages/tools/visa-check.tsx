@@ -37,6 +37,7 @@ import {
   Building2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useToolPayment, TOOL_SCAN_PRICE_KES } from "@/hooks/use-tool-payment";
 import { fetchCsrfToken } from "@/lib/queryClient";
 
 interface SubScore {
@@ -114,7 +115,7 @@ const VERDICT_STYLES = {
 
 export default function VisaCheckPage() {
   usePageSeo({
-    title:       "Free Visa Verification Tool — Spot Fake Visas & Work Permits | WorkAbroad Hub",
+    title:       "Visa Screening (KES 100/check) — Spot Fake Visas & Work Permits | WorkAbroad Hub",
     description: "Upload any visa or work-permit document and get instant AI verification. Detects forgery patterns, invalid stamps, expired formats, and paperwork commonly used by recruitment scammers targeting Kenyans.",
     path:        "/tools/visa-check",
     keywords:    ["visa verify kenya", "fake visa check", "work permit verification", "visa document check kenya"],
@@ -122,6 +123,7 @@ export default function VisaCheckPage() {
 
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const pay = useToolPayment("visa_check");
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [file, setFile] = useState<File | null>(null);
@@ -156,6 +158,13 @@ export default function VisaCheckPage() {
 
   async function handleVerify() {
     if (!file) return;
+    // 2026-09 (Tony's monetisation directive): KES 100 per scan. If no paid
+    // credit is held, collect payment first — handleVerify re-runs
+    // automatically the moment M-Pesa confirms.
+    if (!pay.scanToken) {
+      pay.requestScan(() => handleVerify());
+      return;
+    }
     setLoading(true);
     setResult(null);
     try {
@@ -166,10 +175,18 @@ export default function VisaCheckPage() {
       const res = await fetch("/api/tools/visa-verify", {
         method: "POST",
         credentials: "include",
-        headers: { "X-CSRF-Token": csrf },
+        headers: { "X-CSRF-Token": csrf, "x-scan-token": pay.scanToken ?? "" },
         body: form,
       });
       const data = await res.json();
+      if (res.status === 402) {
+        // Credit missing/expired/used — server is the gate; re-collect payment.
+        setLoading(false);
+        pay.handle402(data);
+        return;
+      }
+      // The gate consumed the credit for this scan — one payment, one check.
+      pay.consumeToken();
       if (!data.ok) {
         toast({ title: "Couldn't verify", description: data.message || "Please try again with a clearer image.", variant: "destructive" });
       } else {
@@ -202,7 +219,12 @@ export default function VisaCheckPage() {
           <p className="text-sm text-gray-600 dark:text-gray-400 max-w-lg mx-auto leading-relaxed">
             Our AI reads your visa, checks it against 30+ countries' official formats, and shows you exactly where to verify with the issuing government.
           </p>
+          <p className="text-xs font-semibold text-teal-700 dark:text-teal-300">
+            KES {TOOL_SCAN_PRICE_KES} per check · paid via M-Pesa · one payment = one scan
+          </p>
         </div>
+
+        <pay.PayModal />
 
         {!result && (
           <Card className="border-2 border-dashed border-teal-300 dark:border-teal-800">

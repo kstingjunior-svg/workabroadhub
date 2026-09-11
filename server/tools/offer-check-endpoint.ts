@@ -24,6 +24,7 @@
  */
 
 import type { Express, Request, Response } from "express";
+import { requireToolCredit } from "./tool-pay";
 import multer from "multer";
 import crypto from "crypto";
 import { pool } from "../db";
@@ -242,6 +243,7 @@ async function saveCheck(args: {
 export function registerOfferCheckRoute(app: Express): void {
   app.post(
     "/api/tools/offer-check",
+    requireToolCredit("offer_check"),
     upload.single("file"),
     async (req: any, res: Response) => {
       const t0 = Date.now();
@@ -397,6 +399,7 @@ export function registerOfferCheckRoute(app: Express): void {
   // ═══════════════════════════════════════════════════════════════════════
   app.post(
     "/api/tools/offer-verify",
+    requireToolCredit("offer_check"),
     (req: any, res, next) => upload.single("file")(req, res, (err: any) => {
       if (!err) return next();
       const isSize = err?.code === "LIMIT_FILE_SIZE";

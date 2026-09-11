@@ -23,6 +23,7 @@ import {
   Phone, Mail, Globe, Building2, MessageSquare, DollarSign, Search,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useToolPayment, TOOL_SCAN_PRICE_KES } from "@/hooks/use-tool-payment";
 import { fetchCsrfToken } from "@/lib/queryClient";
 
 interface SubScore { key: string; label: string; score: number; detail: string; }
@@ -89,13 +90,14 @@ const VERDICT_STYLES = {
 
 export default function JobScamCheckerPage() {
   usePageSeo({
-    title:       "Free Job Scam Checker — Spot Fake Overseas Job Offers in Seconds | WorkAbroad Hub",
-    description: "Paste any suspicious job posting, agency message, or offer letter. Get instant AI analysis identifying red flags: fake salaries, unreliable agencies, upfront-fee scams, and phishing signs. Free.",
+    title:       "Job Scam Checker (KES 100/check) — Spot Fake Overseas Job Offers in Seconds | WorkAbroad Hub",
+    description: "Paste any suspicious job posting, agency message, or offer letter. Get instant AI analysis identifying red flags: fake salaries, unreliable agencies, upfront-fee scams, and phishing signs.",
     path:        "/tools/job-scam-checker",
     keywords:    ["job scam checker kenya", "fake job offer check", "recruitment scam detector kenya", "overseas job scam verify"],
   });
 
   const { toast } = useToast();
+  const pay = useToolPayment("job_scam_check");
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [text, setText] = useState("");
@@ -136,6 +138,14 @@ export default function JobScamCheckerPage() {
       toast({ title: "Nothing to check", description: "Paste the chat text OR upload a screenshot (or both).", variant: "destructive" });
       return;
     }
+    // 2026-09 (Tony's monetisation directive): KES 100 per scan. If no paid
+    // credit is held, collect payment first — handleCheck re-runs
+    // automatically the moment M-Pesa confirms (closing over the current
+    // text/file state).
+    if (!pay.scanToken) {
+      pay.requestScan(() => handleCheck());
+      return;
+    }
     setLoading(true);
     setResult(null);
     try {
@@ -147,10 +157,18 @@ export default function JobScamCheckerPage() {
       const res = await fetch("/api/tools/job-scam-check", {
         method: "POST",
         credentials: "include",
-        headers: { "X-CSRF-Token": csrf },
+        headers: { "X-CSRF-Token": csrf, "x-scan-token": pay.scanToken ?? "" },
         body: form,
       });
       const data = await res.json();
+      if (res.status === 402) {
+        // Credit missing/expired/used — server is the gate; re-collect payment.
+        setLoading(false);
+        pay.handle402(data);
+        return;
+      }
+      // The gate consumed the credit for this scan — one payment, one check.
+      pay.consumeToken();
       if (!data.ok) {
         toast({ title: "Couldn't complete the check", description: data.message || "Please try again.", variant: "destructive" });
       } else {
@@ -184,7 +202,12 @@ export default function JobScamCheckerPage() {
           <p className="text-sm text-gray-600 dark:text-gray-400 max-w-lg mx-auto leading-relaxed">
             Paste the WhatsApp chat, email, or job ad. Upload a screenshot too if you have one. We check the recruiter, payment method, phone number, salary, and 40+ scam patterns.
           </p>
+          <p className="text-xs font-semibold text-teal-700 dark:text-teal-300">
+            KES {TOOL_SCAN_PRICE_KES} per check · paid via M-Pesa · one payment = one scan
+          </p>
         </div>
+
+        <pay.PayModal />
 
         {!result && (
           <Card className="border-2 border-teal-200 dark:border-teal-900">

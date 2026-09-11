@@ -47,7 +47,7 @@ const TOOLS = [
     iconBg: "bg-red-100 dark:bg-red-900/30",
     iconColor: "text-red-600 dark:text-red-400",
     label: "Job Scam Checker",
-    badge: "Free",
+    badge: "KES 100 / check",
     badgeColor: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300",
     description: "Paste any job advert and our engine will scan for scam signals — fake fees, suspicious contacts, and high-risk phrases used by fraudulent recruiters.",
     cta: "Check a Job Advert",
@@ -60,7 +60,7 @@ const TOOLS = [
     iconBg: "bg-indigo-100 dark:bg-indigo-900/30",
     iconColor: "text-indigo-600 dark:text-indigo-400",
     label: "Visa Screening",
-    badge: "Free · New",
+    badge: "KES 100 / check",
     badgeColor: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300",
     description: "Upload a visa or work-permit image. We verify the machine-readable zone, check for tampering signals, and give you an instant risk report. Screening only — not official verification.",
     cta: "Screen a Visa",
@@ -73,7 +73,7 @@ const TOOLS = [
     iconBg: "bg-orange-100 dark:bg-orange-900/30",
     iconColor: "text-orange-600 dark:text-orange-400",
     label: "Offer Letter Screener",
-    badge: "Free · New",
+    badge: "KES 100 / check",
     badgeColor: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300",
     description: "Upload a job offer letter (PDF, Word, or image). We scan for 20+ scam patterns — upfront fees, urgency pressure, fake email domains — and give you an instant risk report.",
     cta: "Screen an Offer",
@@ -86,7 +86,7 @@ const TOOLS = [
     iconBg: "bg-blue-100 dark:bg-blue-900/30",
     iconColor: "text-blue-600 dark:text-blue-400",
     label: "IELTS Verifier",
-    badge: "Free · New",
+    badge: "KES 100 / check",
     badgeColor: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
     description: "Upload your IELTS Test Report Form (TRF). We check the TRF number, test centre code, band consistency, and date validity to flag likely forgeries before you submit them to an employer.",
     cta: "Verify a TRF",
@@ -196,8 +196,8 @@ const HOW_IT_WORKS = [
 
 export default function ToolsHub() {
   usePageSeo({
-    title:       "Free Career Tools for Kenyans — ATS CV Checker, Job Scam Detector, Visa Sponsorship Search | WorkAbroad Hub",
-    description: "Free tools for Kenyan job-seekers: ATS CV score, job-scam detector, visa-sponsoring employer search, offer letter verifier, IELTS test verifier, and more. No signup needed for most tools.",
+    title:       "Career Tools for Kenyans — Free ATS CV Checker, Job Scam Detector, Visa Screening | WorkAbroad Hub",
+    description: "Tools for Kenyan job-seekers: a free ATS CV score, plus KES 100-per-check verification tools — job-scam detector, visa screening, offer letter verifier, IELTS test verifier. No signup needed for most tools.",
     path:        "/tools",
     keywords:    ["free career tools kenya", "cv checker kenya", "job scam checker", "visa sponsorship search", "offer letter verify kenya"],
   });
@@ -258,9 +258,9 @@ export default function ToolsHub() {
               <Sparkles className="h-4 w-4" />
               Growth Tools Suite
             </div>
-            <h1 className="text-2xl font-bold mb-2" data-testid="text-tools-title">Tools, on us.</h1>
+            <h1 className="text-2xl font-bold mb-2" data-testid="text-tools-title">Tools that work for you.</h1>
             <p className="text-blue-100 text-sm max-w-md mx-auto">
-              The things we wish we'd had — CV health check, scam detection, sponsored job listings, ready-to-use CV templates. Free. Use them as much as you want.
+              The things we wish we'd had — a free CV health check, sponsored job listings, ready-to-use CV templates, and professional verification tools at KES 100 per check, pay only when you use them.
             </p>
           </div>
         </div>
