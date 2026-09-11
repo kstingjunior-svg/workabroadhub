@@ -140,25 +140,61 @@ export default function OfferCheckPage() {
     if (!file) return;
     setLoading(true);
     setResult(null);
-    try {
+    // 2026-09 (Tony's screenshot: "Network issue — check your connection"
+    // firing on a working network). Real cause almost always Render cold
+    // start (~60-90s) or the AI provider taking longer than the client's
+    // implicit timeout. Retry once with a 3s wait, log the underlying
+    // reason to devtools so future failures are debuggable, and give the
+    // user a specific message instead of a generic scare toast.
+    async function postOnce(): Promise<Response> {
       const form = new FormData();
-      form.append("file", file);
-      // 2026-07 (production CSRF fix): every mutating request needs the token.
+      form.append("file", file!);
       const csrf = await fetchCsrfToken();
-      const res = await fetch("/api/tools/offer-verify", {
+      return fetch("/api/tools/offer-verify", {
         method: "POST",
         credentials: "include",
         headers: { "X-CSRF-Token": csrf },
         body: form,
       });
+    }
+    let res: Response | null = null;
+    let lastErr: any = null;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (attempt > 0) {
+        console.warn(`[offer-verify] attempt ${attempt + 1} — last error:`, lastErr?.message ?? lastErr);
+        await new Promise((r) => setTimeout(r, 3000));
+      }
+      try {
+        res = await postOnce();
+        break;
+      } catch (err: any) {
+        lastErr = err;
+      }
+    }
+    if (!res) {
+      console.error("[offer-verify] both attempts failed:", lastErr);
+      toast({
+        title: "Server is warming up",
+        description: "Our AI service is starting — please try again in a few seconds. If this keeps happening, screenshot each page as JPG and upload the images one at a time.",
+        variant: "destructive",
+      });
+      setLoading(false);
+      return;
+    }
+    try {
       const data = await res.json();
       if (!data.ok) {
         toast({ title: "Couldn't verify", description: data.message || "Please try again with a clearer image.", variant: "destructive" });
       } else {
         setResult(data);
       }
-    } catch {
-      toast({ title: "Network issue", description: "Check your connection and try again.", variant: "destructive" });
+    } catch (parseErr: any) {
+      console.error("[offer-verify] response was not JSON:", parseErr, "status:", res.status);
+      toast({
+        title: "Verifier is busy",
+        description: "The verifier took too long. Please try again in ~30 seconds, or screenshot the offer as a JPG and upload the image instead — image verification is usually faster than PDF.",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
