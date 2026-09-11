@@ -77,7 +77,7 @@ export function registerAuthRoutes(app: Express) {
 
       // Real-identity email validation
       const emailCheck = await validateEmail(rawEmail);
-      if (!emailCheck.valid) {
+      if (emailCheck.valid === false) {
         return res.status(400).json({ message: emailCheck.message, reason: emailCheck.reason });
       }
       const cleanEmail = emailCheck.normalized;
@@ -870,7 +870,7 @@ export function registerAuthRoutes(app: Express) {
 
     // Real-identity phone validation: format + Twilio Lookup (catches fake/disconnected numbers)
     const phoneCheck = await validatePhone(rawPhone);
-    if (!phoneCheck.valid) {
+    if (phoneCheck.valid === false) {
       console.warn(`[send-phone-code] phone validation failed userId=${userId} raw=${rawPhone} reason=${phoneCheck.reason} msg=${phoneCheck.message}`);
       return res.status(400).json({ message: phoneCheck.message, reason: phoneCheck.reason });
     }
@@ -893,7 +893,7 @@ export function registerAuthRoutes(app: Express) {
       else if (result.code === "send_failed") status = 502;
       // If the failure is "SMS service is not configured", expose a clear hint
       // so admin can act, but keep the user-facing message friendly.
-      const userMessage = result.code === "send_failed" && /not configured/i.test(result.message)
+      const userMessage = result.code === "send_failed" && /not configured/i.test(result.message ?? "")
         ? "We're temporarily unable to send SMS codes. Please contact support@workabroadhub.tech and we'll verify you manually."
         : result.message;
       return res.status(status).json({ message: userMessage, code: result.code });

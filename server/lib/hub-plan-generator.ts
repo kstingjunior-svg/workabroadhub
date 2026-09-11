@@ -96,7 +96,7 @@ async function fetchCandidatePool(): Promise<Array<{ slug: string; name: string;
      WHERE c.is_active = true
      ORDER BY c.id, v.display_order ASC
   `);
-  return rows.map((r) => ({
+  return rows.map((r: any) => ({
     slug: r.slug, name: r.name, iso2: r.iso2, flag: r.flag, ease: r.ease,
     visaCode: r.visa_code, visaName: r.visa_name, visaBenefit: r.visa_benefit,
     sponsorRequired: !!r.sponsor_required, postArrivalOk: !!r.post_arrival_ok,

@@ -604,7 +604,10 @@ export default function BulkApply() {
               <Button
                 className="w-full gap-2 bg-green-600 hover:bg-green-700 text-white font-semibold h-11"
                 onClick={handleFinalSubmit}
-                disabled={step === "submitting" || submitMutation.isPending}
+                // cast: TS narrows `step` to "ready" inside this block (only rendered
+                // when step === "ready"); keep this defensive re-check for when the
+                // mutation flips step mid-click, without fighting the narrowing.
+                disabled={(step as Step) === "submitting" || submitMutation.isPending}
                 data-testid="button-submit-all"
               >
                 {submitMutation.isPending ? (

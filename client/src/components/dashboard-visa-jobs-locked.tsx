@@ -23,7 +23,6 @@ import { useAuth } from "@/hooks/use-auth";
 import { useUpgradeModal } from "@/contexts/upgrade-modal-context";
 import { Lock, ExternalLink, MapPin, DollarSign, Plane, ChevronRight, Briefcase, Loader2 } from "lucide-react";
 import { isPaidUser } from "@/lib/plan";
-import { useQuery } from "@tanstack/react-query";
 import { BookmarkButton } from "@/components/bookmark-button";
 
 interface VisaJob {

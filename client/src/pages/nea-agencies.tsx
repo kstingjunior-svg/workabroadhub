@@ -816,7 +816,7 @@ export default function NeaAgenciesPage() {
                               e.stopPropagation();
                               const isPaid = user && (user as any).plan && (user as any).plan !== "free";
                               if (!isPaid) {
-                                openUpgradeModal("feature_locked", "Agency Claim");
+                                openUpgradeModal("locked_feature", "Agency Claim");
                                 return;
                               }
                               setClaimAgency(agency);

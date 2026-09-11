@@ -46,7 +46,8 @@ async function fetchServicesRaw(): Promise<Service[]> {
 
   // Strip any rows that are missing required display fields (e.g. null-code rows in production DB)
   const valid = raw.filter(
-    (s) => s != null && s.code != null && s.name != null && s.category != null
+    (s): s is Service & { code: string } =>
+      s != null && s.code != null && s.name != null && s.category != null
   );
 
   // Deduplicate by code — keeps the last occurrence so DB-level duplicates never reach the UI

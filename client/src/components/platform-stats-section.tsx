@@ -15,6 +15,9 @@ function useCountUp(target: number | undefined, duration = 1600, enabled = false
 
   useEffect(() => {
     if (!enabled || target === undefined || target === 0) return;
+    // Narrowed value: TS loses the `target !== undefined` narrowing once
+    // captured inside the `step` closure below (called later via rAF).
+    const targetValue: number = target;
     let startTime: number | null = null;
     const start = 0;
 
@@ -24,7 +27,7 @@ function useCountUp(target: number | undefined, duration = 1600, enabled = false
       const progress = Math.min(elapsed / duration, 1);
       // Ease-out cubic
       const eased = 1 - Math.pow(1 - progress, 3);
-      setValue(Math.floor(start + eased * target));
+      setValue(Math.floor(start + eased * targetValue));
       if (progress < 1) requestAnimationFrame(step);
     }
 

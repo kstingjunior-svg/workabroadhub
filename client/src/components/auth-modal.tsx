@@ -38,6 +38,7 @@ interface FieldErrors {
   firstName?: string;
   email?: string;
   password?: string;
+  phone?: string;
 }
 
 function PasswordStrength({

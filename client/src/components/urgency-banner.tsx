@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { AlertTriangle, Shield, TrendingUp, X } from "lucide-react";
+import { AlertTriangle, Shield, TrendingUp, X, type LucideIcon } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
@@ -49,7 +49,7 @@ export function UrgencyBanner({ className }: UrgencyBannerProps) {
 
   if (!visible || dismissed || !stats) return null;
 
-  const messages = [
+  const messages: { icon: LucideIcon; text: string; color: string; bg: string }[] = [
     stats.scamReportsThisMonth > 0
       ? {
           icon: AlertTriangle,
@@ -74,7 +74,7 @@ export function UrgencyBanner({ className }: UrgencyBannerProps) {
           bg: "bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800",
         }
       : null,
-  ].filter(Boolean) as NonNullable<typeof messages[number]>[];
+  ].filter((m): m is { icon: LucideIcon; text: string; color: string; bg: string } => m !== null);
 
   if (messages.length === 0) return null;
 

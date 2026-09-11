@@ -394,7 +394,7 @@ function JobCard({
                         key={sj.id}
                         className="border p-3 rounded cursor-pointer hover:shadow-sm transition-shadow dark:border-gray-700"
                         onClick={() => {
-                          trackEvent("click_similar_job", { category: job.category ?? undefined, country: job.country ?? undefined });
+                          trackEvent("click_similar_job", { category: job.jobCategory ?? undefined, country: job.country ?? undefined });
                           navigate(`/job/${sj.id}`);
                         }}
                         data-testid={`card-similar-job-${sj.id}`}
@@ -510,9 +510,9 @@ export default function VisaSponsorshipJobs() {
 
   const prepareMutation = useMutation({
     mutationFn: (job: Job) =>
-      apiRequest("POST", "/api/prepare-application", { job }).then(
-        (r: { application: PreparedApplication }) => r.application
-      ),
+      apiRequest("POST", "/api/prepare-application", { job })
+        .then((r) => r.json())
+        .then((data: { application: PreparedApplication }) => data.application),
     onSuccess: (data, job) => {
       setApplication(data);
       setReviewJob(job);
@@ -890,7 +890,7 @@ export default function VisaSponsorshipJobs() {
                 selected={selectedIds.has(job.id)}
                 onToggle={toggleJob}
                 selectionMode={selectionCount > 0}
-                isPaid={isPaidUser}
+                isPaid={isPaid}
                 onUpgradeRequired={handleUpgradeRequired}
                 onSave={handleSaveJob}
                 isSaved={savedJobIds.has(job.id)}

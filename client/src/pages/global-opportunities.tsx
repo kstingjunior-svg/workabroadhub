@@ -261,7 +261,7 @@ function PortalModal({
                   target="_blank"
                   rel="noopener noreferrer"
                   data-testid={`portal-link-${portal.id}`}
-                  onClick={() => trackEvent("view_job", { category: portal.category, country: portal.country })}
+                  onClick={() => trackEvent("view_job", { category: portal.category ?? undefined, country: portal.country ?? undefined })}
                   className="group flex flex-col p-3.5 rounded-xl border border-[#E2DDD5] dark:border-gray-700 bg-[#F9F8F6] dark:bg-gray-800 hover:border-[#4A7C59] hover:bg-[#F0FBF4] dark:hover:border-[#4A7C59] dark:hover:bg-gray-700 transition-all"
                 >
                   <div className="flex items-start justify-between gap-2 mb-1">
@@ -293,7 +293,7 @@ function PortalModal({
                   target="_blank"
                   rel="noopener noreferrer"
                   data-testid={`portal-link-${portal.id}`}
-                  onClick={() => trackEvent("view_job", { category: portal.category, country: portal.country })}
+                  onClick={() => trackEvent("view_job", { category: portal.category ?? undefined, country: portal.country ?? undefined })}
                   className="group flex flex-col p-3.5 rounded-xl border border-[#E2DDD5] dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-[#8B7A66] hover:shadow-sm transition-all"
                 >
                   <div className="flex items-start justify-between gap-2 mb-1">

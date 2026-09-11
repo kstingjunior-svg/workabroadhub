@@ -220,7 +220,7 @@ export function registerScoutJobsRoutes(app: Express): void {
       if (!(await assertEmailVerified(req, res, userId))) return;
 
       const check = validateBody(req.body);
-      if (!check.ok) return res.status(400).json({ error: check.error });
+      if (check.ok === false) return res.status(400).json({ error: check.error });
       const d = check.data;
 
       const phone = String(req.body?.phone ?? "").trim();
@@ -260,7 +260,7 @@ export function registerScoutJobsRoutes(app: Express): void {
           PRICE_KES,
           `WorkAbroad Hub — Scout Job listing`,
           `WAH-SCOUT-${scoutJobId.slice(0, 8)}`,
-          `${getCallbackBaseUrl(req)}/api/scout-jobs/mpesa-callback`,
+          `${getCallbackBaseUrl()}/api/scout-jobs/mpesa-callback`,
         );
       } catch (err: any) {
         console.error("[scout-jobs] STK push failed:", err?.message);
@@ -356,7 +356,7 @@ export function registerScoutJobsRoutes(app: Express): void {
       }
 
       const check = validateBody(req.body);
-      if (!check.ok) return res.status(400).json({ error: check.error });
+      if (check.ok === false) return res.status(400).json({ error: check.error });
       const d = check.data;
 
       const { rows: created } = await pool.query(

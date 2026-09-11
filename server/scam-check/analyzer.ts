@@ -248,10 +248,10 @@ export async function analyzeScam(input: { text?: string; imageDataUrl?: string 
   if (fields.recruiterPhone) findings.push(...analyzePhone(fields.recruiterPhone, fields.country ?? null));
 
   // 4. URL / website analysis
-  if (fields.companyWebsite) findings.push(...analyzeUrl(fields.companyWebsite, fields.employerName));
+  if (fields.companyWebsite) findings.push(...analyzeUrl(fields.companyWebsite, fields.employerName ?? null));
 
   // 5. Email analysis (scam-check version)
-  if (fields.recruiterEmail) findings.push(...analyzeEmail(fields.recruiterEmail, fields.employerName, fields.companyWebsite));
+  if (fields.recruiterEmail) findings.push(...analyzeEmail(fields.recruiterEmail, fields.employerName ?? null, fields.companyWebsite ?? null));
 
   // 6. Salary check
   const salaryCheck = benchmarkSalary(fields, country);

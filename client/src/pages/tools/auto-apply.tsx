@@ -217,7 +217,7 @@ export default function AutoApply() {
 
       // PRO path: single-shot generate + save (skips separate generate step)
       if (isPaidPlan) {
-        return apiRequest("POST", "/api/auto-apply/submit", {
+        const res = await apiRequest("POST", "/api/auto-apply/submit", {
           jobs: selectedJobs.map((j) => ({
             id: j.id,
             title: j.title,
@@ -230,6 +230,7 @@ export default function AutoApply() {
             ? `${jobTitle}, ${experience} years experience. ${skills}`
             : undefined,
         });
+        return res.json();
       }
 
       // Fallback: use pre-generated letters from the generate step
@@ -243,7 +244,8 @@ export default function AutoApply() {
         coverLetter: edits[job.id] || generated[job.id]?.coverLetter,
         applicationAnswers: generated[job.id]?.applicationAnswers,
       }));
-      return apiRequest("POST", "/api/bulk-apply/submit", { applications });
+      const res = await apiRequest("POST", "/api/bulk-apply/submit", { applications });
+      return res.json();
     },
     onSuccess: (data) => {
       setSavedCount(data.saved || selected.size);
@@ -681,7 +683,7 @@ export default function AutoApply() {
                     {/* Free user upgrade block */}
                     <button
                       className="w-full rounded-xl border border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/30 px-4 py-3 text-left flex items-center gap-3 hover:bg-violet-100 dark:hover:bg-violet-900/30 transition-colors"
-                      onClick={() => openUpgradeModal("feature_locked", "AI Auto-Apply", "pro")}
+                      onClick={() => openUpgradeModal("locked_feature", "AI Auto-Apply", "pro")}
                       data-testid="button-upgrade-auto-apply"
                     >
                       <div className="h-9 w-9 rounded-full bg-violet-100 dark:bg-violet-900/50 flex items-center justify-center shrink-0">

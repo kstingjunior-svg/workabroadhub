@@ -38,17 +38,22 @@
 
 import crypto from "node:crypto";
 import { computeDiff, countChanges, type ChangeSetCounts } from "./diff";
-import { FINGERPRINT_VERSION, computeFingerprint } from "./fingerprint";
-import { NORMALIZER_VERSION, normalizeAgency } from "./normalize";
+import { FINGERPRINT_VERSION, fingerprint as computeFingerprint } from "./fingerprint";
+import { NORMALIZER_VERSION } from "./normalize";
 import {
   restoreSnapshot,
-  type CapturedSnapshot,
+  type RestoredSnapshot,
   type SnapshotStore,
 } from "./snapshot";
-import { readCurrentAgenciesByProvider, getProviderIdBySlug } from "./storage";
-import { validateAgency } from "./validation";
+import {
+  readCurrentAgenciesByProvider,
+  getProviderIdBySlug,
+  withTransaction,
+} from "./storage";
+import { validate as validateAgency } from "./validation";
 import type {
   NormalizedAgency,
+  ProviderRecord,
   QuarantinedRecord,
   SyncProvider,
   ValidatedRecord,
@@ -78,7 +83,7 @@ export interface ReplayPreviewResult {
   replayId:    string;
   mode:        "replay_preview";
   /** The snapshot we replayed against. */
-  snapshot:    CapturedSnapshot;
+  snapshot:    RestoredSnapshot;
   /** Whether re-normalization actually changed any records. */
   versionsBumped: boolean;
   /** Records that passed validation under the CURRENT versions. */
@@ -92,14 +97,14 @@ export interface ReplayPreviewResult {
 export interface ReplayOnlyResult {
   replayId:  string;
   mode:      "replay_only";
-  snapshot:  CapturedSnapshot;
+  snapshot:  RestoredSnapshot;
   validated: ValidatedRecord[];
 }
 
 export interface ReplayApplyResult {
   replayId:  string;
   mode:      "replay_apply";
-  snapshot:  CapturedSnapshot;
+  snapshot:  RestoredSnapshot;
   /** sync_runs.id created by the RC1 atomic runner. */
   resultingRunId: string;
 }
@@ -114,10 +119,12 @@ export async function runReplay(opts: ReplayOpts): Promise<ReplayResult> {
   const replayId = crypto.randomUUID();
 
   // ── 1. Load + checksum-verify the snapshot ──────────────────────────────
-  const snapshot = await restoreSnapshot(opts.snapshotStore, opts.snapshotId);
+  const snapshot = await withTransaction((client) =>
+    restoreSnapshot(opts.snapshotStore, opts.snapshotId, client),
+  );
 
   // ── 2. Open the sync_replays audit row ──────────────────────────────────
-  await openReplayRow(replayId, snapshot, opts);
+  await openReplayRow(replayId, opts.snapshotId, opts);
 
   try {
     if (opts.mode === "replay_only") {
@@ -134,13 +141,18 @@ export async function runReplay(opts: ReplayOpts): Promise<ReplayResult> {
 
     // For preview + apply we need to re-process raw payloads through the
     // CURRENT normalize + fingerprint pipeline. This is the whole point
-    // of replay: catch what the new pipeline does differently.
-    const { validated, quarantined, versionsBumped } = await replayPipeline(snapshot);
+    // of replay: catch what the new pipeline does differently. Re-running
+    // normalize() is adapter-specific (each provider's raw shape differs),
+    // so both modes require the source provider — not just replay_apply.
+    if (!opts.provider) {
+      throw new Error(`[replay] "${opts.mode}" requires a provider (to re-run adapter-specific normalize())`);
+    }
+    const { validated, quarantined, versionsBumped } = await replayPipeline(snapshot, opts.provider);
 
     if (opts.mode === "replay_preview") {
-      const providerId = await getProviderIdBySlug(snapshot.providerSlug);
+      const providerId = await getProviderIdBySlug(snapshot.header.providerSlug);
       if (!providerId) {
-        throw new Error(`[replay] provider "${snapshot.providerSlug}" not registered`);
+        throw new Error(`[replay] provider "${snapshot.header.providerSlug}" not registered`);
       }
       const current = await readCurrentAgenciesByProvider(providerId);
       const changes = computeDiff(current, validated);
@@ -171,8 +183,8 @@ export async function runReplay(opts: ReplayOpts): Promise<ReplayResult> {
     const runResult = await runSyncRc1(replayProvider, {
       mode:        "recovery",
       triggeredBy: `replay:${opts.triggeredBy}`,
-      reason:      `Replay of snapshot ${snapshot.id}`,
-      replayedFromSnapshotId: snapshot.id,
+      reason:      `Replay of snapshot ${opts.snapshotId}`,
+      replayedFromSnapshotId: opts.snapshotId,
       snapshotStore: opts.snapshotStore,
     });
 
@@ -206,31 +218,34 @@ export async function runReplay(opts: ReplayOpts): Promise<ReplayResult> {
  * predictable, fresh result regardless of what's in the snapshot row.
  */
 async function replayPipeline(
-  snapshot: CapturedSnapshot,
+  snapshot: RestoredSnapshot,
+  provider: SyncProvider,
 ): Promise<{
   validated:      ValidatedRecord[];
   quarantined:    QuarantinedRecord[];
   versionsBumped: boolean;
 }> {
   const versionsBumped =
-    snapshot.normalizerVersion  !== NORMALIZER_VERSION ||
-    snapshot.fingerprintVersion !== FINGERPRINT_VERSION;
+    snapshot.header.normalizerVersion  !== NORMALIZER_VERSION ||
+    snapshot.header.fingerprintVersion !== FINGERPRINT_VERSION;
 
   const validated:   ValidatedRecord[]   = [];
   const quarantined: QuarantinedRecord[] = [];
 
   // Walk validated bin → re-normalize the underlying raw payload.
   // Quarantined bin → re-try; might now pass (or fail differently).
-  const allRaw: Array<{ raw: unknown }> = [
+  const allRaw: Array<{ raw: ProviderRecord }> = [
     ...snapshot.validated.map((v) => ({ raw: v.raw })),
     ...snapshot.quarantined.map((q) => ({ raw: q.raw })),
   ];
 
   for (const r of allRaw) {
-    // Re-normalize
+    // Re-normalize. Normalization is adapter-specific (each provider's raw
+    // shape is different), so we defer to the provider's own normalize(),
+    // exactly like the foundation engine does (see engine.ts processOne).
     let normalized: NormalizedAgency | null = null;
     try {
-      normalized = normalizeAgency(r.raw);
+      normalized = provider.normalize(r.raw);
     } catch (err: any) {
       quarantined.push({
         raw:     r.raw,
@@ -247,7 +262,7 @@ async function replayPipeline(
 
     // Re-validate
     const result = validateAgency(normalized);
-    if (!result.ok) {
+    if (result.ok === false) {
       quarantined.push({
         raw:     r.raw,
         partial: normalized,
@@ -276,7 +291,7 @@ async function replayPipeline(
 
 function makeReplayProvider(
   base: SyncProvider,
-  snapshot: CapturedSnapshot,
+  snapshot: RestoredSnapshot,
 ): SyncProvider {
   return {
     slug:        base.slug,
@@ -287,9 +302,14 @@ function makeReplayProvider(
     normalize:   base.normalize,
     fetchRecords: async function* () {
       // Yield each raw payload from the snapshot back as if it were a
-      // fresh fetch. The pipeline will re-normalize and re-fingerprint.
-      for (const v of snapshot.validated)   yield v.raw;
-      for (const q of snapshot.quarantined) yield q.raw;
+      // fresh fetch, as a single page (fetchRecords yields pages of
+      // records, not individual records — see SyncProvider.fetchRecords).
+      // The pipeline will re-normalize and re-fingerprint.
+      const page: ProviderRecord[] = [
+        ...snapshot.validated.map((v) => v.raw),
+        ...snapshot.quarantined.map((q) => q.raw),
+      ];
+      yield page;
     },
   };
 }
@@ -299,9 +319,9 @@ function makeReplayProvider(
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function openReplayRow(
-  replayId:  string,
-  snapshot:  CapturedSnapshot,
-  opts:      ReplayOpts,
+  replayId:   string,
+  snapshotId: string,
+  opts:       ReplayOpts,
 ): Promise<void> {
   const { pool } = await import("../db");
   await pool.query(
@@ -312,7 +332,7 @@ async function openReplayRow(
      VALUES ($1, $2, $3, $4, $5, $6, NOW(), 'running', $7)`,
     [
       replayId,
-      snapshot.id,
+      snapshotId,
       opts.mode,
       opts.triggeredBy,
       NORMALIZER_VERSION,

@@ -482,6 +482,7 @@ export async function adminFetchRecent(limit = 100): Promise<Array<PostedMessage
     hiddenReason: r.hidden_reason,
     reportedCount: r.reported_count,
     createdAt: typeof r.created_at === "string" ? r.created_at : r.created_at.toISOString(),
+    firstName: r.first_name || null,
     userName: [r.first_name, r.last_name].filter(Boolean).join(" ") || null,
     userEmail: r.email || null,
   }));

@@ -114,7 +114,10 @@ export default function CertificateVerifyPage() {
     );
   }
 
-  if (isError || (!isLoading && !data)) {
+  // (isLoading is already false here — the block above returned when it was
+  // true — so this is equivalent to the original `!isLoading && !data`, but
+  // written this way lets TS narrow `data` as defined for the rest of the render.)
+  if (isError || !data) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
         <Card className="max-w-md">

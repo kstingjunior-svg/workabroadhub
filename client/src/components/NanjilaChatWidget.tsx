@@ -340,7 +340,14 @@ export default function NanjilaChatWidget() {
       if (opener) {
         hasGreeted.current = true;
         setMessages((prev) =>
-          prev.length === 0 ? [{ role: "assistant", content: opener }] : prev
+          prev.length === 0
+            ? [{
+                id: `greeting_${Date.now()}`,
+                role: "nanjila",
+                text: opener,
+                timestamp: new Date(),
+              }]
+            : prev
         );
       }
     }
@@ -503,8 +510,13 @@ export default function NanjilaChatWidget() {
       }]);
 
       // Auto-play Nanjila's voice reply — ElevenLabs first, browser speech fallback
-      if (greetingAudioRef.current) {
-        greetingAudioRef.current.pause();
+      // (cast: TS narrows greetingAudioRef.current to `null` here because the
+      // earlier guard above also sets it to null and nothing in between
+      // reassigns it *syntactically* — but the `await`s above let other
+      // effects/handlers set it to a real HTMLAudioElement in the meantime)
+      const activeGreetingAudio = greetingAudioRef.current as HTMLAudioElement | null;
+      if (activeGreetingAudio) {
+        activeGreetingAudio.pause();
         greetingAudioRef.current = null;
       }
       if (data.audioUrl) {

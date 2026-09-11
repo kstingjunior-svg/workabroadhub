@@ -167,7 +167,7 @@ export const cache = {
    */
   async wrap<T>(key: string, ttlSeconds: number, loader: () => Promise<T>): Promise<T> {
     // 1. Fast path — cached?
-    const cached = await this.get<T>(key);
+    const cached = await cache.get<T>(key);
     if (cached !== undefined) return cached;
 
     // 2. Single-flight — already loading this key?

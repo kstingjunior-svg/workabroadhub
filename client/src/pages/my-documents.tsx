@@ -134,7 +134,7 @@ export default function MyDocuments() {
   const firstName = user?.firstName || "User";
   const initial = firstName.charAt(0).toUpperCase();
   const memberSince = user?.createdAt
-    ? new Date(user.createdAt as string).toLocaleDateString("en-KE", { month: "short", year: "numeric" })
+    ? new Date(user.createdAt).toLocaleDateString("en-KE", { month: "short", year: "numeric" })
     : "—";
 
   const activeSub = planData?.subscription?.status === "active" ? planData : null;
@@ -348,7 +348,7 @@ export default function MyDocuments() {
                 {completedOrders
                   .filter(o => !(userDocsData?.documents ?? []).some(d => d.orderId === o.id))
                   .map(order => {
-                    const date = new Date(order.createdAt).toLocaleDateString("en-KE", {
+                    const date = new Date(order.createdAt ?? Date.now()).toLocaleDateString("en-KE", {
                       day: "numeric", month: "short", year: "numeric",
                     });
                     const icon = getDocumentIcon(order);
@@ -551,7 +551,7 @@ export default function MyDocuments() {
                 </DialogTitle>
                 <p className="text-xs text-[#7A8A9A]">
                   Generated on{" "}
-                  {new Date(viewingOrder.createdAt).toLocaleDateString("en-KE", {
+                  {new Date(viewingOrder.createdAt ?? Date.now()).toLocaleDateString("en-KE", {
                     day: "numeric", month: "long", year: "numeric",
                   })}
                 </p>

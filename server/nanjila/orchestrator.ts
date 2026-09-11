@@ -137,10 +137,15 @@ export async function orchestrate(opts: OrchestrateOptions): Promise<Orchestrate
     // Model requested tool calls — resolve, invoke, feed results back.
     messages.push(msg);
     for (const call of msg.tool_calls) {
-      const slug = call.function?.name ?? "";
+      // `tool_calls` entries are a union of function-tool-calls and
+      // custom-tool-calls in newer SDK types; we only ever register
+      // function tools, so narrow with an `in` check before touching
+      // `.function`.
+      const fnCall = "function" in call ? call.function : undefined;
+      const slug = fnCall?.name ?? "";
       let parsedInput: any = {};
       try {
-        parsedInput = call.function?.arguments ? JSON.parse(call.function.arguments) : {};
+        parsedInput = fnCall?.arguments ? JSON.parse(fnCall.arguments) : {};
       } catch {
         parsedInput = {};
       }

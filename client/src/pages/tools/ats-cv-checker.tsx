@@ -459,7 +459,7 @@ export default function ATSCVChecker() {
             <WrongDocumentCard
               payload={wrongDoc}
               onTryAnother={() => { setWrongDoc(null); setFile(null); }}
-              onAnalyzeAnyway={file ? () => mutation.mutate({ file, forceAnalyze: true }) : undefined}
+              onAnalyzeAnyway={file ? () => checkCV({ file, forceAnalyze: true }) : undefined}
             />
           </div>
         )}

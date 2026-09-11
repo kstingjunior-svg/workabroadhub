@@ -1491,7 +1491,11 @@ app.use((req, res, next) => {
     if (process.env.NODE_ENV === "production") {
       serveStatic(app);
     } else {
-      const { setupVite } = await import("./vite");
+      // Dev-only ESM module (import.meta + .mts config import). Loaded via a
+      // computed specifier so tsconfig.server.json (CommonJS) doesn't try to
+      // type-check/emit it — tsx resolves it normally in dev.
+      const viteModulePath = "./vite";
+      const { setupVite } = await import(viteModulePath);
 
       await setupVite(httpServer, app);
     }

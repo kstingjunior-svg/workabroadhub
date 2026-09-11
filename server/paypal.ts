@@ -43,7 +43,8 @@ export function getPayPalFlatFeeKes(): number { return PAYPAL_FLAT_FEE_KES; }
 // ─── Client factory ──────────────────────────────────────────────────────────
 // Never cache the client — tokens expire. Always call this fresh per request.
 
-function buildClient(): paypalCheckout.core.PayPalHttpClient {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- @paypal/checkout-server-sdk ships no type declarations (see server/types/paypal.d.ts)
+function buildClient(): any {
   const clientId = (process.env.PAYPAL_CLIENT_ID || "").trim();
   const clientSecret = (process.env.PAYPAL_CLIENT_SECRET || "").trim();
 

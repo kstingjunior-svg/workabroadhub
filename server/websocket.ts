@@ -262,7 +262,9 @@ export function initWebSocketServer(httpServer: Server, sessionParser?: RequestH
         const msg = JSON.parse(raw.toString());
         if (msg.type === "identify" && typeof msg.visitorId === "string" && msg.visitorId.length > 0 && msg.visitorId.length < 100) {
           if (attachedVisitorId) return;  // already attached this connection
-          attachedVisitorId = msg.visitorId;
+          // `msg` is untyped JSON; the `typeof` check above already
+          // guarantees visitorId is a non-empty string at runtime.
+          attachedVisitorId = msg.visitorId as string;
           attachVisitor(attachedVisitorId);
         }
       } catch { /* ignore malformed */ }

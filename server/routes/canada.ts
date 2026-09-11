@@ -16,7 +16,7 @@
  *
  * 2026-06 retention feature: Canada Express Entry hub.
  */
-import type { Express, Response, RequestHandler } from "express";
+import type { Express, Request, Response, RequestHandler } from "express";
 import {
   CANADA_PROGRAMS,
   CANADA_FEES,
@@ -135,7 +135,7 @@ export function registerCanadaRoutes(app: Express): void {
   // surface quickly; CDN cache disabled because responses depend on auth.
   const CACHE_CONTROL = "private, max-age=10";
 
-  app.get("/api/canada/programs", paid, (_req, res: Response) => {
+  app.get("/api/canada/programs", paid, (_req: Request, res: Response) => {
     res.setHeader("Cache-Control", CACHE_CONTROL);
     res.json({
       programs: CANADA_PROGRAMS,
@@ -144,7 +144,7 @@ export function registerCanadaRoutes(app: Express): void {
     });
   });
 
-  app.get("/api/canada/fees", paid, (_req, res: Response) => {
+  app.get("/api/canada/fees", paid, (_req: Request, res: Response) => {
     res.setHeader("Cache-Control", CACHE_CONTROL);
     res.json({
       fees: CANADA_FEES.map((f) => ({
@@ -157,7 +157,7 @@ export function registerCanadaRoutes(app: Express): void {
     });
   });
 
-  app.get("/api/canada/noc", paid, (req, res: Response) => {
+  app.get("/api/canada/noc", paid, (req: Request, res: Response) => {
     const category = String(req.query.category || "").toLowerCase();
     res.setHeader("Cache-Control", CACHE_CONTROL);
     const list = category
@@ -170,7 +170,7 @@ export function registerCanadaRoutes(app: Express): void {
     });
   });
 
-  app.get("/api/canada/eca-providers", paid, (_req, res: Response) => {
+  app.get("/api/canada/eca-providers", paid, (_req: Request, res: Response) => {
     res.setHeader("Cache-Control", CACHE_CONTROL);
     res.json({
       providers: ECA_PROVIDERS.map((p) => ({
@@ -180,7 +180,7 @@ export function registerCanadaRoutes(app: Express): void {
     });
   });
 
-  app.get("/api/canada/portals", paid, (req, res: Response) => {
+  app.get("/api/canada/portals", paid, (req: Request, res: Response) => {
     const category = String(req.query.category || "").toLowerCase();
     res.setHeader("Cache-Control", CACHE_CONTROL);
     const list = category
@@ -192,7 +192,7 @@ export function registerCanadaRoutes(app: Express): void {
     });
   });
 
-  app.get("/api/canada/draws", paid, (_req, res: Response) => {
+  app.get("/api/canada/draws", paid, (_req: Request, res: Response) => {
     // 60s edge cache — short enough to pick up new draws when we update the seed
     res.setHeader("Cache-Control", "public, max-age=60, s-maxage=600");
 

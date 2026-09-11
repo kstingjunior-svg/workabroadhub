@@ -186,6 +186,7 @@ export default function KenyaCareers() {
         setFilters({
           counties:   Array.isArray(f.counties)   ? f.counties   : [],
           categories: Array.isArray(f.categories) ? f.categories : [],
+          industries: Array.isArray(f.industries) ? f.industries : [],
           companies:  Array.isArray(f.companies)  ? f.companies  : [],
         });
       }

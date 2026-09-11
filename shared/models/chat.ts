@@ -17,15 +17,19 @@ export const messages = pgTable("messages", {
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
+// NOTE: the omit masks are cast because drizzle-zod@0.7.1 mis-infers the
+// omit() param type under tsconfig.server.json's CommonJS resolution
+// ("boolean is not assignable to never") — the same documented bug that
+// forced @ts-nocheck in shared/schema.ts. Runtime behavior is unchanged.
 export const insertConversationSchema = createInsertSchema(conversations).omit({
   id: true,
   createdAt: true,
-});
+} as any);
 
 export const insertMessageSchema = createInsertSchema(messages).omit({
   id: true,
   createdAt: true,
-});
+} as any);
 
 export type Conversation = typeof conversations.$inferSelect;
 export type InsertConversation = z.infer<typeof insertConversationSchema>;

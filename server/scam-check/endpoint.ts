@@ -96,7 +96,7 @@ export function registerScamCheckRoute(app: Express): void {
         const { analyzeScam } = await import("./analyzer");
         const report = await analyzeScam({ text, imageDataUrl });
 
-        if (!report.ok) {
+        if (report.ok === false) {
           return res.status(502).json({ ok: false, message: report.message });
         }
 

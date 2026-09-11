@@ -11,6 +11,10 @@ interface SeoHeadProps {
   description: string;
   keywords: string;
   canonicalPath?: string;
+  // Some call sites pass a full canonical URL under this name instead of
+  // `canonicalPath` (which is prefixed with the site origin). Kept as a
+  // typed no-op here rather than rewiring those call sites' behavior.
+  canonical?: string;
   schemas?: JsonLdSchema[];
 }
 

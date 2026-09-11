@@ -81,7 +81,7 @@ export function LockedContentPreview({
               ? "bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white"
               : "bg-primary hover:bg-primary/90 text-primary-foreground"
           )}
-          onClick={() => openUpgradeModal("feature_locked", "Verified Jobs", plan)}
+          onClick={() => openUpgradeModal("locked_feature", "Verified Jobs", plan === "pro" ? "pro" : "basic")}
           data-testid="btn-unlock-jobs"
         >
           {plan === "pro" ? (

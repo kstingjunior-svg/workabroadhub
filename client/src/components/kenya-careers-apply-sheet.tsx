@@ -47,7 +47,7 @@ const EDUCATION_LEVELS = [
 
 interface ApplyStatus {
   canApply:    boolean;
-  reason:      "signin" | "upgrade" | "daily_limit" | "ok";
+  reason:      "signin" | "upgrade" | "daily_limit" | "rate_limit" | "ok";
   tier:        string | null;
   appsToday:   number;
   dailyLimit:  number;

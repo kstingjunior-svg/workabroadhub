@@ -194,7 +194,7 @@ export default function FAQPage() {
                 <Accordion type="single" collapsible className="space-y-3">
                   {searchResults.map((f, i) => (
                     <AccordionItem key={i} value={`search-${i}`} className="border rounded-lg px-4">
-                      <AccordionTrigger className="text-left text-sm font-semibold py-4 text-slate-900 dark:text-slate-100" data-testid={`faq-search-item-${i}`}>
+                      <AccordionTrigger className="text-left text-base font-bold py-4 !text-slate-900 dark:!text-white" data-testid={`faq-search-item-${i}`}>
                         {f.q}
                       </AccordionTrigger>
                       <AccordionContent className="text-sm text-slate-700 dark:text-slate-300 pb-4 leading-relaxed">{f.a}</AccordionContent>
@@ -242,7 +242,7 @@ export default function FAQPage() {
                           className="border border-slate-200 rounded-lg px-4 hover:border-teal-200 transition-colors"
                         >
                           <AccordionTrigger
-                            className="text-left text-sm font-semibold py-4 hover:no-underline text-slate-900 dark:text-slate-100"
+                            className="text-left text-base font-bold py-4 hover:no-underline !text-slate-900 dark:!text-white"
                             data-testid={`faq-item-${activeCategory}-${i}`}
                           >
                             {f.q}

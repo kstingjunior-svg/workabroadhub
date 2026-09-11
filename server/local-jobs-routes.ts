@@ -2411,7 +2411,7 @@ export function registerLocalJobsRoutes(app: Express): void {
           ? "No paid applications to seed jobs found. You're clear — no refunds needed."
           : `${rows.length} applicant${rows.length === 1 ? "" : "s"} applied to seed jobs with a paid plan. Refund each KES 99 via M-Pesa B2C (paybill 4153025) using the receipt number, or extend their trial as compensation.`,
         count: rows.length,
-        applicants: rows.map((r) => ({
+        applicants: rows.map((r: any) => ({
           applicationId: r.application_id,
           appliedAt:     r.applied_at,
           applicantName: r.applicant_name,
@@ -2466,7 +2466,7 @@ export function registerLocalJobsRoutes(app: Express): void {
         windowHours: 24,
         totalApplications: Number(totals?.total_apps ?? 0),
         uniqueApplicants:  Number(totals?.unique_users ?? 0),
-        byTier: byTier.map((r) => ({ tier: r.plan, count: Number(r.count) })),
+        byTier: byTier.map((r: any) => ({ tier: r.plan, count: Number(r.count) })),
         gateLogs: {
           message: "Detailed allow/block decisions are emitted to Render logs. Search for [kenya-careers/apply] ALLOW or BLOCK.",
         },
@@ -2561,7 +2561,7 @@ export function registerLocalJobsRoutes(app: Express): void {
       `, [userId]).catch(() => ({ rows: [] }) as any);
 
       res.json({
-        applications: rows.map((r) => ({
+        applications: rows.map((r: any) => ({
           id:         r.id,
           status:     r.status,
           appliedAt:  r.applied_at,

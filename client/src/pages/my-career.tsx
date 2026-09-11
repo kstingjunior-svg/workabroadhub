@@ -154,6 +154,7 @@ export default function MyCareer() {
       <SeoHead
         title="My Career — WorkAbroad Hub"
         description="Your career at a glance: applications, CV scores, interviews, offers, and country reach — all in one dashboard."
+        keywords="career dashboard, job applications tracker, CV score, overseas job offers"
       />
 
       {/* Header */}

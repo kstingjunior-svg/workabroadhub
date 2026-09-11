@@ -7,6 +7,7 @@ export type ActivityEvent =
   | "payment_success"
   | "payment_failed"
   | "user_upgraded"
+  | "payment_blocked_trial_used"
   | "error";
 
 interface LogOptions {

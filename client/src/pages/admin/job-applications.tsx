@@ -360,7 +360,7 @@ export default function AdminJobApplications() {
               </div>
 
               {/* Intake Data */}
-              {selectedApp.intakeData && (
+              {!!selectedApp.intakeData && (
                 <div className="text-sm bg-muted/30 rounded-lg p-4 space-y-2">
                   <p className="font-medium text-muted-foreground uppercase tracking-wide text-xs">Client Intake Information</p>
                   {Object.entries(selectedApp.intakeData as any).map(([k, v]) => (

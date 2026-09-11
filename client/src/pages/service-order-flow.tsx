@@ -235,7 +235,7 @@ export default function ServiceOrderFlow() {
   // Clear draft the moment we successfully move to payment/generating stage —
   // the intake is already captured server-side by then.
   useEffect(() => {
-    if (stage === "generating" || stage === "done") {
+    if (stage === "processing" || stage === "done") {
       try { localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
       setDraftSaved(false);
     }

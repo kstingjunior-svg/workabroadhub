@@ -63,7 +63,7 @@ export async function runFoundation(
 
     for (const raw of page) {
       const result = processOne(raw, provider);
-      if (result.ok) {
+      if (result.ok === true) {
         validated.push(result.validated);
         fingerprintsByLicense.set(
           result.validated.agency.licenseNumber,
@@ -149,7 +149,7 @@ function processOne(raw: ProviderRecord, provider: SyncProvider): ProcessResult 
 
   if (provider.validate) {
     const providerCheck = provider.validate(normalized);
-    if (!providerCheck.ok) {
+    if (providerCheck.ok === false) {
       timings.validate = performance.now() - validateStart;
       return {
         ok: false,
@@ -165,7 +165,7 @@ function processOne(raw: ProviderRecord, provider: SyncProvider): ProcessResult 
   const baseCheck = baseValidate(normalized);
   timings.validate = performance.now() - validateStart;
 
-  if (!baseCheck.ok) {
+  if (baseCheck.ok === false) {
     return {
       ok: false,
       quarantined: {

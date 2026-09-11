@@ -305,7 +305,8 @@ export default function WriteFromScratchPage() {
   // This calls the backend paypal-init endpoint, redirects to PayPal, and
   // captures on return. Matches the M-Pesa flow's UX.
   const startPayPalPayment = async () => {
-    const missing = requiredFor(docType).find((k) => !form[k]?.trim());
+    if (!docType) return;
+    const missing = requiredFields(docType).find((f) => !(form[f] ?? "").trim());
     if (missing) {
       toast({
         title: "Please fill this in",
@@ -463,6 +464,7 @@ export default function WriteFromScratchPage() {
       <SeoHead
         title="Write CV / Cover Letter From Scratch — WorkAbroad Hub"
         description="Generate a professional CV, cover letter, recruitment CV, or reference letter from just a short description of yourself. No upload required. Word + PDF download."
+        keywords="write CV from scratch, cover letter generator, recruitment CV, reference letter generator"
         canonical="https://workabroadhub.tech/tools/write-from-scratch"
       />
       <header className="bg-card border-b sticky top-0 z-10">

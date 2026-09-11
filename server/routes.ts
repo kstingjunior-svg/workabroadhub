@@ -1,4 +1,4 @@
-import type { Express, RequestHandler } from "express";
+import type { Express, RequestHandler, Request, Response } from "express";
 import rateLimit from "express-rate-limit";
 import { nanoid } from "nanoid";
 import { createServer, type Server } from "http";
@@ -733,7 +733,6 @@ async function flagForManualReview(
     if (adminPhone) {
       const { sendWhatsAppAlert } = await import("./sms");
       await sendWhatsAppAlert(
-        adminPhone,
         `🚨 *FRAUD REVIEW REQUIRED*\n` +
         `User: ${userId}\n` +
         `Trigger: ${context.action}\n` +
@@ -2163,7 +2162,7 @@ Crawl-delay: 1`);
 
       await storage.createComplianceAuditLog({
         action: "plan_updated",
-        performedBy: req.user?.claims?.sub || "admin",
+        userId: req.user?.claims?.sub || "admin",
         recordType: "plan",
         recordId: planId,
         details: { changes: updates },
@@ -2186,7 +2185,7 @@ Crawl-delay: 1`);
 
       await storage.createComplianceAuditLog({
         action: updated?.isActive ? "plan_activated" : "plan_deactivated",
-        performedBy: req.user?.claims?.sub || "admin",
+        userId: req.user?.claims?.sub || "admin",
         recordType: "plan",
         recordId: planId,
         details: { isActive: updated?.isActive },
@@ -2779,6 +2778,13 @@ Crawl-delay: 1`);
         } else {
           return res.status(404).json({ message: "Plan not found" });
         }
+      }
+      // Every branch above either assigns `plan` or returns — this guard is
+      // unreachable at runtime, but narrows `plan` from `Plan | undefined`
+      // to `Plan` for TS (the fallback assignment above is `as any`, which
+      // widens back to the declared type rather than narrowing).
+      if (!plan) {
+        return res.status(404).json({ message: "Plan not found" });
       }
 
       const normalizedPhone = normalizePhone(phoneNumber, "KE") ?? phoneNumber;
@@ -4582,7 +4588,7 @@ Crawl-delay: 1`);
             const txRef = `TXN${Date.now()}`;
             await storage.updatePayment(payment.id, { status: "success", transactionRef: txRef } as any);
             const svcId = (payment as any).serviceId;
-            await storage.createUserSubscription({ userId, paymentId: payment.id, isActive: true, expiresAt: null });
+            await storage.createUserSubscription({ userId, paymentId: payment.id, status: "active", endDate: null });
             await storage.unlockService(userId, svcId, payment.id, { transactionRef: txRef, method: "mpesa", simulated: true });
           } catch (e: any) { console.error("[/api/mpesa/stk sim]", e.message); }
         }, 2000);
@@ -5141,14 +5147,19 @@ Crawl-delay: 1`);
         return res.status(400).json({ message: "Invalid transaction code format. Example: NXX123456789" });
       }
 
+      let existingMetadata: object = {};
+      try {
+        existingMetadata = payment.metadata ? JSON.parse(payment.metadata as unknown as string) : {};
+      } catch { /* leave {} on malformed existing metadata */ }
+
       await storage.updatePayment(payment.id, {
         status: "pending_manual_verification",
-        metadata: {
-          ...(payment.metadata as object ?? {}),
+        metadata: JSON.stringify({
+          ...existingMetadata,
           manualTxCode: txCode,
           manualSubmittedAt: new Date().toISOString(),
           manualPaybill: process.env.MPESA_SHORTCODE?.trim() || "4153025",
-        },
+        }),
       });
 
       // Log for admin audit
@@ -6272,10 +6283,17 @@ Crawl-delay: 1`);
         return res.status(401).json({ error: "Unauthorized" });
       }
 
-      const { phone } = req.body;
-      
+      const { phone, amount } = req.body;
+
       if (!phone) {
         return res.status(400).json({ error: "Phone number is required" });
+      }
+      // stkPush() requires a numeric amount — this generic endpoint's body
+      // previously omitted it entirely (a pre-existing bug: every call would
+      // have thrown at runtime). Require it explicitly now.
+      const parsedAmount = Number(amount);
+      if (!amount || !Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+        return res.status(400).json({ error: "amount is required" });
       }
 
       const phoneRegex = /^(?:254|\+254|0)[71]\d{8}$/;
@@ -6284,7 +6302,7 @@ Crawl-delay: 1`);
       }
 
       const { stkPush } = await import("./mpesa");
-      const response = await stkPush(phone);
+      const response = await stkPush(phone, parsedAmount);
       res.json(response);
     } catch (err: any) {
       console.error("STK Push error:", JSON.stringify(err.response?.data || err.message));
@@ -7412,7 +7430,7 @@ Crawl-delay: 1`);
       if (!force && (payment.status === "success" || payment.status === "completed")) {
         const existingSub = await storage.getUserSubscription(payment.userId);
         const now = new Date();
-        const subActive = existingSub?.isActive && (!existingSub.expiresAt || existingSub.expiresAt >= now);
+        const subActive = existingSub?.status === "active" && (!existingSub.endDate || existingSub.endDate >= now);
         const userRow = await storage.getUserById(payment.userId);
         if (subActive && userRow?.plan === planId) {
           return res.json({ success: true, alreadyActive: true, message: "User already has an active plan. Pass force=true to reprocess anyway." });
@@ -8131,7 +8149,7 @@ Crawl-delay: 1`);
 
       // Check if user already has an active subscription
       const currentSub = await storage.getUserSubscription(userId);
-      if (currentSub?.isActive && (currentSub.planId === "pro" || currentSub.planId === planId)) {
+      if (currentSub?.status === "active" && (currentSub.plan === "pro" || currentSub.plan === planId)) {
         return res.status(409).json({ message: "You already have an active subscription." });
       }
 
@@ -8230,8 +8248,8 @@ Crawl-delay: 1`);
       if (existingTx) {
         // If the plan is already active, just return success
         const currentSub = await storage.getUserSubscription(userId);
-        if (currentSub?.isActive) {
-          return res.json({ success: true, plan: currentSub.planId || planId, message: "Plan already active.", alreadyProcessed: true });
+        if (currentSub?.status === "active") {
+          return res.json({ success: true, plan: currentSub.plan || planId, message: "Plan already active.", alreadyProcessed: true });
         }
         return res.status(409).json({ message: "This M-Pesa receipt has already been used for a different account." });
       }
@@ -10579,7 +10597,7 @@ Crawl-delay: 1`);
     return score;
   }
 
-  async function getUserInterests(user_id: string): Promise<{ topCategory: string | undefined; topCountry: string | undefined }> {
+  async function getUserInterests(user_id: string): Promise<{ topCategory: string | undefined; topCountry: string | undefined; categories: Record<string, number> }> {
     const { data } = await supabase
       .from("user_events")
       .select("category, country")
@@ -11058,7 +11076,7 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
           email: user.email,
           firstName: user.firstName,
           lastName: user.lastName,
-          paid: subscription?.isActive || false,
+          paid: subscription?.status === "active" || false,
           isActive: user.isActive,
         };
       });
@@ -16556,6 +16574,10 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
       const errors: string[] = [];
 
       for (const user of recipients) {
+        // `recipients` was already filtered to `u.phone` truthy above, but
+        // that filter predicate is typed `any` so TS can't see the guard —
+        // re-check here so `user.phone` narrows to `string`.
+        if (!user.phone) { skipped++; continue; }
         const name = user.firstName || user.email?.split("@")[0] || "there";
         const message = buildMsg(name, variables);
         const result = await sendWhatsApp(user.phone, message);
@@ -21872,11 +21894,14 @@ Tone examples:
   // middleware. Discovered during the 2026-06 full production audit.
   app.post("/api/admin/portals", isAuthenticated, isAdmin, async (req: any, res) => {
     const parsed = insertVerifiedPortalSchema.safeParse(req.body);
-    if (!parsed.success) {
+    if (parsed.success === false) {
       return res.status(400).json({ message: "Invalid portal data", errors: parsed.error.errors });
     }
     try {
-      const [portal] = await db.insert(verifiedPortals).values(parsed.data).returning();
+      // Cast: insertVerifiedPortalSchema's inferred output collapses to {} under
+      // tsconfig.server.json (drizzle-zod@0.7.1 inference bug documented in
+      // shared/schema.ts). The zod schema has already validated the shape.
+      const [portal] = await db.insert(verifiedPortals).values(parsed.data as typeof verifiedPortals.$inferInsert).returning();
       res.status(201).json(portal);
     } catch (err: any) {
       res.status(500).json({ message: "Failed to add portal", error: err.message });
@@ -22941,7 +22966,7 @@ If your instinct says "3,500", STOP and re-read the SERVICES block above.`;
       // foreign numbers.
       const { validateKenyanPhone } = await import("./lib/validate-kenyan-phone");
       const phoneCheck = validateKenyanPhone(userRow.phone);
-      if (!phoneCheck.ok) {
+      if (phoneCheck.ok === false) {
         return res.status(400).json({
           message: phoneCheck.reason,
           code: "INVALID_MPESA_PHONE",

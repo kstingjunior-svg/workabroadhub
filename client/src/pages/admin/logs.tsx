@@ -242,7 +242,7 @@ export default function AdminLogsPage() {
                                 <div><span className="text-muted-foreground">Full ID: </span><span className="font-mono">{log.id}</span></div>
                                 {log.userId && <div><span className="text-muted-foreground">User ID: </span><span className="font-mono">{log.userId}</span></div>}
                                 {log.ip && <div><span className="text-muted-foreground">IP: </span><span className="font-mono">{log.ip}</span></div>}
-                                {log.meta && (
+                                {!!log.meta && (
                                   <div className="col-span-2">
                                     <span className="text-muted-foreground">Meta: </span>
                                     <pre className="inline bg-muted rounded px-2 py-1 font-mono text-xs whitespace-pre-wrap break-all">

@@ -36,6 +36,7 @@
     "node_modules",
     "scripts",
     "server/server-prod.ts",
+    "server/vite.ts",
     "tests",
     "vite.config.mts",
     "vite.config.ts",

@@ -40,6 +40,8 @@ interface Step {
   title: string;
   description: string;
   tip?: string;
+  tips?: string;
+  estimatedTime?: string;
 }
 interface OfficialLink {
   label: string;

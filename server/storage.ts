@@ -4606,6 +4606,12 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(fraudInvestigationNotes.createdAt));
   }
 
+  // 2026: not implemented yet — /api/admin/monitor calls this optionally
+  // (`storage.getFraudFlagStats?.()`) and falls back to a raw suspicious-
+  // payments count when it's absent. Declared here (unimplemented, hence
+  // optional) purely so that call site type-checks against this class.
+  getFraudFlagStats?: () => Promise<{ openFlags: number } | null>;
+
   async updateFraudFlagAutoActions(id: string, actions: string[]): Promise<void> {
     await db.update(fraudFlags)
       .set({ autoActions: actions })
@@ -5213,6 +5219,14 @@ export class DatabaseStorage implements IStorage {
         .returning({ likesCount: scamReports.likesCount });
       return { liked: true, likesCount: updated?.likesCount ?? 0 };
     }
+  }
+
+  async hasLikedScamReport(reportId: string, fingerprint: string): Promise<boolean> {
+    const { scamWallLikes } = await import('@shared/schema');
+    const existing = await db.select().from(scamWallLikes)
+      .where(and(eq(scamWallLikes.reportId, reportId), eq(scamWallLikes.fingerprint, fingerprint)))
+      .limit(1);
+    return existing.length > 0;
   }
 
   async getScamWallComments(reportId: string): Promise<import('@shared/schema').ScamWallComment[]> {

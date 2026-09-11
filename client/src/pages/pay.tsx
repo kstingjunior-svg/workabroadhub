@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, fetchCsrfToken } from "@/lib/queryClient";
+import { apiRequest } from "@/lib/queryClient";
 import { formatPhone } from "@/lib/phone";
 import {
   CheckCircle, Loader2, Shield, ArrowLeft,
@@ -94,10 +94,9 @@ export default function PayPage() {
   // ── STK push mutation ───────────────────────────────────────────────────────
   const stkMutation = useMutation({
     mutationFn: async (payload: object) => {
-      const csrf = await fetchCsrfToken();
-      return apiRequest("POST", "/api/payments/mpesa/stk-push", payload, {
-        "x-csrf-token": csrf,
-      });
+      // apiRequest already attaches the CSRF token internally for mutating
+      // requests (see lib/queryClient.ts) — no need to fetch/pass it here.
+      return apiRequest("POST", "/api/payments/mpesa/stk-push", payload);
     },
     onSuccess: (res: any) => {
       const id = res?.paymentId ?? res?.payment_id;
