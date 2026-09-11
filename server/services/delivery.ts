@@ -80,7 +80,7 @@ export async function deliverService(payment: any, user: any): Promise<void> {
         type: "info",
         title: "CV Generation Started",
         message:
-          "Your ATS CV is being generated. You'll get a WhatsApp + email the moment it's ready.",
+          "Your ATS CV is being generated. You'll get an email the moment it's ready.",
       }).catch((err) => reportRejection(err, 'services/delivery'));
 
       break;
@@ -258,7 +258,7 @@ export async function deliverService(payment: any, user: any): Promise<void> {
         userId: user.id,
         type: "info",
         title: "CV Revamp In Progress",
-        message: "Your CV is being revamped. You'll get a WhatsApp + email the moment it's ready.",
+        message: "Your CV is being revamped. You'll get an email the moment it's ready.",
       }).catch((err) => { console.error('[deliverService] Notification failed:', err?.message); });
 
       break;
@@ -298,7 +298,7 @@ export async function deliverService(payment: any, user: any): Promise<void> {
         userId: user.id,
         type: "info",
         title: "Preparing your 5 application kits",
-        message: "Your 5 tailored application kits are being generated. You'll receive the PDF via WhatsApp + email in ~3 minutes.",
+        message: "Your 5 tailored application kits are being generated. You'll receive the PDF via email in ~3 minutes.",
       }).catch((err) => { console.error('[deliverService] Notification failed:', err?.message); });
 
       break;
@@ -309,14 +309,14 @@ export async function deliverService(payment: any, user: any): Promise<void> {
     case "document_prep": {
       await sendWhatsApp(
         phone,
-        `📋 Guided Apply Confirmed — KES ${amount.toLocaleString()} received!\n\nHi ${name}, we're preparing your premium bundle:\n\n✅ 5 tailored application kits (real employers)\n✅ 30-day tracker (pre-filled)\n✅ Interview prep for your top 3\n✅ 4 weeks of Monday WhatsApp check-ins\n\nFull bundle PDF arrives via WhatsApp + email in ~4 minutes.\n\n— WorkAbroad Hub 🌍`,
+        `📋 Guided Apply Confirmed — KES ${amount.toLocaleString()} received!\n\nHi ${name}, we're preparing your premium bundle:\n\n✅ 5 tailored application kits (real employers)\n✅ 30-day tracker (pre-filled)\n✅ Interview prep for your top 3\n✅ 4 weeks of Monday email check-ins\n\nFull bundle PDF arrives via email in ~4 minutes.\n\n— WorkAbroad Hub 🌍`,
       ).catch((err) => { console.error('[deliverService] WhatsApp failed:', { error: err?.message, timestamp: new Date().toISOString() }); });
 
       storage.createUserNotification({
         userId: user.id,
         type: "info",
         title: "Preparing your Guided Apply bundle",
-        message: "Your 5 kits + tracker + interview prep bundle is being generated. Delivery via WhatsApp + email in ~4 minutes.",
+        message: "Your 5 kits + tracker + interview prep bundle is being generated. Delivery via email in ~4 minutes.",
       }).catch((err) => { console.error('[deliverService] Notification failed:', err?.message); });
 
       break;
@@ -372,7 +372,7 @@ export async function deliverService(payment: any, user: any): Promise<void> {
         userId: user.id,
         type: "info",
         title: "Country CV Rewrite In Progress",
-        message: "Your country-specific CV rewrite is being prepared. You'll get a WhatsApp + email the moment it's ready.",
+        message: "Your country-specific CV rewrite is being prepared. You'll get an email the moment it's ready.",
       }).catch((err) => { console.error('[deliverService] Notification failed:', err?.message); });
       break;
     }
@@ -387,7 +387,7 @@ export async function deliverService(payment: any, user: any): Promise<void> {
         userId: user.id,
         type: "info",
         title: "Cover Letter In Progress",
-        message: "Your cover letter is being written. You'll get a WhatsApp + email the moment it's ready.",
+        message: "Your cover letter is being written. You'll get an email the moment it's ready.",
       }).catch((err) => { console.error('[deliverService] Notification failed:', err?.message); });
       break;
     }
@@ -402,7 +402,7 @@ export async function deliverService(payment: any, user: any): Promise<void> {
         userId: user.id,
         type: "info",
         title: "Statement of Purpose In Progress",
-        message: "Your SOP is being written. You'll get a WhatsApp + email the moment it's ready.",
+        message: "Your SOP is being written. You'll get an email the moment it's ready.",
       }).catch((err) => { console.error('[deliverService] Notification failed:', err?.message); });
       break;
     }
@@ -417,7 +417,7 @@ export async function deliverService(payment: any, user: any): Promise<void> {
         userId: user.id,
         type: "info",
         title: "Motivation Letter In Progress",
-        message: "Your motivation letter is being drafted. You'll get a WhatsApp + email the moment it's ready.",
+        message: "Your motivation letter is being drafted. You'll get an email the moment it's ready.",
       }).catch((err) => { console.error('[deliverService] Notification failed:', err?.message); });
       break;
     }
@@ -432,7 +432,7 @@ export async function deliverService(payment: any, user: any): Promise<void> {
         userId: user.id,
         type: "info",
         title: "Bundle In Progress",
-        message: "Your CV + cover letter bundle is being prepared. You'll get a WhatsApp + email the moment it's ready.",
+        message: "Your CV + cover letter bundle is being prepared. You'll get an email the moment it's ready.",
       }).catch((err) => { console.error('[deliverService] Notification failed:', err?.message); });
       break;
     }
@@ -447,7 +447,7 @@ export async function deliverService(payment: any, user: any): Promise<void> {
         userId: user.id,
         type: "info",
         title: "LinkedIn Optimization In Progress",
-        message: "Your LinkedIn optimization is being prepared. You'll get a WhatsApp + email the moment it's ready.",
+        message: "Your LinkedIn optimization is being prepared. You'll get an email the moment it's ready.",
       }).catch((err) => { console.error('[deliverService] Notification failed:', err?.message); });
       break;
     }

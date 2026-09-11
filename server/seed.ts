@@ -251,7 +251,7 @@ export async function seedDatabase() {
       description: "AI-generated visit visa application package: draft form, documents checklist, cover letter to embassy, financial proof calc, sample itinerary, interview prep — tailored to your target country",
       price: 999, currency: "KES", isActive: true, order: 14,
       category: "Legal & Verification", badge: "New",
-      features: ["Full application form draft (US DS-160, UK, Canada, Schengen, UAE...)", "Personalized documents checklist per country", "Cover letter to consulate (300-350 words)", "Financial proof calculation for your trip", "Sample day-by-day itinerary", "8 likely interview questions + model answers", "Delivered as PDF via WhatsApp + email"],
+      features: ["Full application form draft (US DS-160, UK, Canada, Schengen, UAE...)", "Personalized documents checklist per country", "Cover letter to consulate (300-350 words)", "Financial proof calculation for your trip", "Sample day-by-day itinerary", "8 likely interview questions + model answers", "Delivered as PDF via email"],
     },
     {
       slug: "employer_verification",
