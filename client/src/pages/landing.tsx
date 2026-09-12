@@ -309,10 +309,21 @@ export default function Landing() {
                 </Button>
               </div>
             </div>
-            {/* Mobile-only: keep just the primary CTA + a hamburger toggle
+            {/* Mobile-only: keep the primary CTA + a hamburger toggle
                 visible in the bar itself — everything else moves into the
-                collapsible panel below so the bar never overflows. */}
-            <div className="flex lg:hidden items-center gap-2 shrink-0">
+                collapsible panel below so the bar never overflows.
+                2026-09 (Tony's "login button is nowhere on phone" report):
+                Login used to live only inside the hamburger panel below.
+                That was fine when the auth modal let you switch from Sign Up
+                to Sign In with one tap — now that Login and Sign Up are two
+                fully separate modals with no in-modal switch, a returning
+                user landing on this page had no visible way in without
+                first discovering the hamburger. Login is now a compact
+                button right in the bar, same as Sign Up. */}
+            <div className="flex lg:hidden items-center gap-1.5 shrink-0">
+              <Button variant="outline" size="sm" onClick={openLogin} data-testid="button-login-mobile-bar" aria-label="Log in to your account" className="px-2.5 whitespace-nowrap">
+                {t("common.login")}
+              </Button>
               <Button size="sm" onClick={openSignUp} data-testid="button-get-started-mobile" aria-label="Sign up for a new account" className="px-3 whitespace-nowrap">
                 {t("common.signUp")}
               </Button>
