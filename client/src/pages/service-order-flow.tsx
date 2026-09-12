@@ -385,6 +385,22 @@ export default function ServiceOrderFlow() {
       toast({ title: "Upload your CV", description: "We need your CV to generate the document.", variant: "destructive" });
       return;
     }
+    // 2026-09 (bug found while testing paid services live): meta.needsCountry
+    // and meta.needsJobDescription were declared and used to render the
+    // fields below, but nothing ever checked them before letting the user
+    // pay — sop_writing and motivation_letter (needsCv: false) had NO
+    // required-field check at all, so "Continue to payment" would create a
+    // real order with every field blank. The server now double-validates
+    // the same two fields (see service-order-routes.ts), but we check here
+    // first so the user sees the error immediately, before a network round-trip.
+    if (meta.needsCountry && !targetCountry.trim()) {
+      toast({ title: "Target country needed", description: "Tell us which country this is for so we can tailor the document to it.", variant: "destructive" });
+      return;
+    }
+    if (meta.needsJobDescription && !jobDescription.trim()) {
+      toast({ title: "A few more details needed", description: "Add the job description or role details — without them we can't write something specific to you.", variant: "destructive" });
+      return;
+    }
     // Guest checkout: name/email/phone all required (server double-validates).
     // We front-load the check so the user sees the error inline before waiting
     // for a network round-trip.

@@ -236,6 +236,19 @@ interface ServiceConfig {
   name: string;
   /** Does this service require the user to upload a CV? */
   needsCv: boolean;
+  /**
+   * Does this service require a target country before it can produce a
+   * meaningful document? Mirrors client SERVICE_META in
+   * service-order-flow.tsx. 2026-09: added after discovering sop_writing
+   * and motivation_letter (needsCv: false) had NO required-field check at
+   * all — a customer could pay for a completely blank document. The client
+   * checks this first for instant feedback; this is the enforced copy, so
+   * a request that skips the UI (or a client bug) can't create a blank
+   * paid order.
+   */
+  needsCountry?: boolean;
+  /** Does this service require job/role details? Same rationale as needsCountry. */
+  needsJobDescription?: boolean;
   /** GPT system prompt for the generation */
   systemPrompt: string;
   /** Suggested output filename (without extension) */
@@ -378,6 +391,8 @@ Output as plain text. No markdown headings.`,
   sop_writing: {
     name: "Statement of Purpose",
     needsCv: false,
+    needsCountry: true,
+    needsJobDescription: true,
     filename: "Statement_of_Purpose",
     estSeconds: 90,
     systemPrompt: `You are a university admissions essay writer. Follow the Master Writing Standard above. Using the user's details, produce a Statement of Purpose that reads as if written by the applicant themselves:
@@ -393,6 +408,8 @@ Output as plain text. Use ## for section headers if it helps flow.`,
   motivation_letter: {
     name: "Motivation Letter",
     needsCv: false,
+    needsCountry: true,
+    needsJobDescription: true,
     filename: "Motivation_Letter",
     estSeconds: 60,
     systemPrompt: `You are a scholarship / EU motivation letter expert. Follow the Master Writing Standard above. Produce a motivation letter that tells a compelling story and feels handcrafted for the applicant:
@@ -2401,6 +2418,18 @@ export function registerServiceOrderRoutes(app: Express, isAuthenticated: Reques
         const jobDescription = String(req.body?.jobDescription ?? "").trim() || null;
         const targetCountry  = String(req.body?.targetCountry ?? "").trim() || null;
         const extraInput     = String(req.body?.extraInput ?? "").trim() || null;
+
+        // 2026-09: enforced copy of the client-side check in
+        // service-order-flow.tsx handleSubmit(). Found live: sop_writing and
+        // motivation_letter (needsCv: false) had no required-field check
+        // anywhere, client or server, so a request that skipped or bypassed
+        // the UI could create a real paid order with every field blank.
+        if (config.needsCountry && !targetCountry) {
+          return res.status(400).json({ message: "Target country is required for this service." });
+        }
+        if (config.needsJobDescription && !jobDescription) {
+          return res.status(400).json({ message: "Job description / role details are required for this service." });
+        }
         // 2026-07 (viral share loop): client sends the ref token from
         // localStorage in every order-init request. Attribution happens in
         // createOrder — safe to send any value, it's re-validated there.
