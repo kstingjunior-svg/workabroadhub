@@ -103,10 +103,15 @@ export function UpgradeModal() {
     closeUpgradeModal();
     setLocation("/pricing");
   }, [setLocation, closeUpgradeModal]);
-  // 2026-06: modal now offers all 3 paid tiers. Founder feedback — too many
-  // signups cancelled when only KES 4,500 was shown. Default to Monthly
-  // (Kenya's most-loved entry point), let user click through to Trial or Yearly.
-  const [selectedPlan, setSelectedPlan] = useState<"trial" | "monthly" | "pro">("monthly");
+  // 2026-09 (Tony's "lead with the real commitment" request): modal offers
+  // all 3 paid tiers, but now defaults to Yearly. Reasoning straight from
+  // the founder — nobody finds a job abroad in a single day, so a 24-hour
+  // KES 99 trial shouldn't be the thing people see first. Yearly (KES
+  // 4,500) is the serious-job-seeker default; Monthly is the flexible
+  // middle option; Trial stays available as a last, smallest card for
+  // someone who just wants to look around before committing.
+  // (Supersedes the 2026-06 "default to Monthly" decision.)
+  const [selectedPlan, setSelectedPlan] = useState<"trial" | "monthly" | "pro">("pro");
   const [phone, setPhone] = useState("");
   const [paymentId, setPaymentId] = useState<string | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(70);
@@ -366,16 +371,19 @@ export function UpgradeModal() {
           <p className="text-sm text-muted-foreground">{subheadline}</p>
         </div>
 
-        {/* ── STEP: compare (4-tier picker) ──────────────────────────────────
-            Founder feedback (2026-06): when only Free + Pro (KES 4,500) were
-            visible, 80%+ of users canceled the M-Pesa STK because they
-            couldn't see the KES 99 + KES 1,000 options. Now shows all 4
-            tiers as clickable cards. Default selection = Monthly KES 1,000
-            (the strongest entry-level commitment). */}
+        {/* ── STEP: compare (4-tier picker) ──────────────────────────────────────────────
+            2026-09 (Tony's "lead with the real commitment" request): card
+            ORDER now matches the recommended path — Free (reference point),
+            Yearly (the serious-job-seeker default, highlighted + pre-
+            selected), Monthly (flexible middle option), Trial (last —
+            "just want to try?"). Nobody lands a job abroad in 24 hours, so
+            the one-day KES 99 pass is no longer the thing people see first.
+            Supersedes the 2026-06 "Monthly is the default door" decision —
+            all 4 tiers still render as clickable cards, same as before. */}
         {step === "compare" && (
           <div className="p-4 sm:p-6">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-4">
-              {/* Free plan — informational */}
+              {/* Free plan — informational reference point, always first */}
               <div className="relative rounded-xl border-2 border-border overflow-hidden flex flex-col" data-testid="plan-card-free">
                 <div className="bg-muted/50 px-2 py-3 text-center">
                   <div className="font-bold text-sm text-foreground">Free</div>
@@ -387,12 +395,70 @@ export function UpgradeModal() {
                 </div>
                 <div className="p-2 pt-0">
                   <div className="w-full text-center text-[10px] text-muted-foreground py-1.5 font-medium">
-                    {isCurrent("free") ? "Current" : " "}
+                    {isCurrent("free") ? "Current" : " "}
                   </div>
                 </div>
               </div>
 
-              {/* Trial plan — KES 99 / 1 day
+              {/* Yearly plan — KES 4,500 / year — RECOMMENDED DEFAULT.
+                  Moved from last to first + given the "most emphasized" card
+                  styling that Monthly used to have (scale + z-10). */}
+              <button
+                type="button"
+                onClick={() => setSelectedPlan("pro")}
+                className={`relative rounded-xl border-2 overflow-hidden flex flex-col text-left transition-all ${
+                  selectedPlan === "pro"
+                    ? "border-amber-500 shadow-xl shadow-amber-200/60 dark:shadow-amber-900/40 ring-2 ring-amber-300/40 scale-[1.03] z-10"
+                    : "border-border hover:border-amber-300"
+                }`}
+                data-testid="plan-card-pro"
+              >
+                <div className={`px-2 py-3 text-center ${selectedPlan === "pro" ? "bg-gradient-to-br from-amber-500 to-orange-500 text-white" : "bg-amber-100 dark:bg-amber-900/30 text-amber-900 dark:text-amber-200"}`}>
+                  <span className="inline-block text-[8px] font-bold px-1.5 py-0.5 rounded-full mb-1 bg-white/20 backdrop-blur-sm border border-white/30">👑 RECOMMENDED</span>
+                  <div className="font-bold text-sm">Yearly</div>
+                  <div className="text-base sm:text-lg font-black mt-1">
+                    {yearlyPrice ? `KES ${yearlyPrice.toLocaleString("en-KE")}` : "—"}
+                  </div>
+                  <div className={`text-[9px] ${selectedPlan === "pro" ? "text-white/80" : "text-amber-700/80 dark:text-amber-300/80"}`}>365 days · save 7,500</div>
+                </div>
+                <div className="p-2 flex-1 text-[10px] text-muted-foreground text-center">
+                  Pay once, done — best for a real job search
+                </div>
+                <div className="p-2 pt-0 text-center text-[10px] font-bold text-amber-700 dark:text-amber-300">
+                  {selectedPlan === "pro" ? "✓ Selected" : "Tap to pick"}
+                </div>
+              </button>
+
+              {/* Monthly plan — KES 1,000 / 30 days — flexible middle option */}
+              <button
+                type="button"
+                onClick={() => setSelectedPlan("monthly")}
+                className={`relative rounded-xl border-2 overflow-hidden flex flex-col text-left transition-all ${
+                  selectedPlan === "monthly"
+                    ? "border-blue-500 shadow-lg shadow-blue-200/60 dark:shadow-blue-900/40 ring-2 ring-blue-300/40"
+                    : "border-border hover:border-blue-300"
+                }`}
+                data-testid="plan-card-monthly"
+              >
+                <div className={`px-2 py-3 text-center ${selectedPlan === "monthly" ? "bg-gradient-to-br from-blue-600 to-indigo-600 text-white" : "bg-blue-100 dark:bg-blue-900/30 text-blue-900 dark:text-blue-200"}`}>
+                  <span className="inline-block text-[8px] font-bold px-1.5 py-0.5 rounded-full mb-1 bg-white/20 backdrop-blur-sm border border-white/30">⭐ FLEXIBLE</span>
+                  <div className="font-bold text-sm">Monthly</div>
+                  <div className="text-base sm:text-lg font-black mt-1">
+                    {monthlyPrice ? `KES ${monthlyPrice.toLocaleString("en-KE")}` : "—"}
+                  </div>
+                  <div className={`text-[9px] ${selectedPlan === "monthly" ? "text-white/80" : "text-blue-700/80 dark:text-blue-300/80"}`}>30 days · cancel anytime</div>
+                </div>
+                <div className="p-2 flex-1 text-[10px] text-muted-foreground text-center">
+                  Full Pro access
+                </div>
+                <div className="p-2 pt-0 text-center text-[10px] font-bold text-blue-700 dark:text-blue-300">
+                  {selectedPlan === "monthly" ? "✓ Selected" : "Tap to pick"}
+                </div>
+              </button>
+
+              {/* Trial plan — KES 99 / 1 day — LAST, for someone who just
+                  wants to look around before committing. Not a serious
+                  job-search plan on its own (see founder's reasoning above).
                   2026-09 (Tony's KES-99-abuse follow-up): hidden entirely
                   once the user has consumed their one-time trial. Server
                   authority via /api/subscriptions/trial-eligibility. */}
@@ -408,74 +474,20 @@ export function UpgradeModal() {
                 data-testid="plan-card-trial"
               >
                 <div className={`px-2 py-3 text-center ${selectedPlan === "trial" ? "bg-green-500 text-white" : "bg-green-100 dark:bg-green-900/30 text-green-900 dark:text-green-200"}`}>
-                  <div className="font-bold text-sm">1 Day Trial</div>
+                  <div className="font-bold text-sm">Just Want to Try?</div>
                   <div className="text-base sm:text-lg font-black mt-1">
                     {trialPrice ? `KES ${trialPrice.toLocaleString("en-KE")}` : "—"}
                   </div>
                   <div className={`text-[9px] ${selectedPlan === "trial" ? "text-white/80" : "text-green-700/80 dark:text-green-300/80"}`}>24-hour access</div>
                 </div>
                 <div className="p-2 flex-1 text-[10px] text-muted-foreground text-center">
-                  Try everything for a day
+                  A quick look, not a full job search
                 </div>
                 <div className="p-2 pt-0 text-center text-[10px] font-bold text-green-700 dark:text-green-300">
                   {selectedPlan === "trial" ? "✓ Selected" : "Tap to pick"}
                 </div>
               </button>
               )}
-
-              {/* Monthly plan — KES 1,000 / 30 days — DEFAULT */}
-              <button
-                type="button"
-                onClick={() => setSelectedPlan("monthly")}
-                className={`relative rounded-xl border-2 overflow-hidden flex flex-col text-left transition-all ${
-                  selectedPlan === "monthly"
-                    ? "border-blue-500 shadow-xl shadow-blue-200/60 dark:shadow-blue-900/40 ring-2 ring-blue-300/40 scale-[1.03] z-10"
-                    : "border-border hover:border-blue-300"
-                }`}
-                data-testid="plan-card-monthly"
-              >
-                <div className={`px-2 py-3 text-center ${selectedPlan === "monthly" ? "bg-gradient-to-br from-blue-600 to-indigo-600 text-white" : "bg-blue-100 dark:bg-blue-900/30 text-blue-900 dark:text-blue-200"}`}>
-                  <span className="inline-block text-[8px] font-bold px-1.5 py-0.5 rounded-full mb-1 bg-white/20 backdrop-blur-sm border border-white/30">⭐ POPULAR</span>
-                  <div className="font-bold text-sm">Monthly</div>
-                  <div className="text-base sm:text-lg font-black mt-1">
-                    {monthlyPrice ? `KES ${monthlyPrice.toLocaleString("en-KE")}` : "—"}
-                  </div>
-                  <div className={`text-[9px] ${selectedPlan === "monthly" ? "text-white/80" : "text-blue-700/80 dark:text-blue-300/80"}`}>30 days · cancel anytime</div>
-                </div>
-                <div className="p-2 flex-1 text-[10px] text-muted-foreground text-center">
-                  Full Pro access
-                </div>
-                <div className="p-2 pt-0 text-center text-[10px] font-bold text-blue-700 dark:text-blue-300">
-                  {selectedPlan === "monthly" ? "✓ Selected" : "Tap to pick"}
-                </div>
-              </button>
-
-              {/* Yearly plan — KES 4,500 / year */}
-              <button
-                type="button"
-                onClick={() => setSelectedPlan("pro")}
-                className={`relative rounded-xl border-2 overflow-hidden flex flex-col text-left transition-all ${
-                  selectedPlan === "pro"
-                    ? "border-amber-500 shadow-xl shadow-amber-200/60 dark:shadow-amber-900/40 ring-2 ring-amber-300/40"
-                    : "border-border hover:border-amber-300"
-                }`}
-                data-testid="plan-card-pro"
-              >
-                <div className={`px-2 py-3 text-center ${selectedPlan === "pro" ? "bg-gradient-to-br from-amber-500 to-orange-500 text-white" : "bg-amber-100 dark:bg-amber-900/30 text-amber-900 dark:text-amber-200"}`}>
-                  <span className="inline-block text-[8px] font-bold px-1.5 py-0.5 rounded-full mb-1 bg-white/20 backdrop-blur-sm border border-white/30">👑 SAVE 7,500</span>
-                  <div className="font-bold text-sm">Yearly</div>
-                  <div className="text-base sm:text-lg font-black mt-1">
-                    {yearlyPrice ? `KES ${yearlyPrice.toLocaleString("en-KE")}` : "—"}
-                  </div>
-                  <div className={`text-[9px] ${selectedPlan === "pro" ? "text-white/80" : "text-amber-700/80 dark:text-amber-300/80"}`}>365 days · best value</div>
-                </div>
-                <div className="p-2 flex-1 text-[10px] text-muted-foreground text-center">
-                  Pay once, done
-                </div>
-                <div className="p-2 pt-0 text-center text-[10px] font-bold text-amber-700 dark:text-amber-300">
-                  {selectedPlan === "pro" ? "✓ Selected" : "Tap to pick"}
-                </div>
-              </button>
             </div>
 
             {/* Single proceed button at full width — uses whichever tier the user picked */}

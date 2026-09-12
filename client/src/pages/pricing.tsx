@@ -97,13 +97,50 @@ interface PlanConfig {
   perMonth?:   string;
 }
 
+// 2026-09 (Tony's "lead with the real commitment" request): reordered so
+// Yearly — the serious-job-seeker default — is the first card and the
+// highlighted "recommended" one. Monthly is the flexible middle option.
+// Trial (KES 99 / 24 hours) is last, framed as "just want to try?" rather
+// than the lead offer — you don't land a job abroad in a single day, so
+// it shouldn't be the first thing people are pushed toward.
+// Supersedes the 2026-06 "Monthly is the default door" reframe below.
 const PLAN_UI: Omit<PlanConfig, "price">[] = [
+  {
+    id:        "pro",
+    name:      "Yearly Access",
+    period:    "/ year",
+    duration:  "365 days full access · pay once, done",
+    badge:     "RECOMMENDED — Save KES 7,500",
+    badgeColor:"bg-amber-500 text-white",
+    icon:      Crown,
+    iconBg:    "bg-amber-100 dark:bg-amber-900/30",
+    iconColor: "text-amber-600",
+    cardClass: "border-amber-400 shadow-2xl shadow-amber-200/60 dark:shadow-amber-900/30",
+    btnClass:  "bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-lg shadow-amber-200 dark:shadow-amber-900/30",
+    highlight: true,
+    urgency:   "Best value for a real job search — save KES 7,500 vs paying month-by-month",
+  },
+  {
+    id:        "monthly",
+    name:      "Monthly Access",
+    period:    "/ month",
+    duration:  "30 days full access · renew when you want",
+    badge:     "Flexible",
+    badgeColor:"bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
+    icon:      Calendar,
+    iconBg:    "bg-blue-100 dark:bg-blue-900/30",
+    iconColor: "text-blue-600",
+    cardClass: "border-blue-300 dark:border-blue-800",
+    btnClass:  "bg-blue-600 hover:bg-blue-700 text-white",
+    highlight: false,
+    urgency:   "Pay as you go — cancel any time",
+  },
   {
     id:        "trial",
     name:      "1 Day Trial",
     period:    "one-time",
     duration:  "24-hour access",
-    badge:     "Try It",
+    badge:     "Just Want to Try?",
     badgeColor:"bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300",
     icon:      Clock,
     iconBg:    "bg-green-100 dark:bg-green-900/30",
@@ -111,40 +148,7 @@ const PLAN_UI: Omit<PlanConfig, "price">[] = [
     cardClass: "border-green-300 dark:border-green-700",
     btnClass:  "bg-green-600 hover:bg-green-700 text-white",
     highlight: false,
-    urgency:   "Try before you commit",
-  },
-  // 2026-06 reframe (founder decision): monthly is now the DEFAULT door.
-  // Kenyans think weekly, not yearly — KES 1,000 survives a bad week. Yearly
-  // is reframed as a savings play for those who already trust the platform.
-  {
-    id:        "monthly",
-    name:      "Monthly Access",
-    period:    "/ month",
-    duration:  "30 days full access · renew when you want",
-    badge:     "MOST POPULAR ⭐",
-    badgeColor:"bg-blue-600 text-white",
-    icon:      Calendar,
-    iconBg:    "bg-blue-100 dark:bg-blue-900/30",
-    iconColor: "text-blue-600",
-    cardClass: "border-blue-400 shadow-2xl shadow-blue-200/60 dark:shadow-blue-900/30",
-    btnClass:  "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg shadow-blue-200 dark:shadow-blue-900/30",
-    highlight: true,
-    urgency:   "Pay as you go — cancel any time",
-  },
-  {
-    id:        "pro",
-    name:      "Yearly Access",
-    period:    "/ year",
-    duration:  "365 days full access · pay once, done",
-    badge:     "Save KES 7,500",
-    badgeColor:"bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
-    icon:      Crown,
-    iconBg:    "bg-amber-100 dark:bg-amber-900/30",
-    iconColor: "text-amber-600",
-    cardClass: "border-amber-300 dark:border-amber-800",
-    btnClass:  "bg-amber-600 hover:bg-amber-700 text-white",
-    highlight: false,
-    urgency:   "Save KES 7,500 vs paying month-by-month",
+    urgency:   "A quick look before you commit — not a full job search",
   },
 ];
 
@@ -268,8 +272,13 @@ export default function PricingPage() {
             <Globe className="h-3.5 w-3.5 mr-1.5" /> Kenya's #1 Overseas Job Platform
           </Badge>
 
+          {/* 2026-09 (Tony's "lead with the real commitment" request): the
+              headline used to lead with the KES 99 trial price. Nobody
+              lands a job abroad in 24 hours, so the headline now leads with
+              the Yearly consultation — the plan for someone seriously
+              job-hunting. Trial still exists, just not as the hook. */}
           <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold mb-4 leading-tight tracking-tight" data-testid="hero-headline">
-            Full Access from KES 99 🌍
+            Your Career Consultation — From KES 4,500/Year 🌍
           </h1>
 
           <p className="text-orange-100 text-base md:text-lg mb-3 max-w-lg mx-auto" data-testid="hero-subtext">
@@ -280,12 +289,11 @@ export default function PricingPage() {
           </p>
 
           {/* 2026-06 update: surface all 4 tiers in the hero so users see
-              they have options below KES 4,500. Founder feedback: too many
-              people canceled the M-Pesa STK when only the KES 4,500 figure
-              was visible — they couldn't see the KES 99 / KES 1,000 entry
-              points. */}
+              they have options. 2026-09 reorder (Tony): Yearly leads, then
+              Monthly, then the KES 99 trial last — still visible, just not
+              the first thing people are pushed toward. */}
           <p className="text-white/85 text-sm mb-6 max-w-md mx-auto leading-snug">
-            <strong className="text-white">Free</strong> to browse · <strong className="text-white">KES 99</strong> for a day · <strong className="text-white">KES 1,000</strong> for a month · <strong className="text-white">KES 4,500</strong> for a year
+            <strong className="text-white">Free</strong> to browse · <strong className="text-white">KES 4,500</strong> for a year · <strong className="text-white">KES 1,000</strong> for a month · <strong className="text-white">KES 99</strong> to just try a day
           </p>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 max-w-2xl mx-auto mb-8 text-[11px]">
@@ -293,17 +301,17 @@ export default function PricingPage() {
               <div className="font-bold text-base text-white">Free</div>
               <div className="text-white/70">Browse & preview</div>
             </div>
+            <div className="rounded-xl bg-amber-400/30 backdrop-blur-sm border-2 border-amber-300 px-3 py-2 ring-2 ring-amber-300/40">
+              <div className="font-bold text-base text-white">KES 4,500</div>
+              <div className="text-white/85">1 Year — recommended</div>
+            </div>
+            <div className="rounded-xl bg-white/15 backdrop-blur-sm border border-white/20 px-3 py-2">
+              <div className="font-bold text-base text-white">KES 1,000</div>
+              <div className="text-white/70">1 Month · flexible</div>
+            </div>
             <div className="rounded-xl bg-white/15 backdrop-blur-sm border border-white/20 px-3 py-2">
               <div className="font-bold text-base text-white">KES 99</div>
-              <div className="text-white/70">1 Day full access</div>
-            </div>
-            <div className="rounded-xl bg-blue-500/30 backdrop-blur-sm border-2 border-blue-300 px-3 py-2 ring-2 ring-blue-300/40">
-              <div className="font-bold text-base text-white">KES 1,000</div>
-              <div className="text-white/85">1 Month — most popular</div>
-            </div>
-            <div className="rounded-xl bg-white/15 backdrop-blur-sm border border-white/20 px-3 py-2">
-              <div className="font-bold text-base text-white">KES 4,500</div>
-              <div className="text-white/70">1 Year · save 7,500</div>
+              <div className="text-white/70">1 Day · just to try</div>
             </div>
           </div>
 
@@ -314,18 +322,6 @@ export default function PricingPage() {
             </div>
           ) : (
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
-              {trialEligible && (
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="border-white/50 text-white bg-white/10 hover:bg-white/20 font-semibold h-12 px-6 text-sm"
-                  onClick={() => goToPayment("trial")}
-                  data-testid="btn-hero-trial"
-                >
-                  <Clock className="h-4 w-4 mr-2" />
-                  Try 1 Day — KES 99
-                </Button>
-              )}
               <Button
                 size="lg"
                 className="bg-white text-amber-700 hover:bg-amber-50 font-bold shadow-xl shadow-amber-900/30 px-8 text-base h-12"
@@ -335,6 +331,16 @@ export default function PricingPage() {
                 <Crown className="h-5 w-5 mr-2" />
                 Start Yearly Consultation — KES 4,500
                 <ArrowRight className="h-5 w-5 ml-2" />
+              </Button>
+              <Button
+                size="lg"
+                variant="outline"
+                className="border-white/50 text-white bg-white/10 hover:bg-white/20 font-semibold h-12 px-6 text-sm"
+                onClick={() => goToPayment("monthly")}
+                data-testid="btn-hero-monthly"
+              >
+                <Calendar className="h-4 w-4 mr-2" />
+                Or Monthly — KES 1,000
               </Button>
             </div>
           )}
@@ -606,16 +612,6 @@ export default function PricingPage() {
             <div className="flex flex-col sm:flex-row gap-3 justify-center mt-6">
               <Button
                 size="lg"
-                variant="outline"
-                className="border-green-500 text-green-700 hover:bg-green-50 dark:hover:bg-green-900/20 font-semibold h-12 px-8"
-                onClick={() => goToPayment(trialEligible ? "trial" : "monthly")}
-                data-testid="btn-cta-trial"
-              >
-                <Clock className="h-4 w-4 mr-2" />
-                {trialEligible ? "Try 1 Day — KES 99" : "Go Monthly — KES 1,000"}
-              </Button>
-              <Button
-                size="lg"
                 className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-lg px-10 text-base h-12"
                 onClick={() => goToPayment("pro")}
                 data-testid="btn-cta2"
@@ -623,6 +619,16 @@ export default function PricingPage() {
                 <Rocket className="h-5 w-5 mr-2" />
                 Start Yearly Consultation — KES 4,500
                 <ArrowRight className="h-5 w-5 ml-2" />
+              </Button>
+              <Button
+                size="lg"
+                variant="outline"
+                className="border-blue-500 text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/20 font-semibold h-12 px-8"
+                onClick={() => goToPayment("monthly")}
+                data-testid="btn-cta-monthly"
+              >
+                <Calendar className="h-4 w-4 mr-2" />
+                Or Monthly — KES 1,000
               </Button>
             </div>
           )}
@@ -692,20 +698,10 @@ export default function PricingPage() {
             <h2 className="text-2xl sm:text-3xl font-extrabold mb-2">Ready to work abroad?</h2>
             <p className="text-white/80 mb-6 max-w-sm mx-auto text-sm">
               {publicStats?.totalUsers
-                ? `Join ${publicStats.totalUsers.toLocaleString()}+ members. Start with a 1-day trial for just KES 99.`
-                : "Start with KES 99 — upgrade to yearly when you're ready. Instant activation."}
+                ? `Join ${publicStats.totalUsers.toLocaleString()}+ members. Get a full year of consultation for KES 4,500.`
+                : "Start Yearly for KES 4,500 — or go Monthly if you'd rather commit month to month. Instant activation."}
             </p>
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
-              <Button
-                size="lg"
-                variant="outline"
-                className="border-white/60 text-white bg-white/15 hover:bg-white/25 font-semibold h-12 px-7"
-                onClick={() => goToPayment(trialEligible ? "trial" : "monthly")}
-                data-testid="btn-bottom-trial"
-              >
-                <Clock className="h-4 w-4 mr-2" />
-                {trialEligible ? "Try 1 Day — KES 99" : "Go Monthly — KES 1,000"}
-              </Button>
               <Button
                 size="lg"
                 className="bg-white text-amber-700 hover:bg-amber-50 font-bold shadow-xl px-10 text-base h-12"
@@ -714,6 +710,16 @@ export default function PricingPage() {
               >
                 <Crown className="h-5 w-5 mr-2" />
                 Start Yearly Consultation — KES 4,500
+              </Button>
+              <Button
+                size="lg"
+                variant="outline"
+                className="border-white/60 text-white bg-white/15 hover:bg-white/25 font-semibold h-12 px-7"
+                onClick={() => goToPayment("monthly")}
+                data-testid="btn-bottom-monthly"
+              >
+                <Calendar className="h-4 w-4 mr-2" />
+                Or Monthly — KES 1,000
               </Button>
             </div>
             <p className="text-white/60 text-xs mt-3">
@@ -731,24 +737,24 @@ export default function PricingPage() {
         >
           <div className="flex flex-col">
             <span className="text-sm font-bold flex items-center gap-1.5">
-              <Flame className="h-4 w-4" /> From KES 99 — limited access remaining
+              <Flame className="h-4 w-4" /> Yearly Consultation — recommended
             </span>
             <span className="text-white/70 text-xs">Verified jobs · Smart tools · Real guidance</span>
           </div>
           <div className="flex gap-2 shrink-0">
-            <Button
-              className="bg-white/20 border border-white/40 text-white hover:bg-white/30 font-semibold h-9 px-4 text-xs"
-              onClick={() => goToPayment(trialEligible ? "trial" : "monthly")}
-              data-testid="btn-sticky-trial"
-            >
-              {trialEligible ? "Try KES 99" : "KES 1,000/mo"}
-            </Button>
             <Button
               className="bg-white text-amber-700 hover:bg-amber-50 font-bold h-9 px-4 text-xs"
               onClick={() => goToPayment("pro")}
               data-testid="btn-sticky-cta"
             >
               <Crown className="h-3.5 w-3.5 mr-1" /> KES 4,500/yr
+            </Button>
+            <Button
+              className="bg-white/20 border border-white/40 text-white hover:bg-white/30 font-semibold h-9 px-4 text-xs"
+              onClick={() => goToPayment("monthly")}
+              data-testid="btn-sticky-monthly"
+            >
+              KES 1,000/mo
             </Button>
           </div>
         </div>
