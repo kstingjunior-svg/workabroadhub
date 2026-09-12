@@ -452,6 +452,25 @@ export async function deliverService(payment: any, user: any): Promise<void> {
       break;
     }
 
+    // ─── 19. IELTS PREP (self-serve unlock — no document generation) ─────────
+    // Unlike the CV/letter services above, there's nothing to "write" here —
+    // unlockService() (step 2 of runPaymentPipeline, before this function
+    // runs) already flipped the user's access on. This case just confirms
+    // that and points them straight at the tool.
+    case "ielts_prep": {
+      await sendWhatsApp(
+        phone,
+        `✅ IELTS Prep Unlocked — KES ${amount.toLocaleString()} received!\n\nHi ${name}, your IELTS Prep access is live right now. Go to your WorkAbroad Hub dashboard → IELTS Prep to submit a Writing task for AI band-scored feedback or take the Reading mock test.\n\n— WorkAbroad Hub 🌍`,
+      ).catch((err) => { console.error('[deliverService] WhatsApp failed:', { error: err?.message, timestamp: new Date().toISOString() }); });
+      storage.createUserNotification({
+        userId: user.id,
+        type: "info",
+        title: "IELTS Prep Unlocked",
+        message: "Your IELTS Prep access is active. Submit a Writing task or start the Reading mock test any time from the IELTS Prep hub.",
+      }).catch((err) => { console.error('[deliverService] Notification failed:', err?.message); });
+      break;
+    }
+
     // ─── DEFAULT ─────────────────────────────────────────────────────────────
     default: {
       // Unknown service — send a generic confirmation so the user always

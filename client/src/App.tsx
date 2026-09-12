@@ -97,6 +97,9 @@ const BirthCertificate = lazyWithRetry(() => import("@/pages/birth-certificate")
 const Community = lazyWithRetry(() => import("@/pages/community"));
 const AssistedApply = lazyWithRetry(() => import("@/pages/assisted-apply"));
 const ApplicationTracker = lazyWithRetry(() => import("@/pages/application-tracker"));
+const IeltsPrepHub = lazyWithRetry(() => import("@/pages/ielts-prep"));
+const IeltsWriting = lazyWithRetry(() => import("@/pages/ielts-writing"));
+const IeltsReadingTest = lazyWithRetry(() => import("@/pages/ielts-reading-test"));
 const PrivacyPolicy = lazyWithRetry(() => import("@/pages/privacy-policy"));
 const TermsOfService = lazyWithRetry(() => import("@/pages/terms-of-service"));
 const RefundPolicy = lazyWithRetry(() => import("@/pages/refund-policy"));
@@ -413,6 +416,9 @@ const LazyBirthCertificate = withSuspense(BirthCertificate);
 const LazyCommunity = withSuspense(Community);
 const LazyAssistedApply = withSuspense(AssistedApply);
 const LazyApplicationTracker = withSuspense(ApplicationTracker);
+const LazyIeltsPrepHub = withSuspense(IeltsPrepHub);
+const LazyIeltsWriting = withSuspense(IeltsWriting);
+const LazyIeltsReadingTest = withSuspense(IeltsReadingTest);
 const LazyPrivacyPolicy = withSuspense(PrivacyPolicy);
 const LazyTermsOfService = withSuspense(TermsOfService);
 const LazyRefundPolicy = withSuspense(RefundPolicy);
@@ -636,6 +642,9 @@ function AuthenticatedRoutes() {
       <Route path="/assisted-apply/application/:applicationId" component={LazyAssistedApply} />
       <Route path="/assisted-apply" component={LazyAssistedApply} />
       <Route path="/application-tracker" component={LazyApplicationTracker} />
+      <Route path="/ielts-prep/reading/:testId" component={LazyIeltsReadingTest} />
+      <Route path="/ielts-prep/writing" component={LazyIeltsWriting} />
+      <Route path="/ielts-prep" component={LazyIeltsPrepHub} />
       <Route path="/profile" component={LazyProfile} />
       <Route path="/my-account" component={() => <Suspense fallback={<div />}><MyAccountPage /></Suspense>} />
       <Route path="/my-payments" component={LazyMyPayments} />
@@ -1026,6 +1035,9 @@ function Router() {
         <Route path="/my-orders" component={ProtectedRedirect} />
         <Route path="/order/:orderId" component={ProtectedRedirect} />
         <Route path="/application-tracker" component={ProtectedRedirect} />
+        <Route path="/ielts-prep/reading/:testId" component={ProtectedRedirect} />
+        <Route path="/ielts-prep/writing" component={ProtectedRedirect} />
+        <Route path="/ielts-prep" component={ProtectedRedirect} />
         <Route path="/profile" component={ProtectedRedirect} />
         <Route path="/autoapply" component={ProtectedRedirect} />
         <Route path="/referrals" component={ProtectedRedirect} />

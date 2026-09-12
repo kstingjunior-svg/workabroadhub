@@ -1559,6 +1559,15 @@ const CANONICAL_SERVICES = [
   { slug: "work_permit_qatar_light", name: "Qatar Work Permit Guide (MOI)", price: 249, currency: "KES", isActive: true, order: 42, category: "Work Permits", badge: "New", isSubscription: false, subscriptionPeriod: null, description: "Complete guide to the Qatar Work Visa via MOI — including pre-departure attestation, medical fitness at Qatar Visa Center Nairobi, and post-arrival Residence Permit (QID)", features: ["Qatar Work Visa via MOI explained","Qatar Visa Center Nairobi process","Medical fitness + biometrics step-by-step","Residence Permit (QID) post-arrival","Sponsorship rules & job-change implications","Instant AI delivery"] },
   { slug: "work_permit_qatar_mid",   name: "Qatar Work Permit Assist + Form Pre-fill", price: 599, currency: "KES", isActive: true, order: 43, category: "Work Permits", badge: "Our pick", isSubscription: false, subscriptionPeriod: null, description: "Light guide + we pre-fill your Hukoomi / MOI forms using your CV/intake, give you the attestation flow for Kenyan documents, and prep your Qatar Visa Center appointment", features: ["All Light guide content included","Hukoomi / MOI forms pre-filled","KE document attestation step-by-step","Qatar Visa Center appointment prep","Sponsorship rules briefing","Delivered within 24h"] },
   { slug: "work_permit_qatar_pro",   name: "Qatar Work Permit — Full Hand-Holding", price: 2999, currency: "KES", isActive: true, order: 44, category: "Work Permits", badge: "Premium", isSubscription: false, subscriptionPeriod: null, description: "Full service: our team coordinates with your Qatari employer, handles attestation logistics, and follows the file through MOI to Residence Permit issuance", features: ["Qatari employer direct liaison","Attestation logistics (Nairobi side)","MOI file tracking through QID","Status check-ins via WhatsApp until QID issued","Refund policy if we mis-advise on permit class","Lands in admin queue — human-delivered"] },
+
+  // --- Test Prep ---
+  // 2026-09: first real (non-waitlist) IELTS Prep unlock. Deliberately
+  // honest scope for v1 — AI Writing feedback + one full Reading mock test.
+  // Do NOT copy "10+ full mock tests" / "AI speaking practice" language from
+  // the old dashboard card into this description — that's the coming-soon
+  // pitch, not what v1 actually ships. Grow the description as more mock
+  // tests / Listening / Speaking are added.
+  { slug: "ielts_prep", name: "IELTS Prep", price: 10000, currency: "KES", isActive: true, order: 45, category: "Test Prep", badge: "New", isSubscription: false, subscriptionPeriod: null, description: "AI-graded IELTS Writing feedback (Task 1 & 2, band-scored against the real criteria) plus a full-length Reading mock test with instant scoring — built for Kenyans prepping for study or work visas abroad.", features: ["Unlimited AI Writing Task 1 & 2 grading","Band-by-band feedback (Task Response, Coherence, Lexical Resource, Grammar)","Full-length Reading mock test with instant score + review","More Reading tests added regularly","One-time unlock — no subscription"] },
 ] as const;
 
 /**
