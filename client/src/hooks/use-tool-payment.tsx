@@ -56,13 +56,21 @@ export function useToolPayment(tool: string) {
   const [phase, setPhase] = useState<PayPhase>("idle");
   const [payError, setPayError] = useState<string | null>(null);
   const [scanToken, setScanToken] = useState<string | null>(null);
-  const onPaidRef = useRef<(() => void) | null>(null);
+  // 2026-09 (Tony: "automatic the moment one pays"): `run` is stashed here
+  // and fired once payment confirms. It takes the fresh token as an ARGUMENT
+  // rather than the caller re-reading `pay.scanToken` off its own closure —
+  // that closure is captured at the moment the user first clicked "Verify"
+  // (before payment), so `pay.scanToken` inside it is permanently null even
+  // after the real state updates. Passing the token explicitly is what makes
+  // the retry actually see the payment instead of silently re-opening the
+  // pay modal, which used to force people to cancel and click Verify again.
+  const onPaidRef = useRef<((token: string) => void) | null>(null);
   const pollAbortRef = useRef<boolean>(false);
 
   const label = TOOL_LABELS[tool] ?? "Verification";
 
-  /** Open the pay modal; `run` fires automatically once payment confirms. */
-  const requestScan = useCallback((run: () => void) => {
+  /** Open the pay modal; `run(token)` fires automatically once payment confirms. */
+  const requestScan = useCallback((run: (token: string) => void) => {
     onPaidRef.current = run;
     setPayError(null);
     setPhase("idle");
@@ -121,8 +129,9 @@ export function useToolPayment(tool: string) {
             setOpen(false);
             const run = onPaidRef.current;
             onPaidRef.current = null;
-            // Let the dialog close before the scan kicks off.
-            setTimeout(() => run?.(), 50);
+            // Let the dialog close before the scan kicks off. Pass the fresh
+            // paymentId directly — see the note on onPaidRef above.
+            setTimeout(() => run?.(paymentId), 50);
             return;
           }
           if (s.status === "failed") {

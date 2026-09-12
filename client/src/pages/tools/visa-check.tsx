@@ -156,13 +156,17 @@ export default function VisaCheckPage() {
     setPreview(f.type.startsWith("image/") ? URL.createObjectURL(f) : null);
   }
 
-  async function handleVerify() {
+  async function handleVerify(freshToken?: string) {
     if (!file) return;
     // 2026-09 (Tony's monetisation directive): KES 100 per scan. If no paid
     // credit is held, collect payment first — handleVerify re-runs
-    // automatically the moment M-Pesa confirms.
-    if (!pay.scanToken) {
-      pay.requestScan(() => handleVerify());
+    // automatically the moment M-Pesa confirms. The retry gets the token
+    // passed in directly (not re-read from pay.scanToken, which is frozen
+    // at its pre-payment value inside this closure) so it can't loop back
+    // into asking for payment again.
+    const token: string = freshToken ?? pay.scanToken ?? "";
+    if (!token) {
+      pay.requestScan((t) => handleVerify(t));
       return;
     }
     setLoading(true);
@@ -175,7 +179,7 @@ export default function VisaCheckPage() {
       const res = await fetch("/api/tools/visa-verify", {
         method: "POST",
         credentials: "include",
-        headers: { "X-CSRF-Token": csrf, "x-scan-token": pay.scanToken ?? "" },
+        headers: { "X-CSRF-Token": csrf, "x-scan-token": token },
         body: form,
       });
       const data = await res.json();
@@ -276,7 +280,7 @@ export default function VisaCheckPage() {
                   )}
                   <div className="flex gap-2">
                     <Button
-                      onClick={handleVerify}
+                      onClick={() => handleVerify()}
                       disabled={loading}
                       className="flex-1 h-12 bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-600 hover:to-cyan-600 text-white font-semibold"
                       data-testid="button-verify"
