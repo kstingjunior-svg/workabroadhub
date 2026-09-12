@@ -152,72 +152,90 @@ export function useToolPayment(tool: string) {
 
   const busy = phase === "sending" || phase === "waiting";
 
-  function PayModal() {
-    return (
-      <Dialog open={open} onOpenChange={(o) => { if (!o) closeModal(); }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <ShieldCheck className="h-5 w-5 text-teal-600" />
-              {label} — KES {TOOL_SCAN_PRICE_KES}
-            </DialogTitle>
-            <DialogDescription>
-              Each check costs KES {TOOL_SCAN_PRICE_KES}, paid via M-Pesa. Enter your
-              Safaricom number, approve the prompt on your phone, and your scan runs
-              immediately. One payment covers one check.
-            </DialogDescription>
-          </DialogHeader>
+  // ── Stable modal component ────────────────────────────────────────────────
+  // PayModal must keep the SAME function identity across every render of this
+  // hook. Previously it was declared as a plain nested function, so every
+  // re-render (including the one triggered by each keystroke via setPhone)
+  // produced a brand-new function reference. React treats a changed component
+  // type as a different component and remounts the whole Dialog subtree —
+  // which drops focus off the phone Input after every single character, so
+  // typing more than one digit was impossible. Reading live values through a
+  // ref (refreshed on every render, before PayModal itself is rendered as a
+  // child) keeps the component's output current without ever changing its
+  // identity, so React just updates it in place and focus is preserved.
+  const liveRef = useRef({ open, phone, phase, payError, busy, label, setPhone, startPayment, closeModal });
+  liveRef.current = { open, phone, phase, payError, busy, label, setPhone, startPayment, closeModal };
 
-          <div className="space-y-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="tool-pay-phone">M-Pesa phone number</Label>
-              <Input
-                id="tool-pay-phone"
-                type="tel"
-                inputMode="tel"
-                placeholder="07XX XXX XXX"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                disabled={busy}
-                data-testid="input-tool-pay-phone"
-              />
-            </div>
+  const payModalRef = useRef<(() => JSX.Element) | null>(null);
+  if (!payModalRef.current) {
+    payModalRef.current = function PayModal() {
+      const { open, phone, phase, payError, busy, label, setPhone, startPayment, closeModal } = liveRef.current;
+      return (
+        <Dialog open={open} onOpenChange={(o) => { if (!o) closeModal(); }}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <ShieldCheck className="h-5 w-5 text-teal-600" />
+                {label} — KES {TOOL_SCAN_PRICE_KES}
+              </DialogTitle>
+              <DialogDescription>
+                Each check costs KES {TOOL_SCAN_PRICE_KES}, paid via M-Pesa. Enter your
+                Safaricom number, approve the prompt on your phone, and your scan runs
+                immediately. One payment covers one check.
+              </DialogDescription>
+            </DialogHeader>
 
-            {payError && (
-              <p className="text-sm text-red-600 dark:text-red-400" data-testid="text-tool-pay-error">{payError}</p>
-            )}
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="tool-pay-phone">M-Pesa phone number</Label>
+                <Input
+                  id="tool-pay-phone"
+                  type="tel"
+                  inputMode="tel"
+                  placeholder="07XX XXX XXX"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  disabled={busy}
+                  data-testid="input-tool-pay-phone"
+                />
+              </div>
 
-            {phase === "waiting" && (
-              <p className="text-sm text-slate-600 dark:text-slate-300 flex items-center gap-2">
-                <Smartphone className="h-4 w-4 animate-pulse" />
-                STK push sent — enter your M-Pesa PIN on your phone. Waiting for confirmation…
-              </p>
-            )}
-
-            <Button
-              className="w-full bg-green-600 hover:bg-green-700"
-              onClick={startPayment}
-              disabled={busy || phone.replace(/\D/g, "").length < 9}
-              data-testid="button-tool-pay"
-            >
-              {phase === "sending" ? (
-                <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Sending STK push…</>
-              ) : phase === "waiting" ? (
-                <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Waiting for M-Pesa PIN…</>
-              ) : (
-                <>Pay KES {TOOL_SCAN_PRICE_KES} via M-Pesa</>
+              {payError && (
+                <p className="text-sm text-red-600 dark:text-red-400" data-testid="text-tool-pay-error">{payError}</p>
               )}
-            </Button>
 
-            <p className="text-[11px] text-center text-muted-foreground">
-              Safaricom lines only. The result appears here the moment payment confirms —
-              keep this page open.
-            </p>
-          </div>
-        </DialogContent>
-      </Dialog>
-    );
+              {phase === "waiting" && (
+                <p className="text-sm text-slate-600 dark:text-slate-300 flex items-center gap-2">
+                  <Smartphone className="h-4 w-4 animate-pulse" />
+                  STK push sent — enter your M-Pesa PIN on your phone. Waiting for confirmation…
+                </p>
+              )}
+
+              <Button
+                className="w-full bg-green-600 hover:bg-green-700"
+                onClick={startPayment}
+                disabled={busy || phone.replace(/\D/g, "").length < 9}
+                data-testid="button-tool-pay"
+              >
+                {phase === "sending" ? (
+                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Sending STK push…</>
+                ) : phase === "waiting" ? (
+                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Waiting for M-Pesa PIN…</>
+                ) : (
+                  <>Pay KES {TOOL_SCAN_PRICE_KES} via M-Pesa</>
+                )}
+              </Button>
+
+              <p className="text-[11px] text-center text-muted-foreground">
+                Safaricom lines only. The result appears here the moment payment confirms —
+                keep this page open.
+              </p>
+            </div>
+          </DialogContent>
+        </Dialog>
+      );
+    };
   }
 
-  return { scanToken, requestScan, consumeToken, handle402, PayModal, payOpen: open };
+  return { scanToken, requestScan, consumeToken, handle402, PayModal: payModalRef.current, payOpen: open };
 }
