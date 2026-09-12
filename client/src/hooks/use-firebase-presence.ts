@@ -82,6 +82,14 @@ export function useFirebasePresence() {
   // Removes this visitor from Firebase and stops the heartbeat —
   // matching: visitorsRef.remove() + alert('Session ended...')
   const handleIdle = useCallback(() => {
+    // rtdb is null when VITE_FIREBASE_* env vars aren't configured (see
+    // lib/firebase.ts) — every consumer is supposed to check before calling
+    // an SDK function on it, since ref(null, ...) throws inside the SDK
+    // ("Cannot read properties of null (reading '_checkNotDeleted')") and
+    // that uncaught throw crashes the whole page via the root ErrorBoundary.
+    // This hook is mounted globally (every page, every user), so a Firebase
+    // misconfiguration would otherwise white-screen the entire site.
+    if (!rtdb) return;
     const visitorRef = ref(rtdb, `activeVisitors/${myIdRef.current}`);
     if (heartbeatRef.current) {
       clearInterval(heartbeatRef.current);
@@ -95,6 +103,7 @@ export function useFirebasePresence() {
   useInactivityTimer({ onIdle: handleIdle, enabled: true });
 
   useEffect(() => {
+    if (!rtdb) return; // Firebase not configured — see note on handleIdle above.
     const visitorId = myIdRef.current;
     const visitorRef = ref(rtdb, `activeVisitors/${visitorId}`);
     let unsubVisitors: (() => void) | null = null;
@@ -197,6 +206,7 @@ export async function pushSignupToFirebase(
   location: string,
   type: "signup" | "upgrade" = "signup"
 ) {
+  if (!rtdb) return; // Firebase not configured — see note in useFirebasePresence above.
   try {
     const signupsRef = ref(rtdb, "signups");
     await push(signupsRef, {

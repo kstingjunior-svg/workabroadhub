@@ -232,33 +232,25 @@ export default function ErrorPage({
 
   return (
     <div
+      className="min-h-screen flex items-center justify-center px-4 py-8 sm:px-8 sm:py-12"
       style={{
         background: "linear-gradient(135deg, #F4F2EE 0%, #FFFFFF 100%)",
         fontFamily: "'Inter', sans-serif",
         color: "#1E2A36",
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "2rem",
       }}
       data-testid="error-page"
     >
       <div
+        className="w-full max-w-[600px] mx-auto text-center rounded-[28px] sm:rounded-[32px] p-5 sm:p-10"
         style={{
-          maxWidth: 600,
-          width: "100%",
-          textAlign: "center",
           background: "#FFFFFF",
-          borderRadius: 32,
-          padding: "3rem 2.5rem",
           border: "1px solid #E2DDD5",
           boxShadow: "0 20px 40px -10px rgba(0,0,0,0.05)",
         }}
       >
         {/* Illustration */}
         <div
-          style={{ fontSize: "5rem", marginBottom: "1.5rem", lineHeight: 1, cursor: "default", userSelect: "none" }}
+          className="text-[3.5rem] sm:text-[5rem] mb-4 sm:mb-6 leading-none cursor-default select-none"
           onClick={handleIllustrationClick}
           data-testid="error-illustration"
           title="(Shift+click 3× for debug info)"
@@ -268,12 +260,11 @@ export default function ErrorPage({
 
         {/* Heading */}
         <h1
+          className="text-[1.5rem] sm:text-[2.2rem] mb-3 sm:mb-4 leading-tight break-words"
           style={{
             fontFamily: "'Crimson Pro', serif",
-            fontSize: "2.2rem",
             fontWeight: 500,
             color: "#1A2530",
-            marginBottom: "1rem",
           }}
           data-testid="error-heading"
         >
@@ -282,7 +273,8 @@ export default function ErrorPage({
 
         {/* Message */}
         <p
-          style={{ color: "#5A6A7A", marginBottom: "2rem", fontSize: "1.1rem", lineHeight: 1.6 }}
+          className="mb-6 sm:mb-8 text-[0.95rem] sm:text-[1.1rem] leading-relaxed break-words"
+          style={{ color: "#5A6A7A" }}
           data-testid="error-message"
         >
           {config.message}
@@ -290,41 +282,32 @@ export default function ErrorPage({
 
         {/* Reassurance box */}
         <div
+          className="text-left mb-6 sm:mb-8 rounded-2xl p-4 sm:p-5"
           style={{
             background: "#ECFDF3",
             border: "1px solid #ABEFC6",
-            borderRadius: 16,
-            padding: "1.25rem",
-            marginBottom: "2rem",
-            textAlign: "left",
           }}
           data-testid="error-reassurance"
         >
-          <p style={{ display: "flex", alignItems: "flex-start", gap: "0.75rem", color: "#067647", margin: 0 }}>
-            <span style={{ fontSize: "1.25rem" }}>🛡️</span>
-            <span>
+          <p className="flex items-start gap-3 m-0" style={{ color: "#067647" }}>
+            <span className="text-xl flex-shrink-0">🛡️</span>
+            <span className="min-w-0 break-words">
               <strong>Your data is secure.</strong> This is a temporary technical issue — no action is
               needed from you. Your account and payment information remain protected.
             </span>
           </p>
         </div>
 
-        {/* Action buttons */}
-        <div
-          style={{ display: "flex", gap: "1rem", justifyContent: "center", flexWrap: "wrap", marginBottom: "2rem" }}
-        >
+        {/* Action buttons — stack full-width on mobile so long labels never
+            overflow the card; flex-wrap alone isn't enough because flex
+            items default to min-width:auto and refuse to shrink below their
+            unwrapped content width, which is what pushed "Refresh & Continue"
+            etc. past the viewport edge on narrow phones. */}
+        <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 justify-center mb-6 sm:mb-8 w-full">
           <button
             onClick={resolvedType === "general" ? handleHardReload : handleRetryClick}
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-full font-medium text-[0.95rem] px-6 py-3 cursor-pointer transition-all text-center break-words"
             style={{
-              padding: "12px 28px",
-              borderRadius: 100,
-              fontWeight: 500,
-              fontSize: "0.95rem",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "0.5rem",
-              cursor: "pointer",
-              transition: "all 0.2s",
               background: (config.autoRetry || resolvedType === "general") ? "#1A2530" : "transparent",
               color: (config.autoRetry || resolvedType === "general") ? "white" : "#3A4A5A",
               border: (config.autoRetry || resolvedType === "general") ? "none" : "1.5px solid #D1CEC8",
@@ -342,16 +325,8 @@ export default function ErrorPage({
 
           <button
             onClick={() => navigate("/")}
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-full font-medium text-[0.95rem] px-6 py-3 cursor-pointer transition-all text-center break-words"
             style={{
-              padding: "12px 28px",
-              borderRadius: 100,
-              fontWeight: 500,
-              fontSize: "0.95rem",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "0.5rem",
-              cursor: "pointer",
-              transition: "all 0.2s",
               background: config.autoRetry ? "transparent" : "#1A2530",
               color: config.autoRetry ? "#3A4A5A" : "white",
               border: config.autoRetry ? "1.5px solid #D1CEC8" : "none",
@@ -363,16 +338,8 @@ export default function ErrorPage({
 
           <button
             onClick={reportIssue}
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-full font-medium text-[0.95rem] px-6 py-3 cursor-pointer transition-all text-center break-words"
             style={{
-              padding: "12px 28px",
-              borderRadius: 100,
-              fontWeight: 500,
-              fontSize: "0.95rem",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "0.5rem",
-              cursor: "pointer",
-              transition: "all 0.2s",
               background: "transparent",
               color: "#3A4A5A",
               border: "1.5px solid #D1CEC8",
@@ -385,22 +352,22 @@ export default function ErrorPage({
 
         {/* Support info */}
         <div
+          className="pt-5 sm:pt-6 text-[0.85rem] sm:text-[0.9rem]"
           style={{
-            paddingTop: "1.5rem",
             borderTop: "1px solid #E2DDD5",
             color: "#7A8A9A",
-            fontSize: "0.9rem",
           }}
           data-testid="error-support-info"
         >
-          <p style={{ margin: 0 }}>
+          <p className="m-0 break-words">
             If this keeps happening, please reach out:
             <br />
             <a
               href={`https://wa.me/${SUPPORT_WHATSAPP}`}
               target="_blank"
               rel="noopener noreferrer"
-              style={{ color: "#1A2530", textDecoration: "underline", fontWeight: 500 }}
+              className="underline font-medium"
+              style={{ color: "#1A2530" }}
               data-testid="link-whatsapp-support"
             >
               💬 WhatsApp Support
@@ -408,7 +375,8 @@ export default function ErrorPage({
             {" · "}
             <a
               href={`mailto:${SUPPORT_EMAIL}`}
-              style={{ color: "#1A2530", textDecoration: "underline", fontWeight: 500 }}
+              className="underline font-medium break-all"
+              style={{ color: "#1A2530" }}
               data-testid="link-email-support"
             >
               ✉️ {SUPPORT_EMAIL}
@@ -417,15 +385,10 @@ export default function ErrorPage({
 
           {/* Error reference */}
           <div
+            className="font-mono rounded-lg px-3 py-1 text-xs inline-block mt-4 max-w-full overflow-x-auto whitespace-nowrap"
             style={{
-              fontFamily: "monospace",
               background: "#F4F2EE",
-              padding: "0.25rem 0.75rem",
-              borderRadius: 8,
-              fontSize: "0.8rem",
               color: "#5A6A7A",
-              display: "inline-block",
-              marginTop: "1rem",
             }}
             data-testid="error-reference"
           >
@@ -436,16 +399,10 @@ export default function ErrorPage({
         {/* Debug panel — dev env OR Shift+click ×3 on illustration */}
         {(debugVisible || (import.meta.env.DEV && error)) && (
           <div
+            className="text-left rounded-xl p-4 font-mono text-xs mt-6 overflow-x-auto max-w-full"
             style={{
-              textAlign: "left",
               background: "#1A2530",
               color: "#A0B0C0",
-              padding: "1rem",
-              borderRadius: 12,
-              fontFamily: "monospace",
-              fontSize: "0.75rem",
-              marginTop: "1.5rem",
-              overflowX: "auto",
             }}
             data-testid="error-debug-panel"
           >
@@ -457,15 +414,15 @@ export default function ErrorPage({
             <br />
             Time: {new Date().toISOString()}
             <br />
-            URL: {window.location.href}
+            URL: <span className="break-all">{window.location.href}</span>
             {error && (
               <>
                 <br />
-                Error: {error.message}
+                Error: <span className="break-all">{error.message}</span>
               </>
             )}
             {errorInfo && (
-              <pre style={{ whiteSpace: "pre-wrap", wordBreak: "break-all", marginTop: "0.5rem", color: "#FF9999" }}>
+              <pre className="whitespace-pre-wrap break-all mt-2" style={{ color: "#FF9999" }}>
                 {errorInfo}
               </pre>
             )}

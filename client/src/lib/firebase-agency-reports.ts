@@ -34,6 +34,7 @@ export async function reportAgency(
   visitorId: string,
   agencyName?: string,
 ): Promise<void> {
+  if (!rtdb) throw new Error("Realtime features are not configured for this deployment.");
   await push(ref(rtdb, "reportedAgencies"), {
     licenseNumber,
     agencyName: agencyName ?? null,
@@ -52,7 +53,7 @@ export function useAgencyWarningCount(licenseNumber: string | null | undefined) 
   const [count, setCount] = useState<number>(0);
 
   useEffect(() => {
-    if (!licenseNumber) return;
+    if (!rtdb || !licenseNumber) return;
     const warningRef = ref(rtdb, `agencyWarnings/${licenseNumber}`);
     const unsub = onValue(warningRef, (snap) => {
       setCount(snap.exists() ? (snap.val() as number) : 0);
@@ -64,6 +65,7 @@ export function useAgencyWarningCount(licenseNumber: string | null | undefined) 
 }
 
 export async function getAllAgencyReports(): Promise<AgencyReport[]> {
+  if (!rtdb) return [];
   const snap = await get(ref(rtdb, "reportedAgencies"));
   if (!snap.exists()) return [];
   return Object.entries(snap.val() as Record<string, Omit<AgencyReport, "id">>)
@@ -72,15 +74,18 @@ export async function getAllAgencyReports(): Promise<AgencyReport[]> {
 }
 
 export async function updateReportStatus(id: string, status: ReportStatus): Promise<void> {
+  if (!rtdb) throw new Error("Realtime features are not configured for this deployment.");
   await update(ref(rtdb, `reportedAgencies/${id}`), { status });
 }
 
 export async function getAgencyWarningCounts(): Promise<Record<string, number>> {
+  if (!rtdb) return {};
   const snap = await get(ref(rtdb, "agencyWarnings"));
   if (!snap.exists()) return {};
   return snap.val() as Record<string, number>;
 }
 
 export async function resetAgencyWarnings(licenseNumber: string): Promise<void> {
+  if (!rtdb) throw new Error("Realtime features are not configured for this deployment.");
   await set(ref(rtdb, `agencyWarnings/${licenseNumber}`), 0);
 }

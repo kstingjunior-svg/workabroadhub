@@ -32,6 +32,7 @@ export async function bookConsultation(params: {
   dateTime: string;
   whatsappNumber: string;
 }): Promise<void> {
+  if (!rtdb) throw new Error("Realtime features are not configured for this deployment.");
   await push(ref(rtdb, "bookings"), {
     ...params,
     status: "confirmed" as BookingStatus,
@@ -44,7 +45,7 @@ export function useUserBookings(userId: string | null | undefined) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!userId) { setLoading(false); return; }
+    if (!rtdb || !userId) { setLoading(false); return; }
     const q = query(ref(rtdb, "bookings"), orderByChild("userId"));
     const unsub = onValue(q, (snap) => {
       if (!snap.exists()) { setBookings([]); setLoading(false); return; }
@@ -62,6 +63,7 @@ export function useUserBookings(userId: string | null | undefined) {
 }
 
 export async function getAllBookings(): Promise<Booking[]> {
+  if (!rtdb) return [];
   const snap = await get(ref(rtdb, "bookings"));
   if (!snap.exists()) return [];
   return Object.entries(snap.val() as Record<string, Omit<Booking, "id">>)
@@ -70,5 +72,6 @@ export async function getAllBookings(): Promise<Booking[]> {
 }
 
 export async function updateBookingStatus(id: string, status: BookingStatus): Promise<void> {
+  if (!rtdb) throw new Error("Realtime features are not configured for this deployment.");
   await update(ref(rtdb, `bookings/${id}`), { status });
 }

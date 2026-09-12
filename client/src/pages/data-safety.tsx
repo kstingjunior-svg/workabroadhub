@@ -28,11 +28,23 @@ const Section = ({ icon: Icon, title, children }: { icon: typeof Shield; title: 
 
 const Row = ({ label, value, note }: { label: string; value: React.ReactNode; note?: string }) => (
   <div className="flex items-start justify-between gap-3 py-1.5 border-b last:border-0">
-    <div>
-      <p className="text-sm font-medium text-foreground">{label}</p>
-      {note && <p className="text-xs text-muted-foreground mt-0.5">{note}</p>}
+    {/* 2026-09 (mobile overhaul): this div had no min-w-0, so its default
+        flex min-width:auto let long labels/notes refuse to shrink below
+        their unwrapped text width — pushing the row (and the page) wider
+        than the viewport on narrow phones. min-w-0 + flex-1 lets the text
+        wrap normally while the Yes/No badge next to it stays fixed-size. */}
+    <div className="min-w-0 flex-1">
+      <p className="text-sm font-medium text-foreground break-words">{label}</p>
+      {note && <p className="text-xs text-muted-foreground mt-0.5 break-words">{note}</p>}
     </div>
-    <div className="shrink-0">{value}</div>
+    {/* `value` is usually a small Yes/No Badge, but a few rows (e.g. "What
+        we send", "OpenAI retention") pass long plain-text strings instead.
+        `shrink-0` forced those to render at their full un-wrapped width —
+        same overflow bug as the label, just on the other side of the row.
+        min-w-0 + a max-width cap + break-words lets long values wrap and
+        share the row with the label instead of blowing past the viewport;
+        short badges are unaffected since they're already narrower than the cap. */}
+    <div className="min-w-0 max-w-[55%] sm:max-w-[45%] shrink text-right break-words">{value}</div>
   </div>
 );
 

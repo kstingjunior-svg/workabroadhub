@@ -39,6 +39,7 @@ export async function submitPortalForVerification(
   country: string,
   description: string,
 ): Promise<void> {
+  if (!rtdb) throw new Error("Realtime features are not configured for this deployment.");
   const visitorId = getVisitorId();
   await push(ref(rtdb, "submittedPortals"), {
     url: url.trim(),
@@ -58,6 +59,7 @@ export async function votePortal(
   submissionId: string,
   voteType: "upvotes" | "downvotes",
 ): Promise<void> {
+  if (!rtdb) throw new Error("Realtime features are not configured for this deployment.");
   await runTransaction(
     ref(rtdb, `submittedPortals/${submissionId}/${voteType}`),
     (count) => (count ?? 0) + 1,
@@ -69,14 +71,17 @@ export async function updateSubmissionStatus(
   submissionId: string,
   status: PortalStatus,
 ): Promise<void> {
+  if (!rtdb) throw new Error("Realtime features are not configured for this deployment.");
   await update(ref(rtdb, `submittedPortals/${submissionId}`), { status });
 }
 
 export async function deleteSubmission(submissionId: string): Promise<void> {
+  if (!rtdb) throw new Error("Realtime features are not configured for this deployment.");
   await remove(ref(rtdb, `submittedPortals/${submissionId}`));
 }
 
 export async function getAllSubmissions(): Promise<SubmittedPortal[]> {
+  if (!rtdb) return [];
   const snap = await get(ref(rtdb, "submittedPortals"));
   if (!snap.exists()) return [];
   return Object.entries(snap.val() as Record<string, Omit<SubmittedPortal, "id">>)
@@ -90,6 +95,10 @@ export function usePendingPortals(): { portals: SubmittedPortal[]; loading: bool
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Used by the community/portal submissions page — mounts unconditionally
+    // there, so an unguarded ref(null, ...) would crash that whole page
+    // whenever Firebase isn't configured. See lib/firebase.ts.
+    if (!rtdb) { setLoading(false); return; }
     const unsub = onValue(ref(rtdb, "submittedPortals"), (snap) => {
       if (!snap.exists()) {
         setPortals([]);
@@ -114,6 +123,7 @@ export function useAllSubmissions(): { portals: SubmittedPortal[]; loading: bool
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!rtdb) { setLoading(false); return; }
     const unsub = onValue(ref(rtdb, "submittedPortals"), (snap) => {
       if (!snap.exists()) {
         setPortals([]);

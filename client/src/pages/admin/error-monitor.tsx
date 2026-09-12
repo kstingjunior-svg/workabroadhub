@@ -57,6 +57,7 @@ function useErrorNodes(origin: "backend" | "frontend"): ErrorEntry[] {
   const [entries, setEntries] = useState<ErrorEntry[]>([]);
 
   useEffect(() => {
+    if (!rtdb) return;
     const r = ref(rtdb, `errors/${origin}`);
     const unsub = onValue(r, (snap) => {
       const val = snap.val() as Record<string, Omit<ErrorEntry, "id">> | null;

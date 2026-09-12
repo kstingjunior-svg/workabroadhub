@@ -438,22 +438,32 @@ export default function CalculatorPage() {
                     <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">
                       <Sparkles className="h-3.5 w-3.5 inline mr-1" /> Next steps
                     </div>
+                    {/* 2026-09 (mobile overhaul): Button's base class includes
+                        whitespace-nowrap, which is fine for short labels but
+                        these have dynamic country/role names spliced in — at
+                        320px the un-wrappable text overflowed the button's
+                        own w-full box and dragged the trailing ArrowRight
+                        icon out past the viewport edge with it (the button
+                        has no overflow-hidden, so oversized flex content
+                        just visually pokes out). whitespace-normal + a
+                        min-w-0 span lets the label wrap onto multiple lines
+                        like a normal button instead. */}
                     <Link href={`/journey/${country}`}>
-                      <Button variant="outline" size="sm" className="w-full justify-between">
-                        See the roadmap to land this job in {SUPPORTED_SALARY_COUNTRIES.find((c) => c.code === country)?.name}
-                        <ArrowRight className="h-4 w-4" />
+                      <Button variant="outline" size="sm" className="w-full justify-between whitespace-normal h-auto py-2 text-left gap-2">
+                        <span className="min-w-0">See the roadmap to land this job in {SUPPORTED_SALARY_COUNTRIES.find((c) => c.code === country)?.name}</span>
+                        <ArrowRight className="h-4 w-4 shrink-0" />
                       </Button>
                     </Link>
                     <Link href="/interview">
-                      <Button variant="outline" size="sm" className="w-full justify-between">
-                        Practice a {role!.label.toLowerCase()} interview
-                        <ArrowRight className="h-4 w-4" />
+                      <Button variant="outline" size="sm" className="w-full justify-between whitespace-normal h-auto py-2 text-left gap-2">
+                        <span className="min-w-0">Practice a {role!.label.toLowerCase()} interview</span>
+                        <ArrowRight className="h-4 w-4 shrink-0" />
                       </Button>
                     </Link>
                     <Link href="/salary">
-                      <Button variant="outline" size="sm" className="w-full justify-between">
-                        Compare {role!.label.toLowerCase()} salaries across all 9 destinations
-                        <ArrowRight className="h-4 w-4" />
+                      <Button variant="outline" size="sm" className="w-full justify-between whitespace-normal h-auto py-2 text-left gap-2">
+                        <span className="min-w-0">Compare {role!.label.toLowerCase()} salaries across all 9 destinations</span>
+                        <ArrowRight className="h-4 w-4 shrink-0" />
                       </Button>
                     </Link>
                   </CardContent>

@@ -41,9 +41,13 @@ export function SuccessStoriesSection() {
       <section className="py-20 sm:py-28 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-emerald-50/50 via-background to-teal-50/50 dark:from-emerald-950/20 dark:via-background dark:to-teal-950/20">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-12 space-y-4">
-            <Skeleton className="h-8 w-48 mx-auto" />
-            <Skeleton className="h-12 w-96 mx-auto" />
-            <Skeleton className="h-6 w-72 mx-auto" />
+            <Skeleton className="h-8 w-48 mx-auto max-w-[80vw]" />
+            {/* 2026-09 (mobile overhaul): fixed w-96/w-72 skeletons were
+                wider than most phone viewports while showing (before the
+                real content replaces them). Capped to a viewport-relative
+                max-width so they never force horizontal scroll. */}
+            <Skeleton className="h-12 w-96 max-w-[90vw] mx-auto" />
+            <Skeleton className="h-6 w-72 max-w-[80vw] mx-auto" />
           </div>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[1, 2, 3].map((i) => (

@@ -40,8 +40,13 @@ export function AdvisorsSection() {
       <section className="py-20 sm:py-28 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-purple-50/50 via-background to-indigo-50/50 dark:from-purple-950/20 dark:via-background dark:to-indigo-950/20">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-12 space-y-4">
-            <Skeleton className="h-8 w-48 mx-auto" />
-            <Skeleton className="h-12 w-96 mx-auto" />
+            <Skeleton className="h-8 w-48 mx-auto max-w-[80vw]" />
+            {/* 2026-09 (mobile overhaul): w-96 (384px) is wider than most
+                phone viewports and overflowed while this skeleton is showing
+                (real content replaces it once the query resolves). Capping
+                at a viewport-relative max-width keeps it from ever being
+                wider than the screen. */}
+            <Skeleton className="h-12 w-96 max-w-[90vw] mx-auto" />
           </div>
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
             {[1, 2, 3, 4].map((i) => (

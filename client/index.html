@@ -2,7 +2,13 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+    <!-- 2026-09 (mobile overhaul): removed maximum-scale=1 / user-scalable=no.
+         Locking pinch-zoom blocks low-vision users from reading the page at
+         all (WCAG 1.4.4/1.4.10) and it was compensating for layout that
+         should just fit the viewport on its own — not a real fix. The
+         layout work in this pass is what makes zooming unnecessary; this
+         tag now only sets the correct base scale, it doesn't forbid zoom. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
     <!-- Cache-busting: tell every browser and proxy never to cache the HTML shell.
          Vite fingerprints JS/CSS assets (e.g. /assets/main-Ab3kQ9.js) so those

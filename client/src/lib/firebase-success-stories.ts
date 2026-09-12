@@ -26,6 +26,10 @@ export async function pushSuccessStory(
   jobTitle: string,
   destination: string,
 ): Promise<void> {
+  // rtdb is null when VITE_FIREBASE_* env vars aren't configured (see
+  // lib/firebase.ts) — every consumer here must check before calling an SDK
+  // function on it, since ref(null, ...) throws inside the SDK.
+  if (!rtdb) return;
   const from = user.country
     ? (COUNTRY_NAMES[user.country.toUpperCase()] ?? user.country)
     : "Kenya";
@@ -50,6 +54,11 @@ export function useVerifiedSuccessStories(limit = 10) {
   const [stories, setStories] = useState<SuccessStoryEntry[]>([]);
 
   useEffect(() => {
+    // This hook is used by the landing page's success-stories section,
+    // which mounts on every visit — an unguarded ref(null, ...) here
+    // crashed the ENTIRE homepage (via the root ErrorBoundary) whenever
+    // Firebase isn't configured. See lib/firebase.ts for the null contract.
+    if (!rtdb) return;
     const q = query(
       ref(rtdb, "successStories"),
       orderByChild("verifiedByAdmin"),
@@ -72,6 +81,7 @@ export function useVerifiedSuccessStories(limit = 10) {
 }
 
 export async function getAllSuccessStories(): Promise<SuccessStoryEntry[]> {
+  if (!rtdb) return [];
   const snap = await get(ref(rtdb, "successStories"));
   if (!snap.exists()) return [];
   return Object.entries(snap.val() as Record<string, Omit<SuccessStoryEntry, "id">>)
@@ -80,9 +90,11 @@ export async function getAllSuccessStories(): Promise<SuccessStoryEntry[]> {
 }
 
 export async function verifyStory(id: string): Promise<void> {
+  if (!rtdb) throw new Error("Realtime features are not configured for this deployment.");
   await update(ref(rtdb, `successStories/${id}`), { verifiedByAdmin: true });
 }
 
 export async function rejectStory(id: string): Promise<void> {
+  if (!rtdb) throw new Error("Realtime features are not configured for this deployment.");
   await remove(ref(rtdb, `successStories/${id}`));
 }

@@ -7,6 +7,11 @@ export function FirebaseConnectionBanner() {
   const [everConnected, setEverConnected] = useState(false);
 
   useEffect(() => {
+    // rtdb is null when Firebase isn't configured (see lib/firebase.ts) —
+    // ref(null, ...) throws inside the SDK, and since this component is
+    // mounted unconditionally on every single page, an uncaught throw here
+    // would white-screen the entire site via the root ErrorBoundary.
+    if (!rtdb) return;
     const connectedRef = ref(rtdb, ".info/connected");
     const unsub = onValue(connectedRef, (snap) => {
       const connected = snap.val() === true;

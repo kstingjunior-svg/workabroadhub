@@ -27,6 +27,7 @@ export async function submitAgencyRating(
   userId: string,
   agencyName?: string,
 ): Promise<void> {
+  if (!rtdb) throw new Error("Realtime features are not configured for this deployment.");
   const safeKey = licenseNumber.replace(/\//g, "_");
   await set(ref(rtdb, `agencyRatings/${safeKey}/${userId}`), {
     rating,
@@ -44,6 +45,7 @@ export async function getUserRating(
   licenseNumber: string,
   userId: string,
 ): Promise<AgencyRating | null> {
+  if (!rtdb) return null;
   const safeKey = licenseNumber.replace(/\//g, "_");
   const snap = await get(ref(rtdb, `agencyRatings/${safeKey}/${userId}`));
   if (!snap.exists()) return null;
@@ -55,6 +57,7 @@ export async function deleteAgencyRating(
   licenseNumber: string,
   userId: string,
 ): Promise<void> {
+  if (!rtdb) throw new Error("Realtime features are not configured for this deployment.");
   const safeKey = licenseNumber.replace(/\//g, "_");
   await remove(ref(rtdb, `agencyRatings/${safeKey}/${userId}`));
 }
@@ -64,7 +67,10 @@ export function useAgencyRatingSummary(licenseNumber: string | null | undefined)
   const [summary, setSummary] = useState<AgencyRatingSummary>({ average: 0, count: 0 });
 
   useEffect(() => {
-    if (!licenseNumber) return;
+    // Mounted per agency card on listing pages — unguarded, this would
+    // crash any page that renders an agency card whenever Firebase isn't
+    // configured. See lib/firebase.ts for the null contract.
+    if (!rtdb || !licenseNumber) return;
     const safeKey = licenseNumber.replace(/\//g, "_");
     const unsub = onValue(ref(rtdb, `agencyRatings/${safeKey}`), (snap) => {
       if (!snap.exists()) {
@@ -90,7 +96,7 @@ export function useUserAgencyRating(
   const [rating, setRating] = useState<AgencyRating | null>(null);
 
   useEffect(() => {
-    if (!licenseNumber || !userId) return;
+    if (!rtdb || !licenseNumber || !userId) return;
     const safeKey = licenseNumber.replace(/\//g, "_");
     const unsub = onValue(ref(rtdb, `agencyRatings/${safeKey}/${userId}`), (snap) => {
       setRating(snap.exists() ? (snap.val() as AgencyRating) : null);
@@ -103,6 +109,7 @@ export function useUserAgencyRating(
 
 // Admin: get all ratings across all agencies, flat list
 export async function getAllAgencyRatings(): Promise<Array<AgencyRating & { id: string; agencyKey: string }>> {
+  if (!rtdb) return [];
   const snap = await get(ref(rtdb, "agencyRatings"));
   if (!snap.exists()) return [];
   const results: Array<AgencyRating & { id: string; agencyKey: string }> = [];

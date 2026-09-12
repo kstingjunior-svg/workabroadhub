@@ -153,6 +153,11 @@ export function LandingNeaSearch() {
         <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide block">
           Agency name or license number
         </label>
+        {/* 2026-09 (mobile overhaul): a text <input> is a flex item with the
+            same default min-width:auto as everything else — without min-w-0
+            it refused to shrink below its own intrinsic width, and combined
+            with the "Verify" button's fixed width that pushed the row (and
+            the button with it) past the edge of narrow phones. */}
         <div className="flex gap-2">
           <input
             type="text"
@@ -160,14 +165,14 @@ export function LandingNeaSearch() {
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") runVerify(); }}
             placeholder="e.g. ABC Recruitment Ltd. or RA/2024/01/123"
-            className="flex-1 px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-700 focus:border-emerald-500 dark:focus:border-emerald-400 focus:outline-none transition-colors text-sm bg-white dark:bg-gray-800"
+            className="flex-1 min-w-0 px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-700 focus:border-emerald-500 dark:focus:border-emerald-400 focus:outline-none transition-colors text-sm bg-white dark:bg-gray-800"
             data-testid="input-nea-search"
             aria-label="Search licensed recruitment agencies"
           />
           <button
             onClick={runVerify}
             disabled={searching || !query.trim()}
-            className="px-5 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 dark:disabled:bg-emerald-900/50 text-white font-bold text-sm transition-colors flex items-center gap-2 whitespace-nowrap shadow-sm"
+            className="px-5 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 dark:disabled:bg-emerald-900/50 text-white font-bold text-sm transition-colors flex items-center gap-2 whitespace-nowrap shadow-sm shrink-0"
             data-testid="button-nea-verify"
           >
             {searching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}

@@ -171,10 +171,10 @@ function QrCodeDialog({ agencyId, agencyName }: { agencyId: string; agencyName: 
         </DialogHeader>
         <div className="flex flex-col items-center gap-4 py-4">
           {isLoading ? (
-            <Skeleton className="w-[300px] h-[300px]" />
+            <Skeleton className="w-full max-w-[260px] aspect-square" />
           ) : data ? (
             <>
-              <img src={data.qrCode} alt={`QR Code for ${agencyName}`} className="w-[300px] h-[300px]" data-testid="img-qr-code" />
+              <img src={data.qrCode} alt={`QR Code for ${agencyName}`} className="w-full max-w-[260px] aspect-square" data-testid="img-qr-code" />
               <p className="text-sm text-center text-muted-foreground">
                 Scan this QR code to verify <strong>{agencyName}</strong> on any device
               </p>

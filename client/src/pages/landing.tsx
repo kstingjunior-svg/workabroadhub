@@ -11,7 +11,7 @@ import { LandingTrustStrip } from "@/components/landing-trust-strip";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PRO_FEATURES } from "@/lib/plan-features";
-import { Globe, Shield, FileCheck, CheckCircle, AlertTriangle, ExternalLink, Briefcase, GraduationCap, Building2, Sparkles, ArrowRight, BadgeCheck, TrendingUp, Users, HelpCircle, ChevronDown, CreditCard, ClipboardList, MessageCircle, Mail, Phone, MapPin, BarChart3, FileText, ShieldAlert, Wrench, Smartphone, Headphones, ScanLine, Zap } from "lucide-react";
+import { Globe, Shield, FileCheck, CheckCircle, AlertTriangle, ExternalLink, Briefcase, GraduationCap, Building2, Sparkles, ArrowRight, BadgeCheck, TrendingUp, Users, HelpCircle, ChevronDown, CreditCard, ClipboardList, MessageCircle, Mail, Phone, MapPin, BarChart3, FileText, ShieldAlert, Wrench, Smartphone, Headphones, ScanLine, Zap, Menu, X } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useTranslation } from "react-i18next";
 import { LanguageSelector } from "@/components/language-selector";
@@ -41,9 +41,16 @@ export default function Landing() {
   const [authModalTab, setAuthModalTab] = useState<"login" | "signup">("signup");
   const [authRedirectPath, setAuthRedirectPath] = useState<string | undefined>(undefined);
   const [submitModalOpen, setSubmitModalOpen] = useState(false);
+  // 2026-09 (mobile overhaul): the nav bar (logo + full link list + language
+  // selector + Login + Sign Up) has no wrap/shrink handling and was
+  // overflowing off the right edge of the screen on real phones — visitors
+  // had to zoom out just to reach the Sign Up button. Collapsing the links,
+  // Login, and language selector into a hamburger panel below `md` keeps the
+  // persistent bar down to logo + Sign Up + toggle, which always fits.
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const openSignUp = () => { setAuthModalTab("signup"); setAuthModalOpen(true); };
-  const openLogin = () => { setAuthModalTab("login"); setAuthModalOpen(true); };
+  const openSignUp = () => { setAuthModalTab("signup"); setAuthModalOpen(true); setMobileMenuOpen(false); };
+  const openLogin = () => { setAuthModalTab("login"); setAuthModalOpen(true); setMobileMenuOpen(false); };
 
   const { data: agencyStats } = useQuery<{ total: number; valid: number; expired: number; lastUpdated: string }>({
     queryKey: ["/api/agencies/stats"],
@@ -263,12 +270,12 @@ export default function Landing() {
         aria-label="Main navigation"
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-2">
-              <img src="/logo.png" alt="" className="h-9 w-9 rounded-xl object-cover" aria-hidden="true" />
-              <span className="font-bold text-lg" aria-label="WorkAbroad Hub - Home">WorkAbroad Hub</span>
+          <div className="flex items-center justify-between h-16 gap-2">
+            <div className="flex items-center gap-2 min-w-0 shrink">
+              <img src="/logo.png" alt="" className="h-9 w-9 rounded-xl object-cover shrink-0" aria-hidden="true" />
+              <span className="font-bold text-lg truncate" aria-label="WorkAbroad Hub - Home">WorkAbroad Hub</span>
             </div>
-            <div className="hidden md:flex items-center gap-8" role="menubar">
+            <div className="hidden lg:flex items-center gap-8" role="menubar">
               <a href="#features" className="text-sm text-muted-foreground hover:text-foreground transition-colors font-medium touch-target-min flex items-center" data-testid="link-features" role="menuitem">Features</a>
               <a href="#countries" className="text-sm text-muted-foreground hover:text-foreground transition-colors font-medium touch-target-min flex items-center" data-testid="link-countries" role="menuitem">Countries</a>
               <a href="#how-it-works" className="text-sm text-muted-foreground hover:text-foreground transition-colors font-medium touch-target-min flex items-center" data-testid="link-how-it-works-nav" role="menuitem">How It Works</a>
@@ -280,7 +287,9 @@ export default function Landing() {
               <Link href="/visa-assistant" className="text-sm font-semibold text-blue-600 hover:text-blue-700 transition-colors touch-target-min flex items-center gap-1" data-testid="link-visa-assistant-nav" role="menuitem">✨ AI Assistant</Link>
               <Link href="/green-card" className="text-sm text-muted-foreground hover:text-foreground transition-colors font-medium touch-target-min flex items-center" data-testid="link-green-card-nav" role="menuitem">🇺🇸 Green Card</Link>
             </div>
-            <div className="flex items-center gap-3">
+            {/* Desktop-only utility group — Login, language, Sign Up all fit
+                fine at md+ widths, so this stays exactly as before there. */}
+            <div className="hidden lg:flex items-center gap-3">
               <LanguageSelector />
               <Button variant="ghost" size="sm" onClick={openLogin} data-testid="button-login" aria-label="Log in to your account">
                 {t("common.login")}
@@ -289,8 +298,57 @@ export default function Landing() {
                 {t("common.signUp")}
               </Button>
             </div>
+            {/* Mobile-only: keep just the primary CTA + a hamburger toggle
+                visible in the bar itself — everything else moves into the
+                collapsible panel below so the bar never overflows. */}
+            <div className="flex lg:hidden items-center gap-2 shrink-0">
+              <Button size="sm" onClick={openSignUp} data-testid="button-get-started-mobile" aria-label="Sign up for a new account" className="px-3 whitespace-nowrap">
+                {t("common.signUp")}
+              </Button>
+              <button
+                type="button"
+                onClick={() => setMobileMenuOpen((o) => !o)}
+                className="p-2 -mr-1 rounded-md text-foreground hover:bg-accent touch-target-min"
+                aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
+                aria-expanded={mobileMenuOpen}
+                aria-controls="mobile-nav-panel"
+                data-testid="button-mobile-menu-toggle"
+              >
+                {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+              </button>
+            </div>
           </div>
         </div>
+
+        {/* Mobile nav panel — full link list + Login + language selector,
+            collapsed by default so the bar above never has to fit them. */}
+        {mobileMenuOpen && (
+          <div
+            id="mobile-nav-panel"
+            className="lg:hidden border-t bg-background px-4 py-3 max-h-[calc(100vh-4rem)] overflow-y-auto"
+            role="menu"
+            aria-label="Mobile navigation"
+          >
+            <div className="flex flex-col gap-1">
+              <a href="#features" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium py-2.5 touch-target-min flex items-center" data-testid="link-features-mobile" role="menuitem">Features</a>
+              <a href="#countries" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium py-2.5 touch-target-min flex items-center" data-testid="link-countries-mobile" role="menuitem">Countries</a>
+              <a href="#how-it-works" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium py-2.5 touch-target-min flex items-center" data-testid="link-how-it-works-nav-mobile" role="menuitem">How It Works</a>
+              <a href="#pricing" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium py-2.5 touch-target-min flex items-center" data-testid="link-pricing-mobile" role="menuitem">Pricing</a>
+              <Link href="/faq" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium py-2.5 touch-target-min flex items-center" data-testid="link-faq-mobile" role="menuitem">FAQ</Link>
+              <Link href="/about" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium py-2.5 touch-target-min flex items-center" data-testid="link-about-mobile" role="menuitem">About</Link>
+              <Link href="/contact" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium py-2.5 touch-target-min flex items-center" data-testid="link-contact-nav-mobile" role="menuitem">Contact</Link>
+              <Link href="/visa-guides" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium py-2.5 touch-target-min flex items-center" data-testid="link-visa-guides-nav-mobile" role="menuitem">Educational Guides</Link>
+              <Link href="/visa-assistant" onClick={() => setMobileMenuOpen(false)} className="text-sm font-semibold text-blue-600 py-2.5 touch-target-min flex items-center gap-1" data-testid="link-visa-assistant-nav-mobile" role="menuitem">✨ AI Assistant</Link>
+              <Link href="/green-card" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium py-2.5 touch-target-min flex items-center" data-testid="link-green-card-nav-mobile" role="menuitem">🇺🇸 Green Card</Link>
+            </div>
+            <div className="flex items-center justify-between gap-3 pt-3 mt-2 border-t">
+              <LanguageSelector />
+              <Button variant="ghost" size="sm" onClick={openLogin} data-testid="button-login-mobile" aria-label="Log in to your account">
+                {t("common.login")}
+              </Button>
+            </div>
+          </div>
+        )}
       </nav>
 
       <main className="pt-16" role="main">
@@ -394,9 +452,17 @@ export default function Landing() {
               )}
             </div>
 
-            {/* Two-column trust panel — sharp corners, ministry look */}
+            {/* Two-column trust panel — sharp corners, ministry look.
+                2026-09 (mobile overhaul): with no grid-template-columns set
+                below `md`, the two children fell back to their own
+                max-content width (sized by the unbreakable hero heading /
+                disclaimer text) instead of stretching to the container —
+                a fixed ~460px box that overflowed every phone width
+                regardless of viewport size. Explicit grid-cols-1 forces a
+                single 100%-width column on mobile; md: still switches to
+                the two-column layout unchanged. */}
             <div
-              className="grid md:grid-cols-[1fr_1.2fr] gap-0 bg-white"
+              className="grid grid-cols-1 md:grid-cols-[1fr_1.2fr] gap-0 bg-white"
               style={{ border: '1px solid #E2DDD5' }}
             >
               {/* LEFT: Human message */}
@@ -819,9 +885,14 @@ export default function Landing() {
               <span className="px-3 py-1 rounded-full bg-white/10 border border-white/20">📧 Morning digest email</span>
               <span className="px-3 py-1 rounded-full bg-white/10 border border-white/20">🇬🇧 🇨🇦 🇺🇸 🇦🇺 🇩🇪</span>
             </div>
+            {/* 2026-09 (mobile overhaul): Button's base class includes
+                whitespace-nowrap — fine for short labels, but this long CTA
+                text rendered as one un-wrappable line ~495px wide and
+                overflowed every phone viewport. whitespace-normal lets it
+                wrap onto 2 lines like a normal button. */}
             <Button
               size="lg"
-              className="text-base bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-400 hover:to-blue-400 text-white border-0 shadow-xl shadow-purple-500/30 gap-2"
+              className="text-base bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-400 hover:to-blue-400 text-white border-0 shadow-xl shadow-purple-500/30 gap-2 whitespace-normal h-auto py-3 max-w-full"
               onClick={() => {
                 if (currentUser) navigate("/autoapply");
                 else {
@@ -831,7 +902,7 @@ export default function Landing() {
               }}
               data-testid="btn-autoapply-hero"
             >
-              <Sparkles className="h-4 w-4" /> Activate my AutoApply Agent — 7-day free Pro trial
+              <Sparkles className="h-4 w-4 shrink-0" /> <span>Activate my AutoApply Agent — 7-day free Pro trial</span>
             </Button>
             <p className="text-xs text-blue-200/70 mt-3">
               7-day Pro trial included · No credit card needed · Pro: KES 1,500/mo or KES 15,000/year (save 17%) · Free tier forever after trial
@@ -1077,7 +1148,7 @@ export default function Landing() {
           <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(circle at 20% 50%, rgba(59, 130, 246, 0.3), transparent 50%), radial-gradient(circle at 80% 50%, rgba(139, 92, 246, 0.2), transparent 50%)' }} />
 
           <div className="relative max-w-6xl mx-auto">
-            <div className="grid lg:grid-cols-2 gap-12 items-center">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
               <div className="space-y-6">
                 <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500/20 border border-blue-400/30 rounded-full animate-pulse">
                   <Building2 className="h-4 w-4 text-blue-300" />
@@ -1125,10 +1196,10 @@ export default function Landing() {
                 </div>
 
                 <div className="flex flex-col sm:flex-row gap-4 pt-2 items-start">
-                  <Button size="lg" className="text-base px-8 py-6 h-auto bg-gradient-to-r from-emerald-500 via-cyan-500 to-blue-500 hover:from-emerald-400 hover:via-cyan-400 hover:to-blue-400 border-0 shadow-lg shadow-emerald-500/30 font-semibold text-base" asChild data-testid="button-agency-portal-cta">
+                  <Button size="lg" className="text-base px-8 py-6 h-auto whitespace-normal max-w-full bg-gradient-to-r from-emerald-500 via-cyan-500 to-blue-500 hover:from-emerald-400 hover:via-cyan-400 hover:to-blue-400 border-0 shadow-lg shadow-emerald-500/30 font-semibold text-base" asChild data-testid="button-agency-portal-cta">
                     <Link href="/agency-portal">
-                      <Building2 className="mr-2 h-5 w-5" />
-                      Claim my agency profile →
+                      <Building2 className="mr-2 h-5 w-5 shrink-0" />
+                      <span>Claim my agency profile →</span>
                     </Link>
                   </Button>
                   <div className="text-xs text-blue-200/70 sm:py-3">
@@ -1316,7 +1387,7 @@ export default function Landing() {
           <div className="absolute inset-0 bg-gradient-to-br from-amber-50 via-orange-50/50 to-amber-50 dark:from-amber-950/20 dark:via-orange-950/10 dark:to-amber-950/20" />
           
           <div className="relative max-w-7xl mx-auto">
-            <div className="grid lg:grid-cols-2 gap-12 items-center">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
               {/* Left Content */}
               <div className="space-y-6">
                 <div className="inline-flex items-center gap-2 px-4 py-2 bg-amber-100 dark:bg-amber-900/50 rounded-full">
@@ -1532,14 +1603,14 @@ export default function Landing() {
             
             {/* CTA after features */}
             <div className="mt-12 sm:mt-16 text-center space-y-4">
-              <Button 
-                size="lg" 
-                className="text-base px-8 py-6 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-lg shadow-blue-500/25 hover:shadow-xl transition-all duration-300" 
+              <Button
+                size="lg"
+                className="text-base px-8 py-6 h-auto whitespace-normal max-w-full rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-lg shadow-blue-500/25 hover:shadow-xl transition-all duration-300"
                 onClick={openSignUp}
                 data-testid="button-features-cta"
               >
-                Start Your Overseas Job Search
-                <ArrowRight className="ml-2 h-5 w-5" />
+                <span>Start Your Overseas Job Search</span>
+                <ArrowRight className="ml-2 h-5 w-5 shrink-0" />
               </Button>
               <p className="text-sm text-muted-foreground">Start your overseas career journey today</p>
             </div>
@@ -1868,18 +1939,24 @@ export default function Landing() {
             <div className="space-y-4">
               <h4 className="font-semibold text-white">Contact Us</h4>
               <ul className="space-y-3 text-sm">
+                {/* 2026-08 (mobile overhaul): the wrapping <div> had no
+                    min-w-0, so at some footer column widths (e.g. 768px,
+                    where the footer grid gives this column a narrower
+                    track) the unbreakable email address refused to shrink
+                    and pushed the footer wider than the viewport. min-w-0 +
+                    break-all lets it wrap like any other long token. */}
                 <li className="flex items-start gap-3">
                   <MessageCircle className="h-4 w-4 text-emerald-500 mt-0.5 flex-shrink-0" />
-                  <div>
+                  <div className="min-w-0">
                     <div className="text-slate-400">WhatsApp Support</div>
-                    <a href="https://wa.me/254111467601" target="_blank" rel="noopener noreferrer" className="text-white hover:text-emerald-400 transition-colors" data-testid="link-footer-whatsapp-number">+254 111 467 601</a>
+                    <a href="https://wa.me/254111467601" target="_blank" rel="noopener noreferrer" className="text-white hover:text-emerald-400 transition-colors break-all" data-testid="link-footer-whatsapp-number">+254 111 467 601</a>
                   </div>
                 </li>
                 <li className="flex items-start gap-3">
                   <Mail className="h-4 w-4 text-blue-500 mt-0.5 flex-shrink-0" />
-                  <div>
+                  <div className="min-w-0">
                     <div className="text-slate-400">Email</div>
-                    <a href="mailto:support@workabroadhub.tech" className="text-white hover:text-blue-400 transition-colors" data-testid="link-footer-email-address">support@workabroadhub.tech</a>
+                    <a href="mailto:support@workabroadhub.tech" className="text-white hover:text-blue-400 transition-colors break-all" data-testid="link-footer-email-address">support@workabroadhub.tech</a>
                   </div>
                 </li>
                 <li className="flex items-start gap-3">

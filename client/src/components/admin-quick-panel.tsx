@@ -30,7 +30,7 @@ export function AdminQuickPanel() {
 
   // Live Firebase stats when panel is open
   useEffect(() => {
-    if (!open) return;
+    if (!open || !rtdb) return;
 
     const rootRef = ref(rtdb, "/");
     const unsub = onValue(rootRef, (snapshot) => {
@@ -56,6 +56,7 @@ export function AdminQuickPanel() {
 
   const exportCSV = useCallback(async () => {
     try {
+      if (!rtdb) { alert("Firebase is not configured for this deployment."); return; }
       const snapshot = await get(ref(rtdb, "signups"));
       if (!snapshot.exists()) { alert("No signups yet."); return; }
 

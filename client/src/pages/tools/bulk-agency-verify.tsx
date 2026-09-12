@@ -132,14 +132,20 @@ export default function BulkAgencyVerifyPage() {
         <Card className="mb-6">
           <CardContent className="p-5 space-y-4">
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-200 flex items-center gap-1.5">
-                  <ClipboardList className="h-4 w-4 text-muted-foreground" />
-                  Paste agency names, license numbers, or any text
+              {/* 2026-09 (mobile overhaul): the label is itself a flex row
+                  (icon + text), which made the text an anonymous flex item
+                  with the default min-width:auto — it refused to wrap and
+                  pushed "Load example" off the right edge at 320px. Wrapping
+                  the text in its own <span> (a normal inline element, wraps
+                  freely) and stacking the row on narrow screens fixes it. */}
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-2 mb-2">
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-200 flex items-center gap-1.5 min-w-0">
+                  <ClipboardList className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <span className="break-words">Paste agency names, license numbers, or any text</span>
                 </label>
                 <button
                   onClick={() => setInputText(EXAMPLE)}
-                  className="text-xs text-teal-600 hover:underline"
+                  className="text-xs text-teal-600 hover:underline self-start sm:self-auto shrink-0"
                   data-testid="button-load-example"
                 >
                   Load example
@@ -172,12 +178,18 @@ export default function BulkAgencyVerifyPage() {
               </div>
             )}
 
-            <div className="flex gap-3">
+            {/* 2026-09 (mobile overhaul): two fixed-content buttons side by
+                side didn't fit 320px together (icon + "Extract Numbers" +
+                gap + icon + "Verify All" > the ~288px available inside the
+                card's padding), pushing "Verify All" past the viewport edge.
+                Stacking them full-width below sm: fixes it without shrinking
+                text or icons. */}
+            <div className="flex flex-col sm:flex-row gap-3">
               <Button
                 variant="outline"
                 onClick={handleExtract}
                 disabled={!inputText.trim()}
-                className="gap-2"
+                className="gap-2 w-full sm:w-auto"
                 data-testid="button-extract"
               >
                 <Search className="h-4 w-4" />
@@ -186,7 +198,7 @@ export default function BulkAgencyVerifyPage() {
               <Button
                 onClick={handleVerify}
                 disabled={loading || !inputText.trim()}
-                className="gap-2 bg-teal-600 hover:bg-teal-700 text-white"
+                className="gap-2 bg-teal-600 hover:bg-teal-700 text-white w-full sm:w-auto"
                 data-testid="button-verify"
               >
                 <ShieldCheck className="h-4 w-4" />

@@ -1051,7 +1051,16 @@ function Router() {
 
   return (
     <>
-      <AuthenticatedRoutes />
+      {/* 2026-09 (mobile overhaul): BottomNav is `fixed bottom-0` and ~64px
+          tall (plus the safe-area inset on notched phones). No individual
+          page reserves space for it, so on every authenticated mobile page
+          the last bit of content — often exactly the CTA/submit button a
+          user needs — renders directly underneath the bar and can be
+          unreachable. Reserving the space here, once, at the root fixes it
+          site-wide instead of touching 100+ page files individually. */}
+      <div className="pb-20 md:pb-0">
+        <AuthenticatedRoutes />
+      </div>
       <BottomNav />
     </>
   );
