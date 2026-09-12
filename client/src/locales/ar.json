@@ -15,7 +15,9 @@
     "expired": "منتهي",
     "logout": "تسجيل الخروج",
     "login": "تسجيل الدخول",
-    "signUp": "التسجيل"
+    "signUp": "التسجيل",
+    "newHere": "جديد هنا؟",
+    "alreadyRegistered": "لديك حساب بالفعل؟"
   },
   "landing": {
     "heroTitle": "اعثر على وظائف خارجية موثقة",

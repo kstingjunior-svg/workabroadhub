@@ -288,15 +288,26 @@ export default function Landing() {
               <Link href="/green-card" className="text-sm text-muted-foreground hover:text-foreground transition-colors font-medium touch-target-min flex items-center" data-testid="link-green-card-nav" role="menuitem">🇺🇸 Green Card</Link>
             </div>
             {/* Desktop-only utility group — Login, language, Sign Up all fit
-                fine at md+ widths, so this stays exactly as before there. */}
+                fine at md+ widths, so this stays exactly as before there.
+                2026-09: added "New here? / Already registered?" microcopy
+                so first-time vs. returning visitors know which button is
+                theirs. Gated to xl+ (not lg) so the already-verified
+                1024-1279px layout is untouched — only wider screens, which
+                have the extra room, show the labels. */}
             <div className="hidden lg:flex items-center gap-3">
               <LanguageSelector />
-              <Button variant="ghost" size="sm" onClick={openLogin} data-testid="button-login" aria-label="Log in to your account">
-                {t("common.login")}
-              </Button>
-              <Button size="sm" onClick={openSignUp} data-testid="button-get-started" aria-label="Sign up for a new account">
-                {t("common.signUp")}
-              </Button>
+              <div className="flex items-center gap-1.5">
+                <span className="hidden xl:inline text-xs text-muted-foreground whitespace-nowrap">{t("common.alreadyRegistered")}</span>
+                <Button variant="ghost" size="sm" onClick={openLogin} data-testid="button-login" aria-label="Log in to your account">
+                  {t("common.login")}
+                </Button>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="hidden xl:inline text-xs text-muted-foreground whitespace-nowrap">{t("common.newHere")}</span>
+                <Button size="sm" onClick={openSignUp} data-testid="button-get-started" aria-label="Sign up for a new account">
+                  {t("common.signUp")}
+                </Button>
+              </div>
             </div>
             {/* Mobile-only: keep just the primary CTA + a hamburger toggle
                 visible in the bar itself — everything else moves into the
@@ -341,11 +352,17 @@ export default function Landing() {
               <Link href="/visa-assistant" onClick={() => setMobileMenuOpen(false)} className="text-sm font-semibold text-blue-600 py-2.5 touch-target-min flex items-center gap-1" data-testid="link-visa-assistant-nav-mobile" role="menuitem">✨ AI Assistant</Link>
               <Link href="/green-card" onClick={() => setMobileMenuOpen(false)} className="text-sm font-medium py-2.5 touch-target-min flex items-center" data-testid="link-green-card-nav-mobile" role="menuitem">🇺🇸 Green Card</Link>
             </div>
-            <div className="flex items-center justify-between gap-3 pt-3 mt-2 border-t">
+            {/* 2026-09: labeled the Login row so returning visitors who open
+                the menu see immediately that this is their button, rather
+                than a plain unlabeled "Login" easy to skip past. */}
+            <div className="flex items-center justify-between gap-3 pt-3 mt-2 border-t flex-wrap gap-y-2">
               <LanguageSelector />
-              <Button variant="ghost" size="sm" onClick={openLogin} data-testid="button-login-mobile" aria-label="Log in to your account">
-                {t("common.login")}
-              </Button>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="hidden sm:inline text-xs text-muted-foreground whitespace-nowrap">{t("common.alreadyRegistered")}</span>
+                <Button variant="outline" size="sm" onClick={openLogin} data-testid="button-login-mobile" aria-label="Log in to your account">
+                  {t("common.login")}
+                </Button>
+              </div>
             </div>
           </div>
         )}

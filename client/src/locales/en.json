@@ -15,7 +15,9 @@
     "expired": "Expired",
     "logout": "Logout",
     "login": "Login",
-    "signUp": "Sign Up"
+    "signUp": "Sign Up",
+    "newHere": "New here?",
+    "alreadyRegistered": "Already registered?"
   },
   "landing": {
     "heroTitle": "Find Verified Overseas Jobs",

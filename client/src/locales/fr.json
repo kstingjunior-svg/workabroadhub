@@ -15,7 +15,9 @@
     "expired": "Expiré",
     "logout": "Déconnexion",
     "login": "Connexion",
-    "signUp": "S'inscrire"
+    "signUp": "S'inscrire",
+    "newHere": "Nouveau ici ?",
+    "alreadyRegistered": "Déjà inscrit ?"
   },
   "landing": {
     "heroTitle": "Trouvez des Emplois Vérifiés à l'Étranger",

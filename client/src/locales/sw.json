@@ -15,7 +15,9 @@
     "expired": "Imekwisha",
     "logout": "Toka",
     "login": "Ingia",
-    "signUp": "Jisajili"
+    "signUp": "Jisajili",
+    "newHere": "Mgeni hapa?",
+    "alreadyRegistered": "Tayari umejisajili?"
   },
   "landing": {
     "heroTitle": "Pata Kazi za Nje za Nchi Zilizothibitishwa",
