@@ -6,8 +6,6 @@ import {
   Loader2,
   Check,
   AlertCircle,
-  UserPlus,
-  LogIn,
   ExternalLink,
 } from "lucide-react";
 
@@ -212,10 +210,23 @@ export function AuthModal({
     setSuccessMsg("");
   };
 
-  const switchTab = (t: Tab) => {
-    setTab(t);
-    resetForm();
-  };
+  // 2026-09 (Tony's "Login brings Sign Up too" fix): Login and Sign Up are
+  // now fully separate — no in-modal toggle between them. This same
+  // <AuthModal> instance stays mounted for the whole page (see landing.tsx),
+  // so `tab`/`stage` only picked up `defaultTab` on the very first mount.
+  // Previously, once a user opened Sign Up once, the internal `tab` state
+  // stayed "signup" forever — reopening via the "Login" button would still
+  // show the Sign Up form, because nothing re-synced state to the new
+  // `defaultTab` prop. Now every time the modal is opened, we force it back
+  // to whichever tab the caller asked for and clear any leftover form state.
+  useEffect(() => {
+    if (open) {
+      setTab(defaultTab);
+      setStage(defaultTab);
+      resetForm();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, defaultTab]);
 
   const validate = (): boolean => {
     const errs: FieldErrors = {};
@@ -726,37 +737,11 @@ export function AuthModal({
         )}
 
         {stage !== "verify" && (<>
-        {/* ── Tabs + login/signup form (hidden during verify stage) ── */}
-
-        <div className="flex mx-6 mt-4 rounded-lg bg-muted p-1 gap-1">
-          <button
-            onClick={() =>
-              switchTab("login")
-            }
-            className={`flex-1 flex items-center justify-center gap-1.5 text-sm font-medium py-2 rounded-md transition-all ${
-              tab === "login"
-                ? "bg-background shadow-sm text-foreground"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <LogIn className="h-3.5 w-3.5" />
-            Sign In
-          </button>
-
-          <button
-            onClick={() =>
-              switchTab("signup")
-            }
-            className={`flex-1 flex items-center justify-center gap-1.5 text-sm font-medium py-2 rounded-md transition-all ${
-              tab === "signup"
-                ? "bg-background shadow-sm text-foreground"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <UserPlus className="h-3.5 w-3.5" />
-            Sign Up
-          </button>
-        </div>
+        {/* 2026-09 (Tony's "separate Login from Sign Up" request): no more
+            in-modal Sign In / Sign Up toggle. This modal now only ever shows
+            the single form matching whichever button opened it (`defaultTab`,
+            synced above). Switching means closing this modal and clicking
+            the other button (Login vs Sign Up) in the nav. */}
 
         <form
           onSubmit={handleSubmit}
@@ -1054,42 +1039,6 @@ export function AuthModal({
               </Link>
             </p>
           )}
-
-          <p className="text-center text-sm text-muted-foreground">
-            {tab === "login" ? (
-              <>
-                Don't have an account?{" "}
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    switchTab(
-                      "signup"
-                    )
-                  }
-                  className="text-primary font-medium hover:underline"
-                >
-                  Sign up free
-                </button>
-              </>
-            ) : (
-              <>
-                Already have an account?{" "}
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    switchTab(
-                      "login"
-                    )
-                  }
-                  className="text-primary font-medium hover:underline"
-                >
-                  Sign in
-                </button>
-              </>
-            )}
-          </p>
         </form>
         </>)}
       </div>
