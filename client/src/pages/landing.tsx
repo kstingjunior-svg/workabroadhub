@@ -11,7 +11,7 @@ import { LandingTrustStrip } from "@/components/landing-trust-strip";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PRO_FEATURES } from "@/lib/plan-features";
-import { Globe, Shield, FileCheck, CheckCircle, AlertTriangle, ExternalLink, Briefcase, GraduationCap, Building2, Sparkles, ArrowRight, BadgeCheck, TrendingUp, Users, HelpCircle, ChevronDown, CreditCard, ClipboardList, MessageCircle, Mail, Phone, MapPin, BarChart3, FileText, ShieldAlert, Download, Wrench, Smartphone, Headphones, ScanLine, Zap } from "lucide-react";
+import { Globe, Shield, FileCheck, CheckCircle, AlertTriangle, ExternalLink, Briefcase, GraduationCap, Building2, Sparkles, ArrowRight, BadgeCheck, TrendingUp, Users, HelpCircle, ChevronDown, CreditCard, ClipboardList, MessageCircle, Mail, Phone, MapPin, BarChart3, FileText, ShieldAlert, Wrench, Smartphone, Headphones, ScanLine, Zap } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useTranslation } from "react-i18next";
 import { LanguageSelector } from "@/components/language-selector";
@@ -757,21 +757,21 @@ export default function Landing() {
                 </div>
               </Link>
 
-              {/* 6 — CV Templates */}
-              <Link href="/tools/cv-templates" data-testid="link-tool-templates" className="group">
+              {/* 6 — IELTS Verification (NEW) */}
+              <Link href="/tools/ielts-verify" data-testid="link-tool-ielts-verify" className="group">
                 <div className="h-full bg-white dark:bg-slate-800 rounded-2xl border border-purple-100 dark:border-slate-700 p-5 shadow-sm hover:shadow-lg hover:border-purple-300 dark:hover:border-purple-700 transition-all duration-300 flex flex-col">
                   <div className="h-12 w-12 bg-purple-100 dark:bg-purple-900/40 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
-                    <Download className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+                    <GraduationCap className="h-6 w-6 text-purple-600 dark:text-purple-400" />
                   </div>
                   <div className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-purple-600 dark:text-purple-400 mb-1.5">
-                    <Download className="h-3 w-3" /> Instant Download
+                    <Sparkles className="h-3 w-3" /> KES 100 / Check
                   </div>
-                  <h3 className="font-bold text-slate-900 dark:text-white text-base mb-2 leading-tight">Download CV Templates</h3>
+                  <h3 className="font-bold text-slate-900 dark:text-white text-base mb-2 leading-tight">Verify an IELTS Result</h3>
                   <p className="text-xs text-muted-foreground leading-relaxed flex-1 mb-4">
-                    Country-specific CV templates for UK, Canada, Dubai, and Australia — formatted exactly how employers in each country expect.
+                    Upload your IELTS Test Report Form (TRF). We check the TRF number, test centre code, band consistency, and date validity to flag likely forgeries.
                   </p>
                   <div className="flex items-center gap-1 text-sm font-semibold text-purple-600 dark:text-purple-400 group-hover:gap-2 transition-all">
-                    Get Templates <ArrowRight className="h-4 w-4" />
+                    Verify Now <ArrowRight className="h-4 w-4" />
                   </div>
                 </div>
               </Link>
