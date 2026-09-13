@@ -312,6 +312,21 @@ export default function AgenciesMarketplace() {
             <Button data-testid="btn-agency-portal">Go to Agency Portal</Button>
           </Link>
         </div>
+
+        {/* Cross-link: agency ratings cover the recruiter, not the overseas
+            employer who actually pays wages and provides housing — that's
+            a separate trust surface at /employers. */}
+        <div className="mt-4 p-6 border rounded-xl bg-muted/50 text-center">
+          <Star className="h-8 w-8 mx-auto mb-2 text-amber-500 fill-amber-500" />
+          <h3 className="font-semibold mb-1">Already have a job offer? Check the employer, too.</h3>
+          <p className="text-sm text-muted-foreground mb-3">
+            Agency ratings tell you about the recruiter. Employer reviews tell you whether the company abroad
+            actually pays on time and keeps its housing promises.
+          </p>
+          <Link href="/employers">
+            <Button variant="outline" data-testid="btn-goto-employer-reviews">See Employer Reviews</Button>
+          </Link>
+        </div>
       </div>
     </div>
   );

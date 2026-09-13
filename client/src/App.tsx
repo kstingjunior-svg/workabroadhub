@@ -123,6 +123,12 @@ const ScamLookup = lazyWithRetry(() => import("@/pages/scam-lookup"));
 const ReportFraud = lazyWithRetry(() => import("@/pages/report-fraud"));
 const ReportScam = lazyWithRetry(() => import("@/pages/report-scam"));
 const ScamWall = lazyWithRetry(() => import("@/pages/scam-wall"));
+// 2026-09 (Phase 1 of the "Direct Hire Exchange" concept): Employer
+// Reputation Layer — a public, worker-authored rating system for overseas
+// EMPLOYERS, distinct from /agencies (which rates NEA-licensed recruitment
+// agencies). Crowd-sourced directory + reviews, no licensing exposure.
+const EmployersDirectory = lazyWithRetry(() => import("@/pages/employers"));
+const EmployerProfile = lazyWithRetry(() => import("@/pages/employer-profile"));
 const GreenCard = lazyWithRetry(() => import("@/pages/green-card"));
 const VisaGuides = lazyWithRetry(() => import("@/pages/visa-guides"));
 // 2026-08 RESTORED (Tony's directive): visit/tourist visa page brought back.
@@ -480,6 +486,8 @@ const LazyScamLookup = withSuspense(ScamLookup);
 const LazyReportFraud = withSuspense(ReportFraud);
 const LazyReportScam = withSuspense(ReportScam);
 const LazyScamWall = withSuspense(ScamWall);
+const LazyEmployersDirectory = withSuspense(EmployersDirectory);
+const LazyEmployerProfile = withSuspense(EmployerProfile);
 const LazyGreenCard = withSuspense(GreenCard);
 const LazyVisaGuides = withSuspense(VisaGuides);
 const LazyVisitVisas = withSuspense(VisitVisas);
@@ -620,6 +628,8 @@ function AuthenticatedRoutes() {
       <Route path="/nea-agencies" component={LazyNeaAgencies} />
       <Route path="/agencies" component={LazyAgenciesMarketplace} />
       <Route path="/agencies/:agencyId" component={LazyAgencyProfilePage} />
+      <Route path="/employers" component={LazyEmployersDirectory} />
+      <Route path="/employers/:employerId" component={LazyEmployerProfile} />
       {/* Scout Jobs — order matters: /post must be before /:id */}
       <Route path="/scout-jobs/post" component={LazyScoutJobPost} />
       <Route path="/scout-jobs/:id" component={LazyScoutJobDetail} />
@@ -900,6 +910,8 @@ function Router() {
         <Route path="/nea-agencies" component={LazyNeaAgencies} />
         <Route path="/agencies" component={LazyAgenciesMarketplace} />
         <Route path="/agencies/:agencyId" component={LazyAgencyProfilePage} />
+        <Route path="/employers" component={LazyEmployersDirectory} />
+        <Route path="/employers/:employerId" component={LazyEmployerProfile} />
         {/* Scout Jobs — public list + detail. /post gate is server-side (auth required). */}
         <Route path="/scout-jobs/post" component={LazyScoutJobPost} />
         <Route path="/scout-jobs/:id" component={LazyScoutJobDetail} />

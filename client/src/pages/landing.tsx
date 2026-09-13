@@ -1953,6 +1953,7 @@ export default function Landing() {
               <h4 className="font-semibold text-white">Resources</h4>
               <ul className="space-y-2 text-sm">
                 <li><Link href="/nea-agencies" className="text-slate-400 hover:text-white transition-colors" data-testid="link-footer-nea">Agency Licence Checker</Link></li>
+                <li><Link href="/employers" className="text-slate-400 hover:text-white transition-colors" data-testid="link-footer-employers">Employer Reviews</Link></li>
                 <li><Link href="/student-visas" className="text-slate-400 hover:text-white transition-colors" data-testid="link-footer-student-visas">Student Educational Guide</Link></li>
                 <li><Link href="/visa-assistant" className="text-slate-400 hover:text-white transition-colors" data-testid="link-footer-visa-assistant">✨ AI Visa Assistant</Link></li>
                 <li><Link href="/visa-guides" className="text-slate-400 hover:text-white transition-colors" data-testid="link-footer-visa-guides">Visa &amp; Immigration Guides</Link></li>
