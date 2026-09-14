@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { reportRejection } from "./lib/sentry";
+import crypto from "crypto";
 import {
   countries,
   countryGuides,
@@ -254,6 +255,10 @@ import {
   toolReports,
   type ToolReport,
   type InsertToolReport,
+  ieltsChecks,
+  type IeltsCheck,
+  verifiedProfiles,
+  type VerifiedProfile,
   plans,
   type Plan,
   promoCodes,
@@ -583,6 +588,14 @@ export interface IStorage {
   getToolReport(reportId: string): Promise<ToolReport | undefined>;
   incrementReportViews(reportId: string): Promise<void>;
   incrementReportShares(reportId: string): Promise<void>;
+
+  // Verified Migration Profile (Phase 2 of the "Direct Hire Exchange")
+  getLatestGenuineIeltsCheck(userId: string): Promise<IeltsCheck | undefined>;
+  getLatestToolReportForUser(userId: string, toolName: string): Promise<ToolReport | undefined>;
+  getOrCreateVerifiedProfileSettings(userId: string): Promise<VerifiedProfile>;
+  updateVerifiedProfileSettings(userId: string, patch: Partial<Pick<VerifiedProfile, "isPublic" | "showPhone" | "showEmail">>): Promise<VerifiedProfile>;
+  regenerateVerifiedProfileShareToken(userId: string): Promise<VerifiedProfile>;
+  getVerifiedProfileByShareToken(token: string): Promise<VerifiedProfile | undefined>;
 
   // Per-user tool usage & premium status
   getUserToolUsageCount(userId: string, toolName: string): Promise<number>;
@@ -5093,6 +5106,73 @@ export class DatabaseStorage implements IStorage {
     await db.update(toolReports)
       .set({ shares: sql`${toolReports.shares} + 1` })
       .where(eq(toolReports.id, reportId));
+  }
+
+  // ── Verified Migration Profile (Phase 2) ────────────────────────────────
+  async getLatestGenuineIeltsCheck(userId: string): Promise<IeltsCheck | undefined> {
+    const [check] = await db.select().from(ieltsChecks)
+      .where(and(eq(ieltsChecks.userId, userId), eq(ieltsChecks.verdict, "likely_genuine")))
+      .orderBy(desc(ieltsChecks.createdAt))
+      .limit(1);
+    return check;
+  }
+
+  async getLatestToolReportForUser(userId: string, toolName: string): Promise<ToolReport | undefined> {
+    const [report] = await db.select().from(toolReports)
+      .where(and(eq(toolReports.userId, userId), eq(toolReports.toolName, toolName)))
+      .orderBy(desc(toolReports.createdAt))
+      .limit(1);
+    return report;
+  }
+
+  private generateShareToken(): string {
+    // URL-safe, unambiguous alphabet (no 0/O/1/l confusion) — same spirit
+    // as the agency certificate ID generator, just longer since this one
+    // guards a person's own data rather than a public compliance record.
+    const chars = "abcdefghjkmnpqrstuvwxyz23456789";
+    const bytes = crypto.randomBytes(22);
+    let token = "";
+    for (let i = 0; i < 22; i++) token += chars[bytes[i] % chars.length];
+    return token;
+  }
+
+  async getOrCreateVerifiedProfileSettings(userId: string): Promise<VerifiedProfile> {
+    const [existing] = await db.select().from(verifiedProfiles).where(eq(verifiedProfiles.userId, userId)).limit(1);
+    if (existing) return existing;
+    const [created] = await db.insert(verifiedProfiles)
+      .values({ userId, shareToken: this.generateShareToken() })
+      .onConflictDoNothing({ target: verifiedProfiles.userId })
+      .returning();
+    if (created) return created;
+    // Lost a race with a concurrent request creating the same row — read it back.
+    const [row] = await db.select().from(verifiedProfiles).where(eq(verifiedProfiles.userId, userId)).limit(1);
+    return row!;
+  }
+
+  async updateVerifiedProfileSettings(
+    userId: string,
+    patch: Partial<Pick<VerifiedProfile, "isPublic" | "showPhone" | "showEmail">>,
+  ): Promise<VerifiedProfile> {
+    await this.getOrCreateVerifiedProfileSettings(userId); // ensure row exists
+    const [updated] = await db.update(verifiedProfiles)
+      .set({ ...patch, updatedAt: new Date() })
+      .where(eq(verifiedProfiles.userId, userId))
+      .returning();
+    return updated;
+  }
+
+  async regenerateVerifiedProfileShareToken(userId: string): Promise<VerifiedProfile> {
+    await this.getOrCreateVerifiedProfileSettings(userId);
+    const [updated] = await db.update(verifiedProfiles)
+      .set({ shareToken: this.generateShareToken(), updatedAt: new Date() })
+      .where(eq(verifiedProfiles.userId, userId))
+      .returning();
+    return updated;
+  }
+
+  async getVerifiedProfileByShareToken(token: string): Promise<VerifiedProfile | undefined> {
+    const [row] = await db.select().from(verifiedProfiles).where(eq(verifiedProfiles.shareToken, token)).limit(1);
+    return row;
   }
 
   // ── AI Usage Tracking ────────────────────────────────────────────────────

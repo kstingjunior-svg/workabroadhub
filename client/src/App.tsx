@@ -129,6 +129,8 @@ const ScamWall = lazyWithRetry(() => import("@/pages/scam-wall"));
 // agencies). Crowd-sourced directory + reviews, no licensing exposure.
 const EmployersDirectory = lazyWithRetry(() => import("@/pages/employers"));
 const EmployerProfile = lazyWithRetry(() => import("@/pages/employer-profile"));
+const MyVerifiedProfile = lazyWithRetry(() => import("@/pages/my-verified-profile"));
+const VerifiedProfilePublic = lazyWithRetry(() => import("@/pages/verified-profile"));
 const GreenCard = lazyWithRetry(() => import("@/pages/green-card"));
 const VisaGuides = lazyWithRetry(() => import("@/pages/visa-guides"));
 // 2026-08 RESTORED (Tony's directive): visit/tourist visa page brought back.
@@ -488,6 +490,8 @@ const LazyReportScam = withSuspense(ReportScam);
 const LazyScamWall = withSuspense(ScamWall);
 const LazyEmployersDirectory = withSuspense(EmployersDirectory);
 const LazyEmployerProfile = withSuspense(EmployerProfile);
+const LazyMyVerifiedProfile = withSuspense(MyVerifiedProfile);
+const LazyVerifiedProfilePublic = withSuspense(VerifiedProfilePublic);
 const LazyGreenCard = withSuspense(GreenCard);
 const LazyVisaGuides = withSuspense(VisaGuides);
 const LazyVisitVisas = withSuspense(VisitVisas);
@@ -630,6 +634,9 @@ function AuthenticatedRoutes() {
       <Route path="/agencies/:agencyId" component={LazyAgencyProfilePage} />
       <Route path="/employers" component={LazyEmployersDirectory} />
       <Route path="/employers/:employerId" component={LazyEmployerProfile} />
+      {/* Verified Migration Profile — Phase 2 of the "Direct Hire Exchange" */}
+      <Route path="/my-profile" component={LazyMyVerifiedProfile} />
+      <Route path="/verified/:token" component={LazyVerifiedProfilePublic} />
       {/* Scout Jobs — order matters: /post must be before /:id */}
       <Route path="/scout-jobs/post" component={LazyScoutJobPost} />
       <Route path="/scout-jobs/:id" component={LazyScoutJobDetail} />
@@ -912,6 +919,8 @@ function Router() {
         <Route path="/agencies/:agencyId" component={LazyAgencyProfilePage} />
         <Route path="/employers" component={LazyEmployersDirectory} />
         <Route path="/employers/:employerId" component={LazyEmployerProfile} />
+        {/* Verified Migration Profile — public share page works signed-out too */}
+        <Route path="/verified/:token" component={LazyVerifiedProfilePublic} />
         {/* Scout Jobs — public list + detail. /post gate is server-side (auth required). */}
         <Route path="/scout-jobs/post" component={LazyScoutJobPost} />
         <Route path="/scout-jobs/:id" component={LazyScoutJobDetail} />
@@ -1051,6 +1060,7 @@ function Router() {
         <Route path="/ielts-prep/writing" component={ProtectedRedirect} />
         <Route path="/ielts-prep" component={ProtectedRedirect} />
         <Route path="/profile" component={ProtectedRedirect} />
+        <Route path="/my-profile" component={ProtectedRedirect} />
         <Route path="/autoapply" component={ProtectedRedirect} />
         <Route path="/referrals" component={ProtectedRedirect} />
         <Route path="/career-match" component={ProtectedRedirect} />

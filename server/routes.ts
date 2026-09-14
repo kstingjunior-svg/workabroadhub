@@ -12490,6 +12490,160 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
     }
   });
 
+  // ── Verified Migration Profile (Phase 2 of the "Direct Hire Exchange") ───
+  // One reusable, worker-controlled credential assembled LIVE at read time
+  // from data already collected elsewhere: identity fields on `users`, a
+  // genuinely-verified IELTS TRF check, and the AI-reviewed CV/ATS result.
+  // Nothing here is a snapshot, so there is nothing to go stale.
+  async function assembleVerifiedProfile(userId: string) {
+    const user = await storage.getUserById(userId);
+    if (!user) return null;
+
+    const [ieltsCheck, atsReport] = await Promise.all([
+      storage.getLatestGenuineIeltsCheck(userId),
+      storage.getLatestToolReportForUser(userId, "ats"),
+    ]);
+
+    const identity = {
+      firstName: user.firstName ?? null,
+      lastName: user.lastName ?? null,
+      country: user.country ?? null,
+      memberSince: user.createdAt ?? null,
+      phone: user.phone ?? null,
+      phoneVerified: !!user.phoneVerified,
+      email: user.email ?? null,
+      emailVerified: !!user.emailVerified,
+    };
+
+    const ielts = ieltsCheck
+      ? {
+          overallBand: ieltsCheck.overallBand ?? null,
+          listeningBand: ieltsCheck.listeningBand ?? null,
+          readingBand: ieltsCheck.readingBand ?? null,
+          writingBand: ieltsCheck.writingBand ?? null,
+          speakingBand: ieltsCheck.speakingBand ?? null,
+          testDate: ieltsCheck.testDate ?? null,
+          testType: ieltsCheck.testType ?? null,
+          verified: true,
+          verifiedVia: "IELTS TRF (Test Report Form) check",
+        }
+      : null;
+
+    const cv = user.generatedCv
+      ? {
+          hasCv: true,
+          verified: false,
+          label: "AI-reviewed",
+          preview: user.generatedCv.slice(0, 300),
+        }
+      : null;
+
+    const atsData = atsReport?.reportData as any;
+    const ats = atsData
+      ? {
+          score: atsData.score ?? null,
+          grade: atsData.grade ?? null,
+          verified: false,
+          label: "Self-reported (AI-assessed)",
+        }
+      : null;
+
+    return { identity, ielts, cv, ats };
+  }
+
+  // GET /api/verified-profile/me — full, unfiltered view for the profile owner
+  app.get("/api/verified-profile/me", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub ?? req.user?.id;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+
+      const [profile, settings] = await Promise.all([
+        assembleVerifiedProfile(userId),
+        storage.getOrCreateVerifiedProfileSettings(userId),
+      ]);
+      if (!profile) return res.status(404).json({ message: "User not found" });
+
+      res.json({
+        ...profile,
+        settings: {
+          isPublic: settings.isPublic,
+          showPhone: settings.showPhone,
+          showEmail: settings.showEmail,
+          shareToken: settings.shareToken,
+        },
+      });
+    } catch (err) {
+      console.error("[VerifiedProfile] get me error:", err);
+      res.status(500).json({ message: "Failed to load verified profile" });
+    }
+  });
+
+  // PATCH /api/verified-profile/me — update sharing preferences, optionally
+  // regenerate the share link (invalidates the old one).
+  app.patch("/api/verified-profile/me", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub ?? req.user?.id;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+
+      const { isPublic, showPhone, showEmail, regenerateShareToken } = req.body ?? {};
+      const patch: Record<string, boolean> = {};
+      if (typeof isPublic === "boolean") patch.isPublic = isPublic;
+      if (typeof showPhone === "boolean") patch.showPhone = showPhone;
+      if (typeof showEmail === "boolean") patch.showEmail = showEmail;
+
+      let settings = Object.keys(patch).length
+        ? await storage.updateVerifiedProfileSettings(userId, patch)
+        : await storage.getOrCreateVerifiedProfileSettings(userId);
+
+      if (regenerateShareToken === true) {
+        settings = await storage.regenerateVerifiedProfileShareToken(userId);
+      }
+
+      res.json({
+        isPublic: settings.isPublic,
+        showPhone: settings.showPhone,
+        showEmail: settings.showEmail,
+        shareToken: settings.shareToken,
+      });
+    } catch (err) {
+      console.error("[VerifiedProfile] patch me error:", err);
+      res.status(500).json({ message: "Failed to update verified profile settings" });
+    }
+  });
+
+  // GET /api/verified-profile/public/:token — public read-only view, gated
+  // by isPublic and per-field sharing toggles. No auth required.
+  app.get("/api/verified-profile/public/:token", async (req, res) => {
+    try {
+      const settings = await storage.getVerifiedProfileByShareToken(req.params.token);
+      if (!settings || !settings.isPublic) {
+        return res.status(404).json({ message: "Profile not found" });
+      }
+
+      const profile = await assembleVerifiedProfile(settings.userId);
+      if (!profile) return res.status(404).json({ message: "Profile not found" });
+
+      res.json({
+        identity: {
+          firstName: profile.identity.firstName,
+          lastName: profile.identity.lastName,
+          country: profile.identity.country,
+          memberSince: profile.identity.memberSince,
+          phone: settings.showPhone ? profile.identity.phone : null,
+          phoneVerified: settings.showPhone ? profile.identity.phoneVerified : false,
+          email: settings.showEmail ? profile.identity.email : null,
+          emailVerified: settings.showEmail ? profile.identity.emailVerified : false,
+        },
+        ielts: profile.ielts,
+        cv: profile.cv,
+        ats: profile.ats,
+      });
+    } catch (err) {
+      console.error("[VerifiedProfile] public get error:", err);
+      res.status(500).json({ message: "Failed to load verified profile" });
+    }
+  });
+
   // POST /api/agencies/bulk-verify — look up multiple license numbers in one shot
   app.post("/api/agencies/bulk-verify", async (req: any, res) => {
     try {

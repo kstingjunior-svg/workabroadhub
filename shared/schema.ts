@@ -2534,3 +2534,23 @@ export const ieltsChecks = pgTable("ielts_checks", {
   byCreated: index("ielts_checks_created_idx").on(t.createdAt),
 }));
 export type IeltsCheck = typeof ieltsChecks.$inferSelect;
+
+// ── Verified Migration Profile — Phase 2 of the "Direct Hire Exchange" ────
+// concept (see the MVP roadmap). One reusable, shareable credential per
+// worker, assembled at read-time from data already collected elsewhere
+// (identity fields on `users`, a genuine IELTS TRF check, the AI-reviewed
+// CV). This table stores only the worker's SHARING PREFERENCES — nothing
+// here is itself profile content, so there's no duplication/staleness risk
+// between this table and the source data.
+export const verifiedProfiles = pgTable("verified_profiles", {
+  userId:     varchar("user_id").primaryKey(),
+  shareToken: varchar("share_token", { length: 32 }).notNull().unique(),
+  // Public sharing is OFF by default — a worker must explicitly opt in
+  // before the /verified/:token URL resolves to anything.
+  isPublic:   boolean("is_public").notNull().default(false),
+  showPhone:  boolean("show_phone").notNull().default(false),
+  showEmail:  boolean("show_email").notNull().default(false),
+  createdAt:  timestamp("created_at").defaultNow(),
+  updatedAt:  timestamp("updated_at").defaultNow(),
+});
+export type VerifiedProfile = typeof verifiedProfiles.$inferSelect;

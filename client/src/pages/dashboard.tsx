@@ -7,7 +7,7 @@ import {
   GraduationCap, Lock, Bell, TrendingUp, MapPin, Search,
   Calendar, Star, Zap, CheckCircle, Clock, AlertCircle,
   ArrowRight, Users, BookOpen, BarChart3, MessageCircle, Flame,
-  CreditCard, XCircle, Receipt, Trophy, Send,
+  CreditCard, XCircle, Receipt, Trophy, Send, BadgeCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -2210,6 +2210,25 @@ export default function Dashboard() {
 
         {/* FREE PREVIEW JOBS (unpaid only) */}
         {!isPaid && <FreePreviewJobs />}
+
+        {/* VERIFIED MIGRATION PROFILE — Phase 2 of the "Direct Hire Exchange" */}
+        <Link href="/my-profile">
+          <div className="bg-gradient-to-br from-emerald-600 to-teal-700 rounded-2xl p-5 shadow-lg cursor-pointer hover:shadow-xl hover:scale-[1.01] active:scale-[0.99] transition-all duration-200" data-testid="card-verified-profile">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center flex-shrink-0">
+                <BadgeCheck className="h-6 w-6 text-white" />
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1 flex-wrap">
+                  <span className="font-bold text-white">Verified Migration Profile</span>
+                  <span className="px-2 py-0.5 bg-yellow-400 text-yellow-900 text-[10px] font-bold rounded-full">NEW</span>
+                </div>
+                <p className="text-sm text-emerald-100">One shareable link with your verified IELTS score, CV &amp; identity</p>
+              </div>
+              <ArrowRight className="h-5 w-5 text-white/70 flex-shrink-0" />
+            </div>
+          </div>
+        </Link>
 
         {/* STUDY ABROAD */}
         <Link href="/student-visas">
