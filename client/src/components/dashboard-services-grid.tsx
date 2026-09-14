@@ -50,16 +50,12 @@ const SERVICES: ServiceCard[] = [
     socialProof: "Most affordable",
     priceAnchor: "≈ 1 mandazi · Typist: KES 1,500",
   },
-  {
-    slug: "cover_letter",
-    emoji: "✉️",
-    name: "Cover Letter",
-    desc: "Custom letter for any job you apply to. Tailored, instant.",
-    price: 149,
-    bgColor: "bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800",
-    textColor: "text-purple-700 dark:text-purple-300",
-    priceAnchor: "≈ 2 mandazi · Writer: KES 2,000",
-  },
+  // 2026-09 REMOVED (Tony: "remove the 149 completely") — the standalone
+  // KES 149 Cover Letter card (cover_letter) duplicated Write from
+  // Scratch's own KES 300 cover letter option under the same name at a
+  // different price. Deactivated storefront-wide in
+  // ensure-services-deactivated.ts; this grid is HARDCODED, same as the
+  // pair removed below, so it needed manual removal too.
   {
     slug: "write_from_scratch",
     emoji: "📝",

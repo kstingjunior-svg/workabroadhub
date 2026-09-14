@@ -168,7 +168,7 @@ export default function VerifiedProfilePublic() {
               </h2>
               <VerifiedBadge label="TRF Verified" />
             </div>
-            <div className="grid grid-cols-5 gap-2 text-center">
+            <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 text-center">
               <div>
                 <p className="text-2xl font-bold text-[#1A2530]" data-testid="text-ielts-overall">{ielts.overallBand ?? "—"}</p>
                 <p className="text-[11px] text-[#7A8A9A]">Overall</p>

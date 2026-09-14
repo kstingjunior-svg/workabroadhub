@@ -185,7 +185,7 @@ export default function MyVerifiedProfile() {
         </CardHeader>
         <CardContent className="text-sm">
           {ielts ? (
-            <div className="grid grid-cols-5 gap-2 text-center">
+            <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 text-center">
               <div>
                 <p className="text-xl font-bold">{ielts.overallBand ?? "—"}</p>
                 <p className="text-[11px] text-muted-foreground">Overall</p>

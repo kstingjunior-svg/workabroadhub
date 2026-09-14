@@ -21,17 +21,17 @@ export function BottomNav() {
       role="navigation"
       aria-label="Main navigation"
     >
-      <div className="flex items-center justify-around h-16 px-2" role="menubar">
+      <div className="flex items-center justify-around h-16 px-1" role="menubar">
         {navItems.map((item) => {
-          const isActive = location === item.href || 
+          const isActive = location === item.href ||
             (item.href === "/dashboard" && location === "/");
           const Icon = item.icon;
-          
+
           return (
-            <Link key={item.href} href={item.href}>
+            <Link key={item.href} href={item.href} className="flex-1 min-w-0">
               <button
                 className={cn(
-                  "flex flex-col items-center justify-center w-16 h-14 rounded-xl transition-all duration-300 touch-target-min",
+                  "flex flex-col items-center justify-center w-full max-w-16 mx-auto h-14 rounded-xl transition-all duration-300 touch-target-min",
                   isActive 
                     ? "text-blue-600 dark:text-blue-400" 
                     : "text-gray-500 dark:text-gray-400 active:scale-95"

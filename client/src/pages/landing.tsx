@@ -1010,21 +1010,24 @@ export default function Landing() {
                   price:     "KES 300",
                   priceColor:"text-red-600 dark:text-red-400",
                   time:      "3 min",
-                  blurb:     "No CV to upload? Just tell us who you are — we&apos;ll write it from scratch.",
+                  // 2026-09 (Tony: "show what's in there on the front page"):
+                  // this card used to only mention the CV, so visitors never
+                  // knew the same tool also writes cover letters, Gulf/Saudi
+                  // recruitment CVs, and reference letters — they'd have to
+                  // click in and scroll down to find out. Spell out all four
+                  // here so people self-select before clicking through.
+                  blurb:     "No CV to upload? Just tell us who you are. Covers CV/Resume, Cover Letter, Recruitment CV &amp; Reference Letter — KES 300 each.",
                   badge:     { text: "NEW", color: "bg-red-500" },
                   compare:   "Professional writer: KES 3,000+ — you save KES 2,700",
-                  cta:       "Write my CV from scratch",
+                  cta:       "Choose & write from scratch",
                 },
-                {
-                  title:     "Cover Letter",
-                  slug:      "cover_letter",
-                  price:     "KES 149",
-                  priceColor:"text-purple-600 dark:text-purple-400",
-                  time:      "3 min",
-                  blurb:     "Custom letter for any job you apply to. Country-specific tone.",
-                  compare:   "Typical writer: KES 2,000 — you save KES 1,851",
-                  cta:       "Write my cover letter",
-                },
+                // 2026-09 REMOVED (Tony: "remove the 149 completely") — the
+                // standalone KES 149 Cover Letter card (cover_letter) sat
+                // right next to Write from Scratch's own KES 300 cover
+                // letter option, same product name at two different prices
+                // on the same page. Deactivated storefront-wide in
+                // ensure-services-deactivated.ts; this hardcoded card
+                // needed manual removal too, same as the retirements below.
                 // 2026-09 REMOVED — Recruiter-Friendly CV + Country CV
                 // Rewrite retired from the landing storefront on Tony's
                 // trust audit. Server-side deactivation hides them from

@@ -287,6 +287,7 @@ export default function AdminSmsWhatsApp() {
                 <div className="space-y-1">
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">7-Day History</p>
                   <div className="rounded-lg border overflow-hidden">
+                    <div className="overflow-x-auto">
                     <table className="w-full text-sm" data-testid="metrics-history-table">
                       <thead>
                         <tr className="border-b bg-muted/40 text-muted-foreground text-xs">
@@ -330,6 +331,7 @@ export default function AdminSmsWhatsApp() {
                         ))}
                       </tbody>
                     </table>
+                    </div>
                   </div>
                 </div>
               </>

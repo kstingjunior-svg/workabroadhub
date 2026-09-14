@@ -828,9 +828,9 @@ export default function VisaCountryPage() {
               <span className="text-white font-medium">{country.name}</span>
             </nav>
 
-            <div className="flex items-center gap-4 mb-5">
+            <div className="flex flex-wrap items-center gap-4 mb-5">
               <span className="text-5xl" role="img" aria-label={country.name}>{country.flag}</span>
-              <Badge className="bg-white/20 text-white border-white/30 text-sm px-3 py-1">
+              <Badge className="bg-white/20 text-white border-white/30 text-sm px-3 py-1 whitespace-normal max-w-full">
                 Work Visa & Immigration Guide
               </Badge>
             </div>
@@ -882,7 +882,7 @@ export default function VisaCountryPage() {
               </CardContent>
             </Card>
 
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {country.visaTypes.map((vt) => (
                 <Card key={vt.name} className="border-l-4 border-l-blue-500">
                   <CardContent className="p-4">
@@ -945,7 +945,7 @@ export default function VisaCountryPage() {
 
           {/* ── Processing Time & Cost ────────────────────────── */}
           <section>
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-base flex items-center gap-2">
@@ -1054,7 +1054,7 @@ export default function VisaCountryPage() {
               </div>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               {conversionServices.map((svc) => (
                 <Link key={svc.title} href={svc.href}>
                   <Card

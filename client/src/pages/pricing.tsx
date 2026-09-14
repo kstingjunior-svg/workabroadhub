@@ -268,8 +268,8 @@ export default function PricingPage() {
         <div className="absolute -bottom-8 -right-8 w-72 h-72 bg-white/5 rounded-full blur-3xl pointer-events-none" />
 
         <div className="relative max-w-2xl mx-auto">
-          <Badge className="mb-5 bg-white/20 text-white border-white/30 text-xs font-semibold uppercase tracking-widest px-4 py-1.5" data-testid="hero-badge">
-            <Globe className="h-3.5 w-3.5 mr-1.5" /> Kenya's #1 Overseas Job Platform
+          <Badge className="mb-5 bg-white/20 text-white border-white/30 text-xs font-semibold uppercase tracking-widest px-4 py-1.5 whitespace-normal text-center max-w-full" data-testid="hero-badge">
+            <Globe className="h-3.5 w-3.5 mr-1.5 flex-shrink-0" /> Kenya's #1 Overseas Job Platform
           </Badge>
 
           {/* 2026-09 (Tony's "lead with the real commitment" request): the
@@ -324,13 +324,13 @@ export default function PricingPage() {
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
               <Button
                 size="lg"
-                className="bg-white text-amber-700 hover:bg-amber-50 font-bold shadow-xl shadow-amber-900/30 px-8 text-base h-12"
+                className="bg-white text-amber-700 hover:bg-amber-50 font-bold shadow-xl shadow-amber-900/30 px-8 text-base h-auto py-3 whitespace-normal max-w-full"
                 onClick={() => goToPayment("pro")}
                 data-testid="btn-hero-cta"
               >
-                <Crown className="h-5 w-5 mr-2" />
+                <Crown className="h-5 w-5 mr-2 flex-shrink-0" />
                 Start Yearly Consultation — KES 4,500
-                <ArrowRight className="h-5 w-5 ml-2" />
+                <ArrowRight className="h-5 w-5 ml-2 flex-shrink-0" />
               </Button>
               <Button
                 size="lg"
@@ -612,13 +612,13 @@ export default function PricingPage() {
             <div className="flex flex-col sm:flex-row gap-3 justify-center mt-6">
               <Button
                 size="lg"
-                className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-lg px-10 text-base h-12"
+                className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-lg px-10 text-base h-auto py-3 whitespace-normal max-w-full"
                 onClick={() => goToPayment("pro")}
                 data-testid="btn-cta2"
               >
-                <Rocket className="h-5 w-5 mr-2" />
+                <Rocket className="h-5 w-5 mr-2 flex-shrink-0" />
                 Start Yearly Consultation — KES 4,500
-                <ArrowRight className="h-5 w-5 ml-2" />
+                <ArrowRight className="h-5 w-5 ml-2 flex-shrink-0" />
               </Button>
               <Button
                 size="lg"
@@ -704,11 +704,11 @@ export default function PricingPage() {
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
               <Button
                 size="lg"
-                className="bg-white text-amber-700 hover:bg-amber-50 font-bold shadow-xl px-10 text-base h-12"
+                className="bg-white text-amber-700 hover:bg-amber-50 font-bold shadow-xl px-10 text-base h-auto py-3 whitespace-normal max-w-full"
                 onClick={() => goToPayment("pro")}
                 data-testid="btn-bottom-cta"
               >
-                <Crown className="h-5 w-5 mr-2" />
+                <Crown className="h-5 w-5 mr-2 flex-shrink-0" />
                 Start Yearly Consultation — KES 4,500
               </Button>
               <Button

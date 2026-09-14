@@ -568,7 +568,7 @@ export default function AdminDashboard() {
               ) : !proSubscribers || proSubscribers.length === 0 ? (
                 <p className="p-6 text-center text-sm text-muted-foreground">No active Pro subscribers found.</p>
               ) : (
-                <div className="max-h-96 overflow-y-auto">
+                <div className="max-h-96 overflow-auto">
                   <table className="w-full text-xs">
                     <thead className="sticky top-0 bg-card border-b border-border">
                       <tr>

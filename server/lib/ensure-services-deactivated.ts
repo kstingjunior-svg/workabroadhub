@@ -25,6 +25,13 @@ const DEACTIVATED_SLUGS = [
   "whatsapp_support",
   "job_alerts",
   "emergency_support",
+  // 2026-09 (Tony: "remove the 149 completely"): the standalone KES 149
+  // Cover Letter (upload-a-CV, we tailor a letter) service was confusingly
+  // priced right next to the KES 300 Write-from-Scratch cover letter
+  // (no upload needed, written from nothing) — same product name, two
+  // prices, on the same page. Retired in favour of the single KES 300
+  // option inside Write from Scratch.
+  "cover_letter",
 ];
 
 export async function ensureServicesDeactivated(): Promise<void> {

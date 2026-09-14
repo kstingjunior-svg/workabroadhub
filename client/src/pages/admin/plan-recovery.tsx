@@ -189,6 +189,7 @@ export default function PlanRecoveryPage() {
                   <div>
                     <div className="text-sm font-medium mb-2">Users to downgrade</div>
                     <div className="border rounded-md overflow-hidden">
+                      <div className="overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead className="bg-muted/50">
                           <tr>
@@ -211,6 +212,7 @@ export default function PlanRecoveryPage() {
                           ))}
                         </tbody>
                       </table>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -219,6 +221,7 @@ export default function PlanRecoveryPage() {
                   <div>
                     <div className="text-sm font-medium mb-2">Bogus subscription rows to expire</div>
                     <div className="border rounded-md overflow-hidden">
+                      <div className="overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead className="bg-muted/50">
                           <tr>
@@ -241,6 +244,7 @@ export default function PlanRecoveryPage() {
                           ))}
                         </tbody>
                       </table>
+                      </div>
                     </div>
                   </div>
                 )}

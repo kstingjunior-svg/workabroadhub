@@ -38,11 +38,11 @@ function EmployersTab() {
     <div className="space-y-3">
       {employers.map((e) => (
         <Card key={e.id} data-testid={`card-pending-employer-${e.id}`}>
-          <CardContent className="py-4 flex items-start justify-between gap-3">
-            <div>
-              <p className="font-semibold">{e.companyName}</p>
-              <p className="text-sm text-muted-foreground">{e.country} · {e.contactEmail}</p>
-              {e.description && <p className="text-sm text-muted-foreground mt-1">{e.description}</p>}
+          <CardContent className="py-4 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+            <div className="min-w-0">
+              <p className="font-semibold break-words">{e.companyName}</p>
+              <p className="text-sm text-muted-foreground break-words">{e.country} · {e.contactEmail}</p>
+              {e.description && <p className="text-sm text-muted-foreground mt-1 break-words">{e.description}</p>}
             </div>
             <div className="flex gap-2 flex-shrink-0">
               <Button size="sm" variant="outline" className="gap-1" onClick={() => verify.mutate({ id: e.id, status: "rejected" })} data-testid={`button-reject-employer-${e.id}`}>
@@ -80,9 +80,9 @@ function ListingsTab() {
     <div className="space-y-3">
       {listings.map((l) => (
         <Card key={l.id} data-testid={`card-pending-listing-${l.id}`}>
-          <CardContent className="py-4 flex items-center justify-between gap-3">
-            <div>
-              <p className="font-semibold">{l.title}</p>
+          <CardContent className="py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="min-w-0">
+              <p className="font-semibold break-words">{l.title}</p>
               <p className="text-sm text-muted-foreground">{l.country}</p>
             </div>
             <div className="flex gap-2 flex-shrink-0">
@@ -150,7 +150,7 @@ export default function DirectHireAdmin() {
         </p>
       </div>
       <Tabs defaultValue="employers">
-        <TabsList>
+        <TabsList className="w-full grid grid-cols-3">
           <TabsTrigger value="employers" className="gap-1.5" data-testid="tab-employers"><Building2 className="h-3.5 w-3.5" /> Employers</TabsTrigger>
           <TabsTrigger value="listings" className="gap-1.5" data-testid="tab-listings"><Briefcase className="h-3.5 w-3.5" /> Listings</TabsTrigger>
           <TabsTrigger value="disputes" className="gap-1.5" data-testid="tab-disputes"><AlertTriangle className="h-3.5 w-3.5" /> Disputes</TabsTrigger>

@@ -24,8 +24,32 @@
  * The server is the real gate (requireToolCredit consumes the credit
  * atomically) — this hook is UX: collect the phone, fire the STK push,
  * poll until paid, then run the scan the user asked for.
+ *
+ * 2026-09 (Tony's "clients pay but get nothing" report): real customers on
+ * real phones were paying KES 100, the M-Pesa payment genuinely succeeding
+ * (server-side recovery — server/stk-recovery.ts — actively queries Safaricom
+ * every 15s and recovers a payment even if Safaricom's callback is dropped),
+ * and then getting NOTHING, while it "worked fine" whenever the site owner
+ * tested it himself. Root cause: this hook kept the paid/pending state in
+ * plain React state only, and gave up after a fixed 2-minute client-side
+ * poll. Entering an M-Pesa PIN takes real users through their phone's own
+ * SIM-toolkit / notification UI, which very commonly backgrounds or
+ * suspends the browser tab — mobile browsers throttle or fully pause
+ * setTimeout/fetch while backgrounded, and low-memory phones often evict a
+ * backgrounded tab outright. A quick tester at a desk on WiFi almost never
+ * hits that; someone on a mid-range Android phone reading an SMS while
+ * paying does, every time. When that happened the payment still succeeded
+ * server-side minutes later, but the client had already reset to a blank
+ * page with nothing to redeem it — an orphaned, already-paid credit.
+ *
+ * Fix: persist the pending paymentId to localStorage the moment the STK
+ * push is sent, re-check status immediately when the tab regains focus
+ * (not just on the next 3s tick), extend the give-up window to comfortably
+ * outlast the server's own 5-minute auto-recovery window, and — critically
+ * — on every mount, silently look for a leftover paid-but-unconsumed credit
+ * for this tool and adopt it instead of demanding another KES 100.
  */
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -38,8 +62,53 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, ShieldCheck, Smartphone } from "lucide-react";
 import { fetchCsrfToken } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 export const TOOL_SCAN_PRICE_KES = 100;
+
+// ── Pending-payment persistence ─────────────────────────────────────────────
+// Survives a reload, a backgrounded/evicted tab, or the user just closing the
+// browser and coming back later. Scoped per tool so paying for one check
+// never gets confused with another. 30 minutes comfortably outlasts every
+// server-side recovery path (STK auto-recovery poller times out at 5 min;
+// the M-Pesa Pull-API reconciler runs every 5 min looking back 90 min).
+const PENDING_TTL_MS = 30 * 60 * 1000;
+
+function pendingKey(tool: string): string {
+  return `wah_toolpay_pending:${tool}`;
+}
+
+function readPending(tool: string): { paymentId: string; startedAt: number } | null {
+  try {
+    const raw = localStorage.getItem(pendingKey(tool));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed?.paymentId || typeof parsed.startedAt !== "number") return null;
+    if (Date.now() - parsed.startedAt > PENDING_TTL_MS) {
+      localStorage.removeItem(pendingKey(tool));
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writePending(tool: string, paymentId: string): void {
+  try {
+    localStorage.setItem(pendingKey(tool), JSON.stringify({ paymentId, startedAt: Date.now() }));
+  } catch {
+    /* localStorage unavailable (private mode etc.) — polling still works, just not resumable across reload */
+  }
+}
+
+function clearPending(tool: string): void {
+  try {
+    localStorage.removeItem(pendingKey(tool));
+  } catch {
+    /* ignore */
+  }
+}
 
 const TOOL_LABELS: Record<string, string> = {
   offer_check:    "Offer Letter Screening",
@@ -50,12 +119,34 @@ const TOOL_LABELS: Record<string, string> = {
 
 type PayPhase = "idle" | "sending" | "waiting" | "paid" | "failed";
 
+/** Sleep `ms`, but return early the moment the tab becomes visible again —
+ * so a poll loop resumes checking immediately on focus instead of waiting
+ * out the rest of a 3s tick after a backgrounded/evicted tab wakes up. */
+function waitTickOrVisible(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+      resolve();
+    };
+    const timer = setTimeout(finish, ms);
+    function onVisible() {
+      if (document.visibilityState === "visible") finish();
+    }
+    document.addEventListener("visibilitychange", onVisible);
+  });
+}
+
 export function useToolPayment(tool: string) {
   const [open, setOpen] = useState(false);
   const [phone, setPhone] = useState("");
   const [phase, setPhase] = useState<PayPhase>("idle");
   const [payError, setPayError] = useState<string | null>(null);
   const [scanToken, setScanToken] = useState<string | null>(null);
+  const { toast } = useToast();
   // 2026-09 (Tony: "automatic the moment one pays"): `run` is stashed here
   // and fired once payment confirms. It takes the fresh token as an ARGUMENT
   // rather than the caller re-reading `pay.scanToken` off its own closure —
@@ -69,6 +160,45 @@ export function useToolPayment(tool: string) {
 
   const label = TOOL_LABELS[tool] ?? "Verification";
 
+  // On every mount, silently check for a leftover paid-but-unconsumed credit
+  // for this tool (e.g. the tab was backgrounded during M-Pesa PIN entry last
+  // time and the poll loop never got to redeem it). If found, adopt it so the
+  // user doesn't get charged again; if it turns out to have failed or already
+  // been used, drop the stale local record.
+  useEffect(() => {
+    const pending = readPending(tool);
+    if (!pending) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const sRes = await fetch(`/api/tools/pay/${encodeURIComponent(pending.paymentId)}/status`, {
+          credentials: "include",
+        });
+        if (!sRes.ok || cancelled) return;
+        const s = await sRes.json();
+        if (cancelled) return;
+        if (s.paid && !s.consumed) {
+          setScanToken(pending.paymentId);
+          clearPending(tool);
+          toast({
+            title: "Earlier payment found",
+            description: `Your KES ${TOOL_SCAN_PRICE_KES} payment for ${label} went through — you can run the check now without paying again.`,
+          });
+        } else if (s.consumed || s.status === "failed") {
+          clearPending(tool);
+        }
+        // else still genuinely pending (rare) — leave the local record so a
+        // later mount or the TTL expiry resolves it.
+      } catch {
+        /* transient — leave the pending record, we'll retry next mount */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tool]);
+
   /** Open the pay modal; `run(token)` fires automatically once payment confirms. */
   const requestScan = useCallback((run: (token: string) => void) => {
     onPaidRef.current = run;
@@ -78,19 +208,29 @@ export function useToolPayment(tool: string) {
   }, []);
 
   /** One payment = one scan: call after the scan request went through. */
-  const consumeToken = useCallback(() => setScanToken(null), []);
+  const consumeToken = useCallback(() => {
+    setScanToken(null);
+    clearPending(tool);
+  }, [tool]);
 
   /** The server rejected the token (402) — clear it and re-open the modal. */
   const handle402 = useCallback((data: any) => {
     setScanToken(null);
+    // PAYMENT_PENDING means the credit is real but not confirmed yet — keep
+    // the local pending record so the mount-time check / poll can still pick
+    // it up automatically later. Any other 402 (already used, wrong tool,
+    // not found) means the local record is stale — drop it.
+    if (data?.code !== "PAYMENT_PENDING") {
+      clearPending(tool);
+    }
     setPayError(
       data?.code === "PAYMENT_PENDING"
-        ? "Payment not confirmed yet — complete the M-Pesa prompt on your phone, then pay again if it expired."
+        ? "Payment not confirmed yet — complete the M-Pesa prompt on your phone. We'll pick it up automatically; you don't need to pay again."
         : data?.message || `This check costs KES ${TOOL_SCAN_PRICE_KES}.`,
     );
     setPhase("idle");
     setOpen(true);
-  }, []);
+  }, [tool]);
 
   const startPayment = useCallback(async () => {
     setPayError(null);
@@ -110,13 +250,18 @@ export function useToolPayment(tool: string) {
         return;
       }
       const paymentId: string = data.paymentId;
+      writePending(tool, paymentId);
       setPhase("waiting");
 
-      // Poll payment status every 3s for up to 2 minutes.
+      // Poll payment status every ~3s (sooner if the tab regains focus) for
+      // up to 6 minutes — comfortably outlasting the server's own 5-minute
+      // STK auto-recovery window, so a payment that only confirms server-side
+      // after the phone's M-Pesa UI backgrounds/suspends this tab still gets
+      // caught here instead of orphaned.
       pollAbortRef.current = false;
-      const deadline = Date.now() + 120_000;
+      const deadline = Date.now() + 360_000;
       while (Date.now() < deadline && !pollAbortRef.current) {
-        await new Promise((r) => setTimeout(r, 3000));
+        await waitTickOrVisible(3000);
         try {
           const sRes = await fetch(`/api/tools/pay/${encodeURIComponent(paymentId)}/status`, {
             credentials: "include",
@@ -124,6 +269,7 @@ export function useToolPayment(tool: string) {
           if (!sRes.ok) continue;
           const s = await sRes.json();
           if (s.paid) {
+            clearPending(tool);
             setScanToken(paymentId);
             setPhase("paid");
             setOpen(false);
@@ -135,6 +281,7 @@ export function useToolPayment(tool: string) {
             return;
           }
           if (s.status === "failed") {
+            clearPending(tool);
             setPayError("The M-Pesa payment failed or was cancelled. Please try again.");
             setPhase("failed");
             return;
@@ -144,7 +291,11 @@ export function useToolPayment(tool: string) {
         }
       }
       if (!pollAbortRef.current) {
-        setPayError("We didn't get payment confirmation in time. If you completed the M-Pesa prompt, wait a few seconds and press Pay again — you won't be charged twice for the same prompt.");
+        // Deliberately NOT clearing the pending record here: the payment may
+        // still confirm server-side after we stop watching (that's exactly
+        // the failure mode this fix targets), and the mount-time check will
+        // pick it up automatically next time this page loads.
+        setPayError("Still waiting on M-Pesa confirmation. If you completed the PIN prompt, your payment will be picked up automatically — just reopen this page in a few minutes. No need to pay again unless you cancelled the prompt.");
         setPhase("failed");
       }
     } catch (err: any) {

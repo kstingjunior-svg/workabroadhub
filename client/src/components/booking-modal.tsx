@@ -145,7 +145,7 @@ export function BookingModal({ open, onClose, advisor }: BookingModalProps) {
               <label className="text-sm font-medium text-gray-700 dark:text-gray-200 flex items-center gap-1.5 mb-2">
                 <Clock className="h-4 w-4 text-muted-foreground" /> Select Time (EAT)
               </label>
-              <div className="grid grid-cols-5 gap-2">
+              <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
                 {TIME_SLOTS.map(slot => (
                   <button
                     key={slot}

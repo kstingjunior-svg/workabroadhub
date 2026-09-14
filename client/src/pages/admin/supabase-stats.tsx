@@ -70,6 +70,7 @@ export default function AdminDashboard() {
         <div className="bg-white shadow rounded p-4 dark:bg-card">
           <h2 className="text-lg font-semibold mb-3">Recent Payments</h2>
 
+          <div className="overflow-x-auto">
           <table className="w-full text-left border">
             <thead>
               <tr className="border-b">
@@ -91,6 +92,7 @@ export default function AdminDashboard() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
 
       </div>
