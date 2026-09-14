@@ -4389,6 +4389,54 @@ Crawl-delay: 1`);
         console.warn(`[/api/payments/initiate] plan-looking serviceId="${serviceId}" did not resolve to a subscription`);
       }
 
+      // 2026-09 (Tony: "block repeat KES 99 trial purchases" — DB audit found
+      // 269 accounts had bought it more than once, one account 12 times). A
+      // gate for this ALREADY existed in /api/subscriptions/upgrade
+      // (2026-08 Phase 3 audit, hardened 2026-09 for the "mbuguisa" case),
+      // but not here — and client/src/pages/payment.tsx only calls
+      // /api/subscriptions/upgrade when the page loaded with a `plan` in
+      // the URL (urlPlanId); every other path into buying a plan lands on
+      // THIS endpoint instead, completely ungated. That's how every one of
+      // those 269 accounts got through. Mirrors the other gate exactly —
+      // same query, same response shape — so it doesn't matter which route
+      // the client takes: one KES 99 trial per userId OR per phone number,
+      // ever, across both current ('trial') and legacy ('basic') naming.
+      if (subscriptionPlanId === "trial" || subscriptionPlanId === "basic") {
+        const { rows: trialCheck } = await pool.query<{ has_trial: boolean }>(
+          `SELECT EXISTS(
+             SELECT 1 FROM payments
+             WHERE (user_id = $1 OR phone = $2)
+               AND status IN ('success','completed')
+               AND (plan_id IN ('trial', 'basic')
+                    OR service_id IN ('plan_trial', 'plan_basic'))
+           ) AS has_trial`,
+          [userId, normalizedPhone || null],
+        );
+        if (trialCheck[0]?.has_trial) {
+          console.warn(`[Trial][Security] Repeat trial blocked (via /api/payments/initiate) userId=${userId} phone=${normalizedPhone} attemptedPlan=${subscriptionPlanId}`);
+          import("./services/activityLogger").then(({ logActivity }) => {
+            logActivity({
+              event: "payment_blocked_trial_used",
+              userId,
+              meta: {
+                attemptedPlan: subscriptionPlanId,
+                phone: normalizedPhone,
+                userAgent: String(req.headers["user-agent"] ?? "").slice(0, 200),
+                referer: String(req.headers["referer"] ?? "").slice(0, 200),
+                via: "payments_initiate",
+              },
+              ip: clientIp,
+            });
+          }).catch(() => { /* logging must never break the response */ });
+          return res.status(403).json({
+            success: false,
+            message: "The KES 99 trial is a one-time offer per user. Please upgrade to Monthly (KES 1,000) or Yearly (KES 4,500) to continue.",
+            code:    "TRIAL_ALREADY_USED",
+            upgradeUrl: "/pricing",
+          });
+        }
+      }
+
       // Resolve serviceName: prefer client-provided → plan name map → services table by slug → fallback
       const planNameMap: Record<string, string> = {
         trial:    planLabel("trial"),
