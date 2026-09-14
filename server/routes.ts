@@ -3177,6 +3177,13 @@ Crawl-delay: 1`);
         poland:     { name: "Poland",              flag: "🇵🇱" },
         kuwait:     { name: "Kuwait",              flag: "🇰🇼" },
         oman:       { name: "Oman",                flag: "🇴🇲" },
+        // 2026-09 (Tony: add countries we've left out that are competitive
+        // for Kenyans) — Qatar/Saudi/Bahrain were previously only reachable
+        // via the dashboard's generic UAE card, which made them hard to find.
+        qatar:          { name: "Qatar",          flag: "🇶🇦" },
+        "saudi-arabia": { name: "Saudi Arabia",   flag: "🇸🇦" },
+        bahrain:        { name: "Bahrain",        flag: "🇧🇭" },
+        malta:          { name: "Malta",          flag: "🇲🇹" },
       };
 
       let country: any = null;

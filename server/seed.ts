@@ -1632,6 +1632,13 @@ export async function seedCountryPortals(): Promise<void> {
       { code: "poland",      name: "Poland",              flag: "🇵🇱" },
       { code: "kuwait",      name: "Kuwait",              flag: "🇰🇼" },
       { code: "oman",        name: "Oman",                flag: "🇴🇲" },
+      // 2026-09 (Tony: add countries we've left out that are competitive for
+      // Kenyans) — Qatar/Saudi/Bahrain were previously only reachable via the
+      // dashboard's generic UAE card.
+      { code: "qatar",         name: "Qatar",             flag: "🇶🇦" },
+      { code: "saudi-arabia",  name: "Saudi Arabia",      flag: "🇸🇦" },
+      { code: "bahrain",       name: "Bahrain",           flag: "🇧🇭" },
+      { code: "malta",         name: "Malta",             flag: "🇲🇹" },
     ];
     for (const c of wantedCountries) {
       await pool.query(

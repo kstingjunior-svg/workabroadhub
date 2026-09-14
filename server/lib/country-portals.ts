@@ -223,6 +223,53 @@ export const COUNTRY_PORTALS: Record<string, PortalLink[]> = {
     { name: "Petroleum Development Oman", url: "https://www.pdo.co.om/en/careers",                           description: "PDO — Oman's largest employer in oil & gas, engineering roles for international staff", order: 8 },
     { name: "Laimoon Oman",              url: "https://jobs.laimoon.com/oman",                               description: "Oman-focused aggregator — Kenya-friendly",                                            order: 9 },
   ],
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // 2026-09 (Tony: "add countries we've left out that are competitive for
+  // Kenyans" — Qatar/Saudi/Bahrain were previously only reachable via the
+  // dashboard's generic UAE card, which is why they were hard to find).
+  // ═══════════════════════════════════════════════════════════════════════
+
+  qatar: [
+    { name: "Bayt Qatar",             url: "https://www.bayt.com/en/qatar/",                              description: "Middle East's largest job board — Qatar section, strong Kenya-to-Gulf pipeline",     order: 1 },
+    { name: "Naukri Gulf Qatar",      url: "https://www.naukrigulf.com/jobs-in-qatar",                    description: "Major Gulf board — India + Africa friendly listings for Qatar",                       order: 2 },
+    { name: "GulfTalent Qatar",       url: "https://www.gulftalent.com/qatar/jobs",                       description: "Mid-to-senior Gulf roles — Qatar section",                                            order: 3 },
+    { name: "LinkedIn Jobs Qatar",    url: "https://www.linkedin.com/jobs/?location=Qatar",               description: "Professional Qatar roles, recruiters actively source international candidates",       order: 4 },
+    { name: "Indeed Qatar",           url: "https://qa.indeed.com",                                       description: "Indeed QA — Gulf coverage",                                                           order: 5 },
+    { name: "Qatar Ministry of Labour", url: "https://www.mol.gov.qa",                                    description: "Official Qatari government body — work permit & sponsorship (Kafala) rules",         order: 6 },
+    { name: "Qatar Airways Careers",  url: "https://careers.qatarairways.com",                            description: "Major Qatari employer — cabin crew, ground handling, hospitality, engineering",       order: 7 },
+    { name: "Laimoon Qatar",          url: "https://jobs.laimoon.com/qatar",                              description: "Qatar-focused aggregator — Kenya-friendly",                                           order: 8 },
+  ],
+
+  "saudi-arabia": [
+    { name: "Bayt Saudi Arabia",          url: "https://www.bayt.com/en/saudi-arabia/",                   description: "Middle East's largest job board — Saudi Arabia section",                             order: 1 },
+    { name: "Naukri Gulf Saudi Arabia",   url: "https://www.naukrigulf.com/jobs-in-saudi-arabia",         description: "Major Gulf board — Saudi Arabia listings",                                            order: 2 },
+    { name: "GulfTalent Saudi Arabia",    url: "https://www.gulftalent.com/saudi-arabia/jobs",            description: "Mid-to-senior Gulf roles — Saudi Arabia section",                                     order: 3 },
+    { name: "LinkedIn Jobs Saudi Arabia", url: "https://www.linkedin.com/jobs/?location=Saudi+Arabia",    description: "Professional Saudi roles — recruiters source internationally",                        order: 4 },
+    { name: "Indeed Saudi Arabia",        url: "https://sa.indeed.com",                                   description: "Indeed SA — Gulf coverage",                                                           order: 5 },
+    { name: "Musaned (Saudi Gov)",        url: "https://musaned.hrsd.gov.sa",                             description: "Official Saudi Ministry of Human Resources platform for recruiting domestic/foreign workers — verify any recruiting agency here before paying anyone", order: 6 },
+    { name: "Saudia Careers",             url: "https://www.saudia.com/careers",                          description: "Major Saudi employer — cabin crew, ground handling, engineering",                     order: 7 },
+    { name: "Laimoon Saudi Arabia",       url: "https://jobs.laimoon.com/saudi-arabia",                   description: "Saudi-focused aggregator — Kenya-friendly",                                           order: 8 },
+  ],
+
+  bahrain: [
+    { name: "Bayt Bahrain",           url: "https://www.bayt.com/en/bahrain/",                            description: "Middle East's largest job board — Bahrain section",                                  order: 1 },
+    { name: "Naukri Gulf Bahrain",    url: "https://www.naukrigulf.com/jobs-in-bahrain",                  description: "Major Gulf board — Bahrain listings",                                                 order: 2 },
+    { name: "GulfTalent Bahrain",     url: "https://www.gulftalent.com/bahrain/jobs",                     description: "Mid-to-senior Gulf roles — Bahrain section",                                          order: 3 },
+    { name: "LinkedIn Jobs Bahrain",  url: "https://www.linkedin.com/jobs/?location=Bahrain",             description: "Professional Bahrain roles",                                                          order: 4 },
+    { name: "Indeed Bahrain",         url: "https://bh.indeed.com",                                       description: "Indeed BH — Gulf coverage",                                                           order: 5 },
+    { name: "LMRA (Bahrain Gov)",     url: "https://www.lmra.bh",                                         description: "Labour Market Regulatory Authority — official Bahraini body for work permits & sponsorship", order: 6 },
+    { name: "Gulf Air Careers",       url: "https://www.gulfair.com/careers",                             description: "Major Bahraini employer — cabin crew, ground handling, engineering",                  order: 7 },
+    { name: "Laimoon Bahrain",        url: "https://jobs.laimoon.com/bahrain",                            description: "Bahrain-focused aggregator — Kenya-friendly",                                         order: 8 },
+  ],
+
+  malta: [
+    { name: "Jobsplus (Malta Gov)",   url: "https://jobsplus.gov.mt",                                     description: "Malta's official national employment agency — government-verified listings",         order: 1 },
+    { name: "Indeed Malta",           url: "https://mt.indeed.com",                                       description: "Indeed MT — broad Maltese coverage",                                                  order: 2 },
+    { name: "LinkedIn Jobs Malta",    url: "https://www.linkedin.com/jobs/?location=Malta",               description: "Professional Malta roles — hospitality, iGaming, finance, customer service",          order: 3 },
+    { name: "Jobsinmalta.com",        url: "https://www.jobsinmalta.com",                                 description: "Malta's leading dedicated jobs board — strong hospitality & customer-service coverage", order: 4 },
+    { name: "Identity Malta",         url: "https://identitymalta.com",                                   description: "Official Maltese agency for residence permits & the Single Work Authorisation",       order: 5 },
+  ],
 };
 
 // ─── Synthetic ID helpers ───────────────────────────────────────────────────

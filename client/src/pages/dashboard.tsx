@@ -1369,11 +1369,14 @@ export default function Dashboard() {
               { flag: "🇦🇪", code: "AE", slug: "uae",       name: "UAE",       desc: "Tax-free salary",    tone: "from-green-500/10 to-red-500/10" },
               { flag: "🇨🇦", code: "CA", slug: "canada",    name: "Canada",    desc: "PR pathway",         tone: "from-red-500/10 to-white/0" },
               { flag: "🇦🇺", code: "AU", slug: "australia", name: "Australia", desc: "482 Skilled visa",   tone: "from-blue-500/10 to-yellow-500/10" },
-              { flag: "🇸🇦", code: "SA", slug: "uae",       name: "Saudi",     desc: "Vision 2030 hiring", tone: "from-green-700/10 to-emerald-500/10" },
+              // 2026-09 (Tony): Saudi/Qatar/Bahrain now have their own dedicated
+              // portal pages instead of all three dumping into the generic UAE
+              // page — that was the "hard to find" bug Tony flagged.
+              { flag: "🇸🇦", code: "SA", slug: "saudi-arabia", name: "Saudi",   desc: "Vision 2030 hiring", tone: "from-green-700/10 to-emerald-500/10" },
               { flag: "🇩🇪", code: "DE", slug: "europe",    name: "Germany",   desc: "EU Blue Card",       tone: "from-black/10 to-yellow-500/10" },
               { flag: "🇺🇸", code: "US", slug: "usa",       name: "USA",       desc: "H-1B / EB-3",        tone: "from-blue-500/10 to-red-500/10" },
-              { flag: "🇶🇦", code: "QA", slug: "uae",       name: "Qatar",     desc: "Tax-free Gulf",      tone: "from-purple-700/10 to-amber-500/10" },
-              { flag: "🇧🇭", code: "BH", slug: "uae",       name: "Bahrain",   desc: "Hospitality + GCC",  tone: "from-red-500/10 to-white/0" },
+              { flag: "🇶🇦", code: "QA", slug: "qatar",     name: "Qatar",     desc: "Tax-free Gulf",      tone: "from-purple-700/10 to-amber-500/10" },
+              { flag: "🇧🇭", code: "BH", slug: "bahrain",   name: "Bahrain",   desc: "Hospitality + GCC",  tone: "from-red-500/10 to-white/0" },
               { flag: "🇱🇺", code: "LU", slug: "luxembourg", name: "Luxembourg", desc: "Skilled only · 800k+/mo", tone: "from-sky-500/10 to-red-500/10" },
               { flag: "🇹🇷", code: "TR", slug: "turkey",     name: "Turkey",     desc: "Hospitality + Tourism",   tone: "from-red-600/15 to-red-400/5" },
               { flag: "🇮🇪", code: "IE", slug: "ireland",     name: "Ireland",     desc: "Nurse + care hiring",       tone: "from-green-500/10 to-orange-500/10" },
@@ -1382,6 +1385,8 @@ export default function Dashboard() {
               { flag: "🇵🇱", code: "PL", slug: "poland",      name: "Poland",      desc: "EU work permit growth",     tone: "from-red-600/15 to-white/0" },
               { flag: "🇰🇼", code: "KW", slug: "kuwait",      name: "Kuwait",      desc: "Care + drivers + hotels",   tone: "from-green-700/10 to-red-500/10" },
               { flag: "🇴🇲", code: "OM", slug: "oman",        name: "Oman",        desc: "Hospitality + Gulf salary", tone: "from-red-500/10 to-green-500/10" },
+              // 2026-09 (Tony's request — "think of other countries... e.g. Malta").
+              { flag: "🇲🇹", code: "MT", slug: "malta",       name: "Malta",       desc: "EU permit · English-speaking", tone: "from-red-500/10 to-white/0" },
             ].map((c) => (
               <Link
                 key={c.name}
