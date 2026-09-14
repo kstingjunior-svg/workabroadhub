@@ -552,10 +552,18 @@ export function registerToolsRoutes(
         // Persist parsed CV text to career profile (fire-and-forget) so every
         // subsequent application generation has access to the user's real CV content.
         // Only save when we have clean extracted text — not for the base64 GPT path.
+        //
+        // 2026-09 (Tony: "Nanjila says 68%, the CV checker says 45%"): also save
+        // the score/grade here. This is now the ONE place a numeric ATS score is
+        // written — Nanjila's chat prompt reads it back instead of guessing her
+        // own number, so the two surfaces can never disagree again.
         if (userId && cvText.trim().length >= MIN_CV_LENGTH) {
           storage.upsertUserCareerProfile(userId, {
             parsedCvText: cvText.slice(0, 12_000), // cap at ~12k chars — ample for any CV
             cvLastParsed: new Date(),
+            atsScore: aiResult.score ?? null,
+            atsGrade: aiResult.grade ?? null,
+            atsScoredAt: new Date(),
           } as any).catch((err: any) => {
             console.warn("[ATS] Failed to save parsed CV text:", err?.message);
           });

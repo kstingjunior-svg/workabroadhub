@@ -1388,6 +1388,13 @@ export const userCareerProfiles = pgTable("user_career_profiles", {
   // application generation has access to the user's actual CV content.
   parsedCvText:  text("parsed_cv_text"),
   cvLastParsed:  timestamp("cv_last_parsed"),
+  // 2026-09 (Tony: "Nanjila says 68%, the CV checker says 45% — no
+  // consistency"). Single source of truth for the user's real ATS score,
+  // written on every /api/tools/ats-check run. Nanjila's chat prompt reads
+  // this instead of ever estimating her own number — see server/ai/nanjila.ts.
+  atsScore:      integer("ats_score"),
+  atsGrade:      varchar("ats_grade"),
+  atsScoredAt:   timestamp("ats_scored_at"),
   // AI Analysis
   lastAnalyzedAt: timestamp("last_analyzed_at"),
   aiRecommendations: jsonb("ai_recommendations").$type<{

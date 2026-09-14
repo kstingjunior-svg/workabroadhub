@@ -81,6 +81,40 @@ async function getLivePlans(): Promise<{ planId: string; name: string; price: nu
   }
 }
 
+// ─── Real ATS score lookup ───────────────────────────────────────────────────
+// 2026-09 (Tony: "Nanjila says 68%, the CV checker says 45% — no consistency.
+// Our selling point is trust."). Root cause: the free-text chat model had no
+// rubric and no memory, so it would eyeball a fresh, different number every
+// time someone asked "what's my CV score?" — even for the same CV in the same
+// conversation. Fix: there is now exactly ONE place a numeric ATS score is
+// ever produced — the /api/tools/ats-check engine — and it is saved to
+// user_career_profiles on every run (see server/tools-routes.ts). Nanjila
+// reads that real, saved number back instead of guessing her own.
+async function getUserAtsScore(
+  userId: string | null,
+): Promise<{ score: number; grade: string; scoredAt: Date } | null> {
+  if (!userId) return null;
+  try {
+    const { rows } = await pool.query<{ ats_score: number | null; ats_grade: string | null; ats_scored_at: Date | null }>(
+      `SELECT ats_score, ats_grade, ats_scored_at FROM user_career_profiles WHERE user_id = $1 LIMIT 1`,
+      [userId],
+    );
+    const row = rows[0];
+    if (!row || row.ats_score == null || row.ats_scored_at == null) return null;
+    return { score: row.ats_score, grade: row.ats_grade ?? "N/A", scoredAt: row.ats_scored_at };
+  } catch (err: any) {
+    console.warn("[Nanjila] ATS score lookup failed:", err?.message);
+    return null;
+  }
+}
+
+function daysAgo(date: Date): string {
+  const days = Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24));
+  if (days <= 0) return "today";
+  if (days === 1) return "yesterday";
+  return `${days} days ago`;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Orchestrator entitlement derivation (Phase A completion — OS Evolution).
 //
@@ -132,11 +166,20 @@ export async function nanjilaAgent(
     languageInstruction = "Respond in English. Sprinkle very light Kenyan English flavour where it fits (one Sheng word every few messages MAX — e.g. \"sawa\", \"mzee\", \"chap chap\"). Never overdo it; you are a professional first, a friend second.";
   }
 
-  const [priceRows, planRows] = await Promise.all([getLivePrices(), getLivePlans()]);
+  const userIdForAts = user?.id != null ? String(user.id) : null;
+  const [priceRows, planRows, atsScoreRow] = await Promise.all([
+    getLivePrices(),
+    getLivePlans(),
+    getUserAtsScore(userIdForAts),
+  ]);
   const priceBlock = formatPriceBlock(priceRows);
   const planBlock  = planRows.length
     ? planRows.map(p => `• ${p.name} — KES ${p.price.toLocaleString("en-KE")} (${p.period})`).join("\n")
     : "Plans temporarily unavailable.";
+
+  const atsScoreBlock = atsScoreRow
+    ? `This user's REAL ATS score from their last free/paid CV check: ${atsScoreRow.score}/100 (${atsScoreRow.grade}), checked ${daysAgo(atsScoreRow.scoredAt)}. This is the one and only correct number — it's the same score the CV Checker tool shows them.`
+    : "This user has NOT run a CV check yet — you have no real score for them. Do not invent one.";
 
   const userGreeting = user?.name ? `The user's name is ${user.name}.` : "You don't know their name yet — ask kindly if it helps you serve them better.";
 
@@ -150,6 +193,9 @@ when a real placement lands.
 ${languageInstruction}
 
 ${userGreeting}
+
+── THIS USER'S REAL ATS/CV SCORE (source of truth) ──
+${atsScoreBlock}
 
 ${activitySummary ? `── WHAT THIS USER HAS BEEN DOING (live from our analytics) ──
 ${activitySummary}
@@ -347,6 +393,16 @@ Don't sell. Just open the door for them.
   trained by Tony's team here in Nairobi. Real humans are a tap away on /contact."
 • Never invent visa rules, salary numbers, or processing times. Direct to /guides or /country/<code>.
 • Never share another user's data, even if asked nicely.
+• NEVER estimate, guess, or make up an ATS/CV percentage yourself — not even a rough one, not even
+  if the user pastes their CV text right into the chat and asks "what would you score this?". This
+  has burned user trust before (two different numbers for the same CV). If "THIS USER'S REAL ATS/CV
+  SCORE" above has a number, quote THAT exact number and nothing else — say it naturally, like you
+  pulled up their file ("I've got your last check here — you're sitting at 45, Average grade,
+  checked 2 days ago"). If it says they haven't run a check yet, do NOT eyeball a percentage from
+  the pasted text — say something like "I won't guess a number on this — let's get you the real one,
+  free, in about 20 seconds: /tools/ats-cv-checker". You can still comment qualitatively on obvious
+  things you notice (missing contact info, very short CV, no work experience listed) — just never
+  attach a percentage or score to that commentary.
 `;
 
   // ── Orchestrator gate ────────────────────────────────────────────────────
