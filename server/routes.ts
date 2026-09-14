@@ -9039,6 +9039,98 @@ Crawl-delay: 1`);
     res.json({ success: true });
   });
 
+  // GET /api/admin/manual-grant/lookup?identifier=...
+  // 2026-09 (Tony: "make it smart enough to know if this user is already on
+  // Pro before I grant again"): before an admin fires the Manual Plan Grant
+  // button, look up whatever account matches that email/phone and show its
+  // CURRENT plan + recent grant history — so a second manual grant for the
+  // same payment doesn't silently stack on top of the first. Read-only,
+  // same lookup storage.getUserByEmailOrPhone() uses for the real grant, so
+  // "found here" always means the grant below will hit the same account.
+  app.get("/api/admin/manual-grant/lookup", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const raw = String(req.query.identifier ?? "").trim();
+      if (!raw) {
+        return res.status(400).json({ message: "identifier (email or phone) is required" });
+      }
+
+      const user = await storage.getUserByEmailOrPhone(raw);
+      if (!user) {
+        return res.json({ found: false });
+      }
+
+      // getUserPlan() is the SAME resolver the app itself uses to decide what
+      // a user can access — it already accounts for expired-but-not-yet-
+      // downgraded subscriptions and stale plan columns, so "current" here
+      // matches reality, not just a raw column value.
+      const [plan, sub, recentGrantRows] = await Promise.all([
+        storage.getUserPlan(user.id),
+        storage.getUserSubscription(user.id),
+        db.select({
+            id:        paymentsTable.id,
+            serviceId: paymentsTable.serviceId,
+            amount:    paymentsTable.amount,
+            status:    paymentsTable.status,
+            createdAt: paymentsTable.createdAt,
+            metadata:  paymentsTable.metadata,
+          })
+          .from(paymentsTable)
+          .where(and(
+            eq(paymentsTable.userId, user.id),
+            sql`${paymentsTable.serviceId} LIKE 'plan_%'`,
+          ))
+          .orderBy(desc(paymentsTable.createdAt))
+          .limit(5),
+      ]);
+
+      const expiresAt = sub?.endDate ?? null;
+      const isActive = plan !== "free" && (!expiresAt || new Date(expiresAt) >= new Date());
+
+      const recentGrants = recentGrantRows.map((p) => {
+        let adminGranted = false;
+        let note = "";
+        let grantedBy: string | null = null;
+        try {
+          const m = p.metadata ? JSON.parse(p.metadata) : null;
+          adminGranted = !!m?.adminGranted;
+          note = m?.note ?? "";
+          grantedBy = m?.grantedBy ?? null;
+        } catch { /* legacy/non-JSON metadata — ignore */ }
+        return {
+          id:          p.id,
+          planId:      String(p.serviceId ?? "").replace(/^plan_/, ""),
+          amount:      p.amount,
+          status:      p.status,
+          createdAt:   p.createdAt,
+          adminGranted,
+          grantedBy,
+          note,
+        };
+      });
+
+      res.json({
+        found: true,
+        user: {
+          id:    user.id,
+          name:  [user.firstName, user.lastName].filter(Boolean).join(" ") || user.email || user.phone || "Unknown",
+          email: user.email,
+          phone: user.phone,
+        },
+        plan: {
+          current:   plan, // "free" | "trial" | "basic" | "monthly" | "yearly" | "pro" | "pro_referral"
+          isActive,
+          status:    sub?.status ?? null,
+          startDate: sub?.startDate ?? null,
+          expiresAt,
+        },
+        recentGrants,
+      });
+    } catch (err: any) {
+      console.error("[ManualGrant lookup]", err.message);
+      res.status(500).json({ message: "Lookup failed", error: err.message });
+    }
+  });
+
   // POST /api/admin/manual-grant
   // Look up a user by email OR phone, then grant them a plan.
   // Used when a user paid successfully but the system did not recognise them.

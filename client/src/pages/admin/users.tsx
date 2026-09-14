@@ -91,6 +91,41 @@ interface GrantResult {
   user: { id: string; email: string | null; phone: string | null; name: string; plan: string; expiresAt: string };
 }
 
+// 2026-09 (Tony: "tell me if this user is already on Pro before I grant
+// again") — result shape for GET /api/admin/manual-grant/lookup, the
+// read-only pre-check the Manual Plan Grant form runs as the admin types.
+interface GrantLookupResult {
+  found: boolean;
+  user?: { id: string; name: string; email: string | null; phone: string | null };
+  plan?: {
+    current: string;      // "free" | "trial" | "basic" | "monthly" | "yearly" | "pro" | "pro_referral"
+    isActive: boolean;
+    status: string | null;
+    startDate: string | null;
+    expiresAt: string | null;
+  };
+  recentGrants?: Array<{
+    id: string;
+    planId: string;
+    amount: number;
+    status: string;
+    createdAt: string;
+    adminGranted: boolean;
+    grantedBy: string | null;
+    note: string;
+  }>;
+}
+
+const GRANT_PLAN_LABELS: Record<string, string> = {
+  free:         "Free",
+  trial:        "Trial (KES 99 / 24h)",
+  basic:        "Basic",
+  monthly:      "Monthly (KES 1,000 / 30d)",
+  yearly:       "Yearly (KES 4,500 / 365d)",
+  pro:          "Pro (KES 4,500 / 365d)",
+  pro_referral: "Pro (referral)",
+};
+
 interface ActiveSessionRow {
   user_id: string;
   email: string | null;
@@ -253,6 +288,17 @@ export default function UsersPage() {
   const [grantNote, setGrantNote] = useState("");
   const [grantResult, setGrantResult] = useState<GrantResult | null>(null);
   const [grantNotFound, setGrantNotFound] = useState(false);
+
+  // 2026-09 (Tony: "make it smart enough to know if this user is already on
+  // Pro before I grant again") — debounce the identifier as it's typed, then
+  // look up the account's CURRENT plan so the admin sees "already on Yearly,
+  // expires 12 Mar" before they ever click Grant, instead of discovering a
+  // double-grant after the fact.
+  const [debouncedGrantIdentifier, setDebouncedGrantIdentifier] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedGrantIdentifier(grantIdentifier.trim()), 400);
+    return () => clearTimeout(t);
+  }, [grantIdentifier]);
 
   // Pro subscriber dropdown
   const [proDropdownOpen, setProDropdownOpen] = useState(false);
@@ -419,6 +465,22 @@ export default function UsersPage() {
   const users = pagedData?.users ?? [];
   const totalUsers = stats?.totalUsers ?? pagedData?.totalUsers ?? 0;
   const totalPages = pagedData?.totalPages ?? 1;
+
+  // Manual Plan Grant pre-check — read-only, fires as the admin types (once
+  // there's enough to search on) and again whenever they clear grantResult
+  // to grant another. Skipped once a grant just succeeded (grantResult set)
+  // since the identifier field is hidden behind the success panel then.
+  const { data: grantLookup, isFetching: grantLookupFetching } = useQuery<GrantLookupResult>({
+    queryKey: ["/api/admin/manual-grant/lookup", debouncedGrantIdentifier],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/manual-grant/lookup?identifier=${encodeURIComponent(debouncedGrantIdentifier)}`, { credentials: "include" });
+      if (!res.ok) throw new Error(`Lookup failed (${res.status})`);
+      return res.json();
+    },
+    enabled: debouncedGrantIdentifier.length >= 3 && !grantResult,
+    staleTime: 10_000,
+    retry: 1,
+  });
 
   /* Mutations */
   async function doGrant(createIfNotFound = false): Promise<GrantResult> {
@@ -934,6 +996,46 @@ export default function UsersPage() {
                 <div className="space-y-1.5">
                   <Label htmlFor="grant-identifier" className="text-xs">Email or Phone <span className="text-destructive">*</span></Label>
                   <Input id="grant-identifier" value={grantIdentifier} onChange={e => { setGrantIdentifier(e.target.value); setGrantNotFound(false); }} placeholder="user@email.com or 0712…" data-testid="input-grant-identifier" />
+                  {/* 2026-09: live pre-check so the admin sees the account's
+                      CURRENT plan before clicking Grant — no more finding out
+                      after the fact that this was a repeat grant. */}
+                  {grantIdentifier.trim().length >= 3 && (
+                    <div data-testid="text-grant-lookup-status">
+                      {grantLookupFetching && !grantLookup ? (
+                        <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                          <Loader2 className="h-3 w-3 animate-spin" /> Checking existing plan…
+                        </p>
+                      ) : grantLookup?.found && grantLookup.plan?.isActive ? (
+                        <div className="rounded-md border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/30 px-2.5 py-2 space-y-1 mt-0.5">
+                          <p className="text-[11px] font-semibold text-red-700 dark:text-red-400 flex items-center gap-1">
+                            <AlertTriangle className="h-3 w-3 shrink-0" /> Already on an active plan
+                          </p>
+                          <p className="text-[11px] text-red-700/90 dark:text-red-300/90 leading-snug">
+                            <strong>{grantLookup.user?.name}</strong> is on{" "}
+                            <span className="font-medium">{GRANT_PLAN_LABELS[grantLookup.plan.current] ?? grantLookup.plan.current}</span>
+                            {grantLookup.plan.expiresAt && (
+                              <> — expires {new Date(grantLookup.plan.expiresAt).toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric" })}</>
+                            )}.
+                          </p>
+                          {grantLookup.recentGrants && grantLookup.recentGrants.length > 0 && (
+                            <p className="text-[10px] text-red-700/70 dark:text-red-300/70 leading-snug">
+                              Last grant: {new Date(grantLookup.recentGrants[0].createdAt).toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric" })}
+                              {" · "}{grantLookup.recentGrants[0].adminGranted ? "manual admin grant" : "paid via M-Pesa"}
+                              {grantLookup.recentGrants[0].note ? ` — "${grantLookup.recentGrants[0].note}"` : ""}
+                            </p>
+                          )}
+                        </div>
+                      ) : grantLookup?.found ? (
+                        <p className="text-[11px] text-emerald-700 dark:text-emerald-400 flex items-center gap-1 mt-0.5">
+                          <CheckCircle className="h-3 w-3 shrink-0" /> {grantLookup.user?.name} found — no active plan (Free). Safe to grant.
+                        </p>
+                      ) : grantLookup && !grantLookup.found ? (
+                        <p className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5">
+                          <Clock className="h-3 w-3 shrink-0" /> No account yet for this email/phone — you'll be offered to create one.
+                        </p>
+                      ) : null}
+                    </div>
+                  )}
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="grant-plan" className="text-xs">Plan</Label>
