@@ -56,6 +56,9 @@ export const COUNTRY_PORTALS: Record<string, PortalLink[]> = {
     { name: "XpatJobs UAE",      url: "https://unitedarabemirates.xpatjobs.com",                                           description: "Expat-focused UAE roles",                                         order: 6 },
     { name: "Laimoon",           url: "https://jobs.laimoon.com/uae",                                                      description: "UAE-focused aggregator — Kenya-friendly",                         order: 7 },
     { name: "Dubizzle Jobs",     url: "https://dubai.dubizzle.com/jobs/",                                                  description: "Classifieds-style UAE jobs",                                     order: 8 },
+    // 2026-09 (Tony's job-portal audit): already live in job_links, added here so the
+    // catalogue stays the single source of truth and any future reseed keeps it.
+    { name: "Reed UAE",          url: "https://www.reed.co.uk/jobs/jobs-in-uae",                                           description: "UK's Reed board, filtered to UAE roles",                         order: 9 },
   ],
 
   usa: [
@@ -67,6 +70,9 @@ export const COUNTRY_PORTALS: Record<string, PortalLink[]> = {
     { name: "SimplyHired",     url: "https://www.simplyhired.com",         description: "Aggregator with friendly international access",              order: 6 },
     { name: "ZipRecruiter",    url: "https://www.ziprecruiter.com",        description: "AI-matched US jobs",                                         order: 7 },
     { name: "H1BGrader",       url: "https://h1bgrader.com",               description: "Search H-1B sponsors by company / role / location",         order: 8 },
+    // 2026-09 (Tony's job-portal audit): already live in job_links, added here so the
+    // catalogue stays the single source of truth and any future reseed keeps it.
+    { name: "USAJOBS (Government)", url: "https://www.usajobs.gov",        description: "Official US federal government jobs portal",                order: 9 },
   ],
 
   // ── AUSTRALIA — expanded list specifically for African / Kenyan applicants ──
@@ -108,6 +114,14 @@ export const COUNTRY_PORTALS: Record<string, PortalLink[]> = {
     { name: "🇩🇰 WorkInDenmark",     url: "https://www.workindenmark.dk",                               description: "Official Danish portal for international workers",                          order: 15 },
     { name: "🇫🇮 TE-palvelut",       url: "https://www.te-palvelut.fi/en/jobseekers",                    description: "Finnish Public Employment Service",                                         order: 16 },
     { name: "🇵🇱 EURES Poland",      url: "https://eures.praca.gov.pl",                                  description: "EU jobs portal for Poland — non-EU workers eligible",                       order: 17 },
+    // 2026-09 (Tony's job-portal audit): already live in job_links, added here so the
+    // catalogue stays the single source of truth and any future reseed keeps it.
+    { name: "🇮🇹 Cliclavoro",        url: "https://www.cliclavoro.gov.it",                               description: "Italian Ministry of Labour official job portal",                            order: 18 },
+    { name: "🇮🇹 Indeed Italy",      url: "https://www.indeed.it",                                       description: "Indeed IT — broad coverage",                                                order: 19 },
+    { name: "🇪🇸 SEPE",              url: "https://www.sepe.es",                                         description: "Spain's official public employment service",                               order: 20 },
+    { name: "🇵🇱 Praca.gov.pl",      url: "https://www.praca.gov.pl",                                    description: "Polish Ministry of Family, Labour and Social Policy job portal",             order: 21 },
+    { name: "🇵🇱 Indeed Poland",     url: "https://www.indeed.pl",                                       description: "Indeed PL — broad coverage",                                                order: 22 },
+    { name: "🇸🇪 Indeed Sweden",     url: "https://www.indeed.se",                                       description: "Indeed SE — broad coverage",                                                order: 23 },
   ],
 
   // 2026-07: Turkey added as a supported destination (Tony's request).
