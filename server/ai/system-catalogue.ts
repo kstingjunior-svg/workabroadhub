@@ -29,6 +29,14 @@ export const SYSTEM_CATALOGUE: CatalogueGroup[] = [
     title: "FREE TOOLS (anyone can use — no signup required)",
     entries: [
       { label: "ATS CV Health Check",          path: "/tools/ats-cv-checker",       purpose: "User wants to know if their CV is good enough for overseas employers — uploads PDF/DOCX, gets a 0-100 score" },
+      // 2026-09 (Tony: "there are other services which you are not charging,
+      // like checking an offer letter, taking a screening of the visa —
+      // I want you to let her know everything"). These two were already
+      // wired into her PROACTIVE VERIFICATION ENGAGEMENT triggers below but
+      // were missing from this catalogue, so she wasn't reliably naming them
+      // when a user asked "what can you do?" or browsed the tools list cold.
+      { label: "Offer Letter Verifier",        path: "/tools/offer-check",          purpose: "User got a job offer / employment contract and wants a forensic check — salary vs. country benchmark, employer registration, format authenticity. FREE. This is one of our biggest anti-scam trust tools — mention it proactively whenever a user mentions an offer, contract, or salary figure." },
+      { label: "Visa Document Verifier",       path: "/tools/visa-check",           purpose: "User has a visa / e-visa / visa approval PDF and wants it cross-checked against the official country registry format. FREE. Mention it proactively whenever a user mentions a visa, MOFA/MOI stamp, or consulate/embassy letter." },
       { label: "Job Scam Checker",             path: "/tools/job-scam-checker",     purpose: "User got a job offer or saw a posting and isn't sure if it's a scam" },
       { label: "IELTS Verifier",               path: "/tools/ielts-verify",         purpose: "User has an IELTS TRF (Test Report Form) and wants to check if it's genuine before submitting to an employer. Free 2/day, Pro unlimited. Anti-scam tool for TRF fraud." },
       { label: "Visa Sponsorship Jobs feed",   path: "/tools/visa-sponsorship-jobs", purpose: "User just wants to browse real overseas jobs with visa sponsorship — entry-level + skilled" },
@@ -42,7 +50,14 @@ export const SYSTEM_CATALOGUE: CatalogueGroup[] = [
     entries: [
       { label: "United Kingdom",       path: "/country/uk",        purpose: "NHS, Skilled Worker visa, Care Worker pathway. Top destination for Kenyan nurses",                                audience: "paid" },
       { label: "Canada",               path: "/country/canada",    purpose: "Express Entry, PNP, LMIA. Strong nursing + tech + trades pathway",                                                audience: "paid" },
-      { label: "UAE / Arab Countries", path: "/country/uae",       purpose: "Tax-free salaries, hospitality, drivers, hotel jobs. Also covers Saudi, Qatar, Bahrain via this same dashboard", audience: "paid" },
+      // 2026-09: Saudi/Qatar/Bahrain used to route into this same UAE
+      // dashboard (a real "can't find it" bug a user reported) — each now
+      // has its own dedicated country page with its own portal list.
+      { label: "UAE / Arab Countries", path: "/country/uae",       purpose: "Tax-free salaries, hospitality, drivers, hotel jobs",                                                              audience: "paid" },
+      { label: "Qatar",                path: "/country/qatar",     purpose: "Tax-free Gulf salary. World Cup-legacy hospitality/construction pipeline still strong for Kenyans",                audience: "paid" },
+      { label: "Saudi Arabia",         path: "/country/saudi-arabia", purpose: "Vision 2030 hiring boom. Also the highest-scam-risk Gulf corridor — steer users to Musaned to verify any agency", audience: "paid" },
+      { label: "Bahrain",              path: "/country/bahrain",   purpose: "Smaller Gulf market — hospitality + GCC. Good alternative when UAE/Qatar competition is high",                      audience: "paid" },
+      { label: "Malta",                path: "/country/malta",     purpose: "EU work permit, English-speaking. Hospitality, iGaming, customer service — easier entry than mainland EU",           audience: "paid" },
       { label: "Australia",            path: "/country/australia", purpose: "Subclass 482 / 186 / 189 skilled migration. 14 verified portals including NHS-style state health systems",       audience: "paid" },
       { label: "USA",                  path: "/country/usa",       purpose: "H-1B sponsorship, EB-3 unskilled-worker route, Green Card DV Lottery",                                            audience: "paid" },
       { label: "Europe",               path: "/country/europe",    purpose: "EU Blue Card, Germany / Ireland / Netherlands / France / Nordic countries",                                       audience: "paid" },
@@ -54,6 +69,10 @@ export const SYSTEM_CATALOGUE: CatalogueGroup[] = [
       { label: "Poland",               path: "/country/poland",    purpose: "Work Permit A / Blue Card. Fast-growing EU market — logistics, factory, IT, construction",                            audience: "paid" },
       { label: "Kuwait",               path: "/country/kuwait",    purpose: "Article 18 work visa. Care, hospitality, drivers, hotel",                                                             audience: "paid" },
       { label: "Oman",                 path: "/country/oman",      purpose: "Employment Visa. Hospitality, healthcare, engineering, oil & gas",                                                    audience: "paid" },
+      // Live in production but were missing from this catalogue — added
+      // 2026-09 so she actually knows these two exist.
+      { label: "Lithuania",            path: "/country/lithuania", purpose: "Smaller, lower-competition EU entry point. State employment service + growing private job market", audience: "paid" },
+      { label: "Luxembourg",           path: "/country/luxembourg", purpose: "Skilled roles only, but very high pay (KES 800k+/mo). Finance, EU institutions, tech",              audience: "paid" },
     ],
   },
   {
@@ -70,9 +89,14 @@ export const SYSTEM_CATALOGUE: CatalogueGroup[] = [
   {
     title: "REVENUE FEATURES (subscriptions + one-off services)",
     entries: [
-      { label: "Pricing & subscription plans", path: "/pricing",                            purpose: "Show plans (Trial 99 / Monthly 600 / Yearly 4500). Live prices in LIVE PRICE OVERRIDE" },
-      { label: "Services catalogue",           path: "/services",                            purpose: "Show all one-off paid services (CV Fix Lite, ATS CV Optimization, Cover Letter, Interview Coaching, etc.)" },
-      { label: "Service order flow",           path: "/services/order/<slug>",               purpose: "Direct deep-link to start a specific paid service. Slugs: cv_fix_lite, ats_cv_optimization, cv_rewrite, cover_letter, interview_coaching, etc." },
+      // 2026-09: don't hardcode plan/service names or prices here — they drift
+      // (the "Cover Letter" standalone service and an old "Monthly 600" figure
+      // were both stale here while the LIVE blocks below already had the
+      // correct current data). Always trust LIVE SERVICE PRICES / LIVE
+      // SUBSCRIPTION PLANS in the prompt over anything written in this file.
+      { label: "Pricing & subscription plans", path: "/pricing",                            purpose: "Show plans (Trial / Monthly / Yearly). ALWAYS use the exact current prices from LIVE SUBSCRIPTION PLANS above, never a number written here" },
+      { label: "Services catalogue",           path: "/services",                            purpose: "Show all one-off paid services. ALWAYS use the exact current names/prices from LIVE SERVICE PRICES above, never a name written here" },
+      { label: "Service order flow",           path: "/services/order/<slug>",               purpose: "Direct deep-link to start a specific paid service, e.g. /services/order/cv_fix_lite" },
       { label: "Payment page",                 path: "/payment",                             purpose: "M-Pesa STK push / PayPal — when user has already chosen a plan or service" },
       { label: "Referrals — earn 10% per signup", path: "/referrals",                        purpose: "Affiliate program. Anyone can refer; instant M-Pesa payout per paid signup. Referred users get 20% off Pro" },
     ],
