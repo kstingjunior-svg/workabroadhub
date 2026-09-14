@@ -2554,3 +2554,135 @@ export const verifiedProfiles = pgTable("verified_profiles", {
   updatedAt:  timestamp("updated_at").defaultNow(),
 });
 export type VerifiedProfile = typeof verifiedProfiles.$inferSelect;
+
+// ── Direct Hire Exchange — Phase 3: Success-Fee Marketplace ───────────────
+// Verified overseas employers list real jobs for free. The platform would
+// eventually take a placement fee once a hire is CONFIRMED by both sides —
+// but fee collection is INTENTIONALLY NOT implemented here. It's gated on
+// a Kenyan labour-migration lawyer confirming, in writing, whether an
+// employer-paid success fee counts as "recruitment"/"placement" under the
+// NEA Act / Labour Migration Management Bill (see the MVP roadmap, Phase 0
+// and Phase 3). `placementConfirmations.feeStatus` exists only so the
+// pending-legal-review state is visible to admins — nothing in this schema
+// or the routes built on it should ever charge anyone. Do not add real
+// M-Pesa/PayPal charging here without that legal sign-off.
+//
+// This is a distinct table set from Kenya Careers' `companies`/`local_jobs`
+// (server/local-jobs-routes.ts, not in this file) on purpose: Kenya Careers
+// is domestic Kenyan retail/service hiring with its own seeded-demo-data
+// legal posture; this is real overseas placement, a different risk profile
+// entirely. Cross-links to Phase 1's Firebase employer ratings via
+// `ratingSlug` (matches `firebase-employer-ratings.ts`'s `slugifyEmployer`)
+// and to Phase 2's Verified Migration Profile via the applicant's own
+// `users.id` (an employer looks the applicant up in `verifiedProfiles`).
+
+export const overseasEmployers = pgTable("overseas_employers", {
+  id:                       varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  ownerUserId:              varchar("owner_user_id").notNull(),   // users.id who registered this employer
+  companyName:              varchar("company_name").notNull(),
+  country:                  varchar("country").notNull(),
+  sector:                   varchar("sector"),
+  website:                  varchar("website"),
+  contactEmail:             varchar("contact_email").notNull(),
+  contactPhone:             varchar("contact_phone"),
+  description:              text("description"),
+  // Cross-link to the Firebase Employer Reputation Layer (Phase 1) —
+  // matches slugifyEmployer(companyName, country) so the public employer
+  // page can pull in worker-submitted ratings without a schema merge.
+  ratingSlug:               varchar("rating_slug"),
+  // No government registry of overseas employers exists to check against
+  // (unlike NEA-licensed agencies), so verification here is admin review
+  // of submitted evidence, not automated license lookup.
+  verificationStatus:       varchar("verification_status").notNull().default("pending"), // pending | verified | rejected
+  verificationEvidenceUrl:  varchar("verification_evidence_url"),
+  verificationNote:         text("verification_note"),
+  verifiedAt:               timestamp("verified_at"),
+  verifiedBy:               varchar("verified_by"),
+  createdAt:                timestamp("created_at").defaultNow(),
+  updatedAt:                timestamp("updated_at").defaultNow(),
+}, (t) => ({
+  byOwner:  index("overseas_employers_owner_idx").on(t.ownerUserId),
+  byStatus: index("overseas_employers_status_idx").on(t.verificationStatus),
+}));
+export type OverseasEmployer = typeof overseasEmployers.$inferSelect;
+
+export const overseasJobListings = pgTable("overseas_job_listings", {
+  id:               varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employerId:       varchar("employer_id").notNull(),
+  title:            varchar("title").notNull(),
+  country:          varchar("country").notNull(),
+  city:             varchar("city"),
+  category:         varchar("category"),
+  employmentType:   varchar("employment_type"),   // full_time | contract | seasonal
+  salaryMin:        integer("salary_min"),
+  salaryMax:        integer("salary_max"),
+  salaryCurrency:   varchar("salary_currency").default("USD"),
+  vacancies:        integer("vacancies").default(1),
+  requirements:     text("requirements"),
+  responsibilities: text("responsibilities"),
+  // Listings are free to post but reviewed before going live — an employer
+  // marketplace with zero moderation is an easy target for scam postings.
+  status:           varchar("status").notNull().default("pending_review"), // draft | pending_review | live | closed | expired
+  createdAt:        timestamp("created_at").defaultNow(),
+  updatedAt:        timestamp("updated_at").defaultNow(),
+}, (t) => ({
+  byEmployer: index("overseas_job_listings_employer_idx").on(t.employerId),
+  byStatus:   index("overseas_job_listings_status_idx").on(t.status),
+}));
+export type OverseasJobListing = typeof overseasJobListings.$inferSelect;
+
+export const overseasJobApplications = pgTable("overseas_job_applications", {
+  id:              varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  listingId:       varchar("listing_id").notNull(),
+  applicantUserId: varchar("applicant_user_id").notNull(),
+  coverNote:       text("cover_note"),
+  status:          varchar("status").notNull().default("applied"), // applied | shortlisted | interview | offered | confirmed_start | withdrawn | rejected
+  appliedAt:       timestamp("applied_at").defaultNow(),
+  updatedAt:       timestamp("updated_at").defaultNow(),
+}, (t) => ({
+  byListing:        index("overseas_job_applications_listing_idx").on(t.listingId),
+  byApplicant:      index("overseas_job_applications_applicant_idx").on(t.applicantUserId),
+  uniqueApplication: uniqueIndex("overseas_job_applications_unique_idx").on(t.listingId, t.applicantUserId),
+}));
+export type OverseasJobApplication = typeof overseasJobApplications.$inferSelect;
+
+// The "confirmed start" event: the hardest single mechanism in Phase 3.
+// Deliberately requires BOTH sides to independently confirm rather than
+// trusting the employer's word alone (local_job_applications.status=
+// 'hired' elsewhere in the codebase is employer-only and one-sided).
+export const placementConfirmations = pgTable("placement_confirmations", {
+  id:                  varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  applicationId:       varchar("application_id").notNull().unique(),
+  employerConfirmedAt: timestamp("employer_confirmed_at"),
+  employerConfirmedBy: varchar("employer_confirmed_by"),
+  workerConfirmedAt:   timestamp("worker_confirmed_at"),
+  startDate:           varchar("start_date"),      // worker-entered, ISO date string
+  workLocation:        varchar("work_location"),
+  status:              varchar("status").notNull().default("awaiting_confirmation"), // awaiting_confirmation | confirmed | disputed
+  // INTENTIONALLY INERT — see the module comment above. No code path may
+  // turn this into a real charge until Phase 0's legal review is in hand.
+  feeStatus:           varchar("fee_status").notNull().default("pending_legal_review"),
+  createdAt:           timestamp("created_at").defaultNow(),
+  updatedAt:           timestamp("updated_at").defaultNow(),
+});
+export type PlacementConfirmation = typeof placementConfirmations.$inferSelect;
+
+export const placementDisputes = pgTable("placement_disputes", {
+  id:              varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  applicationId:   varchar("application_id").notNull(),
+  raisedByUserId:  varchar("raised_by_user_id").notNull(),
+  raisedByRole:    varchar("raised_by_role").notNull(),    // worker | employer
+  category:        varchar("category").notNull(),          // no_show | pay_mismatch | conditions_mismatch | other
+  description:     text("description").notNull(),
+  evidenceUrl:      varchar("evidence_url"),
+  status:          varchar("status").notNull().default("open"), // open | investigating | resolved | dismissed
+  resolutionNote:  text("resolution_note"),
+  resolvedBy:      varchar("resolved_by"),
+  resolvedAt:      timestamp("resolved_at"),
+  createdAt:       timestamp("created_at").defaultNow(),
+  updatedAt:       timestamp("updated_at").defaultNow(),
+}, (t) => ({
+  byApplication: index("placement_disputes_application_idx").on(t.applicationId),
+  byStatus:      index("placement_disputes_status_idx").on(t.status),
+}));
+export type PlacementDispute = typeof placementDisputes.$inferSelect;

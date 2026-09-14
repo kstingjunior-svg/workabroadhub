@@ -259,6 +259,16 @@ import {
   type IeltsCheck,
   verifiedProfiles,
   type VerifiedProfile,
+  overseasEmployers,
+  type OverseasEmployer,
+  overseasJobListings,
+  type OverseasJobListing,
+  overseasJobApplications,
+  type OverseasJobApplication,
+  placementConfirmations,
+  type PlacementConfirmation,
+  placementDisputes,
+  type PlacementDispute,
   plans,
   type Plan,
   promoCodes,
@@ -596,6 +606,37 @@ export interface IStorage {
   updateVerifiedProfileSettings(userId: string, patch: Partial<Pick<VerifiedProfile, "isPublic" | "showPhone" | "showEmail">>): Promise<VerifiedProfile>;
   regenerateVerifiedProfileShareToken(userId: string): Promise<VerifiedProfile>;
   getVerifiedProfileByShareToken(token: string): Promise<VerifiedProfile | undefined>;
+
+  // Direct Hire Exchange — Phase 3: Success-Fee Marketplace (fee collection NOT implemented — see schema comment)
+  createOverseasEmployer(data: Pick<OverseasEmployer, "ownerUserId" | "companyName" | "country" | "contactEmail"> & Partial<OverseasEmployer>): Promise<OverseasEmployer>;
+  getOverseasEmployerByOwner(ownerUserId: string): Promise<OverseasEmployer | undefined>;
+  getOverseasEmployerById(id: string): Promise<OverseasEmployer | undefined>;
+  updateOverseasEmployer(id: string, patch: Partial<OverseasEmployer>): Promise<OverseasEmployer | undefined>;
+  listPendingOverseasEmployers(): Promise<OverseasEmployer[]>;
+  verifyOverseasEmployer(id: string, status: "verified" | "rejected", note: string | null, adminId: string): Promise<OverseasEmployer | undefined>;
+
+  createOverseasJobListing(data: Pick<OverseasJobListing, "employerId" | "title" | "country"> & Partial<OverseasJobListing>): Promise<OverseasJobListing>;
+  getOverseasJobListingById(id: string): Promise<OverseasJobListing | undefined>;
+  listOverseasJobListingsByEmployer(employerId: string): Promise<OverseasJobListing[]>;
+  listLiveOverseasJobListings(filters?: { country?: string; category?: string }): Promise<OverseasJobListing[]>;
+  updateOverseasJobListing(id: string, patch: Partial<OverseasJobListing>): Promise<OverseasJobListing | undefined>;
+  listPendingOverseasJobListings(): Promise<OverseasJobListing[]>;
+
+  createOverseasJobApplication(listingId: string, applicantUserId: string, coverNote?: string): Promise<OverseasJobApplication | undefined>;
+  getOverseasJobApplicationById(id: string): Promise<OverseasJobApplication | undefined>;
+  listOverseasJobApplicationsByListing(listingId: string): Promise<OverseasJobApplication[]>;
+  listOverseasJobApplicationsByApplicant(applicantUserId: string): Promise<OverseasJobApplication[]>;
+  updateOverseasJobApplicationStatus(id: string, status: OverseasJobApplication["status"]): Promise<OverseasJobApplication | undefined>;
+
+  getOrCreatePlacementConfirmation(applicationId: string): Promise<PlacementConfirmation>;
+  employerConfirmPlacement(applicationId: string, employerUserId: string, startDate?: string, workLocation?: string): Promise<PlacementConfirmation>;
+  workerConfirmPlacement(applicationId: string): Promise<PlacementConfirmation>;
+  getPlacementConfirmationByApplication(applicationId: string): Promise<PlacementConfirmation | undefined>;
+
+  createPlacementDispute(data: Pick<PlacementDispute, "applicationId" | "raisedByUserId" | "raisedByRole" | "category" | "description"> & Partial<PlacementDispute>): Promise<PlacementDispute>;
+  listPlacementDisputesByApplication(applicationId: string): Promise<PlacementDispute[]>;
+  listOpenPlacementDisputes(): Promise<PlacementDispute[]>;
+  resolvePlacementDispute(id: string, status: "resolved" | "dismissed", resolutionNote: string | null, adminId: string): Promise<PlacementDispute | undefined>;
 
   // Per-user tool usage & premium status
   getUserToolUsageCount(userId: string, toolName: string): Promise<number>;
@@ -5172,6 +5213,149 @@ export class DatabaseStorage implements IStorage {
 
   async getVerifiedProfileByShareToken(token: string): Promise<VerifiedProfile | undefined> {
     const [row] = await db.select().from(verifiedProfiles).where(eq(verifiedProfiles.shareToken, token)).limit(1);
+    return row;
+  }
+
+  // ── Direct Hire Exchange — Phase 3: Success-Fee Marketplace ─────────────
+  // Fee collection is INTENTIONALLY NOT implemented anywhere below — see
+  // the schema.ts comment above overseasEmployers. Do not add real
+  // charging to any of this without the Phase 0 legal sign-off.
+  async createOverseasEmployer(data: Pick<OverseasEmployer, "ownerUserId" | "companyName" | "country" | "contactEmail"> & Partial<OverseasEmployer>): Promise<OverseasEmployer> {
+    const [row] = await db.insert(overseasEmployers).values(data as any).returning();
+    return row;
+  }
+  async getOverseasEmployerByOwner(ownerUserId: string): Promise<OverseasEmployer | undefined> {
+    const [row] = await db.select().from(overseasEmployers).where(eq(overseasEmployers.ownerUserId, ownerUserId)).limit(1);
+    return row;
+  }
+  async getOverseasEmployerById(id: string): Promise<OverseasEmployer | undefined> {
+    const [row] = await db.select().from(overseasEmployers).where(eq(overseasEmployers.id, id)).limit(1);
+    return row;
+  }
+  async updateOverseasEmployer(id: string, patch: Partial<OverseasEmployer>): Promise<OverseasEmployer | undefined> {
+    const [row] = await db.update(overseasEmployers).set({ ...patch, updatedAt: new Date() }).where(eq(overseasEmployers.id, id)).returning();
+    return row;
+  }
+  async listPendingOverseasEmployers(): Promise<OverseasEmployer[]> {
+    return db.select().from(overseasEmployers).where(eq(overseasEmployers.verificationStatus, "pending")).orderBy(desc(overseasEmployers.createdAt));
+  }
+  async verifyOverseasEmployer(id: string, status: "verified" | "rejected", note: string | null, adminId: string): Promise<OverseasEmployer | undefined> {
+    const [row] = await db.update(overseasEmployers)
+      .set({ verificationStatus: status, verificationNote: note ?? undefined, verifiedAt: new Date(), verifiedBy: adminId, updatedAt: new Date() })
+      .where(eq(overseasEmployers.id, id)).returning();
+    return row;
+  }
+
+  async createOverseasJobListing(data: Pick<OverseasJobListing, "employerId" | "title" | "country"> & Partial<OverseasJobListing>): Promise<OverseasJobListing> {
+    const [row] = await db.insert(overseasJobListings).values(data as any).returning();
+    return row;
+  }
+  async getOverseasJobListingById(id: string): Promise<OverseasJobListing | undefined> {
+    const [row] = await db.select().from(overseasJobListings).where(eq(overseasJobListings.id, id)).limit(1);
+    return row;
+  }
+  async listOverseasJobListingsByEmployer(employerId: string): Promise<OverseasJobListing[]> {
+    return db.select().from(overseasJobListings).where(eq(overseasJobListings.employerId, employerId)).orderBy(desc(overseasJobListings.createdAt));
+  }
+  async listLiveOverseasJobListings(filters?: { country?: string; category?: string }): Promise<OverseasJobListing[]> {
+    const conditions = [eq(overseasJobListings.status, "live")];
+    if (filters?.country) conditions.push(eq(overseasJobListings.country, filters.country));
+    if (filters?.category) conditions.push(eq(overseasJobListings.category, filters.category));
+    return db.select().from(overseasJobListings).where(and(...conditions)).orderBy(desc(overseasJobListings.createdAt));
+  }
+  async updateOverseasJobListing(id: string, patch: Partial<OverseasJobListing>): Promise<OverseasJobListing | undefined> {
+    const [row] = await db.update(overseasJobListings).set({ ...patch, updatedAt: new Date() }).where(eq(overseasJobListings.id, id)).returning();
+    return row;
+  }
+  async listPendingOverseasJobListings(): Promise<OverseasJobListing[]> {
+    return db.select().from(overseasJobListings).where(eq(overseasJobListings.status, "pending_review")).orderBy(desc(overseasJobListings.createdAt));
+  }
+
+  async createOverseasJobApplication(listingId: string, applicantUserId: string, coverNote?: string): Promise<OverseasJobApplication | undefined> {
+    const [row] = await db.insert(overseasJobApplications)
+      .values({ listingId, applicantUserId, coverNote })
+      .onConflictDoNothing({ target: [overseasJobApplications.listingId, overseasJobApplications.applicantUserId] })
+      .returning();
+    if (row) return row;
+    const [existing] = await db.select().from(overseasJobApplications)
+      .where(and(eq(overseasJobApplications.listingId, listingId), eq(overseasJobApplications.applicantUserId, applicantUserId))).limit(1);
+    return existing;
+  }
+  async getOverseasJobApplicationById(id: string): Promise<OverseasJobApplication | undefined> {
+    const [row] = await db.select().from(overseasJobApplications).where(eq(overseasJobApplications.id, id)).limit(1);
+    return row;
+  }
+  async listOverseasJobApplicationsByListing(listingId: string): Promise<OverseasJobApplication[]> {
+    return db.select().from(overseasJobApplications).where(eq(overseasJobApplications.listingId, listingId)).orderBy(desc(overseasJobApplications.appliedAt));
+  }
+  async listOverseasJobApplicationsByApplicant(applicantUserId: string): Promise<OverseasJobApplication[]> {
+    return db.select().from(overseasJobApplications).where(eq(overseasJobApplications.applicantUserId, applicantUserId)).orderBy(desc(overseasJobApplications.appliedAt));
+  }
+  async updateOverseasJobApplicationStatus(id: string, status: OverseasJobApplication["status"]): Promise<OverseasJobApplication | undefined> {
+    const [row] = await db.update(overseasJobApplications).set({ status, updatedAt: new Date() }).where(eq(overseasJobApplications.id, id)).returning();
+    return row;
+  }
+
+  async getOrCreatePlacementConfirmation(applicationId: string): Promise<PlacementConfirmation> {
+    const [existing] = await db.select().from(placementConfirmations).where(eq(placementConfirmations.applicationId, applicationId)).limit(1);
+    if (existing) return existing;
+    const [created] = await db.insert(placementConfirmations)
+      .values({ applicationId })
+      .onConflictDoNothing({ target: placementConfirmations.applicationId })
+      .returning();
+    if (created) return created;
+    const [row] = await db.select().from(placementConfirmations).where(eq(placementConfirmations.applicationId, applicationId)).limit(1);
+    return row!;
+  }
+  private async settlePlacementConfirmationStatus(applicationId: string): Promise<PlacementConfirmation> {
+    const confirmation = await this.getOrCreatePlacementConfirmation(applicationId);
+    if (confirmation.employerConfirmedAt && confirmation.workerConfirmedAt && confirmation.status === "awaiting_confirmation") {
+      const [updated] = await db.update(placementConfirmations)
+        .set({ status: "confirmed", updatedAt: new Date() })
+        .where(eq(placementConfirmations.applicationId, applicationId)).returning();
+      // Both sides confirmed — reflect it on the application too.
+      await db.update(overseasJobApplications).set({ status: "confirmed_start", updatedAt: new Date() })
+        .where(eq(overseasJobApplications.id, applicationId));
+      return updated;
+    }
+    return confirmation;
+  }
+  async employerConfirmPlacement(applicationId: string, employerUserId: string, startDate?: string, workLocation?: string): Promise<PlacementConfirmation> {
+    await this.getOrCreatePlacementConfirmation(applicationId);
+    await db.update(placementConfirmations)
+      .set({ employerConfirmedAt: new Date(), employerConfirmedBy: employerUserId, startDate: startDate ?? undefined, workLocation: workLocation ?? undefined, updatedAt: new Date() })
+      .where(eq(placementConfirmations.applicationId, applicationId));
+    return this.settlePlacementConfirmationStatus(applicationId);
+  }
+  async workerConfirmPlacement(applicationId: string): Promise<PlacementConfirmation> {
+    await this.getOrCreatePlacementConfirmation(applicationId);
+    await db.update(placementConfirmations)
+      .set({ workerConfirmedAt: new Date(), updatedAt: new Date() })
+      .where(eq(placementConfirmations.applicationId, applicationId));
+    return this.settlePlacementConfirmationStatus(applicationId);
+  }
+  async getPlacementConfirmationByApplication(applicationId: string): Promise<PlacementConfirmation | undefined> {
+    const [row] = await db.select().from(placementConfirmations).where(eq(placementConfirmations.applicationId, applicationId)).limit(1);
+    return row;
+  }
+
+  async createPlacementDispute(data: Pick<PlacementDispute, "applicationId" | "raisedByUserId" | "raisedByRole" | "category" | "description"> & Partial<PlacementDispute>): Promise<PlacementDispute> {
+    const [row] = await db.insert(placementDisputes).values(data as any).returning();
+    // A raised dispute flags the confirmation record so both sides + admins see it.
+    await db.update(placementConfirmations).set({ status: "disputed", updatedAt: new Date() })
+      .where(eq(placementConfirmations.applicationId, data.applicationId));
+    return row;
+  }
+  async listPlacementDisputesByApplication(applicationId: string): Promise<PlacementDispute[]> {
+    return db.select().from(placementDisputes).where(eq(placementDisputes.applicationId, applicationId)).orderBy(desc(placementDisputes.createdAt));
+  }
+  async listOpenPlacementDisputes(): Promise<PlacementDispute[]> {
+    return db.select().from(placementDisputes).where(inArray(placementDisputes.status, ["open", "investigating"])).orderBy(desc(placementDisputes.createdAt));
+  }
+  async resolvePlacementDispute(id: string, status: "resolved" | "dismissed", resolutionNote: string | null, adminId: string): Promise<PlacementDispute | undefined> {
+    const [row] = await db.update(placementDisputes)
+      .set({ status, resolutionNote: resolutionNote ?? undefined, resolvedBy: adminId, resolvedAt: new Date(), updatedAt: new Date() })
+      .where(eq(placementDisputes.id, id)).returning();
     return row;
   }
 

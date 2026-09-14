@@ -12644,6 +12644,448 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
     }
   });
 
+  // ── Direct Hire Exchange — Phase 3: Success-Fee Marketplace ──────────────
+  // Verified overseas employers list real jobs for free; workers apply and
+  // both sides confirm a placement start. FEE COLLECTION IS INTENTIONALLY
+  // NOT IMPLEMENTED ANYWHERE BELOW — gated on a Kenyan labour-migration
+  // lawyer's written opinion (see the MVP roadmap, Phase 0 and Phase 3).
+  // `placementConfirmations.feeStatus` stays "pending_legal_review" for
+  // every confirmed placement; nothing here charges anyone. Do not add
+  // M-Pesa/PayPal charging to this section without that legal sign-off.
+
+  async function requireOwnedEmployer(userId: string) {
+    return storage.getOverseasEmployerByOwner(userId);
+  }
+
+  // Mirrors client/src/lib/firebase-employer-ratings.ts's slugifyEmployer()
+  // exactly, so an overseas_employers row and its Phase 1 Firebase rating
+  // entry (employers/{slug}) resolve to the same key without a schema merge.
+  function slugifyEmployerForRatings(name: string, country: string): string {
+    const norm = (s: string) => s.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+    const namePart = norm(name).slice(0, 80) || "employer";
+    const countryPart = norm(country).slice(0, 40) || "unknown";
+    return `${namePart}__${countryPart}`;
+  }
+
+  // Employer: register (one employer profile per user for now)
+  app.post("/api/direct-hire/employer/register", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub ?? req.user?.id;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+
+      const existing = await requireOwnedEmployer(userId);
+      if (existing) return res.json(existing);
+
+      const { companyName, country, contactEmail, sector, website, contactPhone, description } = req.body ?? {};
+      if (!companyName || !country || !contactEmail) {
+        return res.status(400).json({ message: "companyName, country, and contactEmail are required" });
+      }
+      const employer = await storage.createOverseasEmployer({
+        ownerUserId: userId, companyName, country, contactEmail,
+        sector, website, contactPhone, description,
+        ratingSlug: slugifyEmployerForRatings(companyName, country),
+      });
+      res.json(employer);
+    } catch (err) {
+      console.error("[DirectHire] employer register error:", err);
+      res.status(500).json({ message: "Failed to register employer" });
+    }
+  });
+
+  // Employer: my profile (+ listing count)
+  app.get("/api/direct-hire/employer/me", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub ?? req.user?.id;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+      const employer = await requireOwnedEmployer(userId);
+      if (!employer) return res.status(404).json({ message: "No employer profile yet" });
+      const listings = await storage.listOverseasJobListingsByEmployer(employer.id);
+      res.json({ ...employer, listingCount: listings.length });
+    } catch (err) {
+      console.error("[DirectHire] employer me error:", err);
+      res.status(500).json({ message: "Failed to load employer profile" });
+    }
+  });
+
+  // Employer: edit basic profile fields (verificationStatus is admin-only, never editable here)
+  app.patch("/api/direct-hire/employer/me", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub ?? req.user?.id;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+      const employer = await requireOwnedEmployer(userId);
+      if (!employer) return res.status(404).json({ message: "No employer profile yet" });
+
+      const { companyName, sector, website, contactEmail, contactPhone, description, verificationEvidenceUrl } = req.body ?? {};
+      const patch: Record<string, any> = {};
+      for (const [k, v] of Object.entries({ companyName, sector, website, contactEmail, contactPhone, description, verificationEvidenceUrl })) {
+        if (v !== undefined) patch[k] = v;
+      }
+      const updated = await storage.updateOverseasEmployer(employer.id, patch);
+      res.json(updated);
+    } catch (err) {
+      console.error("[DirectHire] employer patch error:", err);
+      res.status(500).json({ message: "Failed to update employer profile" });
+    }
+  });
+
+  // Employer: create a listing (goes to pending_review, not instantly live)
+  app.post("/api/direct-hire/employer/listings", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub ?? req.user?.id;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+      const employer = await requireOwnedEmployer(userId);
+      if (!employer) return res.status(404).json({ message: "Register an employer profile first" });
+      if (employer.verificationStatus === "rejected") {
+        return res.status(403).json({ message: "This employer profile was not approved. Contact support." });
+      }
+
+      const { title, country, city, category, employmentType, salaryMin, salaryMax, salaryCurrency, vacancies, requirements, responsibilities } = req.body ?? {};
+      if (!title || !country) return res.status(400).json({ message: "title and country are required" });
+
+      const listing = await storage.createOverseasJobListing({
+        employerId: employer.id, title, country, city, category, employmentType,
+        salaryMin, salaryMax, salaryCurrency, vacancies, requirements, responsibilities,
+      });
+      res.json(listing);
+    } catch (err) {
+      console.error("[DirectHire] create listing error:", err);
+      res.status(500).json({ message: "Failed to create listing" });
+    }
+  });
+
+  // Employer: my listings
+  app.get("/api/direct-hire/employer/listings", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub ?? req.user?.id;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+      const employer = await requireOwnedEmployer(userId);
+      if (!employer) return res.status(404).json({ message: "No employer profile yet" });
+      const listings = await storage.listOverseasJobListingsByEmployer(employer.id);
+      res.json(listings);
+    } catch (err) {
+      console.error("[DirectHire] list employer listings error:", err);
+      res.status(500).json({ message: "Failed to load listings" });
+    }
+  });
+
+  // Employer: edit / close a listing
+  app.patch("/api/direct-hire/employer/listings/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub ?? req.user?.id;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+      const employer = await requireOwnedEmployer(userId);
+      if (!employer) return res.status(404).json({ message: "No employer profile yet" });
+      const listing = await storage.getOverseasJobListingById(req.params.id);
+      if (!listing || listing.employerId !== employer.id) return res.status(404).json({ message: "Listing not found" });
+
+      const { title, city, category, employmentType, salaryMin, salaryMax, salaryCurrency, vacancies, requirements, responsibilities, status } = req.body ?? {};
+      const patch: Record<string, any> = {};
+      for (const [k, v] of Object.entries({ title, city, category, employmentType, salaryMin, salaryMax, salaryCurrency, vacancies, requirements, responsibilities })) {
+        if (v !== undefined) patch[k] = v;
+      }
+      // Employers can close their own listing, but can't self-approve to "live" —
+      // that stays an admin action so postings are moderated before they're public.
+      if (status === "closed" || status === "draft") patch.status = status;
+
+      const updated = await storage.updateOverseasJobListing(listing.id, patch);
+      res.json(updated);
+    } catch (err) {
+      console.error("[DirectHire] update listing error:", err);
+      res.status(500).json({ message: "Failed to update listing" });
+    }
+  });
+
+  // Employer: view applicants for one of my listings
+  app.get("/api/direct-hire/employer/listings/:id/applications", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub ?? req.user?.id;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+      const employer = await requireOwnedEmployer(userId);
+      if (!employer) return res.status(404).json({ message: "No employer profile yet" });
+      const listing = await storage.getOverseasJobListingById(req.params.id);
+      if (!listing || listing.employerId !== employer.id) return res.status(404).json({ message: "Listing not found" });
+
+      const applications = await storage.listOverseasJobApplicationsByListing(listing.id);
+      // Enrich with the applicant's Verified Migration Profile (Phase 2) share
+      // status, so the employer can see who has a shareable verified credential
+      // without exposing anything the worker hasn't chosen to make public.
+      const enriched = await Promise.all(applications.map(async (a) => {
+        const vp = await storage.getOrCreateVerifiedProfileSettings(a.applicantUserId).catch(() => null);
+        return {
+          ...a,
+          verifiedProfileUrl: vp?.isPublic ? `/verified/${vp.shareToken}` : null,
+        };
+      }));
+      res.json(enriched);
+    } catch (err) {
+      console.error("[DirectHire] list applications error:", err);
+      res.status(500).json({ message: "Failed to load applications" });
+    }
+  });
+
+  // Employer: move an applicant through the pipeline
+  app.patch("/api/direct-hire/employer/applications/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub ?? req.user?.id;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+      const employer = await requireOwnedEmployer(userId);
+      if (!employer) return res.status(404).json({ message: "No employer profile yet" });
+
+      const application = await storage.getOverseasJobApplicationById(req.params.id);
+      if (!application) return res.status(404).json({ message: "Application not found" });
+      const listing = await storage.getOverseasJobListingById(application.listingId);
+      if (!listing || listing.employerId !== employer.id) return res.status(404).json({ message: "Application not found" });
+
+      const allowed = ["shortlisted", "interview", "offered", "rejected", "withdrawn"];
+      const { status } = req.body ?? {};
+      if (!allowed.includes(status)) return res.status(400).json({ message: `status must be one of: ${allowed.join(", ")}` });
+
+      const updated = await storage.updateOverseasJobApplicationStatus(application.id, status);
+      res.json(updated);
+    } catch (err) {
+      console.error("[DirectHire] update application status error:", err);
+      res.status(500).json({ message: "Failed to update application" });
+    }
+  });
+
+  // ── Public browse ─────────────────────────────────────────────────────
+  app.get("/api/direct-hire/jobs", async (req, res) => {
+    try {
+      const { country, category } = req.query as { country?: string; category?: string };
+      const listings = await storage.listLiveOverseasJobListings({ country, category });
+      const employerIds = Array.from(new Set(listings.map((l) => l.employerId)));
+      const employers = await Promise.all(employerIds.map((id) => storage.getOverseasEmployerById(id)));
+      const employerById = new Map(employers.filter(Boolean).map((e) => [e!.id, e!]));
+      const enriched = listings.map((l) => {
+        const employer = employerById.get(l.employerId);
+        return {
+          ...l,
+          employerName: employer?.companyName ?? "Unknown employer",
+          employerCountry: employer?.country ?? l.country,
+          employerVerified: employer?.verificationStatus === "verified",
+          employerRatingSlug: employer?.ratingSlug ?? null,
+        };
+      });
+      res.json(enriched);
+    } catch (err) {
+      console.error("[DirectHire] browse jobs error:", err);
+      res.status(500).json({ message: "Failed to load jobs" });
+    }
+  });
+
+  app.get("/api/direct-hire/jobs/:id", async (req, res) => {
+    try {
+      const listing = await storage.getOverseasJobListingById(req.params.id);
+      if (!listing || listing.status !== "live") return res.status(404).json({ message: "Job not found" });
+      const employer = await storage.getOverseasEmployerById(listing.employerId);
+      res.json({
+        ...listing,
+        employer: employer ? {
+          id: employer.id,
+          companyName: employer.companyName,
+          country: employer.country,
+          sector: employer.sector,
+          website: employer.website,
+          description: employer.description,
+          verified: employer.verificationStatus === "verified",
+          ratingSlug: employer.ratingSlug,
+        } : null,
+      });
+    } catch (err) {
+      console.error("[DirectHire] job detail error:", err);
+      res.status(500).json({ message: "Failed to load job" });
+    }
+  });
+
+  // Worker: apply to a live listing
+  app.post("/api/direct-hire/jobs/:id/apply", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub ?? req.user?.id;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+      const listing = await storage.getOverseasJobListingById(req.params.id);
+      if (!listing || listing.status !== "live") return res.status(404).json({ message: "Job not found" });
+
+      const { coverNote } = req.body ?? {};
+      const application = await storage.createOverseasJobApplication(listing.id, userId, coverNote);
+      res.json(application);
+    } catch (err) {
+      console.error("[DirectHire] apply error:", err);
+      res.status(500).json({ message: "Failed to submit application" });
+    }
+  });
+
+  // Worker: my applications, enriched with listing + employer + confirmation status
+  app.get("/api/direct-hire/my-applications", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub ?? req.user?.id;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+      const applications = await storage.listOverseasJobApplicationsByApplicant(userId);
+      const enriched = await Promise.all(applications.map(async (a) => {
+        const listing = await storage.getOverseasJobListingById(a.listingId);
+        const employer = listing ? await storage.getOverseasEmployerById(listing.employerId) : null;
+        const confirmation = ["offered", "confirmed_start"].includes(a.status)
+          ? await storage.getPlacementConfirmationByApplication(a.id)
+          : null;
+        return {
+          ...a,
+          listingTitle: listing?.title ?? "Listing removed",
+          listingCountry: listing?.country ?? null,
+          employerName: employer?.companyName ?? null,
+          confirmation: confirmation ? {
+            status: confirmation.status,
+            employerConfirmed: !!confirmation.employerConfirmedAt,
+            workerConfirmed: !!confirmation.workerConfirmedAt,
+            startDate: confirmation.startDate,
+            workLocation: confirmation.workLocation,
+          } : null,
+        };
+      }));
+      res.json(enriched);
+    } catch (err) {
+      console.error("[DirectHire] my applications error:", err);
+      res.status(500).json({ message: "Failed to load your applications" });
+    }
+  });
+
+  // ── Confirmed-start (both sides must confirm independently) ─────────────
+  app.post("/api/direct-hire/employer/applications/:id/confirm-start", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub ?? req.user?.id;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+      const employer = await requireOwnedEmployer(userId);
+      if (!employer) return res.status(404).json({ message: "No employer profile yet" });
+      const application = await storage.getOverseasJobApplicationById(req.params.id);
+      if (!application) return res.status(404).json({ message: "Application not found" });
+      const listing = await storage.getOverseasJobListingById(application.listingId);
+      if (!listing || listing.employerId !== employer.id) return res.status(404).json({ message: "Application not found" });
+
+      const { startDate, workLocation } = req.body ?? {};
+      const confirmation = await storage.employerConfirmPlacement(application.id, userId, startDate, workLocation);
+      if (application.status !== "confirmed_start" && confirmation.status !== "confirmed") {
+        await storage.updateOverseasJobApplicationStatus(application.id, "offered");
+      }
+      res.json(confirmation);
+    } catch (err) {
+      console.error("[DirectHire] employer confirm-start error:", err);
+      res.status(500).json({ message: "Failed to confirm placement" });
+    }
+  });
+
+  app.post("/api/direct-hire/applications/:id/confirm-start", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub ?? req.user?.id;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+      const application = await storage.getOverseasJobApplicationById(req.params.id);
+      if (!application || application.applicantUserId !== userId) return res.status(404).json({ message: "Application not found" });
+
+      const confirmation = await storage.workerConfirmPlacement(application.id);
+      res.json(confirmation);
+    } catch (err) {
+      console.error("[DirectHire] worker confirm-start error:", err);
+      res.status(500).json({ message: "Failed to confirm placement" });
+    }
+  });
+
+  // ── Disputes ──────────────────────────────────────────────────────────
+  app.post("/api/direct-hire/applications/:id/dispute", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub ?? req.user?.id;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+      const application = await storage.getOverseasJobApplicationById(req.params.id);
+      if (!application) return res.status(404).json({ message: "Application not found" });
+      const listing = await storage.getOverseasJobListingById(application.listingId);
+      const employer = listing ? await storage.getOverseasEmployerById(listing.employerId) : null;
+
+      let role: "worker" | "employer" | null = null;
+      if (application.applicantUserId === userId) role = "worker";
+      else if (employer?.ownerUserId === userId) role = "employer";
+      if (!role) return res.status(403).json({ message: "You're not a party to this application" });
+
+      const { category, description, evidenceUrl } = req.body ?? {};
+      const allowedCategories = ["no_show", "pay_mismatch", "conditions_mismatch", "other"];
+      if (!allowedCategories.includes(category) || !description) {
+        return res.status(400).json({ message: `category must be one of: ${allowedCategories.join(", ")}, and description is required` });
+      }
+      const dispute = await storage.createPlacementDispute({
+        applicationId: application.id, raisedByUserId: userId, raisedByRole: role, category, description, evidenceUrl,
+      });
+      res.json(dispute);
+    } catch (err) {
+      console.error("[DirectHire] create dispute error:", err);
+      res.status(500).json({ message: "Failed to file dispute" });
+    }
+  });
+
+  // ── Admin ─────────────────────────────────────────────────────────────
+  app.get("/api/admin/direct-hire/employers/pending", isAuthenticated, isAdmin, async (_req, res) => {
+    try {
+      res.json(await storage.listPendingOverseasEmployers());
+    } catch (err) {
+      console.error("[DirectHire] admin pending employers error:", err);
+      res.status(500).json({ message: "Failed to load pending employers" });
+    }
+  });
+
+  app.post("/api/admin/direct-hire/employers/:id/verify", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const adminId = req.user?.claims?.sub ?? req.user?.id ?? "unknown";
+      const { status, note } = req.body ?? {};
+      if (!["verified", "rejected"].includes(status)) return res.status(400).json({ message: "status must be 'verified' or 'rejected'" });
+      const employer = await storage.verifyOverseasEmployer(req.params.id, status, note ?? null, adminId);
+      if (!employer) return res.status(404).json({ message: "Employer not found" });
+      res.json(employer);
+    } catch (err) {
+      console.error("[DirectHire] admin verify employer error:", err);
+      res.status(500).json({ message: "Failed to verify employer" });
+    }
+  });
+
+  app.get("/api/admin/direct-hire/listings/pending", isAuthenticated, isAdmin, async (_req, res) => {
+    try {
+      res.json(await storage.listPendingOverseasJobListings());
+    } catch (err) {
+      console.error("[DirectHire] admin pending listings error:", err);
+      res.status(500).json({ message: "Failed to load pending listings" });
+    }
+  });
+
+  app.patch("/api/admin/direct-hire/listings/:id", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const { status } = req.body ?? {};
+      const allowed = ["live", "closed", "rejected", "pending_review"];
+      if (!allowed.includes(status)) return res.status(400).json({ message: `status must be one of: ${allowed.join(", ")}` });
+      const listing = await storage.updateOverseasJobListing(req.params.id, { status });
+      if (!listing) return res.status(404).json({ message: "Listing not found" });
+      res.json(listing);
+    } catch (err) {
+      console.error("[DirectHire] admin update listing error:", err);
+      res.status(500).json({ message: "Failed to update listing" });
+    }
+  });
+
+  app.get("/api/admin/direct-hire/disputes", isAuthenticated, isAdmin, async (_req, res) => {
+    try {
+      res.json(await storage.listOpenPlacementDisputes());
+    } catch (err) {
+      console.error("[DirectHire] admin disputes error:", err);
+      res.status(500).json({ message: "Failed to load disputes" });
+    }
+  });
+
+  app.post("/api/admin/direct-hire/disputes/:id/resolve", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const adminId = req.user?.claims?.sub ?? req.user?.id ?? "unknown";
+      const { status, resolutionNote } = req.body ?? {};
+      if (!["resolved", "dismissed"].includes(status)) return res.status(400).json({ message: "status must be 'resolved' or 'dismissed'" });
+      const dispute = await storage.resolvePlacementDispute(req.params.id, status, resolutionNote ?? null, adminId);
+      if (!dispute) return res.status(404).json({ message: "Dispute not found" });
+      res.json(dispute);
+    } catch (err) {
+      console.error("[DirectHire] admin resolve dispute error:", err);
+      res.status(500).json({ message: "Failed to resolve dispute" });
+    }
+  });
+
   // POST /api/agencies/bulk-verify — look up multiple license numbers in one shot
   app.post("/api/agencies/bulk-verify", async (req: any, res) => {
     try {

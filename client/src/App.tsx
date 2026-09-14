@@ -131,6 +131,14 @@ const EmployersDirectory = lazyWithRetry(() => import("@/pages/employers"));
 const EmployerProfile = lazyWithRetry(() => import("@/pages/employer-profile"));
 const MyVerifiedProfile = lazyWithRetry(() => import("@/pages/my-verified-profile"));
 const VerifiedProfilePublic = lazyWithRetry(() => import("@/pages/verified-profile"));
+// Direct Hire Exchange — Phase 3: Success-Fee Marketplace (fee collection NOT implemented)
+const DirectHireJobsIndex = lazyWithRetry(() => import("@/pages/direct-hire/index"));
+const DirectHireJobDetail = lazyWithRetry(() => import("@/pages/direct-hire/detail"));
+const DirectHireMyApplications = lazyWithRetry(() => import("@/pages/direct-hire/my-applications"));
+const DirectHireEmployerRegister = lazyWithRetry(() => import("@/pages/direct-hire/employer-register"));
+const DirectHireEmployerDashboard = lazyWithRetry(() => import("@/pages/direct-hire/employer-dashboard"));
+const DirectHireEmployerListing = lazyWithRetry(() => import("@/pages/direct-hire/employer-listing"));
+const DirectHireAdmin = lazyWithRetry(() => import("@/pages/admin/direct-hire"));
 const GreenCard = lazyWithRetry(() => import("@/pages/green-card"));
 const VisaGuides = lazyWithRetry(() => import("@/pages/visa-guides"));
 // 2026-08 RESTORED (Tony's directive): visit/tourist visa page brought back.
@@ -492,6 +500,13 @@ const LazyEmployersDirectory = withSuspense(EmployersDirectory);
 const LazyEmployerProfile = withSuspense(EmployerProfile);
 const LazyMyVerifiedProfile = withSuspense(MyVerifiedProfile);
 const LazyVerifiedProfilePublic = withSuspense(VerifiedProfilePublic);
+const LazyDirectHireJobsIndex = withSuspense(DirectHireJobsIndex);
+const LazyDirectHireJobDetail = withSuspense(DirectHireJobDetail);
+const LazyDirectHireMyApplications = withSuspense(DirectHireMyApplications);
+const LazyDirectHireEmployerRegister = withSuspense(DirectHireEmployerRegister);
+const LazyDirectHireEmployerDashboard = withSuspense(DirectHireEmployerDashboard);
+const LazyDirectHireEmployerListing = withSuspense(DirectHireEmployerListing);
+const LazyDirectHireAdmin = withSuspense(DirectHireAdmin);
 const LazyGreenCard = withSuspense(GreenCard);
 const LazyVisaGuides = withSuspense(VisaGuides);
 const LazyVisitVisas = withSuspense(VisitVisas);
@@ -637,6 +652,15 @@ function AuthenticatedRoutes() {
       {/* Verified Migration Profile — Phase 2 of the "Direct Hire Exchange" */}
       <Route path="/my-profile" component={LazyMyVerifiedProfile} />
       <Route path="/verified/:token" component={LazyVerifiedProfilePublic} />
+      {/* Direct Hire Exchange — Phase 3: Success-Fee Marketplace (fee collection NOT implemented) */}
+      {/* Order matters: specific paths before the employer :id-bearing routes */}
+      <Route path="/direct-hire/employer/register" component={LazyDirectHireEmployerRegister} />
+      <Route path="/direct-hire/employer/dashboard" component={LazyDirectHireEmployerDashboard} />
+      <Route path="/direct-hire/employer/listings/:id" component={LazyDirectHireEmployerListing} />
+      <Route path="/direct-hire/my-applications" component={LazyDirectHireMyApplications} />
+      <Route path="/direct-hire/jobs/:id" component={LazyDirectHireJobDetail} />
+      <Route path="/direct-hire/jobs" component={LazyDirectHireJobsIndex} />
+      <Route path="/admin/direct-hire" component={LazyDirectHireAdmin} />
       {/* Scout Jobs — order matters: /post must be before /:id */}
       <Route path="/scout-jobs/post" component={LazyScoutJobPost} />
       <Route path="/scout-jobs/:id" component={LazyScoutJobDetail} />
@@ -921,6 +945,9 @@ function Router() {
         <Route path="/employers/:employerId" component={LazyEmployerProfile} />
         {/* Verified Migration Profile — public share page works signed-out too */}
         <Route path="/verified/:token" component={LazyVerifiedProfilePublic} />
+        {/* Direct Hire Exchange — Phase 3: browsing/viewing listings is public; applying needs auth (handled in-page) */}
+        <Route path="/direct-hire/jobs/:id" component={LazyDirectHireJobDetail} />
+        <Route path="/direct-hire/jobs" component={LazyDirectHireJobsIndex} />
         {/* Scout Jobs — public list + detail. /post gate is server-side (auth required). */}
         <Route path="/scout-jobs/post" component={LazyScoutJobPost} />
         <Route path="/scout-jobs/:id" component={LazyScoutJobDetail} />
@@ -1061,6 +1088,11 @@ function Router() {
         <Route path="/ielts-prep" component={ProtectedRedirect} />
         <Route path="/profile" component={ProtectedRedirect} />
         <Route path="/my-profile" component={ProtectedRedirect} />
+        <Route path="/direct-hire/my-applications" component={ProtectedRedirect} />
+        <Route path="/direct-hire/employer/register" component={ProtectedRedirect} />
+        <Route path="/direct-hire/employer/dashboard" component={ProtectedRedirect} />
+        <Route path="/direct-hire/employer/listings/:id" component={ProtectedRedirect} />
+        <Route path="/admin/direct-hire" component={ProtectedRedirect} />
         <Route path="/autoapply" component={ProtectedRedirect} />
         <Route path="/referrals" component={ProtectedRedirect} />
         <Route path="/career-match" component={ProtectedRedirect} />
