@@ -11,6 +11,8 @@ import { openai } from "./lib/openai";
 import { extractTextFromBuffer, MIN_CV_LENGTH } from "./utils/extract-text";
 import { classifyDocument, checkDocumentType } from "./tools/document-classifier";
 import { reportRejection } from "./lib/sentry";
+import { pool } from "./db";
+import { randomUUID } from "crypto";
 
 // ── Multer config (memory storage, 5 MB limit, PDF/DOCX only) ─────────────────
 const upload = multer({
@@ -388,55 +390,7 @@ export function registerToolsRoutes(
           }
         }
 
-        // ── Determine if user is logged in for full results gating ────────────
-        const isLoggedIn = !!req.user?.id;
-
-        // 2026-08 v3.0 (Tony's ATS Career Intelligence Engine spec): replaced
-        // the earlier 12-line recruiter prompt with a comprehensive 20-phase
-        // analysis emitting an 18-section report. Uses gpt-4o (not mini) for
-        // depth. Response shape is backward-compatible — top-level fields
-        // stay identical so the existing UI keeps working; new deep analysis
-        // lives under `report.*` and is rendered progressively as UI ships.
-        const { ATS_ANALYSIS_ENGINE } = await import("./lib/ats-analysis-engine");
-
-        let aiMessages: any[];
-        let modelToUse = "gpt-4o";
-
-        if (cvText.trim().length >= MIN_CV_LENGTH) {
-          // ── Happy path: extracted readable text ───────────────────────────
-          // 2026-08: raised truncation cap 4000 → 12000 chars. Long / technical
-          // CVs (e.g. David Gathoni's 5081-char plumbing CV) used to lose
-          // content mid-analysis. 12k covers ~99th percentile of real CVs.
-          const truncated = cvText.slice(0, 12_000);
-
-          // ── 2026-08 Phase 2 optional inputs — Job Match + Country Readiness ─
-          // Accept two optional form fields from the client:
-          //   jobDescription: pastes a full JD → engine returns rich report.jobMatch
-          //   targetCountry:  ISO name (e.g. "Canada") → engine returns report.countryReadiness
-          // Both are OPTIONAL — falls back to the existing general-scan behaviour.
-          const jobDescription = String((req.body as any)?.jobDescription ?? "")
-            .trim()
-            .slice(0, 8000);   // JDs longer than 8k chars are outliers; truncate
-          const targetCountry = String((req.body as any)?.targetCountry ?? "")
-            .trim()
-            .slice(0, 40) || null;
-
-          let userPromptParts = [`Analyse the following CV. Emit the full JSON report per the schema.`];
-          if (targetCountry) {
-            userPromptParts.push(`\nTARGET COUNTRY: ${targetCountry}\n(Populate report.countryReadiness with a real readinessScore and country-specific improvements. Country conventions live in your systemPrompt.)`);
-          }
-          if (jobDescription.length >= 40) {
-            userPromptParts.push(`\nJOB DESCRIPTION (compare CV against this):\n${jobDescription}\n(Populate report.jobMatch — set to null only if the pasted text is not actually a job description.)`);
-          } else {
-            userPromptParts.push(`\n(No job description provided — set report.jobMatch to null.)`);
-          }
-          userPromptParts.push(`\nCV TEXT:\n\n${truncated}`);
-
-          aiMessages = [
-            { role: "system", content: ATS_ANALYSIS_ENGINE },
-            { role: "user",   content: userPromptParts.join("\n") },
-          ];
-        } else {
+        if (cvText.trim().length < MIN_CV_LENGTH) {
           // ── All local extraction methods exhausted ───────────────────────
           // The base64-file GPT-4o path is not supported by all AI proxies and
           // causes "Internal Server Error" responses — use a clear 422 instead.
@@ -448,143 +402,298 @@ export function registerToolsRoutes(
           });
         }
 
-        // Force JSON output on the text path so we never have to strip markdown fences.
-        // 2026-08: raised max_tokens 800 → 6000 to fit the 18-section report.
-        const completionOptions: any = {
-          model: modelToUse,
-          messages: aiMessages,
-          temperature: 0.3,
-          max_tokens: 6000,
-          response_format: { type: "json_object" },
-        };
-
-        // 2026-09: 45s hard timeout on the OpenAI call so a stalled upstream
-        // becomes a clear "AI service slow" error rather than the Render
-        // 502 that the client sees as a mystery "ATS check failed".
-        const completion = await openai.chat.completions.create(completionOptions, {
-          timeout: 45_000,
-        } as any);
-
-        let aiResult: any = {};
-        try {
-          const raw = completion.choices[0]?.message?.content ?? "{}";
-
-          // Strip markdown code fences (GPT often adds these despite "return ONLY JSON")
-          const cleaned = raw
-            .replace(/^```(?:json)?\s*/im, "")
-            .replace(/\s*```\s*$/m, "")
-            .trim();
-
-          // Try direct parse first; if that fails, hunt for the first {...} block
-          try {
-            aiResult = JSON.parse(cleaned);
-          } catch {
-            const jsonBlock = cleaned.match(/\{[\s\S]*\}/);
-            if (jsonBlock) {
-              aiResult = JSON.parse(jsonBlock[0]);
-            } else {
-              throw new Error("No JSON object found in response");
-            }
-          }
-
-          // Validate the score is a sensible integer 0-100
-          if (typeof aiResult.score !== "number") {
-            aiResult.score = parseInt(String(aiResult.score ?? "0"), 10) || 0;
-          }
-          aiResult.score = Math.max(0, Math.min(100, aiResult.score));
-          if (!aiResult.grade) aiResult.grade = "Average";
-
-          console.log(`[ATS] GPT result: score=${aiResult.score} grade=${aiResult.grade} model=${modelToUse}`);
-        } catch (parseErr) {
-          console.error("[ATS] JSON parse failed:", parseErr, "| raw:", completion.choices[0]?.message?.content?.slice(0, 300));
-          aiResult = {
-            score: 0,
-            grade: "Average",
-            strengths: [],
-            weaknesses: ["Could not fully parse your CV — please ensure it is not scanned/image-based"],
-            missingKeywords: [],
-            suggestions: ["Upload a text-based PDF or DOCX for best results"],
-            summary: "CV parsing encountered issues.",
-            report: null,  // 2026-08 v3.0: no deep report available when parse failed
-          };
-        }
-
-        // ── Delivered-CV guarantee ─────────────────────────────────────────
-        // If THIS exact CV (or a structurally identical one) was previously
-        // delivered to a user via a paid CV service, the score we promised
-        // them is binding. Honour it now — overrides the raw AI score so
-        // we never tell a customer "the CV we sold you is still bad".
-        // Lookup is content-only so it works for any user, even logged-out.
-        let deliveryMatch: { deliveredScore: number; deliveredAt: Date; serviceSlug: string; matchType: "exact"|"structural" } | null = null;
-        try {
-          const { lookupDeliveredCv } = await import("../lib/cv-fingerprint");
-          deliveryMatch = await lookupDeliveredCv(cvText);
-        } catch (e: any) {
-          console.warn("[ATS] Delivered-CV lookup failed:", e?.message);
-        }
-        if (deliveryMatch && aiResult.score < deliveryMatch.deliveredScore) {
-          console.log(`[ATS] Honouring delivered-CV guarantee: AI=${aiResult.score} → ${deliveryMatch.deliveredScore} (${deliveryMatch.serviceSlug}, ${deliveryMatch.matchType})`);
-          aiResult.score = deliveryMatch.deliveredScore;
-          if (aiResult.score >= 90) aiResult.grade = "Excellent";
-          else if (aiResult.score >= 80) aiResult.grade = "Good";
-        }
-
-        // Gate: unauthenticated users get score + summary only
-        if (!isLoggedIn) {
-          return res.json({
-            score: aiResult.score ?? 0,
-            grade: aiResult.grade ?? "N/A",
-            summary: aiResult.summary ?? "",
-            locked: true,
-            message: "Sign in to see your full ATS report including strengths, weaknesses, missing keywords, and suggestions.",
-            ...(deliveryMatch ? { deliveredCv: { score: deliveryMatch.deliveredScore, at: deliveryMatch.deliveredAt, slug: deliveryMatch.serviceSlug } } : {}),
-          });
-        }
-
-        // Gate: free-plan users get score + summary + grade only; paid tiers get full report.
-        // 2026-06: was strict (basic | pro) check, denying trial/monthly/yearly/pro_referral.
-        // Now uses the unified PAID_TIERS allowlist matching server/visa-jobs-routes.ts.
+        // ── Determine if user is logged in for full results gating ────────────
+        const isLoggedIn = !!req.user?.id;
         const userId = req.user?.claims?.sub ?? req.user?.id;
-        const atsPlanId = userId ? (await storage.getUserPlan(userId) || "free").toLowerCase() : "free";
-        const ATS_PAID_TIERS = new Set(["trial", "basic", "monthly", "yearly", "pro", "pro_referral"]);
-        const atsIsPaid = ATS_PAID_TIERS.has(atsPlanId);
 
-        // Persist parsed CV text to career profile (fire-and-forget) so every
-        // subsequent application generation has access to the user's real CV content.
-        // Only save when we have clean extracted text — not for the base64 GPT path.
-        //
-        // 2026-09 (Tony: "Nanjila says 68%, the CV checker says 45%"): also save
-        // the score/grade here. This is now the ONE place a numeric ATS score is
-        // written — Nanjila's chat prompt reads it back instead of guessing her
-        // own number, so the two surfaces can never disagree again.
-        if (userId && cvText.trim().length >= MIN_CV_LENGTH) {
-          storage.upsertUserCareerProfile(userId, {
-            parsedCvText: cvText.slice(0, 12_000), // cap at ~12k chars — ample for any CV
-            cvLastParsed: new Date(),
-            atsScore: aiResult.score ?? null,
-            atsGrade: aiResult.grade ?? null,
-            atsScoredAt: new Date(),
-          } as any).catch((err: any) => {
-            console.warn("[ATS] Failed to save parsed CV text:", err?.message);
-          });
+        // 2026-09 (Tony: "CV checker has an issue — make sure any CV, they
+        // can see their score"): the gpt-4o analysis below routinely takes
+        // 20-35s for the full 20-phase/18-section report. Render's edge
+        // proxy kills any request around ~30s regardless of what our own
+        // OpenAI SDK timeout is set to — production logs showed roughly
+        // 60% of real checks dying to a mystery 502 because of this, and
+        // rising. Fix (this is Render's own recommended pattern for exactly
+        // this situation): respond immediately with a job id, run the slow
+        // analysis in the background, and let the client poll
+        // /api/tools/ats-check/status/:jobId for the result instead of
+        // holding one long request open.
+        const jobId = randomUUID();
+        await pool.query(
+          `INSERT INTO ats_check_jobs (id, user_id, status) VALUES ($1, $2, 'processing')`,
+          [jobId, userId ?? null],
+        );
+        // Best-effort housekeeping — never blocks the response.
+        pool.query(`DELETE FROM ats_check_jobs WHERE created_at < NOW() - INTERVAL '24 hours'`).catch(() => {});
+
+        res.status(202).json({ jobId, status: "processing" });
+
+        // Everything below runs AFTER the response has already been sent.
+        // It writes its outcome to ats_check_jobs instead of to `res`.
+        runAtsAnalysis({ jobId, cvText, userId, isLoggedIn, req }).catch((err: any) => {
+          const { message } = categorizeAtsError(err);
+          pool.query(
+            `UPDATE ats_check_jobs SET status = 'error', error_message = $2, updated_at = NOW() WHERE id = $1`,
+            [jobId, message],
+          ).catch(() => {});
+        });
+      } catch (err: any) {
+        const { status, message } = categorizeAtsError(err);
+        res.status(status).json({
+          message,
+          diag: `err:${err?.name ?? "unknown"}${err?.status ? `/${err.status}` : ""}`,
+        });
+      }
+    }
+  );
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // GET /api/tools/ats-check/status/:jobId
+  //
+  // 2026-09: the client polls this instead of holding the original POST
+  // open — see the long comment above the POST handler for why.
+  // ════════════════════════════════════════════════════════════════════════════
+  app.get("/api/tools/ats-check/status/:jobId", async (req: any, res: Response) => {
+    try {
+      const { jobId } = req.params;
+      const { rows } = await pool.query(
+        `SELECT status, result, error_message FROM ats_check_jobs WHERE id = $1`,
+        [jobId],
+      );
+      const job = rows[0];
+      if (!job) {
+        return res.status(404).json({ status: "error", message: "We couldn't find that check — please upload your CV again." });
+      }
+      if (job.status === "processing") {
+        return res.json({ status: "processing" });
+      }
+      if (job.status === "error") {
+        return res.json({ status: "error", message: job.error_message ?? "ATS check failed. Please try again." });
+      }
+      // status === "done" — result already carries the exact shape the
+      // client expects (score/grade/locked/report/etc.), same as the old
+      // synchronous 200 response used to.
+      return res.json({ status: "done", ...(job.result ?? {}) });
+    } catch (err: any) {
+      console.error("[ATS Check status] error:", err?.message);
+      res.status(500).json({ status: "error", message: "Could not check your result right now. Please try again." });
+    }
+  });
+
+  // 2026-08 (Tony's "free tools broken" report): categorise an ATS-check
+  // failure so users see a useful message instead of a generic "please try
+  // again" when the real problem is our OpenAI key/billing/timeout. Shared
+  // between the synchronous fast-path errors above and the background
+  // analysis below so both surfaces stay consistent.
+  function categorizeAtsError(err: any): { status: number; message: string } {
+    const status = err?.status ?? err?.response?.status;
+    const code = err?.code ?? err?.error?.code;
+    const name = err?.name;
+    console.error(`[ATS Check] status=${status} code=${code} name=${name} msg=${err?.message}`, err?.stack?.split("\n").slice(0, 4).join(" | "));
+    if (status === 401 || status === 403) {
+      return { status: 503, message: "Our AI service is temporarily offline. Our team has been alerted — please try again in a few minutes." };
+    }
+    if (status === 429) {
+      return { status: 503, message: "Our AI service is at capacity right now. Please wait a minute and try again." };
+    }
+    if (name === "APIConnectionTimeoutError" || code === "ETIMEDOUT" || /timeout/i.test(err?.message ?? "")) {
+      return { status: 504, message: "Analysis is taking longer than usual — the AI service is slow right now. Please try again in a moment." };
+    }
+    if (/pdf-parse|extract|OCR|tesseract/i.test(err?.message ?? "")) {
+      return { status: 422, message: "We couldn't read the text inside your CV. Please try a Word (.docx) file, or ensure the PDF is text-based (not a scanned image)." };
+    }
+    return { status: 500, message: "ATS check failed. Please try again." };
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // Runs the actual gpt-4o analysis in the background (see the POST handler
+  // above) and writes the outcome to ats_check_jobs. This is the exact same
+  // logic that used to run inline inside the request — only the "where does
+  // the result go" part changed (pool.query instead of res.json).
+  // ════════════════════════════════════════════════════════════════════════════
+  async function runAtsAnalysis({ jobId, cvText, userId, isLoggedIn, req }: {
+    jobId: string;
+    cvText: string;
+    userId: string | undefined;
+    isLoggedIn: boolean;
+    req: any;
+  }): Promise<void> {
+    // 2026-08 v3.0 (Tony's ATS Career Intelligence Engine spec): replaced
+    // the earlier 12-line recruiter prompt with a comprehensive 20-phase
+    // analysis emitting an 18-section report. Uses gpt-4o (not mini) for
+    // depth. Response shape is backward-compatible — top-level fields
+    // stay identical so the existing UI keeps working; new deep analysis
+    // lives under `report.*` and is rendered progressively as UI ships.
+    const { ATS_ANALYSIS_ENGINE } = await import("./lib/ats-analysis-engine");
+
+    // 2026-08: raised truncation cap 4000 → 12000 chars. Long / technical
+    // CVs (e.g. David Gathoni's 5081-char plumbing CV) used to lose
+    // content mid-analysis. 12k covers ~99th percentile of real CVs.
+    const truncated = cvText.slice(0, 12_000);
+
+    // ── 2026-08 Phase 2 optional inputs — Job Match + Country Readiness ─
+    // Accept two optional form fields from the client:
+    //   jobDescription: pastes a full JD → engine returns rich report.jobMatch
+    //   targetCountry:  ISO name (e.g. "Canada") → engine returns report.countryReadiness
+    // Both are OPTIONAL — falls back to the existing general-scan behaviour.
+    const jobDescription = String((req.body as any)?.jobDescription ?? "")
+      .trim()
+      .slice(0, 8000);   // JDs longer than 8k chars are outliers; truncate
+    const targetCountry = String((req.body as any)?.targetCountry ?? "")
+      .trim()
+      .slice(0, 40) || null;
+
+    let userPromptParts = [`Analyse the following CV. Emit the full JSON report per the schema.`];
+    if (targetCountry) {
+      userPromptParts.push(`\nTARGET COUNTRY: ${targetCountry}\n(Populate report.countryReadiness with a real readinessScore and country-specific improvements. Country conventions live in your systemPrompt.)`);
+    }
+    if (jobDescription.length >= 40) {
+      userPromptParts.push(`\nJOB DESCRIPTION (compare CV against this):\n${jobDescription}\n(Populate report.jobMatch — set to null only if the pasted text is not actually a job description.)`);
+    } else {
+      userPromptParts.push(`\n(No job description provided — set report.jobMatch to null.)`);
+    }
+    userPromptParts.push(`\nCV TEXT:\n\n${truncated}`);
+
+    const aiMessages = [
+      { role: "system", content: ATS_ANALYSIS_ENGINE },
+      { role: "user",   content: userPromptParts.join("\n") },
+    ];
+
+    // Force JSON output on the text path so we never have to strip markdown fences.
+    // 2026-08: raised max_tokens 800 → 6000 to fit the 18-section report.
+    const completionOptions: any = {
+      model: "gpt-4o",
+      messages: aiMessages,
+      temperature: 0.3,
+      max_tokens: 6000,
+      response_format: { type: "json_object" },
+    };
+
+    // 2026-09: now running in the background instead of inline in the HTTP
+    // request, so this no longer has to race Render's ~30s proxy timeout.
+    // 90s is a generous ceiling for a genuinely stalled upstream.
+    const completion = await openai.chat.completions.create(completionOptions, {
+      timeout: 90_000,
+    } as any);
+
+    let aiResult: any = {};
+    try {
+      const raw = completion.choices[0]?.message?.content ?? "{}";
+
+      // Strip markdown code fences (GPT often adds these despite "return ONLY JSON")
+      const cleaned = raw
+        .replace(/^```(?:json)?\s*/im, "")
+        .replace(/\s*```\s*$/m, "")
+        .trim();
+
+      // Try direct parse first; if that fails, hunt for the first {...} block
+      try {
+        aiResult = JSON.parse(cleaned);
+      } catch {
+        const jsonBlock = cleaned.match(/\{[\s\S]*\}/);
+        if (jsonBlock) {
+          aiResult = JSON.parse(jsonBlock[0]);
+        } else {
+          throw new Error("No JSON object found in response");
         }
+      }
 
-        if (!atsIsPaid) {
-          return res.json({
-            score: aiResult.score ?? 0,
-            grade: aiResult.grade ?? "N/A",
-            summary: aiResult.summary ?? "",
-            strengths: [],
-            weaknesses: [],
-            missingKeywords: [],
-            suggestions: [],
-            locked: true,
-            planGated: true,
-            message: "Upgrade to Basic or Pro to unlock your full ATS report — strengths, weaknesses, missing keywords, and actionable suggestions.",
-            ...(deliveryMatch ? { deliveredCv: { score: deliveryMatch.deliveredScore, at: deliveryMatch.deliveredAt, slug: deliveryMatch.serviceSlug } } : {}),
-          });
-        }
+      // Validate the score is a sensible integer 0-100
+      if (typeof aiResult.score !== "number") {
+        aiResult.score = parseInt(String(aiResult.score ?? "0"), 10) || 0;
+      }
+      aiResult.score = Math.max(0, Math.min(100, aiResult.score));
+      if (!aiResult.grade) aiResult.grade = "Average";
 
+      console.log(`[ATS] GPT result: score=${aiResult.score} grade=${aiResult.grade} model=gpt-4o`);
+    } catch (parseErr) {
+      console.error("[ATS] JSON parse failed:", parseErr, "| raw:", completion.choices[0]?.message?.content?.slice(0, 300));
+      aiResult = {
+        score: 0,
+        grade: "Average",
+        strengths: [],
+        weaknesses: ["Could not fully parse your CV — please ensure it is not scanned/image-based"],
+        missingKeywords: [],
+        suggestions: ["Upload a text-based PDF or DOCX for best results"],
+        summary: "CV parsing encountered issues.",
+        report: null,  // 2026-08 v3.0: no deep report available when parse failed
+      };
+    }
+
+    // ── Delivered-CV guarantee ─────────────────────────────────────────
+    // If THIS exact CV (or a structurally identical one) was previously
+    // delivered to a user via a paid CV service, the score we promised
+    // them is binding. Honour it now — overrides the raw AI score so
+    // we never tell a customer "the CV we sold you is still bad".
+    // Lookup is content-only so it works for any user, even logged-out.
+    let deliveryMatch: { deliveredScore: number; deliveredAt: Date; serviceSlug: string; matchType: "exact"|"structural" } | null = null;
+    try {
+      const { lookupDeliveredCv } = await import("./lib/cv-fingerprint");
+      deliveryMatch = await lookupDeliveredCv(cvText);
+    } catch (e: any) {
+      console.warn("[ATS] Delivered-CV lookup failed:", e?.message);
+    }
+    if (deliveryMatch && aiResult.score < deliveryMatch.deliveredScore) {
+      console.log(`[ATS] Honouring delivered-CV guarantee: AI=${aiResult.score} → ${deliveryMatch.deliveredScore} (${deliveryMatch.serviceSlug}, ${deliveryMatch.matchType})`);
+      aiResult.score = deliveryMatch.deliveredScore;
+      if (aiResult.score >= 90) aiResult.grade = "Excellent";
+      else if (aiResult.score >= 80) aiResult.grade = "Good";
+    }
+
+    let finalResult: any;
+
+    // Gate: unauthenticated users get score + summary only
+    if (!isLoggedIn) {
+      finalResult = {
+        score: aiResult.score ?? 0,
+        grade: aiResult.grade ?? "N/A",
+        summary: aiResult.summary ?? "",
+        locked: true,
+        message: "Sign in to see your full ATS report including strengths, weaknesses, missing keywords, and suggestions.",
+        ...(deliveryMatch ? { deliveredCv: { score: deliveryMatch.deliveredScore, at: deliveryMatch.deliveredAt, slug: deliveryMatch.serviceSlug } } : {}),
+      };
+    } else {
+      // Gate: free-plan users get score + summary + grade only; paid tiers get full report.
+      // 2026-06: was strict (basic | pro) check, denying trial/monthly/yearly/pro_referral.
+      // Now uses the unified PAID_TIERS allowlist matching server/visa-jobs-routes.ts.
+      const atsPlanId = userId ? (await storage.getUserPlan(userId) || "free").toLowerCase() : "free";
+      const ATS_PAID_TIERS = new Set(["trial", "basic", "monthly", "yearly", "pro", "pro_referral"]);
+      const atsIsPaid = ATS_PAID_TIERS.has(atsPlanId);
+
+      // Persist parsed CV text to career profile (fire-and-forget) so every
+      // subsequent application generation has access to the user's real CV content.
+      // Only save when we have clean extracted text — not for the base64 GPT path.
+      //
+      // 2026-09 (Tony: "Nanjila says 68%, the CV checker says 45%"): also save
+      // the score/grade here. This is now the ONE place a numeric ATS score is
+      // written — Nanjila's chat prompt reads it back instead of guessing her
+      // own number, so the two surfaces can never disagree again.
+      if (userId && cvText.trim().length >= MIN_CV_LENGTH) {
+        storage.upsertUserCareerProfile(userId, {
+          parsedCvText: cvText.slice(0, 12_000), // cap at ~12k chars — ample for any CV
+          cvLastParsed: new Date(),
+          atsScore: aiResult.score ?? null,
+          atsGrade: aiResult.grade ?? null,
+          atsScoredAt: new Date(),
+        } as any).catch((err: any) => {
+          console.warn("[ATS] Failed to save parsed CV text:", err?.message);
+        });
+      }
+
+      if (!atsIsPaid) {
+        finalResult = {
+          score: aiResult.score ?? 0,
+          grade: aiResult.grade ?? "N/A",
+          summary: aiResult.summary ?? "",
+          strengths: [],
+          weaknesses: [],
+          missingKeywords: [],
+          suggestions: [],
+          locked: true,
+          planGated: true,
+          message: "Upgrade to Basic or Pro to unlock your full ATS report — strengths, weaknesses, missing keywords, and actionable suggestions.",
+          ...(deliveryMatch ? { deliveredCv: { score: deliveryMatch.deliveredScore, at: deliveryMatch.deliveredAt, slug: deliveryMatch.serviceSlug } } : {}),
+        };
+      } else {
         // Trigger CV email drip + funnel tracking for logged-in paid users (fire-and-forget)
         try {
           const webUser = await storage.getUserById(userId!);
@@ -609,51 +718,19 @@ export function registerToolsRoutes(
           }).catch((err) => reportRejection(err, 'tools-routes'));
         } catch { /* non-critical */ }
 
-        return res.json({
+        finalResult = {
           ...aiResult,
           locked: false,
           ...(deliveryMatch ? { deliveredCv: { score: deliveryMatch.deliveredScore, at: deliveryMatch.deliveredAt, slug: deliveryMatch.serviceSlug } } : {}),
-        });
-      } catch (err: any) {
-        // 2026-08 (Tony's "free tools broken" report): categorise the failure
-        // so users see a useful message instead of a generic "please try again"
-        // when the real problem is our OpenAI key/billing.
-        const status = err?.status ?? err?.response?.status;
-        const code = err?.code ?? err?.error?.code;
-        const name = err?.name;
-        console.error(`[ATS Check] status=${status} code=${code} name=${name} msg=${err?.message}`, err?.stack?.split("\n").slice(0, 4).join(" | "));
-        if (status === 401 || status === 403) {
-          return res.status(503).json({
-            message: "Our AI service is temporarily offline. Our team has been alerted — please try again in a few minutes.",
-          });
-        }
-        if (status === 429) {
-          return res.status(503).json({
-            message: "Our AI service is at capacity right now. Please wait a minute and try again.",
-          });
-        }
-        // 2026-09 (Tony's screenshot: real user hit the generic "please try
-        // again" toast). Surface WHICH stage failed so the client can show
-        // something actionable rather than a dead-end.
-        if (name === "APIConnectionTimeoutError" || code === "ETIMEDOUT" || /timeout/i.test(err?.message ?? "")) {
-          return res.status(504).json({
-            message: "Analysis is taking longer than usual — the AI service is slow right now. Please try again in a moment.",
-          });
-        }
-        if (/pdf-parse|extract|OCR|tesseract/i.test(err?.message ?? "")) {
-          return res.status(422).json({
-            message: "We couldn't read the text inside your CV. Please try a Word (.docx) file, or ensure the PDF is text-based (not a scanned image).",
-          });
-        }
-        res.status(500).json({
-          message: "ATS check failed. Please try again.",
-          // 2026-09: include a short diagnostic tag so admins can grep logs
-          // without users seeing the raw stack.
-          diag: `err:${name ?? "unknown"}${status ? `/${status}` : ""}${code ? `/${code}` : ""}`,
-        });
+        };
       }
     }
-  );
+
+    await pool.query(
+      `UPDATE ats_check_jobs SET status = 'done', result = $2, updated_at = NOW() WHERE id = $1`,
+      [jobId, JSON.stringify(finalResult)],
+    );
+  }
 
   // ════════════════════════════════════════════════════════════════════════════
   // UTIL: Extract plain text from an uploaded CV file

@@ -85,11 +85,40 @@ export default function UploadCVPage() {
         credentials: "include",
         headers: { "X-CSRF-Token": csrf },
       });
-      if (!res.ok) {
-        const err = await res.json();
+
+      // 2026-09: the server now kicks off the (slow, 20-35s) analysis in
+      // the background and responds 202 immediately with a job id instead
+      // of holding the request open — holding it open is what was getting
+      // most real checks killed by Render's ~30s proxy timeout before the
+      // user ever saw a result. See server/tools-routes.ts.
+      if (res.status !== 202) {
+        const err = await res.json().catch(() => ({}));
         throw new Error(err.message || "Analysis failed");
       }
-      return res.json() as Promise<MatchResult>;
+
+      const { jobId } = await res.json();
+      const POLL_INTERVAL_MS = 2000;
+      const MAX_WAIT_MS = 120_000; // generous — a real gpt-4o run rarely exceeds 45s
+      const startedAt = Date.now();
+
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+        const pollRes = await fetch(`/api/tools/ats-check/status/${jobId}`, { credentials: "include" });
+        const pollBody = await pollRes.json().catch(() => ({} as any));
+
+        if (pollBody?.status === "processing") {
+          if (Date.now() - startedAt > MAX_WAIT_MS) {
+            throw new Error("This is taking unusually long. Your result may still arrive in a moment — please check back, or try again.");
+          }
+          continue;
+        }
+        if (pollBody?.status === "error") {
+          throw new Error(pollBody.message ?? "Analysis failed");
+        }
+        const { status: _status, ...result } = pollBody;
+        return result as MatchResult;
+      }
     },
     onSuccess: (data) => {
       setResult(data);

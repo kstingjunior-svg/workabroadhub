@@ -177,7 +177,13 @@ export default function ATSCVChecker() {
         credentials: "include",
         headers: { "X-CSRF-Token": csrfToken },
       });
-      if (!res.ok) {
+
+      // 2026-09: the server now kicks off the (slow, 20-35s) analysis in
+      // the background and responds 202 immediately with a job id — see
+      // server/tools-routes.ts for why. Anything other than 202 here is a
+      // fast-path failure (bad file, wrong document type, etc.) and still
+      // comes back synchronously with a 4xx/JSON body exactly as before.
+      if (res.status !== 202) {
         // 2026-09: check Content-Type before parsing. Render's edge gateway
         // returns an HTML timeout/502 page when the upstream Node app takes
         // too long; we don't want the user seeing a raw "Unexpected token '<'"
@@ -204,7 +210,35 @@ export default function ATSCVChecker() {
           throw new Error(`ATS check failed (HTTP ${res.status}). Please try again.`);
         }
       }
-      return res.json() as Promise<ATSResult>;
+
+      // 202 — analysis is running in the background. Poll for the result
+      // instead of holding one request open (that long hold is exactly
+      // what was causing the "mystery" failures: Render's edge proxy has
+      // its own ~30s timeout that no amount of client patience can extend).
+      const { jobId } = await res.json();
+      const POLL_INTERVAL_MS = 2000;
+      const MAX_WAIT_MS = 120_000; // generous — a real gpt-4o run rarely exceeds 45s
+      const startedAt = Date.now();
+
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+        const pollRes = await fetch(`/api/tools/ats-check/status/${jobId}`, { credentials: "include" });
+        const pollBody = await pollRes.json().catch(() => ({} as any));
+
+        if (pollBody?.status === "processing") {
+          if (Date.now() - startedAt > MAX_WAIT_MS) {
+            throw new Error("This is taking unusually long. Your result may still arrive in a moment — please check back, or try again.");
+          }
+          continue;
+        }
+        if (pollBody?.status === "error") {
+          throw new Error(pollBody.message ?? "ATS check failed. Please try again.");
+        }
+        // status === "done"
+        const { status: _status, ...result } = pollBody;
+        return result as ATSResult;
+      }
     },
     onSuccess: (data) => {
       setWrongDoc(null);
