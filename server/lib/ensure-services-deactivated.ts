@@ -36,8 +36,14 @@ const DEACTIVATED_SLUGS = [
 
 export async function ensureServicesDeactivated(): Promise<void> {
   try {
+    // 2026-09 (bug found during "cover_letter keeps reactivating" fix):
+    // the `services` table has no `updated_at` column. This UPDATE was
+    // throwing on every single boot and landing in the catch below, which
+    // logged it as a harmless "skipped" — so this function has never
+    // actually deactivated anything since it was written. Dropped the
+    // nonexistent column so the UPDATE actually runs.
     const result = await pool.query(
-      `UPDATE services SET is_active = false, updated_at = NOW()
+      `UPDATE services SET is_active = false
         WHERE slug = ANY($1::text[]) AND is_active = true`,
       [DEACTIVATED_SLUGS],
     );
