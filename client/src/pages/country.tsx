@@ -343,12 +343,19 @@ export default function Country() {
     if (error) {
       const errorMessage = (error as any)?.message || "";
       if (errorMessage.includes("403") || errorMessage.includes("Payment required")) {
-        toast({
-          title: "Access Locked",
-          description: "Please complete payment to access country dashboards.",
-          variant: "destructive",
-        });
-        navigate("/payment");
+        // 2026-09 (Tony's report — a widespread, unexplained repeating 403
+        // pattern traced to this exact endpoint): this used to toast AND
+        // force-navigate to /payment on every 403, fighting with the
+        // dedicated inline "Access Required" lock screen already rendered
+        // below (isPaywall branch) for this exact case. Two effects racing
+        // to control navigation from the same error is what was producing
+        // rapid repeat hits on this and the dashboard's other queries for
+        // free-tier users who click a Pro-gated country card — the forced
+        // navigate fires before the lock screen ever gets a chance to be
+        // seen, and depending on where /payment sends them next, the cycle
+        // can repeat. The inline lock screen below already gives the user
+        // a clear "Talk to an Advisor" / "Go Back" choice — no forced
+        // redirect needed, so we just stop here and let it render.
       } else if (errorMessage.includes("401")) {
         toast({
           title: "Session Expired",
