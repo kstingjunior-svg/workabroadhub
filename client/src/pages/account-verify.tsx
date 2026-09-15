@@ -6,7 +6,7 @@
  * Phone verification was removed — M-Pesa STK PIN proves phone ownership.
  * Payment endpoints (server-side) reject requests until both flags are true.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -30,6 +30,7 @@ interface VerificationStatus {
   email: string;
   emailVerified: boolean;
   isAdmin: boolean;
+  hasPendingEmailCode: boolean;
 }
 
 async function jsonPost(path: string, body: any): Promise<any> {
@@ -56,6 +57,13 @@ export default function AccountVerifyPage() {
   const [emailSending, setEmailSending] = useState(false);
   const [emailVerifying, setEmailVerifying] = useState(false);
   const [emailCodeSent, setEmailCodeSent] = useState(false);
+  // 2026-09 (Tony's "3+ codes, can't verify" fix): show the code-entry
+  // input immediately on this page — no "Send verification code" button
+  // gate. We only fire an actual send once per page visit, and only if
+  // the server says no valid code is already pending (registration
+  // already fires one in the background).
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const autoSendFired = useRef(false);
 
   // ── Account deletion state ───────────────────────────────────────────────
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -111,6 +119,21 @@ export default function AccountVerifyPage() {
       }
       const data: VerificationStatus = await res.json();
       setStatus(data);
+      if (!data.emailVerified) {
+        // 2026-09: reveal the code-entry input immediately — never gate it
+        // behind a "Send code" click. If the server already has a valid,
+        // unused code on file (from registration, or an earlier visit /
+        // the banner's Resend button), just show the input as-is. Only
+        // auto-send a fresh one if there truly isn't a live code waiting
+        // AND we haven't already sent one this page visit — this is what
+        // stops the repeated-code loop that was burying users' inboxes.
+        if (data.hasPendingEmailCode) {
+          setEmailCodeSent(true);
+        } else if (!autoSendFired.current) {
+          autoSendFired.current = true;
+          sendEmail();
+        }
+      }
       if (data.emailVerified) {
         // 2026-07 (Tony's conversion audit): honour ?returnTo so users
         // finishing verification mid-purchase land straight back on the
@@ -139,11 +162,18 @@ export default function AccountVerifyPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const id = setTimeout(() => setResendCooldown((c) => c - 1), 1000);
+    return () => clearTimeout(id);
+  }, [resendCooldown]);
+
   async function sendEmail() {
     setEmailSending(true);
     try {
       const result = await jsonPost("/api/auth/send-email-code", {}) as any;
       setEmailCodeSent(true);
+      setResendCooldown(30);
       // 2026-08 (deliverability): show last-2-digits hint so users can
       // pick the right email even when it's buried in Spam / Promotions
       // with dozens of other messages from us.
@@ -250,34 +280,37 @@ export default function AccountVerifyPage() {
           </CardHeader>
           {!status.emailVerified && (
             <CardContent className="space-y-3">
-              {!emailCodeSent ? (
-                <Button onClick={sendEmail} disabled={emailSending} className="w-full">
-                  {emailSending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Mail className="h-4 w-4 mr-2" />}
-                  Send verification code
-                </Button>
-              ) : (
-                <div className="space-y-3">
-                  <Label htmlFor="email-code">6-digit code from your inbox</Label>
-                  <Input
-                    id="email-code"
-                    value={emailCode}
-                    onChange={(e) => setEmailCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                    inputMode="numeric"
-                    maxLength={6}
-                    placeholder="123456"
-                    className="font-mono text-center text-lg tracking-widest"
-                  />
-                  <div className="flex gap-2">
-                    <Button onClick={submitEmailCode} disabled={emailVerifying || emailCode.length !== 6} className="flex-1">
-                      {emailVerifying ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-                      Verify
-                    </Button>
-                    <Button variant="outline" onClick={sendEmail} disabled={emailSending}>
-                      Resend
-                    </Button>
-                  </div>
+              {/* 2026-09: input is shown immediately — a code is already on
+                  its way (or already sitting in their inbox) the moment
+                  this page loads. No extra click needed to reveal it. */}
+              <p className="text-xs text-muted-foreground">
+                {emailSending
+                  ? "Sending your code\u2026"
+                  : `We've sent a 6-digit code to ${status.email}. Check your inbox (and spam folder).`}
+              </p>
+              <div className="space-y-3">
+                <Label htmlFor="email-code">6-digit code from your inbox</Label>
+                <Input
+                  id="email-code"
+                  value={emailCode}
+                  onChange={(e) => setEmailCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  autoFocus
+                  maxLength={6}
+                  placeholder="123456"
+                  className="font-mono text-center text-lg tracking-widest"
+                />
+                <div className="flex gap-2">
+                  <Button onClick={submitEmailCode} disabled={emailVerifying || emailCode.length !== 6} className="flex-1">
+                    {emailVerifying ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                    Verify
+                  </Button>
+                  <Button variant="outline" onClick={sendEmail} disabled={emailSending || resendCooldown > 0}>
+                    {resendCooldown > 0 ? `Resend (${resendCooldown}s)` : "Resend"}
+                  </Button>
                 </div>
-              )}
+              </div>
             </CardContent>
           )}
         </Card>

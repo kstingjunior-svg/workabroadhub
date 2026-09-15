@@ -936,6 +936,27 @@ export function registerAuthRoutes(app: Express) {
     const u = r.rows[0];
     if (!u) return res.status(404).json({ message: "User not found." });
     const isAdmin = u.is_admin || u.role === "ADMIN" || u.role === "SUPER_ADMIN";
+
+    // 2026-09 (Tony's "3+ codes, can't verify" report): tell the client
+    // whether a still-valid, unused email code already exists so it does
+    // NOT blindly fire another send on every page load/visit. Every send
+    // invalidates the previous code (see invalidatePriorCodes) — silently
+    // re-sending on each visit was the actual cause of the "keeps sending
+    // codes, can't verify" loop, not a delivery problem.
+    let hasPendingEmailCode = false;
+    try {
+      const codeRow = await pool.query<{ expires_at: string }>(
+        `SELECT expires_at FROM verification_codes
+          WHERE user_id = $1 AND channel = 'email' AND used_at IS NULL
+          ORDER BY created_at DESC LIMIT 1`,
+        [userId],
+      );
+      const pending = codeRow.rows[0];
+      hasPendingEmailCode = !!pending && new Date(pending.expires_at) > new Date();
+    } catch (e: any) {
+      console.warn("[Auth][verification-status] pending-code lookup failed:", e?.message);
+    }
+
     // EMAIL-ONLY verification policy: phoneVerified is ALWAYS reported true
     // so the client never gates anything on it. Phone column is preserved
     // for M-Pesa STK push but is no longer a verification gate.
@@ -945,6 +966,7 @@ export function registerAuthRoutes(app: Express) {
       emailVerified: u.email_verified || isAdmin,
       phoneVerified: true,
       isAdmin,
+      hasPendingEmailCode,
     });
   });
 
