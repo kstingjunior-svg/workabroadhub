@@ -1,4 +1,5 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { isEmailVerificationExempt } from "@shared/email-verification-gate";
 
 // =============================================================================
 // PERFORMANCE: Optimized Query Client Configuration
@@ -245,13 +246,45 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
+    const endpoint = queryKey.join("/");
+
+    // 2026-09 (Tony's 403-storm investigation): the server's
+    // requireEmailVerifiedApi middleware blocks every non-allowlisted
+    // /api/* call for an authenticated-but-unverified user with a 403 —
+    // this is correct, by-design behavior. But dozens of dashboard widgets
+    // (subscription, orders, job alerts, referrals, notifications, etc.)
+    // poll on their own timers with no awareness of that wall, so an
+    // unverified user sitting on the dashboard for their whole 72h grace
+    // window kept re-asking the server the same "no" over and over —
+    // every poll costs a live Postgres round-trip inside that middleware
+    // just to say no again. Once we already know the answer (from the
+    // cached /api/auth/user payload), skip the network call entirely
+    // instead of manufacturing a real 403 the server is guaranteed to
+    // send back anyway.
+    if (endpoint.startsWith("/api") && !isEmailVerificationExempt(endpoint)) {
+      const cachedUser = queryClient.getQueryData<any>(["/api/auth/user"]);
+      const isExemptUser =
+        !cachedUser ||
+        cachedUser.emailVerified !== false ||
+        cachedUser.isAdmin === true ||
+        cachedUser.role === "ADMIN" ||
+        cachedUser.role === "SUPER_ADMIN";
+
+      if (!isExemptUser) {
+        if (unauthorizedBehavior === "returnNull") return null as any;
+        const err = new Error(
+          "Please verify your email address to continue using WorkAbroadHub. Check your inbox and spam folder for the verification code."
+        ) as any;
+        err.status = 403;
+        throw err;
+      }
+    }
+
     const controller = new AbortController();
 
     const timeoutId = setTimeout(() => controller.abort(), 30000);
 
     try {
-      const endpoint = queryKey.join("/");
-
       const res = await fetch(`${API_URL}${endpoint}`, {
         credentials: "include",
         signal: controller.signal,

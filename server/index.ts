@@ -349,31 +349,20 @@ app.use((_req, res, next) => {
   next();
 });
 
-// 2026-09 TEMPORARY DIAGNOSTIC (Tony's report — widespread, unexplained 403s
-// on many different endpoints, including ones with zero auth/middleware like
-// /api/public/stats and /api/countries). Every code path that can legitimately
-// send a 403 has been checked and ruled out (ddos-protection layers all log to
-// security_events and none fired for the affected IPs/timeframes; CSRF skips
-// GET; isAuthenticated only ever 401s; rate limiters default to 429). This
-// patches res.status so the FIRST time a 403 is set for one of these requests,
-// we log the exact call site (stack trace) plus request context. Remove once
-// the source is identified — this is not a fix, just instrumentation.
-app.use((req, res, next) => {
-  const origStatus = res.status.bind(res);
-  (res as any).status = (code: number) => {
-    if (code === 403 && !(res as any)._diagLogged403) {
-      (res as any)._diagLogged403 = true;
-      const stack = new Error("diag-403-origin").stack;
-      console.error(
-        `[DIAG-403] path=${req.path} method=${req.method} origin=${req.headers.origin ?? "none"} ` +
-        `hasCookie=${!!req.headers.cookie} ua="${req.headers["user-agent"] ?? ""}" ` +
-        `xff=${req.headers["x-forwarded-for"] ?? "none"}\n${stack}`
-      );
-    }
-    return origStatus(code);
-  };
-  next();
-});
+// 2026-09 RESOLVED (Tony's 403-storm report): the diagnostic instrumentation
+// that used to sit here found the root cause — server/middleware/
+// requireEmailVerifiedApi.ts, mounted globally in server/routes.ts, blocks
+// every non-allowlisted /api/* call for authenticated-but-unverified users
+// with a 403. That's correct, by-design behavior (it never touches
+// ddos-protection's security_events log, CSRF, or isAuthenticated — all of
+// which were already ruled out — which is exactly why it evaded the first
+// pass of investigation). The "storm" quality came from client-side dashboard
+// widgets polling those endpoints on their own timers with no awareness that
+// the wall existed. Fixed client-side in client/src/lib/queryClient.ts, which
+// now short-circuits those calls once it already knows (from the cached
+// /api/auth/user payload) that the user is unverified, using the same
+// allowlist as requireEmailVerifiedApi via shared/email-verification-gate.ts.
+// Instrumentation removed now that the source is confirmed.
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SECURITY

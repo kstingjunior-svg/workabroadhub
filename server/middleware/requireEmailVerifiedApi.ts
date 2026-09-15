@@ -23,63 +23,15 @@
 
 import type { RequestHandler } from "express";
 import { pool } from "../db";
+import { isEmailVerificationExempt } from "../../shared/email-verification-gate";
 
-// Substring/prefix allowlist. Paths that START WITH any of these are exempt.
-// Kept generous so users can complete signup + verify + basic dashboard reads
-// without hitting the wall.
-const ALLOWED_PREFIXES: readonly string[] = [
-  // ── Session / identity — client must be able to read who it is ──────────
-  "/api/auth/user",
-  "/api/auth/session",
-  "/api/csrf",
-  "/api/csrf-token",
-  // ── Auth entry / exit ───────────────────────────────────────────────────
-  "/api/auth/login",
-  "/api/auth/logout",
-  "/api/logout",
-  "/api/auth/register",
-  "/api/auth/signup",
-  "/api/auth/callback",
-  "/api/callback",
-  "/api/login",
-  // ── Verification flow itself ────────────────────────────────────────────
-  "/api/auth/verify-email",
-  "/api/auth/verify-phone",
-  "/api/auth/verification-status",  // GET — /account/verify page reads status
-  "/api/auth/send-email-code",
-  "/api/auth/send-phone-code",
-  "/api/auth/forgot-password",
-  "/api/auth/reset-password",
-  "/api/auth/delete-account",
-  // ── Admin can also toggle verification out-of-band ──────────────────────
-  "/api/auth/admin/force-verify-phone",
-  // ── Ops / health / diagnostics ──────────────────────────────────────────
-  "/api/health",
-  "/api/log/client-error",
-  "/api/track-live",           // presence pings — must not be blocked
-  // ── Payment gateway webhooks (server-to-server, no user session) ────────
-  "/api/mpesa/callback",
-  "/api/mpesa/b2c",
-  "/api/payments/mpesa/callback",
-  "/api/payments/paypal/webhook",
-  "/api/paypal/webhook",
-  // ── PWA / uptime bits ───────────────────────────────────────────────────
-  "/api/pwa/event",
-];
-
-function isAllowed(path: string): boolean {
-  for (const p of ALLOWED_PREFIXES) {
-    if (path === p || path.startsWith(p + "/") || path.startsWith(p + "?")) return true;
-  }
-  return false;
-}
 
 export const requireEmailVerifiedApi: RequestHandler = async (req: any, res, next) => {
   // Only guard /api routes — static assets, HTML entry, etc. must pass through.
   if (!req.path.startsWith("/api")) return next();
 
   // Allow the routes that unverified users need to complete verification.
-  if (isAllowed(req.path)) return next();
+  if (isEmailVerificationExempt(req.path)) return next();
 
   // Only enforce for authenticated sessions. Anonymous /api hits either fail
   // upstream (isAuthenticated) or are legitimate public reads.
