@@ -4657,78 +4657,95 @@ Crawl-delay: 1`);
       }
 
       // ── Live Safaricom STK push ───────────────────────────────────────────
-      let safaricomId: string;
-      let merchantRequestId: string;
-      try {
-        const { stkPush } = await import("./mpesa");
-        const stkResponse  = await stkPush(phone, amount, serviceName, accountRef);
-        safaricomId        = stkResponse.CheckoutRequestID;
-        merchantRequestId  = stkResponse.MerchantRequestID;
-      } catch (mpesaError: any) {
-        console.error("[/api/mpesa/stk] STK push failed:", mpesaError.response?.data || mpesaError.message);
-        await storage.updatePayment(payment.id, { status: "failed" } as any).catch((err) => reportRejection(err, 'routes'));
-        storage.createPaymentAuditLog({
-          paymentId: payment.id, event: "stk_push_failed",
-          ip: req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket?.remoteAddress || "unknown",
-          metadata: { error: mpesaError.message, phone, amount },
-        }).catch((err) => reportRejection(err, 'routes'));
-        // 2026-06: translate Daraja errors into Kenyan-friendly guidance + always
-        // ship the Paybill fallback so the user has a path no matter what.
-        const { friendlyMpesaError, MPESA_FALLBACK } = await import("./lib/mpesa-error-translator");
-        const friendly = friendlyMpesaError(mpesaError.response?.data || mpesaError);
-        return res.status(502).json({
-          success:       false,
-          error:         friendly.message,
-          title:         friendly.title,
-          nextStep:      friendly.next_step,
-          retrySafe:     friendly.retry_safe,
-          offerPaybill:  friendly.offer_paybill,
-          badPhone:      friendly.bad_phone,
-          darajaCode:    friendly.daraja_code,
-          paybillFallback: {
-            paybill:  MPESA_FALLBACK.paybill,
-            account:  payment.email || MPESA_FALLBACK.accountKey,
-            amount,
-          },
-        });
-      }
-
-      // Stamp Safaricom's IDs onto the row — this is what the M-Pesa callback will match on.
-      // MERGE existing metadata (from /api/payments/initiate) with the new Safaricom fields
-      // so we don't lose serviceOrderId, refCode, etc. that the unified service-order
-      // flow stored. Without this merge, the M-Pesa callback can't trigger AI generation
-      // because Step 3b in paymentPipeline reads meta.serviceOrderId.
-      let existingMeta: Record<string, any> = {};
-      try {
-        const raw = (payment as any).metadata;
-        if (raw) existingMeta = typeof raw === "string" ? JSON.parse(raw) : raw;
-      } catch { /* fallthrough — treat as empty */ }
-      const mergedMeta = {
-        ...existingMeta,
-        checkoutRequestId: safaricomId,
-        merchantRequestId,
-        phone,
-      };
-      await storage.updatePayment(payment.id, {
-        checkoutRequestId: safaricomId,
-        transactionRef:    safaricomId,
-        metadata: JSON.stringify(mergedMeta),
-      } as any);
-
-      storage.createPaymentAuditLog({
-        paymentId: payment.id,
-        event:     "stk_push_initiated",
-        ip:        req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket?.remoteAddress || "unknown",
-        metadata:  { checkoutRequestId: safaricomId, merchantRequestId, phone, amount },
-      }).catch((err) => reportRejection(err, 'routes'));
-
-      return res.json({
+      // 2026-09 (Tony's report — "the M-Pesa message... sends an error"):
+      // this used to `await stkPush(...)` right here before responding.
+      // Safaricom's OAuth-token + STK-push round trip can take 15-45s
+      // combined, but Render's edge proxy kills any request running past
+      // ~30s with a 502 (confirmed on the guest-checkout twin of this
+      // endpoint, /api/services/order/:id/pay-guest, via production logs
+      // showing exactly this timing). The client here already just polls
+      // the order/payment status after this call succeeds — it doesn't
+      // read checkoutRequestId out of THIS response — so there's no UX
+      // cost to responding immediately and running the actual Safaricom
+      // call in the background instead of blocking the HTTP response on it.
+      res.json({
         success:             true,
         paymentId:           payment.id,
-        checkoutRequestId:   safaricomId,
-        checkout_request_id: safaricomId,
-        message:             "STK push sent to your phone. Please enter your M-Pesa PIN.",
+        status:              "processing",
+        message:             "Sending the M-Pesa prompt to your phone…",
       });
+
+      (async () => {
+        let safaricomId: string;
+        let merchantRequestId: string;
+        try {
+          const { stkPush } = await import("./mpesa");
+          const stkResponse  = await stkPush(phone, amount, serviceName, accountRef);
+          safaricomId        = stkResponse.CheckoutRequestID;
+          merchantRequestId  = stkResponse.MerchantRequestID;
+        } catch (mpesaError: any) {
+          console.error("[/api/mpesa/stk] STK push failed (async):", mpesaError.response?.data || mpesaError.message);
+          await storage.updatePayment(payment.id, { status: "failed" } as any).catch((err) => reportRejection(err, 'routes'));
+          storage.createPaymentAuditLog({
+            paymentId: payment.id, event: "stk_push_failed",
+            ip: req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket?.remoteAddress || "unknown",
+            metadata: { error: mpesaError.message, phone, amount },
+          }).catch((err) => reportRejection(err, 'routes'));
+          // 2026-06: translate Daraja errors into Kenyan-friendly guidance.
+          const { friendlyMpesaError } = await import("./lib/mpesa-error-translator");
+          const friendly = friendlyMpesaError(mpesaError.response?.data || mpesaError);
+          // The HTTP response already went out as success:true "processing"
+          // above — the only way to tell the client this failed is via the
+          // linked service_order's error_message, which GET
+          // /api/services/order/:id/status surfaces regardless of status.
+          try {
+            let meta: Record<string, any> = {};
+            const raw = (payment as any).metadata;
+            if (raw) meta = typeof raw === "string" ? JSON.parse(raw) : raw;
+            const linkedOrderId = meta?.serviceOrderId;
+            if (typeof linkedOrderId === "string" && linkedOrderId) {
+              await pool.query(
+                `UPDATE service_orders SET error_message = $2, updated_at = NOW() WHERE id = $1`,
+                [linkedOrderId, `[STK_INIT_FAILED] ${friendly?.message || mpesaError.message || "Could not reach M-Pesa."}`],
+              );
+            }
+          } catch (linkErr: any) {
+            console.warn("[/api/mpesa/stk] could not surface failure to linked service order:", linkErr?.message);
+          }
+          return;
+        }
+
+        // Stamp Safaricom's IDs onto the row — this is what the M-Pesa callback will match on.
+        // MERGE existing metadata (from /api/payments/initiate) with the new Safaricom fields
+        // so we don't lose serviceOrderId, refCode, etc. that the unified service-order
+        // flow stored. Without this merge, the M-Pesa callback can't trigger AI generation
+        // because Step 3b in paymentPipeline reads meta.serviceOrderId.
+        let existingMeta: Record<string, any> = {};
+        try {
+          const raw = (payment as any).metadata;
+          if (raw) existingMeta = typeof raw === "string" ? JSON.parse(raw) : raw;
+        } catch { /* fallthrough — treat as empty */ }
+        const mergedMeta = {
+          ...existingMeta,
+          checkoutRequestId: safaricomId,
+          merchantRequestId,
+          phone,
+        };
+        await storage.updatePayment(payment.id, {
+          checkoutRequestId: safaricomId,
+          transactionRef:    safaricomId,
+          metadata: JSON.stringify(mergedMeta),
+        } as any);
+
+        storage.createPaymentAuditLog({
+          paymentId: payment.id,
+          event:     "stk_push_initiated",
+          ip:        req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket?.remoteAddress || "unknown",
+          metadata:  { checkoutRequestId: safaricomId, merchantRequestId, phone, amount },
+        }).catch((err) => reportRejection(err, 'routes'));
+
+        console.log(`[/api/mpesa/stk] STK push initiated (async): paymentId=${payment.id} checkoutRequestId=${safaricomId}`);
+      })();
     } catch (err: any) {
       console.error("[POST /api/mpesa/stk]", err.message);
       return res.status(500).json({ success: false, error: "Internal server error" });

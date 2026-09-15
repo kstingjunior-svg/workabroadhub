@@ -116,6 +116,18 @@ function cvUploadWithJsonErrors(_fieldName?: string) {
 function mapErrorForUser(raw: string): string {
   const lower = String(raw || "").toLowerCase();
 
+  // 2026-09 (Tony's report — "the M-Pesa message... sends an error"): the
+  // guest checkout's STK push runs in the background now (see /pay-guest)
+  // so it can fail AFTER we've already told the client "processing". This
+  // is NOT the same as an AI-generation failure — no payment was ever
+  // taken and no document is being generated, so the generic "your
+  // payment is safe, document coming" copy used below would be an
+  // outright lie here. Must be checked before every other branch.
+  if (lower.includes("[stk_init_failed]")) {
+    const detail = String(raw || "").replace(/^\[stk_init_failed\]\s*/i, "").trim();
+    return `We couldn't send the M-Pesa prompt to your phone${detail ? ` (${detail})` : ""}. You have NOT been charged. Please check the number and tap "Pay" again.`;
+  }
+
   // OpenAI billing / quota exhaustion — this is the founder's #1 issue.
   // Whatever exact wording OpenAI uses, we normalize to a warm message.
   if (
@@ -1419,13 +1431,19 @@ async function processOrder(orderId: string): Promise<void> {
 ╚════════════════════════════════════════════════════════════╝
 ${order.extra_input}
 
-Rules for handling the preferences above:
-- If the user mentions a TARGET SALARY or compensation expectation, add a "Compensation Expectations" line (or include it in the Professional Summary) using their exact figure.
-- If the user mentions AVAILABILITY / NOTICE PERIOD / START DATE, add an "Availability" line near the top.
-- If the user mentions specific ACHIEVEMENTS or PROJECTS to emphasize, work them into the relevant experience bullets using their exact words.
-- If the user mentions LANGUAGES, add a "Languages" section.
-- If the user mentions willingness to RELOCATE, add a one-line "Open to relocation to {country}" note in the Summary.
-- If the user mentions any CERTIFICATIONS not already in the CV, add them to the Certifications section.
+MANDATORY: the block above is a direct instruction from the paying customer, not decorative context. Nothing in it may be silently dropped. Read every line of it and make sure the final CV visibly reflects each one. If you cannot find a natural place for a given piece of information, ADD a short "Additional Information" section near the end rather than omitting it.
+
+2026-09 (Tony's report — "whichever information I add as additional information does not appear in the final CV"): a real customer test order proved that when this block contained a TARGET JOB POSTING'S requirements (e.g. "UAE security experience or valid SIRA license is preferred", "minimum height 185cm", etc.) instead of one of the specific categories below, the model dropped every line of it except the one that happened to match a listed pattern ("Fluent in English" -> Languages section), because the categories below were being read as an exhaustive checklist instead of examples. The list below is ILLUSTRATIVE, NOT EXHAUSTIVE. If the customer's text doesn't match any specific pattern below, that is NOT permission to ignore it - find the closest fit and include it anyway.
+
+Common patterns to watch for (not a complete list):
+- TARGET SALARY / compensation expectation -> add a "Compensation Expectations" line (or fold into the Professional Summary) using their exact figure.
+- AVAILABILITY / NOTICE PERIOD / START DATE -> add an "Availability" line near the top.
+- Specific ACHIEVEMENTS or PROJECTS to emphasize -> work them into the relevant experience bullets using their exact words.
+- LANGUAGES -> add a "Languages" section.
+- Willingness to RELOCATE -> add a one-line "Open to relocation to {country}" note in the Summary.
+- CERTIFICATIONS not already in the CV -> add them to the Certifications section.
+- A TARGET JOB POSTING / employer requirements (physical requirements, licenses, years of experience in a specific environment, appearance, language, attitude, etc.) -> treat this as the job the candidate is applying for. Rewrite the Professional Summary and Skills section to foreground whichever of the candidate's REAL, TRUTHFUL experience and qualifications match those requirements, using language that echoes the posting's own wording where truthful. Do NOT fabricate a qualification the candidate doesn't have (e.g. a specific license) - but do NOT drop the requirements you can't match either; still address every requirement you CAN truthfully speak to.
+- Anything else the customer wrote that doesn't fit a pattern above -> still include it, verbatim if needed, in an "Additional Information" section. Never let it disappear.
 - Do NOT invent facts the user didn't provide, but DO include every fact they did provide even if it wasn't in the original CV.
 `;
     }
@@ -2632,58 +2650,96 @@ export function registerServiceOrderRoutes(app: Express, isAuthenticated: Reques
         ],
       );
 
-      // Fire the STK push. AccountReference = paymentId so the callback can
-      // resolve which pending payment this is for.
-      const { stkPush } = await import("./mpesa");
-      const appOrigin = (process.env.APP_ORIGIN || process.env.APP_URL || "").replace(/\/$/, "");
-      const callbackUrl = appOrigin ? `${appOrigin}/api/payments/mpesa/callback` : undefined;
-      const stk = await stkPush(
-        normalizedPhone,
-        amount,
-        `${order.service_name}`.slice(0, 60),
-        paymentId,
-        callbackUrl,
-      );
+      // 2026-09 (Tony's report — "the M-Pesa message... sends an error"):
+      // this used to `await stkPush(...)` right here before responding.
+      // Safaricom's Daraja API (OAuth token fetch + STK push) can take
+      // 15-45s combined, but Render's own edge proxy kills any request
+      // that runs past ~30s with a 502 — confirmed in production logs:
+      // this exact endpoint was timing out at 30000-30540ms and returning
+      // 502 with the STK push potentially still in flight, leaving guest
+      // customers staring at an error with no idea if they'd been charged.
+      // Same fix pattern as the ATS checker (thin handler, background
+      // work): clear the pending payment row's error immediately, respond
+      // to the client the moment we know the request is valid, then run
+      // the actual Safaricom call in the background. The client already
+      // polls GET /api/services/order/:id/status for the order to move
+      // out of pending_payment — we don't need the checkoutRequestId back
+      // synchronously, so there is no UX downside to not waiting for it.
+      await pool.query(
+        `UPDATE service_orders SET error_message = NULL, updated_at = NOW() WHERE id = $1`,
+        [order.id],
+      ).catch(() => {});
 
-      // Persist Safaricom identifiers so the callback can find this row.
-      // 2026-08 (P0): metadata is VARCHAR (stores JSON strings), NOT jsonb.
-      // Read → parse → merge → stringify → write. Also write to
-      // checkout_request_id column directly since it exists on the schema
-      // and the callback matches on that field first.
-      const merchantId = (stk as any)?.MerchantRequestID ?? null;
-      const checkoutId = (stk as any)?.CheckoutRequestID ?? null;
-      if (checkoutId) {
-        try {
-          const { rows: metaRows } = await pool.query<{ metadata: string | null }>(
-            `SELECT metadata FROM payments WHERE id = $1`,
-            [paymentId],
-          );
-          let merged: Record<string, unknown> = {};
-          try {
-            merged = metaRows[0]?.metadata ? JSON.parse(metaRows[0].metadata) : {};
-          } catch { merged = {}; }
-          merged.merchantRequestId = merchantId;
-          merged.checkoutRequestId = checkoutId;
-          await pool.query(
-            `UPDATE payments
-                SET metadata = $2,
-                    checkout_request_id = $3,
-                    updated_at = NOW()
-              WHERE id = $1`,
-            [paymentId, JSON.stringify(merged), checkoutId],
-          );
-        } catch (metaErr: any) {
-          console.warn("[ServiceOrder] payment metadata update failed:", metaErr?.message);
-        }
-      }
-
-      console.log(`[ServiceOrder] Guest STK push initiated: orderId=${order.id} paymentId=${paymentId} phone=${normalizedPhone} amount=${amount}`);
       res.json({
         success: true,
         paymentId,
-        checkoutRequestId: checkoutId,
-        message: "STK push sent. Check your phone and enter your M-Pesa PIN.",
+        status: "processing",
+        message: "Sending the M-Pesa prompt to your phone…",
       });
+
+      // ── background: fire the STK push, don't hold the HTTP response ────
+      (async () => {
+        try {
+          const { stkPush } = await import("./mpesa");
+          const appOrigin = (process.env.APP_ORIGIN || process.env.APP_URL || "").replace(/\/$/, "");
+          const callbackUrl = appOrigin ? `${appOrigin}/api/payments/mpesa/callback` : undefined;
+          const stk = await stkPush(
+            normalizedPhone,
+            amount,
+            `${order.service_name}`.slice(0, 60),
+            paymentId,
+            callbackUrl,
+          );
+
+          // Persist Safaricom identifiers so the callback can find this row.
+          // 2026-08 (P0): metadata is VARCHAR (stores JSON strings), NOT jsonb.
+          // Read → parse → merge → stringify → write. Also write to
+          // checkout_request_id column directly since it exists on the schema
+          // and the callback matches on that field first.
+          const merchantId = (stk as any)?.MerchantRequestID ?? null;
+          const checkoutId = (stk as any)?.CheckoutRequestID ?? null;
+          if (checkoutId) {
+            try {
+              const { rows: metaRows } = await pool.query<{ metadata: string | null }>(
+                `SELECT metadata FROM payments WHERE id = $1`,
+                [paymentId],
+              );
+              let merged: Record<string, unknown> = {};
+              try {
+                merged = metaRows[0]?.metadata ? JSON.parse(metaRows[0].metadata) : {};
+              } catch { merged = {}; }
+              merged.merchantRequestId = merchantId;
+              merged.checkoutRequestId = checkoutId;
+              await pool.query(
+                `UPDATE payments
+                    SET metadata = $2,
+                        checkout_request_id = $3,
+                        updated_at = NOW()
+                  WHERE id = $1`,
+                [paymentId, JSON.stringify(merged), checkoutId],
+              );
+            } catch (metaErr: any) {
+              console.warn("[ServiceOrder] payment metadata update failed:", metaErr?.message);
+            }
+          }
+          console.log(`[ServiceOrder] Guest STK push initiated (async): orderId=${order.id} paymentId=${paymentId} phone=${normalizedPhone} amount=${amount}`);
+        } catch (stkErr: any) {
+          // The STK push itself failed (bad shortcode config, Safaricom
+          // rejected the phone, Daraja outage, etc). The client is sitting
+          // on /services/order/:slug polling GET .../status and will only
+          // ever see "pending_payment" forever unless we surface this.
+          // error_message on the ORDER (not just the payment row) is what
+          // that status endpoint actually returns to the client.
+          console.error(`[ServiceOrder] pay-guest background STK push failed: orderId=${order.id} paymentId=${paymentId}`, stkErr?.response?.data || stkErr?.message);
+          await pool.query(`UPDATE payments SET status = 'failed', updated_at = NOW() WHERE id = $1`, [paymentId]).catch(() => {});
+          const { friendlyMpesaError } = await import("./lib/mpesa-error-translator");
+          const friendly = friendlyMpesaError(stkErr?.response?.data || stkErr);
+          await pool.query(
+            `UPDATE service_orders SET error_message = $2, updated_at = NOW() WHERE id = $1`,
+            [order.id, `[STK_INIT_FAILED] ${friendly?.message || stkErr?.message || "Could not reach M-Pesa."}`],
+          ).catch(() => {});
+        }
+      })();
     } catch (err: any) {
       console.error("[ServiceOrder] pay-guest error:", err?.message);
       res.status(500).json({ message: err?.message || "Could not initiate M-Pesa payment. Please try again." });

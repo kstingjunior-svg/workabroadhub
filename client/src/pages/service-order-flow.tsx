@@ -361,6 +361,25 @@ export default function ServiceOrderFlow() {
           if (pollRef.current) window.clearInterval(pollRef.current);
           setServiceName(data.serviceName || meta.name);
           setStage("done");
+        } else if (data.status === "pending_payment" && data.error) {
+          // 2026-09 (Tony's report — "the M-Pesa message... sends an
+          // error"): the guest checkout's STK push now fires in the
+          // background (server no longer blocks the HTTP response on
+          // Safaricom, which was blowing past Render's ~30s proxy timeout
+          // and returning a 502 mid-payment). If that background push
+          // fails, the order stays "pending_payment" forever unless we
+          // watch for error_message showing up on it here. Stop polling
+          // and send the user right back to the pay button — nothing was
+          // charged, so there's nothing to wait for.
+          if (pollRef.current) window.clearInterval(pollRef.current);
+          toast({
+            title: "Payment didn't go through",
+            description: data.error,
+            variant: "destructive",
+            duration: 15000,
+          });
+          setPayingNow(false);
+          setStage("paying");
         } else {
           // Still pending or processing — surface a softer message after 2 min
           // so the user knows we haven't forgotten them.
