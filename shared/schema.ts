@@ -98,6 +98,12 @@ export const payments = pgTable("payments", {
   failReason: varchar("fail_reason"),        // human-readable failure reason
   isSuspicious: boolean("is_suspicious").notNull().default(false),
   fraudReason: varchar("fraud_reason"),
+  // 2026-09 (migrations/0051): marks a duplicate trial/basic payment row so
+  // uniq_trial_success_per_user / uniq_trial_success_per_phone (see
+  // server/lib/trial-gate.ts) only enforce one-per-person among the
+  // CANONICAL (earliest) rows. The row itself, its amount, and its status
+  // are untouched — this is purely a dedup marker, never a deletion.
+  isDuplicateTrial: boolean("is_duplicate_trial").notNull().default(false),
   paymentMethod: varchar("payment_method").default("mpesa"), // "mpesa" | "paypal"
   reference: varchar("reference"),                           // human-readable reference / receipt alias
 

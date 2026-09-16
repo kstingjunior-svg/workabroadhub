@@ -42,13 +42,29 @@ import { pool } from "../db";
 export async function bootstrapTrialGuards(): Promise<void> {
   const started = Date.now();
   try {
+    // 2026-09 (Tony's "reusage of a trial" follow-up): these two indexes
+    // had NEVER actually existed in production — every boot silently failed
+    // to create them (caught below, logged non-fatal) the moment enough
+    // historical duplicate trial rows existed to violate a plain unique
+    // index. migrations/0051_trial_dedup_unique_index.sql backfilled a
+    // dedup flag (is_duplicate_trial) for every row except the earliest per
+    // user_id/phone, WITHOUT deleting or altering any payment's status —
+    // every KES 99 ever collected still stands for revenue/audit history.
+    // The indexes below now only require uniqueness among non-duplicate
+    // rows, which any fresh environment (no duplicates yet) already
+    // satisfies trivially.
+    await pool.query(`
+      ALTER TABLE payments
+      ADD COLUMN IF NOT EXISTS is_duplicate_trial boolean NOT NULL DEFAULT false;
+    `);
     await pool.query(`
       CREATE UNIQUE INDEX IF NOT EXISTS uniq_trial_success_per_user
       ON payments (user_id)
       WHERE status IN ('success', 'completed')
         AND (plan_id IN ('trial', 'basic')
              OR service_id IN ('plan_trial', 'plan_basic'))
-        AND user_id IS NOT NULL;
+        AND user_id IS NOT NULL
+        AND is_duplicate_trial = false;
     `);
     await pool.query(`
       CREATE UNIQUE INDEX IF NOT EXISTS uniq_trial_success_per_phone
@@ -56,7 +72,8 @@ export async function bootstrapTrialGuards(): Promise<void> {
       WHERE status IN ('success', 'completed')
         AND (plan_id IN ('trial', 'basic')
              OR service_id IN ('plan_trial', 'plan_basic'))
-        AND phone IS NOT NULL;
+        AND phone IS NOT NULL
+        AND is_duplicate_trial = false;
     `);
     console.log(`[trial-gate] indexes ensured in ${Date.now() - started}ms`);
   } catch (err: any) {
