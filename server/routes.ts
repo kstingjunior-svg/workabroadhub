@@ -87,7 +87,6 @@ import {
   paypalMode,
   paypalClientId,
   createPayPalOrder,
-  capturePayPalOrder,
   kesToUsd,
 } from "./paypal";
 import { reportRejection } from "./lib/sentry";
@@ -8204,6 +8203,30 @@ Crawl-delay: 1`);
     } catch (error: any) {
       console.error("Reconcile error:", error);
       res.status(500).json({ message: "Reconciliation failed", error: error.message });
+    }
+  });
+
+  // POST /api/paypal/reconcile — admin-only; immediately sweeps stuck
+  // "pending" PayPal payments instead of waiting for the next
+  // paypal-recovery poller tick. Mirrors /api/mpesa/reconcile above.
+  //
+  // 2026-09 (Tony's payment-bug audit): added alongside the PayPal
+  // recovery poller so Tony can trigger an immediate reconciliation pass
+  // right after this fix deploys, to recover orders that were already
+  // stuck before the fix shipped.
+  app.post("/api/paypal/reconcile", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      const user = await storage.getUserById(userId);
+      if (!user?.isAdmin) return res.status(403).json({ message: "Admin only" });
+
+      const { runPaypalRecovery } = await import("./paypal-recovery");
+      await runPaypalRecovery();
+
+      res.json({ message: "PayPal reconciliation sweep completed — check logs for per-payment results." });
+    } catch (error: any) {
+      console.error("[PayPal Reconcile] Error:", error);
+      res.status(500).json({ message: "PayPal reconciliation failed", error: error.message });
     }
   });
 
@@ -21172,6 +21195,13 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
         paymentRecord.id
       );
 
+      // Persist the PayPal order ID onto the payment row — without this,
+      // a stuck "pending" payment can never be matched back to its PayPal
+      // order for server-side reconciliation (see server/paypal-recovery.ts).
+      await storage.updatePayment(paymentRecord.id, {
+        checkoutRequestId: order.id,
+      } as any).catch((e) => reportRejection(e, 'routes/paypal-create-order'));
+
       res.json({
         paypalOrderId: order.id,
         paymentId: paymentRecord.id,
@@ -21187,6 +21217,15 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
 
   // POST /api/paypal/capture-order — authenticated; captures a PayPal order
   // after the user approves on PayPal's hosted page.
+  //
+  // 2026-09 (Tony's payment-bug audit): this handler used to contain ~300
+  // lines of capture/verify/upgrade/sync logic inline. That logic is now
+  // shared via completePayPalCapture() in server/services/paypalCapture.ts
+  // so the exact same code path can also be driven by the server-side
+  // recovery poller (server/paypal-recovery.ts) for orders where the
+  // client's onApprove callback never reaches us — see that file's header
+  // comment for the full root-cause writeup (PayPal live success rate was
+  // ~0% for 2+ months because of this single-path-of-completion gap).
   app.post("/api/paypal/capture-order", isAuthenticated, async (req: any, res) => {
     try {
       if (!isPayPalConfigured()) {
@@ -21194,294 +21233,18 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
       }
 
       const { paypalOrderId, paymentId } = req.body;
-      if (!paypalOrderId) {
-        return res.status(400).json({ message: "paypalOrderId is required." });
-      }
-
-      // 1. Capture payment with PayPal
-      const capture = await capturePayPalOrder(paypalOrderId);
-      if (capture.status !== "COMPLETED") {
-        return res.status(402).json({
-          message: `PayPal payment not completed — status: ${capture.status}`,
-          status: capture.status,
-        });
-      }
-
       const userId = req.user?.claims?.sub as string;
-      const { upgradeUserAccount } = await import("./services/upgradeUserAccount");
 
-      // 2. Look up (or create) the payment record so we know serviceId
-      let payment: any = null;
-      if (paymentId) {
-        try {
-          payment = await storage.getPaymentById(paymentId);
-        } catch (_e) { /* non-fatal */ }
-      }
-
-      // Idempotency guard — prevent double-capture and double-upgrade
-      if (payment?.processed) {
-        console.log(`[PayPal] Capture skipped — payment ${payment.id} already processed`);
-        return res.status(200).json({ message: "Payment already processed.", alreadyProcessed: true, plan: "pro" });
-      }
-
-      if (!payment) {
-        // Fallback: create the record if none exists (legacy flow)
-        // 2026-09 (currency-label audit): store BOTH the raw USD charge
-        // AND the KES equivalent so receipts, admin reports, and dispute
-        // paperwork show the actual currency PayPal charged.
-        const amountUSD = parseFloat(capture.amountUSD);
-        const kesAmount = Math.round(amountUSD * 130);
-        payment = await storage.createPayment({
-          userId,
-          amount: kesAmount || 0,
-          currency: "KES",
-          method: "paypal",
-          transactionRef: capture.transactionId,
-          status: "pending",
-          serviceId: "main_subscription",
-          metadata: JSON.stringify({
-            paypalOrderId,
-            payerEmail: capture.payerEmail,
-            amountUSD:  capture.amountUSD,        // raw string PayPal returned
-            amountUsdNumeric: amountUSD,          // parsed for admin queries
-            fxUsdToKes: 130,                      // conversion rate we used
-            chargedCurrency: "USD",               // authoritative — what was actually charged
-            recordedCurrency: "KES",              // what we store as amount for reporting
-          }),
-        });
-      }
-
-      // 3. ── PROVIDER VERIFICATION ────────────────────────────────────────────
-      // Confirm the capture with PayPal before upgrading the user.
-      //
-      // 2026-09 SECURITY (audit): was `payment.amount || Math.round(usd*130)`
-      // — if the DB row's amount was 0/missing/NULL, the fraud check
-      // compared PayPal's captured amount to itself (kesAmount and
-      // capture.amountUSD*130 are the same value), always passed, and
-      // upgraded the user regardless of what they actually paid. Now we
-      // fail loudly if payment.amount isn't a positive number — the
-      // create-order endpoint above is authoritative on amount, so an
-      // empty row here means the record was tampered with or never got
-      // its price set. Refuse to upgrade in that case.
-      const kesAmount = Number(payment.amount ?? 0);
-      if (!kesAmount || kesAmount <= 0) {
-        console.error(`[PayPal][Security] Refusing capture — payment ${payment.id} has invalid amount=${payment.amount}. Cannot verify against PayPal capture.`);
-        return res.status(402).json({
-          message: "Payment amount could not be verified. Please contact support.",
-          code: "PAYPAL_AMOUNT_MISSING",
-        });
-      }
-      const { verifyPayPalPayment } = await import("./services/verifyPayment");
-      const paypalVerify = await verifyPayPalPayment({
-        paymentId: payment.id,
+      const { completePayPalCapture } = await import("./services/paypalCapture");
+      const result = await completePayPalCapture({
         paypalOrderId,
-        captureId: capture.transactionId,
-        expectedAmountKes: kesAmount,
-        ip: String(req.ip || "server"),
-      });
-
-      if (!paypalVerify.verified && paypalVerify.status !== "api_unavailable") {
-        // PayPal order/capture mismatch — do NOT upgrade
-        console.error(
-          `[PayPal][Security] Verification BLOCKED paymentId=${payment.id} orderId=${paypalOrderId} status=${paypalVerify.status} note="${paypalVerify.note}"`
-        );
-        return res.status(402).json({
-          message: `Payment verification failed: ${paypalVerify.note}`,
-          verificationStatus: paypalVerify.status,
-        });
-      }
-
-      if (paypalVerify.status === "api_unavailable") {
-        console.warn(`[PayPal][Verify] API unavailable for paymentId=${payment.id} — proceeding with upgrade (non-blocking)`);
-      }
-
-      // 4. ── AUTO-UNLOCK via centralized upgradeUserAccount ─────────────────
-      // 2026-09 CRITICAL FIX (Tony's payment audit): was hardcoded to "pro"
-      // for every PayPal capture, giving 365 days of Pro (KES 4,500) to
-      // ANY PayPal payment — including trial (KES 99, 24h) and monthly
-      // (KES 1,000, 30d). Users paying via PayPal for a monthly plan
-      // received a full year for a fraction of the cost. Massive revenue
-      // leak + wrong subscription duration in DB.
-      //
-      // Derive the actual tier the user paid for from the payment row's
-      // planId/serviceId. Only fall back to "pro" if we can't resolve
-      // anything — and log a warning so we can audit those.
-      const svcId = payment.serviceId || "main_subscription";
-      const CANONICAL = new Set(["trial", "basic", "monthly", "yearly", "pro", "pro_referral"]);
-      const sidLower = String(svcId).toLowerCase();
-      const derivedPlan: "trial" | "basic" | "monthly" | "yearly" | "pro" | "pro_referral" =
-        (payment.planId && CANONICAL.has(payment.planId)) ? payment.planId :
-        (sidLower.startsWith("plan_") && CANONICAL.has(sidLower.replace("plan_", ""))) ? sidLower.replace("plan_", "") as any :
-        (CANONICAL.has(sidLower) ? sidLower as any : "pro");
-      if (derivedPlan === "pro" && !payment.planId && !sidLower.startsWith("plan_")) {
-        console.warn(`[PayPal] Could not derive plan from payment ${payment.id} (serviceId="${svcId}", planId="${payment.planId}") — defaulting to yearly pro. Audit this — user may have overpaid or underpaid.`);
-      }
-      const upgrade = await upgradeUserAccount({
+        paymentId,
         userId,
-        email: capture.payerEmail || (payment as any).email || undefined,
-        planType: derivedPlan,
-        transactionId: capture.transactionId,
-        paymentId: payment.id,
-        serviceId: svcId,
-        method: "paypal",
-        paymentSource: "web",
-        amountKes: kesAmount,
-        extraMeta: { paypalOrderId, payerEmail: capture.payerEmail, amountUSD: capture.amountUSD, verificationStatus: paypalVerify.status, derivedPlan },
+        clientIp: String(req.ip || "server"),
+        source: "client",
       });
 
-      if (upgrade.alreadyProcessed) {
-        console.warn(`[PayPal] Duplicate capture ignored — txn ${capture.transactionId} already processed.`);
-      }
-
-      console.info(
-        `[Payment][COMPLETE] PayPal | txn=${capture.transactionId} | paymentId=${payment.id} | userId=${userId} | email=${capture.payerEmail || (payment as any).email || "unknown"} | USD=${capture.amountUSD} | plan=${upgrade.planActivated} | verified=${paypalVerify.status} | success=${upgrade.success}`
-      );
-
-      if (upgrade.success) {
-        import("./services/activityLogger").then(({ logActivity }) => {
-          logActivity({
-            event: "payment_success",
-            userId,
-            email: capture.payerEmail || (payment as any).email || undefined,
-            meta: { method: "paypal", transactionId: capture.transactionId, amountUSD: capture.amountUSD, paymentId: payment.id, plan: upgrade.planActivated },
-            ip: req.ip || "",
-          });
-        }).catch((err) => reportRejection(err, 'routes'));
-
-        // Real-time update to My Payments page
-        import("./websocket").then(({ notifyUserPaymentUpdate }) => {
-          notifyUserPaymentUpdate(userId, {
-            type: "payment_update", paymentId: payment.id, status: "completed",
-          });
-        }).catch((err) => reportRejection(err, 'routes'));
-
-        // Sync completed payment to Supabase
-        console.log('CALLING PAYMENT SYNC NOW');
-        await syncPaymentToSupabase({
-          user_id:       userId,
-          phone:         null,
-          amount:        kesAmount,
-          mpesa_code:    capture.transactionId || null,
-          status:        "completed",
-          plan_id:       (payment as any).planId || null,
-          base_amount:   (payment as any).baseAmount ?? null,
-          currency:      "KES",
-          discount_data: (payment as any).discountType
-            ? { discountType: (payment as any).discountType, discountValue: ((payment as any).baseAmount ?? kesAmount) - kesAmount }
-            : null,
-        });
-        await upgradeUserToPro(userId);
-        // 2026-09 (PayPal audit fix — parity with webhook path): was hardcoded
-        // 360d + fallback to 'pro'. Use the derivedPlan we resolved above
-        // + planExpiry(derivedPlan) so Supabase-side shows the actual tier
-        // and duration, same as local Postgres.
-        const ppCaptureExpiry = planExpiry(derivedPlan);
-        syncSubscriptionToSupabase({
-          user_id: userId,
-          plan_id: derivedPlan,
-          provider: "paypal",
-          status: "active",
-          auto_renew: false,
-          expires_at: ppCaptureExpiry,
-        }).catch((err) => reportRejection(err, 'routes'));
-        redeemAppliedPromo(payment.metadata).catch((err) => reportRejection(err, 'routes'));
-
-        // 2026-09 (parity with M-Pesa callback): send WhatsApp payment
-        // receipt to the user's stored phone. M-Pesa users have always
-        // received this — PayPal users only got an email. Both channels
-        // now get parity so PayPal users don't message support asking
-        // "did my payment go through?"
-        (async () => {
-          try {
-            const user = await storage.getUserById(userId).catch(() => null);
-            const phone = user?.phone?.trim();
-            if (!phone) return;   // no phone on file — email is enough
-            const { sendWhatsAppPaymentConfirmation } = await import("./sms");
-            const { planLabel } = await import("./utils/plans");
-            await sendWhatsAppPaymentConfirmation({
-              phone,
-              serviceLabel: planLabel(derivedPlan),
-              amountKes:    kesAmount,
-              receipt:      capture.transactionId,
-              userId,
-              serviceCode:  derivedPlan,
-            });
-          } catch (waErr: any) {
-            console.warn(`[PayPal WhatsApp] confirmation send failed for userId=${userId}: ${waErr?.message}`);
-          }
-        })();
-      }
-
-      // 4. Handle referral if one was stored
-      // 2026-08 SECURITY (Phase 3 audit): previously trusted metadata.refCode
-      // directly and paid 10% commission. Since the client sets metadata.refCode
-      // at /api/paypal/init time, a user could send their OWN referral code and
-      // pocket 10% cashback on every PayPal payment. Fixed by:
-      //   (a) refusing to create a commission if the refCode belongs to the
-      //       paying user themselves (self-referral)
-      //   (b) requiring the refCode match a real user in the DB (unknown codes
-      //       are silently dropped instead of paying a fake influencer)
-      //   (c) requiring the payer's users.referred_by matches this refCode —
-      //       so a user can only ever generate commission for the referrer
-      //       they SIGNED UP under, never for a random code they inject later
-      // M-Pesa callback at line 5551 already does (c) correctly by reading
-      // users.referred_by from the DB instead of trusting request metadata.
-      if (payment.metadata) {
-        try {
-          const meta = typeof payment.metadata === "string" ? JSON.parse(payment.metadata) : payment.metadata;
-          const clientRefCode: string | undefined = meta?.refCode;
-          if (clientRefCode && userId) {
-            const normCode = String(clientRefCode).trim().toUpperCase();
-            // Read the payer's ACTUAL referral chain from the DB (source of truth)
-            const { rows: [payerRow] } = await pool.query<{ referred_by: string | null; referral_code: string | null }>(
-              `SELECT referred_by, referral_code FROM users WHERE id = $1 LIMIT 1`,
-              [userId],
-            );
-            const authoritativeCode = String(payerRow?.referred_by ?? "").trim().toUpperCase();
-            // Self-referral guard — payer's own code cannot pay them commission
-            const payerOwnCode = String(payerRow?.referral_code ?? "").trim().toUpperCase();
-            if (!authoritativeCode) {
-              console.log(`[PayPal][Referral] Payer ${userId} has no referred_by — commission skipped (client sent "${normCode}")`);
-            } else if (normCode === payerOwnCode) {
-              console.warn(`[PayPal][Referral][Security] Self-referral blocked for user=${userId} — client sent their own code`);
-            } else if (normCode !== authoritativeCode) {
-              console.warn(`[PayPal][Referral][Security] refCode mismatch for user=${userId} — client="${normCode}" authoritative="${authoritativeCode}" — using authoritative`);
-            }
-            const effectiveCode = authoritativeCode; // always use DB value
-            if (effectiveCode && effectiveCode !== payerOwnCode) {
-              // Confirm the referrer code actually resolves to a real user
-              const { rows: [refUser] } = await pool.query<{ id: string }>(
-                `SELECT id FROM users WHERE UPPER(referral_code) = $1 LIMIT 1`,
-                [effectiveCode],
-              );
-              if (!refUser) {
-                console.warn(`[PayPal][Referral] refCode "${effectiveCode}" doesn't match any user — commission skipped`);
-              } else if (refUser.id === userId) {
-                console.warn(`[PayPal][Referral][Security] Self-referral (referrer.id === payer.id) blocked for user=${userId}`);
-              } else {
-                const commission = Math.round(payment.amount * 0.10);
-                storage.createReferral({
-                  refCode: effectiveCode,
-                  referredPhone: capture.payerEmail || "",
-                  paymentAmount: payment.amount,
-                  commission,
-                  status: "pending",
-                }).catch((err) => reportRejection(err, 'routes'));
-              }
-            }
-          }
-        } catch (_e) { /* non-fatal */ }
-      }
-
-      res.json({
-        success: true,
-        transactionId: capture.transactionId,
-        payerEmail: capture.payerEmail,
-        amountUSD: capture.amountUSD,
-        planActivated: upgrade.planActivated,
-        expiresAt: upgrade.expiresAt,
-        status: capture.status,
-      });
+      res.status(result.status).json(result.body);
     } catch (err: any) {
       console.error("[PayPal] capture-order error:", err?.message ?? err);
       res.status(500).json({ message: err?.message ?? "PayPal capture failed." });

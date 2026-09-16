@@ -1431,6 +1431,16 @@ app.use((req, res, next) => {
       })
       .catch(console.error);
 
+    // 2026-09 (Tony's payment-bug audit): PayPal equivalent of the STK
+    // recovery poller above — see server/paypal-recovery.ts header comment
+    // for the full root-cause writeup (live PayPal success rate was ~0%
+    // for 2+ months because nothing ever retried a stuck "pending" order).
+    import("./paypal-recovery")
+      .then((m) => {
+        m.startPaypalRecoveryPoller();
+      })
+      .catch(console.error);
+
     import("./portal-health-checker")
       .then((m) => {
         m.startPortalHealthChecker();
