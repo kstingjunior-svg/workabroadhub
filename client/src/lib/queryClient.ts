@@ -271,7 +271,23 @@ export const getQueryFn: <T>(options: {
         cachedUser.role === "SUPER_ADMIN";
 
       if (!isExemptUser) {
-        if (unauthorizedBehavior === "returnNull") return null as any;
+        // 2026-09 (Tony's "Just a small detour" / stuck-app report, found
+        // while investigating the paid-tools timeout bug): this short-circuit
+        // is standing in for a REAL network call, so it must fail the exact
+        // same way that real call would have. The real server returns 403
+        // (not 401) for an unverified user — the "returnNull" branch below
+        // is scoped to genuine 401s (see the res.status === 401 check further
+        // down) and was never meant to cover this case. Returning `null` here
+        // handed dozens of dashboard widgets (dashboard-journey-card.tsx,
+        // dashboard-bookmarks-card.tsx, etc.) a `data` value their `= []`
+        // destructuring defaults don't protect against — those defaults only
+        // trigger on `undefined`, not `null` — so every unverified user
+        // landing on the dashboard hit an uncaught "X is not iterable" /
+        // "Cannot read properties of null" render crash and got stuck on the
+        // ErrorBoundary fallback with refresh unable to help (same crash,
+        // every load). ALWAYS throwing here — exactly like the real 403
+        // would — keeps `data` correctly `undefined` on failure, which is
+        // what those widgets' `= []` defaults actually guard against.
         const err = new Error(
           "Please verify your email address to continue using WorkAbroadHub. Check your inbox and spam folder for the verification code."
         ) as any;

@@ -43,7 +43,7 @@ const STAGE_BADGE: Record<string, { label: string; emoji: string }> = {
 
 export function DashboardJourneyCard() {
   const { user } = useAuth();
-  const { data: journeys = [] } = useQuery<JourneySummary[]>({
+  const { data: journeysData } = useQuery<JourneySummary[]>({
     queryKey: ["/api/journey"],
     enabled: !!user,
     staleTime: 60_000,
@@ -51,6 +51,12 @@ export function DashboardJourneyCard() {
     // widget rather than spamming a failing endpoint.
     retry: false,
   });
+  // 2026-09: the shared default queryFn can resolve with `null` (not just
+  // `undefined`) on a 401/403 — a `= []` destructuring default only
+  // catches `undefined`, so `[...journeys]` below crashed with "not
+  // iterable" for any signed-in-but-unauthorized session. See
+  // queryClient.ts getQueryFn.
+  const journeys = journeysData ?? [];
 
   // Sort newest-touched first, take the top one
   const active = [...journeys]

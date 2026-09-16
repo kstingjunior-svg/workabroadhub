@@ -63,11 +63,15 @@ export default function BookmarksPage() {
   const { toast } = useToast();
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
 
-  const { data: bookmarks = [], isLoading } = useQuery<BookmarkRow[]>({
+  const { data: bookmarksData, isLoading } = useQuery<BookmarkRow[]>({
     queryKey: ["/api/bookmarks"],
     enabled: !!user,
     retry: false,
   });
+  // 2026-09: the shared default queryFn can resolve with `null` (not just
+  // `undefined`) on a 401/403 — a `= []` destructuring default only
+  // catches `undefined`. See queryClient.ts getQueryFn.
+  const bookmarks = bookmarksData ?? [];
 
   const removeMutation = useMutation({
     mutationFn: async (id: string) => {

@@ -105,9 +105,13 @@ export default function JourneyPage() {
 
 function CountryPicker() {
   const [, navigate] = useLocation();
-  const { data: existingJourneys = [] } = useQuery<Array<{ countryCode: string; progressPercent: number; completedCount: number; totalSteps: number; stage: string }>>({
+  const { data: existingJourneysData } = useQuery<Array<{ countryCode: string; progressPercent: number; completedCount: number; totalSteps: number; stage: string }>>({
     queryKey: ["/api/journey"],
   });
+  // 2026-09: the shared default queryFn can resolve with `null` (not just
+  // `undefined`) on a 401/403 — a `= []` destructuring default only
+  // catches `undefined`. See queryClient.ts getQueryFn.
+  const existingJourneys = existingJourneysData ?? [];
   const progressByCountry = useMemo(() => {
     const m = new Map<string, { progressPercent: number; completedCount: number; totalSteps: number; stage: string }>();
     for (const j of existingJourneys) m.set(j.countryCode, j);

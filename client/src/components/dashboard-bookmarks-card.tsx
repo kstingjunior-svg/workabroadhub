@@ -17,12 +17,17 @@ interface BookmarkRow {
 
 export function DashboardBookmarksCard() {
   const { user } = useAuth();
-  const { data: bookmarks = [] } = useQuery<BookmarkRow[]>({
+  const { data: bookmarksData } = useQuery<BookmarkRow[]>({
     queryKey: ["/api/bookmarks"],
     enabled: !!user,
     staleTime: 60_000,
     retry: false,
   });
+  // 2026-09: the shared default queryFn can resolve with `null` (not just
+  // `undefined`) on a 401/403 — a `= []` destructuring default only
+  // catches `undefined`, so this widget crashed the whole dashboard for
+  // any signed-in-but-unauthorized session. See queryClient.ts getQueryFn.
+  const bookmarks = bookmarksData ?? [];
 
   if (bookmarks.length === 0) return null;
 
