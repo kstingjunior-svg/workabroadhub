@@ -339,6 +339,81 @@ export const queryClient = new QueryClient({
   },
 });
 
+// =============================================================================
+// GLOBAL FETCH GUARD FOR UNVERIFIED-EMAIL USERS
+// =============================================================================
+// 2026-09 (Tony's 403-storm, round 2): the getQueryFn-level short-circuit
+// above only covers useQuery calls that rely on the DEFAULT queryFn. After
+// that fix shipped, the storm dropped but didn't stop — the codebase has
+// dozens of call sites that talk to /api/* directly instead of through
+// getQueryFn: inline fetch() calls (dashboard.tsx's own /api/check-hot-user
+// poll, use-user-data.ts's /api/user/overview, dashboard-kazi-karibu-card.tsx,
+// lib/services.ts), useQuery calls with their OWN custom queryFn
+// (dashboard-best-match.tsx, live-activity-feed.tsx, live-activity-strip.tsx),
+// and plain analytics/presence pings (use-heartbeat.ts, use-behavior-tracker.ts,
+// lib/analytics.ts). None of those go anywhere near getQueryFn, so the
+// per-queryFn check above never sees them, and each one kept hitting the
+// server and paying for a real Postgres round-trip inside
+// requireEmailVerifiedApi just to get told "still unverified".
+//
+// Rather than chase every existing call site (and the next one someone
+// writes), patch the one thing every single one of them funnels through:
+// the global fetch() function itself. Any same-origin /api/* request that
+// isn't on the shared allowlist, made while we already know (from the
+// cached /api/auth/user payload) that the current user is
+// authenticated-but-unverified, is answered locally with a synthetic 403
+// Response shaped exactly like requireEmailVerifiedApi.ts's real one — no
+// network round trip, no wasted DB query. Every existing caller already
+// handles a 403 Response identically whether it came from the network or
+// from here, so this needs zero changes anywhere else.
+if (typeof window !== "undefined" && !(window as any).__wahEmailVerifiedFetchPatched) {
+  (window as any).__wahEmailVerifiedFetchPatched = true;
+  const originalFetch = window.fetch.bind(window);
+
+  window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    try {
+      const rawUrl =
+        typeof input === "string" ? input :
+        input instanceof URL ? input.toString() :
+        input.url;
+
+      const url = new URL(rawUrl, window.location.origin);
+
+      if (
+        url.origin === window.location.origin &&
+        url.pathname.startsWith("/api") &&
+        !isEmailVerificationExempt(url.pathname)
+      ) {
+        const cachedUser = queryClient.getQueryData<any>(["/api/auth/user"]);
+        const isBlockedUser =
+          !!cachedUser &&
+          cachedUser.emailVerified === false &&
+          cachedUser.isAdmin !== true &&
+          cachedUser.role !== "ADMIN" &&
+          cachedUser.role !== "SUPER_ADMIN";
+
+        if (isBlockedUser) {
+          return new Response(
+            JSON.stringify({
+              error: "email_verification_required",
+              message:
+                "Please verify your email address to continue using WorkAbroadHub. Check your inbox and spam folder for the verification code.",
+              verificationRequired: true,
+              verificationStep: "email",
+              actionUrl: "/account/verify",
+            }),
+            { status: 403, headers: { "Content-Type": "application/json" } }
+          );
+        }
+      }
+    } catch {
+      // Never let a bug in this guard break a real request — fall through.
+    }
+
+    return originalFetch(input, init);
+  }) as typeof window.fetch;
+}
+
 queryClient.setQueryDefaults(["/api/user/plan"], {
   staleTime: 30000,
   refetchOnWindowFocus: true,
