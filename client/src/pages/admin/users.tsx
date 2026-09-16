@@ -114,6 +114,14 @@ interface GrantLookupResult {
     grantedBy: string | null;
     note: string;
   }>;
+  // 2026-09 (Tony's repeat-trial fix): unlike `plan.isActive`, this looks at
+  // the account's FULL payment history, so it still flags a prior trial
+  // even after that 24h trial has long since expired.
+  trialHistory?: {
+    everUsed: boolean;
+    timesGranted: number;
+    lastGrantedAt: string | null;
+  };
 }
 
 const GRANT_PLAN_LABELS: Record<string, string> = {
@@ -288,6 +296,12 @@ export default function UsersPage() {
   const [grantNote, setGrantNote] = useState("");
   const [grantResult, setGrantResult] = useState<GrantResult | null>(null);
   const [grantNotFound, setGrantNotFound] = useState(false);
+  // 2026-09 (Tony's repeat-trial fix): the server now blocks a repeat KES 99
+  // trial grant with 409 TRIAL_ALREADY_USED unless { force: true } is sent.
+  // This checkbox is the admin's explicit, visible confirmation before we
+  // ever set that flag — default false, and reset any time the identifier
+  // or plan changes so a stale confirmation can't carry over to a new grant.
+  const [grantForceTrialOverride, setGrantForceTrialOverride] = useState(false);
 
   // 2026-09 (Tony: "make it smart enough to know if this user is already on
   // Pro before I grant again") — debounce the identifier as it's typed, then
@@ -490,6 +504,9 @@ export default function UsersPage() {
       receipt: grantReceipt.trim() || undefined,
       note: grantNote.trim() || "Manual grant via admin panel",
       createIfNotFound,
+      // 2026-09: only ever true when the admin has explicitly ticked the
+      // "grant anyway" box below the trial-already-used warning.
+      force: grantPlan === "trial" ? grantForceTrialOverride : undefined,
     });
     return res.json();
   }
@@ -502,7 +519,7 @@ export default function UsersPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
       toast({ title: "Plan granted", description: data.message });
-      setGrantIdentifier(""); setGrantReceipt(""); setGrantNote("");
+      setGrantIdentifier(""); setGrantReceipt(""); setGrantNote(""); setGrantForceTrialOverride(false);
     },
     onError: (err: any) => {
       const msg: string = err.message || "";
@@ -995,7 +1012,7 @@ export default function UsersPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="grant-identifier" className="text-xs">Email or Phone <span className="text-destructive">*</span></Label>
-                  <Input id="grant-identifier" value={grantIdentifier} onChange={e => { setGrantIdentifier(e.target.value); setGrantNotFound(false); }} placeholder="user@email.com or 0712…" data-testid="input-grant-identifier" />
+                  <Input id="grant-identifier" value={grantIdentifier} onChange={e => { setGrantIdentifier(e.target.value); setGrantNotFound(false); setGrantForceTrialOverride(false); }} placeholder="user@email.com or 0712…" data-testid="input-grant-identifier" />
                   {/* 2026-09: live pre-check so the admin sees the account's
                       CURRENT plan before clicking Grant — no more finding out
                       after the fact that this was a repeat grant. */}
@@ -1039,7 +1056,7 @@ export default function UsersPage() {
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="grant-plan" className="text-xs">Plan</Label>
-                  <Select value={grantPlan} onValueChange={v => setGrantPlan(v as GrantPlanId)}>
+                  <Select value={grantPlan} onValueChange={v => { setGrantPlan(v as GrantPlanId); setGrantForceTrialOverride(false); }}>
                     <SelectTrigger id="grant-plan" data-testid="select-grant-plan"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="trial">Trial — KES 99 / 24 hours</SelectItem>
@@ -1051,6 +1068,32 @@ export default function UsersPage() {
                   <p className="text-[10px] text-muted-foreground leading-tight">
                     Expiry is set from the activation moment — pick the tier matching what they paid.
                   </p>
+                  {/* 2026-09 (Tony's repeat-trial fix): fires off the account's FULL
+                      history, not just its current plan, so this still warns after
+                      the 24h trial has already expired — which is exactly when a
+                      support message asking to "reactivate" tends to arrive. */}
+                  {grantPlan === "trial" && grantLookup?.found && grantLookup.trialHistory?.everUsed && (
+                    <div className="rounded-md border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/30 px-2.5 py-2 space-y-1.5 mt-1" data-testid="warning-trial-already-used">
+                      <p className="text-[11px] font-semibold text-red-700 dark:text-red-400 flex items-center gap-1">
+                        <AlertTriangle className="h-3 w-3 shrink-0" /> Trial already used {grantLookup.trialHistory.timesGranted > 1 ? `(${grantLookup.trialHistory.timesGranted}×)` : ""}
+                      </p>
+                      <p className="text-[11px] text-red-700/90 dark:text-red-300/90 leading-snug">
+                        <strong>{grantLookup.user?.name}</strong> already received the one-time KES 99 trial
+                        {grantLookup.trialHistory.lastGrantedAt && (
+                          <> (last {new Date(grantLookup.trialHistory.lastGrantedAt).toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric" })})</>
+                        )}. Granting another trial repeats the exact bypass Tony flagged — pick <strong>Monthly (KES 1,000)</strong> or <strong>Yearly (KES 4,500)</strong> instead.
+                      </p>
+                      <label className="flex items-center gap-1.5 text-[11px] text-red-700 dark:text-red-400 pt-0.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={grantForceTrialOverride}
+                          onChange={e => setGrantForceTrialOverride(e.target.checked)}
+                          data-testid="checkbox-force-trial-override"
+                        />
+                        I understand — grant another trial anyway (rare; e.g. correcting our own error)
+                      </label>
+                    </div>
+                  )}
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="grant-receipt" className="text-xs">Receipt <span className="text-muted-foreground">(optional)</span></Label>
@@ -1092,7 +1135,13 @@ export default function UsersPage() {
                   )}
                   <Button
                     onClick={() => { setGrantNotFound(false); manualGrantMutation.mutate(); }}
-                    disabled={!grantIdentifier.trim() || manualGrantMutation.isPending}
+                    disabled={
+                      !grantIdentifier.trim() ||
+                      manualGrantMutation.isPending ||
+                      // 2026-09: can't submit a repeat trial grant until the admin
+                      // has explicitly ticked the override checkbox above.
+                      (grantPlan === "trial" && !!grantLookup?.found && !!grantLookup.trialHistory?.everUsed && !grantForceTrialOverride)
+                    }
                     data-testid="button-grant-plan"
                     className="bg-amber-600 hover:bg-amber-700 text-white self-start"
                   >

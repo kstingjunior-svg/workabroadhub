@@ -9158,6 +9158,29 @@ Crawl-delay: 1`);
       const expiresAt = sub?.endDate ?? null;
       const isActive = plan !== "free" && (!expiresAt || new Date(expiresAt) >= new Date());
 
+      // 2026-09 (Tony: "the reusage of a trial" — root cause was THIS panel:
+      // the "already on an active plan" warning below only fires while a
+      // plan is still active, but the KES 99 trial expires in 24h, so by
+      // the time a user messages back asking to be reactivated, isActive is
+      // already false and the panel says "safe to grant" — even for an
+      // account that has already burned a trial a dozen times). Look at the
+      // FULL history, not just the current subscription, so the UI can warn
+      // regardless of whether the last trial has already expired.
+      const { rows: trialHistoryRows } = await pool.query<{ times_granted: string; last_granted_at: Date | null }>(
+        `SELECT COUNT(*)::int AS times_granted, MAX(created_at) AS last_granted_at
+           FROM payments
+          WHERE user_id = $1
+            AND status IN ('success', 'completed')
+            AND (plan_id IN ('trial', 'basic') OR service_id IN ('plan_trial', 'plan_basic'))`,
+        [user.id],
+      );
+      const timesGranted = Number(trialHistoryRows[0]?.times_granted ?? 0);
+      const trialHistory = {
+        everUsed:      timesGranted > 0,
+        timesGranted,
+        lastGrantedAt: trialHistoryRows[0]?.last_granted_at ?? null,
+      };
+
       const recentGrants = recentGrantRows.map((p) => {
         let adminGranted = false;
         let note = "";
@@ -9196,6 +9219,7 @@ Crawl-delay: 1`);
           expiresAt,
         },
         recentGrants,
+        trialHistory,
       });
     } catch (err: any) {
       console.error("[ManualGrant lookup]", err.message);
@@ -9209,7 +9233,7 @@ Crawl-delay: 1`);
   app.post("/api/admin/manual-grant", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const adminId = req.user?.claims?.sub;
-      const { identifier, planId = "pro", note = "", receipt, createIfNotFound = false } = req.body;
+      const { identifier, planId = "pro", note = "", receipt, createIfNotFound = false, force = false } = req.body;
 
       if (!identifier || typeof identifier !== "string") {
         return res.status(400).json({ message: "identifier (email or phone) is required" });
@@ -9249,6 +9273,33 @@ Crawl-delay: 1`);
       }
 
       console.info(`[ManualGrant] found userId=${user.id} email=${user.email} phone=${user.phone ?? "N/A"}`);
+
+      // 2026-09 CRITICAL FIX (Tony's report: "the reusage of a trial" — one
+      // account had 13 successful KES 99 trial grants, all via THIS
+      // endpoint, most recent same-day). /api/subscriptions/upgrade,
+      // PayPal create-order, and /api/payments/initiate all refuse a
+      // repeat self-service trial purchase — but this admin tool granted
+      // "trial" directly via storage.activateUserPlan(), bypassing every
+      // one of those gates AND upgradeUserAccount()'s grant-time check
+      // (this endpoint never calls upgradeUserAccount() at all). The
+      // /admin/users Manual Plan Grant panel only warns when the account's
+      // CURRENT plan is active — a 24h trial is expired again by the next
+      // support message, so the warning never fired and the same trial got
+      // re-granted on a near-daily cadence. Close the gap here, with the
+      // same one-time-per-person rule and the same escape hatch every other
+      // gate uses: pass { force: true } for the rare genuine override.
+      if ((planId === "trial" || planId === "basic") && !force) {
+        const { isTrialConsumed } = await import("./lib/trial-gate");
+        const alreadyUsed = await isTrialConsumed({ userId: user.id, phone: user.phone ?? null });
+        if (alreadyUsed) {
+          console.warn(`[ManualGrant][SECURITY] Repeat-trial grant BLOCKED: userId=${user.id} identifier=${raw} requested by admin=${adminId}`);
+          return res.status(409).json({
+            message: `This person has already used the one-time KES 99 trial. Granting it again would defeat the one-trial-per-person rule — grant Monthly (KES 1,000) or Yearly (KES 4,500) instead. If this is a genuine exception, resend with { force: true }.`,
+            code: "TRIAL_ALREADY_USED",
+            trialAlreadyUsed: true,
+          });
+        }
+      }
 
       // 2026-06 hardening: never let a missing plans row block a legitimate
       // admin grant. If the DB lookup returns null (plans table empty, row
