@@ -25,6 +25,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useToolPayment, TOOL_SCAN_PRICE_KES } from "@/hooks/use-tool-payment";
 import { fetchCsrfToken } from "@/lib/queryClient";
+import { pollToolScanResult, ToolScanError } from "@/lib/tool-scan-poll";
 
 interface SubScore { key: string; label: string; score: number; detail: string; }
 interface Finding  {
@@ -164,22 +165,27 @@ export default function JobScamCheckerPage() {
         headers: { "X-CSRF-Token": csrf, "x-scan-token": token },
         body: form,
       });
-      const data = await res.json();
       if (res.status === 402) {
         // Credit missing/expired/used — server is the gate; re-collect payment.
+        const data = await res.json().catch(() => ({}));
         setLoading(false);
         pay.handle402(data);
         return;
       }
       // The gate consumed the credit for this scan — one payment, one check.
       pay.consumeToken();
-      if (!data.ok) {
-        toast({ title: "Couldn't complete the check", description: data.message || "Please try again.", variant: "destructive" });
+      // 2026-09: the server now runs the (slow) AI analysis in the
+      // background and responds 202 immediately with a job id — see
+      // client/src/lib/tool-scan-poll.ts for why (Render's ~30s proxy
+      // timeout was silently eating already-paid-for results).
+      const data = await pollToolScanResult(res);
+      setResult(data);
+    } catch (err: any) {
+      if (err instanceof ToolScanError) {
+        toast({ title: "Couldn't complete the check", description: err.message, variant: "destructive" });
       } else {
-        setResult(data);
+        toast({ title: "Network issue", description: "Check your connection and try again.", variant: "destructive" });
       }
-    } catch {
-      toast({ title: "Network issue", description: "Check your connection and try again.", variant: "destructive" });
     } finally {
       setLoading(false);
     }

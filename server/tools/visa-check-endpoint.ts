@@ -25,6 +25,7 @@
 
 import type { Express, Request, Response } from "express";
 import { requireToolCredit } from "./tool-pay";
+import { createToolScanJob, markToolScanJobDone, markToolScanJobError } from "./tool-scan-jobs";
 import multer from "multer";
 import crypto from "crypto";
 import { pool } from "../db";
@@ -443,7 +444,16 @@ export function registerVisaCheckRoute(app: Express): void {
       });
     }),
     async (req: any, res: Response) => {
-      const t0 = Date.now();
+      // 2026-09 (Tony's "people are paying but I can't tell" investigation):
+      // this used to synchronously await analyzeVisa() (a GPT-4o call that
+      // can run well past Render's ~30s platform proxy timeout) before
+      // responding. requireToolCredit() above has ALREADY atomically
+      // consumed the user's KES 100 credit by this point, so a timeout here
+      // meant: paid, credit gone, nothing delivered. Production logs showed
+      // 35+ recent 502s on this route alone, median ~30003ms. Fix: validate
+      // + extract text synchronously (fast, non-AI), then hand off to a
+      // background job and respond 202 immediately so the client can poll —
+      // same pattern already proven on /api/tools/ats-check.
       try {
         if (!req.file) return res.status(400).json({ message: "Please attach a visa document." });
 
@@ -459,12 +469,11 @@ export function registerVisaCheckRoute(app: Express): void {
         // 2026-08 (Tony): PDF + Word supported via text-extraction path.
         // Vision remains default for images (seals, fonts, layout matter
         // for forgery detection). See visa-verify/analyzer.ts.
-        const { analyzeVisa } = await import("../visa-verify/analyzer");
-        let report;
+        let analyzerInput: { kind: "image"; imageBase64DataUrl: string } | { kind: "text"; text: string; sourceFilename: string };
         if (isImage) {
           const base64 = req.file.buffer.toString("base64");
           const dataUrl = `data:${mt};base64,${base64}`;
-          report = await analyzeVisa({ kind: "image", imageBase64DataUrl: dataUrl });
+          analyzerInput = { kind: "image", imageBase64DataUrl: dataUrl };
         } else {
           const { extractTextFromBuffer } = await import("../utils/extract-text");
           const extracted = await extractTextFromBuffer(req.file.buffer, mt, req.file.originalname);
@@ -473,46 +482,61 @@ export function registerVisaCheckRoute(app: Express): void {
               message: "We couldn't read enough text from that file. If it's a scanned PDF, please upload a clear photo (JPG/PNG) instead — our OCR handles those.",
             });
           }
-          report = await analyzeVisa({
-            kind: "text",
-            text: extracted.text,
-            sourceFilename: req.file.originalname,
-          });
+          analyzerInput = { kind: "text", text: extracted.text, sourceFilename: req.file.originalname };
         }
 
-        if (!report.ok) {
-          return res.status(502).json({ ok: false, message: report.message });
-        }
+        const userId: string | null = req.user?.claims?.sub ?? req.user?.id ?? null;
+        const jobId = await createToolScanJob("visa_check", userId, req.toolPaymentId ?? null);
+        res.status(202).json({ jobId, status: "processing" });
 
-        console.log(
-          `[VisaVerify] verdict=${report.verdict} trust=${report.overallTrust} band=${report.riskBand} country=${report.country?.code ?? "?"} in ${Date.now() - t0}ms`,
-        );
+        (async () => {
+          const t0 = Date.now();
+          try {
+            const { analyzeVisa } = await import("../visa-verify/analyzer");
+            const report = await analyzeVisa(analyzerInput);
 
-        res.json({
-          ok: true,
-          overallTrust:         report.overallTrust,
-          confidence:           report.confidence,
-          riskBand:             report.riskBand,
-          verdict:              report.verdict,
-          headline:             report.headline,
-          explanation:          report.explanation,
-          extractedFields:      report.extractedFields,
-          country:              report.country ? {
-            code:            report.country.code,
-            name:            report.country.name,
-            flag:            report.country.flag,
-            links:           report.country.links,
-            contacts:        report.country.contacts,
-            nextStepAdvice:  report.country.nextStepAdvice,
-          } : null,
-          subScores:            report.subScores,
-          findings:             report.findings,
-          forgeryIndicators:    report.forgeryIndicators,
-          positiveIndicators:   report.positiveIndicators,
-          recommendations:      report.recommendations,
-          scamPatternsMatched:  report.scamPatternsMatched,
-          disclaimer:           "This is an AI-assisted screening, not an official verification. Always confirm through the government portals shown before making travel, payment, or contract decisions.",
-        });
+            if (!report.ok) {
+              await markToolScanJobError(jobId, report.message);
+              return;
+            }
+
+            console.log(
+              `[VisaVerify] job=${jobId} verdict=${report.verdict} trust=${report.overallTrust} band=${report.riskBand} country=${report.country?.code ?? "?"} in ${Date.now() - t0}ms`,
+            );
+
+            await markToolScanJobDone(jobId, {
+              ok: true,
+              overallTrust:         report.overallTrust,
+              confidence:           report.confidence,
+              riskBand:             report.riskBand,
+              verdict:              report.verdict,
+              headline:             report.headline,
+              explanation:          report.explanation,
+              extractedFields:      report.extractedFields,
+              country:              report.country ? {
+                code:            report.country.code,
+                name:            report.country.name,
+                flag:            report.country.flag,
+                links:           report.country.links,
+                contacts:        report.country.contacts,
+                nextStepAdvice:  report.country.nextStepAdvice,
+              } : null,
+              subScores:            report.subScores,
+              findings:             report.findings,
+              forgeryIndicators:    report.forgeryIndicators,
+              positiveIndicators:   report.positiveIndicators,
+              recommendations:      report.recommendations,
+              scamPatternsMatched:  report.scamPatternsMatched,
+              disclaimer:           "This is an AI-assisted screening, not an official verification. Always confirm through the government portals shown before making travel, payment, or contract decisions.",
+            });
+          } catch (err: any) {
+            console.error(`[VisaVerify] job=${jobId} background error:`, err?.message);
+            await markToolScanJobError(
+              jobId,
+              "We couldn't verify this document right now. Please try again shortly, or use the classic verifier at /api/tools/visa-check.",
+            );
+          }
+        })();
       } catch (err: any) {
         console.error("[VisaVerify] endpoint error:", err?.message);
         res.status(500).json({
@@ -523,5 +547,5 @@ export function registerVisaCheckRoute(app: Express): void {
     },
   );
 
-  console.log("[VisaVerify] Route registered: POST /api/tools/visa-verify (AI engine v2)");
+  console.log("[VisaVerify] Route registered: POST /api/tools/visa-verify (AI engine v2, async job+poll)");
 }

@@ -8,6 +8,7 @@
 
 import type { Express, Request, Response } from "express";
 import { requireToolCredit } from "../tools/tool-pay";
+import { createToolScanJob, markToolScanJobDone, markToolScanJobError } from "../tools/tool-scan-jobs";
 import multer from "multer";
 import rateLimit from "express-rate-limit";
 
@@ -53,7 +54,16 @@ export function registerScamCheckRoute(app: Express): void {
       });
     }),
     async (req: any, res: Response) => {
-      const t0 = Date.now();
+      // 2026-09 (Tony's "people are paying but I can't tell" investigation):
+      // this used to synchronously await analyzeScam() (a GPT-4o call that
+      // can run well past Render's ~30s platform proxy timeout) before
+      // responding. requireToolCredit() above has ALREADY atomically
+      // consumed the user's KES 100 credit by this point, so a timeout here
+      // meant: paid, credit gone, nothing delivered. Same confirmed failure
+      // class as offer-verify, visa-verify, and ielts-verify-ai. Fix:
+      // validate + extract text synchronously (fast, non-AI), then hand off
+      // to a background job and respond 202 immediately so the client can
+      // poll — same pattern already proven on /api/tools/ats-check.
       try {
         let text = String(req.body?.text ?? "").trim();
         const file = req.file as Express.Multer.File | undefined;
@@ -95,42 +105,58 @@ export function registerScamCheckRoute(app: Express): void {
           }
         }
 
-        const { analyzeScam } = await import("./analyzer");
-        const report = await analyzeScam({ text, imageDataUrl });
+        const userId: string | null = req.user?.claims?.sub ?? req.user?.id ?? null;
+        const jobId = await createToolScanJob("job_scam_check", userId, req.toolPaymentId ?? null);
+        res.status(202).json({ jobId, status: "processing" });
 
-        if (report.ok === false) {
-          return res.status(502).json({ ok: false, message: report.message });
-        }
+        const finalText = text;
+        const finalImageDataUrl = imageDataUrl;
 
-        console.log(
-          `[JobScamCheck] verdict=${report.verdict} trust=${report.overallTrust} country=${report.country?.code ?? "?"} ` +
-          `findings=${report.findings.length} inputMode=${imageDataUrl ? (text ? "text+image" : "image") : "text"} in ${Date.now() - t0}ms`,
-        );
+        (async () => {
+          const t0 = Date.now();
+          try {
+            const { analyzeScam } = await import("./analyzer");
+            const report = await analyzeScam({ text: finalText, imageDataUrl: finalImageDataUrl });
 
-        res.json({
-          ok: true,
-          overallTrust:        report.overallTrust,
-          confidence:          report.confidence,
-          riskBand:            report.riskBand,
-          verdict:             report.verdict,
-          headline:            report.headline,
-          explanation:         report.explanation,
-          extractedFields:     report.extractedFields,
-          country:             report.country ? {
-            code:            report.country.code,
-            name:            report.country.name,
-            flag:            report.country.flag,
-            links:           report.country.links,
-            contacts:        report.country.contacts,
-            nextStepAdvice:  report.country.nextStepAdvice,
-          } : null,
-          subScores:           report.subScores,
-          findings:            report.findings,
-          positiveIndicators:  report.positiveIndicators,
-          recommendations:     report.recommendations,
-          scamPatternsMatched: report.scamPatternsMatched,
-          disclaimer:          "This is an AI-assisted screening — not a legal determination. Always verify the employer and recruiter through the official government portals below before making travel, payment, or contract decisions.",
-        });
+            if (report.ok === false) {
+              await markToolScanJobError(jobId, report.message);
+              return;
+            }
+
+            console.log(
+              `[JobScamCheck] job=${jobId} verdict=${report.verdict} trust=${report.overallTrust} country=${report.country?.code ?? "?"} ` +
+              `findings=${report.findings.length} inputMode=${finalImageDataUrl ? (finalText ? "text+image" : "image") : "text"} in ${Date.now() - t0}ms`,
+            );
+
+            await markToolScanJobDone(jobId, {
+              ok: true,
+              overallTrust:        report.overallTrust,
+              confidence:          report.confidence,
+              riskBand:            report.riskBand,
+              verdict:             report.verdict,
+              headline:            report.headline,
+              explanation:         report.explanation,
+              extractedFields:     report.extractedFields,
+              country:             report.country ? {
+                code:            report.country.code,
+                name:            report.country.name,
+                flag:            report.country.flag,
+                links:           report.country.links,
+                contacts:        report.country.contacts,
+                nextStepAdvice:  report.country.nextStepAdvice,
+              } : null,
+              subScores:           report.subScores,
+              findings:            report.findings,
+              positiveIndicators:  report.positiveIndicators,
+              recommendations:     report.recommendations,
+              scamPatternsMatched: report.scamPatternsMatched,
+              disclaimer:          "This is an AI-assisted screening — not a legal determination. Always verify the employer and recruiter through the official government portals below before making travel, payment, or contract decisions.",
+            });
+          } catch (err: any) {
+            console.error(`[JobScamCheck] job=${jobId} background error:`, err?.message);
+            await markToolScanJobError(jobId, "We couldn't complete the analysis right now. Please try again shortly.");
+          }
+        })();
       } catch (err: any) {
         console.error("[JobScamCheck] endpoint error:", err?.message);
         res.status(500).json({
@@ -141,5 +167,5 @@ export function registerScamCheckRoute(app: Express): void {
     },
   );
 
-  console.log("[JobScamCheck] Route registered: POST /api/tools/job-scam-check (AI scam analyzer v2)");
+  console.log("[JobScamCheck] Route registered: POST /api/tools/job-scam-check (AI scam analyzer v2, async job+poll)");
 }

@@ -22306,6 +22306,11 @@ Rules:
   const { registerToolPayRoutes } = await import("./tools/tool-pay");
   registerToolPayRoutes(app);
 
+  // 2026-09: shared background-job status endpoint backing the async fix
+  // for all four paid AI tools' timeout bug. See server/tools/tool-scan-jobs.ts.
+  const { registerToolScanStatusRoute } = await import("./tools/tool-scan-jobs");
+  registerToolScanStatusRoute(app);
+
   // 2026-07: Community Fraud Intelligence Platform — structured scam
   // reports with auto cross-referencing (shared phones/emails/bank
   // accounts group reports into agency clusters) + public agency
