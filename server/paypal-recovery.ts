@@ -28,15 +28,27 @@
  *
  * State machine (payments.method = 'paypal'):
  *  pending/awaiting_payment/processing, age >= MIN_AGE_SECONDS
- *    → ask PayPal via completePayPalCapture({source:"recovery"})
+ *    → ALWAYS ask PayPal first via completePayPalCapture({source:"recovery"})
  *       COMPLETED  → upgradeUserAccount marks payment "completed" internally
  *                    (same as the live capture path) — nothing left to do here.
- *       CREATED / still pending far too long (> MAX_AGE_HOURS) or query
- *       attempts exhausted (>= MAX_QUERY_ATTEMPTS) → give up, mark "failed"
- *       so the row stops showing as a ghost "pending" payment forever.
- *       Anything else (declined, verification failed, etc.) → already
- *       marked "failed" by completePayPalCapture/upgradeUserAccount
- *       internally; nothing extra to do.
+ *       Anything else → only THEN, if this row is older than MAX_AGE_HOURS
+ *       or has exhausted MAX_QUERY_ATTEMPTS, give up and mark "failed" so
+ *       it stops showing as a ghost "pending" payment forever. A fresh
+ *       row (0 attempts) is never given up on without checking PayPal at
+ *       least once — see the 2026-09 backlog-recovery note below for why
+ *       this ordering matters.
+ *       A hard decline etc. is already marked "failed" by
+ *       completePayPalCapture/upgradeUserAccount internally; nothing
+ *       extra to do here in that case.
+ *
+ * 2026-09 backlog-recovery note: the FIRST version of this poller checked
+ * age/attempts BEFORE ever querying PayPal, which meant every pre-existing
+ * "pending" row (created long before this poller shipped, all older than
+ * MAX_AGE_HOURS) would have been marked "failed" on the very first tick
+ * without ever asking PayPal what actually happened — the opposite of
+ * what this file exists to do. Fixed so a query always happens first;
+ * age/attempts now only decide when to STOP RETRYING a status PayPal has
+ * already reported, never whether to ask at all.
  */
 
 import { storage } from "./storage";
@@ -113,30 +125,20 @@ async function runPaypalRecovery(): Promise<void> {
       const created = new Date(payment.createdAt).getTime();
       const attempts = (payment as any).queryAttempts ?? 0;
 
-      // Too old or out of attempts — give up rather than poll forever.
-      if (created <= maxAgeCutoff.getTime() || attempts >= MAX_QUERY_ATTEMPTS) {
-        inFlight.add(payment.id);
-        try {
-          await giveUp(
-            payment,
-            created <= maxAgeCutoff.getTime()
-              ? `paypal_order_expired_after_${MAX_AGE_HOURS}h`
-              : `paypal_recovery_exhausted_after_${MAX_QUERY_ATTEMPTS}_attempts`,
-          );
-        } finally {
-          inFlight.delete(payment.id);
-        }
-        continue;
-      }
-
       // Too new — let the client's own capture-order call finish normally.
+      // (Only applies to freshly-created orders — an old backlog row with
+      // 0 attempts always gets queried below, never short-circuited here.)
       if (created > minAgeCutoff.getTime()) continue;
 
-      // Checked too recently — don't hammer PayPal's API.
+      // Checked too recently — don't hammer PayPal's API. A row that has
+      // NEVER been checked (attempts === 0, e.g. a pre-existing backlog
+      // row that just got its order ID backfilled) always gets its first
+      // check now, regardless of age — age/attempt limits below only
+      // apply AFTER we've actually asked PayPal at least once.
       const lastChecked = (payment as any).statusLastChecked
         ? new Date((payment as any).statusLastChecked).getTime()
         : 0;
-      if (lastChecked > recheckCutoff.getTime()) continue;
+      if (attempts > 0 && lastChecked > recheckCutoff.getTime()) continue;
 
       inFlight.add(payment.id);
       try {
@@ -162,6 +164,21 @@ async function runPaypalRecovery(): Promise<void> {
           console.log(`[PaypalRecovery] ✓ Recovered payment ${payment.id} (orderId=${payment.checkoutRequestId})`);
         } else {
           console.log(`[PaypalRecovery] Payment ${payment.id} not yet completable — status=${result.status} body=${JSON.stringify(result.body).slice(0, 200)}`);
+
+          // Only give up AFTER we've actually asked PayPal and it's still
+          // not completable — never before a query has run at least once.
+          // This is what previously mismarked the entire pre-existing
+          // backlog as "failed" without ever checking PayPal, because the
+          // age check ran before any query. Now age/attempts only decide
+          // whether to STOP RETRYING a status PayPal has already told us.
+          if (created <= maxAgeCutoff.getTime() || attempts + 1 >= MAX_QUERY_ATTEMPTS) {
+            await giveUp(
+              payment,
+              created <= maxAgeCutoff.getTime()
+                ? `paypal_order_expired_after_${MAX_AGE_HOURS}h`
+                : `paypal_recovery_exhausted_after_${MAX_QUERY_ATTEMPTS}_attempts`,
+            );
+          }
         }
       } catch (err: any) {
         console.warn(`[PaypalRecovery] Query error for payment ${payment.id}: ${err?.message}`);
