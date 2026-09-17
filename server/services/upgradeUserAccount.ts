@@ -298,6 +298,18 @@ export async function upgradeUserAccount(opts: UpgradeOptions): Promise<UpgradeR
           title: "Trial Already Used",
           message: "The KES 99 trial is a one-time offer per person, so this payment was not applied to a second trial. Upgrade to Monthly (KES 1,000) or Yearly (KES 4,500) for continued access — or contact support about this payment.",
         }).catch((err) => reportRejection(err, 'services/upgradeUserAccount'));
+        // 2026-09 (Tony's "tell the user immediately, not the admin" fix):
+        // fire the same warm WhatsApp/SMS notice as the reconciler's
+        // duplicate-trial block below, so the person who just paid finds
+        // out from us within seconds — not from an admin who has to break
+        // the news after the fact. Fire-and-forget; never blocks the
+        // response or lets a messaging failure affect the gate decision.
+        if (user.phone) {
+          import("../sms").then(({ notifyTrialAlreadyUsed }) => {
+            notifyTrialAlreadyUsed(user.phone).catch((err: any) =>
+              console.warn("[Upgrade][trial-gate] WhatsApp notice failed:", err?.message));
+          }).catch(() => { /* messaging must never break the gate */ });
+        }
         return {
           success: false,
           planActivated: resolvedPlan,

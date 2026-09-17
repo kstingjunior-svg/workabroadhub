@@ -328,6 +328,16 @@ export const messageTemplates = {
   subscriptionActivated: () => 
     `WorkAbroad Hub: Your subscription is now active! Access all job portals and resources at workabroadhub.tech/dashboard`,
 
+  // 2026-09 (Tony's "tell the user immediately, not the admin" fix): sent the
+  // instant a payment is confirmed for a user/phone that already consumed
+  // their one-time KES 99 trial — whether that confirmation comes from the
+  // app's own STK/PayPal capture, the M-Pesa reconciler (direct Paybill
+  // payments the app never saw coming), or an admin's manual review. Keeps
+  // the tone warm and immediately actionable so the user upgrades instead
+  // of waiting on a human to explain it to them.
+  trialAlreadyUsed: () =>
+    `Hi 👋 Thanks for your KES 99 payment to WorkAbroad Hub!\n\nYour one-time trial was already used, so we couldn't apply this payment to a second trial.\n\nNo stress — you can upgrade to:\n• Monthly (KES 1,000) — 30 days full access\n• Yearly (KES 4,500) — 365 days full access\n\nReply here or visit workabroadhub.tech/pricing and we'll sort out your KES 99 right away.\n\n- Nanjila 🤖`,
+
   // Service order notifications
   orderReceived: (serviceName: string, orderId: string) => 
     `WorkAbroad Hub: Your order for "${serviceName}" (ID: ${orderId.slice(0, 8)}) has been received. We'll notify you when it's ready.`,
@@ -414,6 +424,16 @@ export async function notifyPaymentRecovery(phone: string): Promise<void> {
 export async function notifySubscriptionActivated(phone: string): Promise<void> {
   const message = messageTemplates.subscriptionActivated();
   await sendMessage(phone, message);
+}
+
+// See trialAlreadyUsed template above — fire-and-forget by design (never
+// blocks the caller's response/activation-decision flow on WhatsApp/SMS
+// delivery, matching notifyPaymentRecovery's pattern below).
+export async function notifyTrialAlreadyUsed(phone: string): Promise<void> {
+  const message = messageTemplates.trialAlreadyUsed();
+  await sendMessage(phone, message).catch((err: any) => {
+    console.warn("[TrialAlreadyUsed] Failed to send notice:", err?.message || err);
+  });
 }
 
 // Service order notifications

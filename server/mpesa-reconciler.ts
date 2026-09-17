@@ -180,6 +180,47 @@ async function reconcileTransaction(tx: any): Promise<void> {
             return;
           }
 
+          // 2026-09 (Tony's "repeat trial payment slips through" gap):
+          // this C2B/Paybill reconciliation path used to call
+          // activateUserPlan() directly for ANY resolved tier, including
+          // trial/basic — completely bypassing the one-time-trial gate
+          // that /api/subscriptions/upgrade, PayPal create-order, and
+          // upgradeUserAccount() all enforce. A user who paid the app's
+          // STK/PayPal flow once could never re-buy the trial (blocked
+          // pre-charge), but a user who paid the KES 99 DIRECTLY to the
+          // Paybill/Till from their M-Pesa app — bypassing our checkout
+          // entirely — had their money land here with zero gate at all.
+          // Close that gap with the exact same isTrialConsumed() check
+          // used everywhere else, and tell the PAYER immediately via
+          // WhatsApp/SMS instead of leaving it for an admin to discover
+          // and explain after the fact.
+          if (resolvedTier === "trial" || resolvedTier === "basic") {
+            const { isTrialConsumed } = await import("./lib/trial-gate");
+            const consumed = await isTrialConsumed({ userId: matchedPayment.userId, phone });
+            if (consumed) {
+              console.warn(
+                `[Reconciler][SECURITY] Repeat-trial grant BLOCKED at C2B reconciliation: ` +
+                `userId=${matchedPayment.userId} phone=${phone} paymentId=${matchedPayment.id} transId=${transId}`
+              );
+              await storage.updatePayment(matchedPayment.id, {
+                status: "failed",
+                isSuspicious: true,
+                fraudReason: "repeat_trial_blocked_at_reconciliation",
+              } as any).catch((err: any) => console.warn(`[Reconciler] flag update failed: ${err?.message}`));
+              storage.createUserNotification({
+                userId: matchedPayment.userId,
+                type: "error",
+                title: "Trial Already Used",
+                message: "The KES 99 trial is a one-time offer per person, so this M-Pesa payment could not be applied to a second trial. Upgrade to Monthly (KES 1,000) or Yearly (KES 4,500) for continued access — or contact support about this payment.",
+              }).catch((err: any) => reportRejection(err, 'mpesa-reconciler'));
+              const { notifyTrialAlreadyUsed } = await import("./sms");
+              notifyTrialAlreadyUsed(phone).catch((err: any) =>
+                console.warn(`[Reconciler] WhatsApp notice failed: ${err?.message}`));
+              await db.execute(sql`UPDATE mpesa_pull_transactions SET reconciled = TRUE, reconciled_at = NOW() WHERE transaction_id = ${transId}`);
+              return;
+            }
+          }
+
           // Real subscription — activate the right tier with the right duration.
           const PLAN_DAYS: Record<string, number> = { trial: 1, basic: 1, monthly: 30, yearly: 365, pro: 365, pro_referral: 365 };
           const expiresAt = new Date(Date.now() + (PLAN_DAYS[resolvedTier] ?? 1) * 24 * 60 * 60 * 1000);
