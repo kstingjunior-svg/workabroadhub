@@ -6,7 +6,7 @@
  *   - trial    (KES 99, 24h access)
  *   - basic    (KES 99, alias)
  *   - monthly  (KES 1,000, 30 days)
- *   - yearly   (KES 4,500, 360 days)
+ *   - yearly   (KES 4,500, 365 days)
  *   - pro / pro_referral (admin-granted)
  *
  * Admins and the `isAdminBypass` flag both pass automatically because the
@@ -150,7 +150,7 @@ export function ProOnlyGate({ featureName, pitch, bullets, returnTo, children }:
                   <div className="font-bold text-sm">Yearly</div>
                 </div>
                 <div className="text-2xl font-bold tabular-nums">KES 4,500</div>
-                <div className="text-[11px] text-muted-foreground mb-3">360 days · best value</div>
+                <div className="text-[11px] text-muted-foreground mb-3">365 days · best value</div>
                 <ul className="text-xs space-y-1 mb-3">
                   <li>✓ Everything in monthly</li>
                   <li>✓ Save KES 7,500 vs monthly</li>

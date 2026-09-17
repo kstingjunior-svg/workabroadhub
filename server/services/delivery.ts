@@ -161,7 +161,7 @@ export async function deliverService(payment: any, user: any): Promise<void> {
             ``,
             `Welcome to WorkAbroad Hub ${planLabel} ✅`,
             ``,
-            `Hi ${name}, your account is now ACTIVE for 360 days.`,
+            `Hi ${name}, your account is now ACTIVE for 365 days.`,
             ``,
             `📄 Your ATS-Optimised CV:`,
             ``,
@@ -176,7 +176,7 @@ export async function deliverService(payment: any, user: any): Promise<void> {
         : [
             `🌟 ${planLabel} Plan Activated!`,
             ``,
-            `Hi ${name}, your WorkAbroad Hub ${planLabel} plan is now live for 360 days.`,
+            `Hi ${name}, your WorkAbroad Hub ${planLabel} plan is now live for 365 days.`,
             `Payment of KES ${amount.toLocaleString()} confirmed ✅`,
             ``,
             `Your ATS CV is being prepared and will be sent to this number shortly.`,
@@ -193,8 +193,8 @@ export async function deliverService(payment: any, user: any): Promise<void> {
         type: "success",
         title: `${planLabel} Plan Activated`,
         message: cvText
-          ? `Your ${planLabel} plan is active for 360 days. Your ATS CV has been sent to your WhatsApp.`
-          : `Your ${planLabel} plan is active for 360 days. Your ATS CV will arrive on WhatsApp shortly.`,
+          ? `Your ${planLabel} plan is active for 365 days. Your ATS CV has been sent to your WhatsApp.`
+          : `Your ${planLabel} plan is active for 365 days. Your ATS CV will arrive on WhatsApp shortly.`,
       }).catch((err) => reportRejection(err, 'services/delivery'));
 
       break;

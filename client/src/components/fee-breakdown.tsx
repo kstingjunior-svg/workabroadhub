@@ -112,7 +112,7 @@ export function FeeBreakdown({ alwaysOpen = false, className = "", total }: FeeB
 
           {/* Total row */}
           <div className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-foreground/5 border border-border mt-1">
-            <span className="text-sm font-bold text-foreground">Total (360-day Pro access)</span>
+            <span className="text-sm font-bold text-foreground">Total (365-day Pro access)</span>
             <span className="text-sm font-extrabold text-amber-600" data-testid="fee-total">
               KES {TOTAL.toLocaleString()}
             </span>

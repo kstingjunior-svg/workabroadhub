@@ -415,11 +415,11 @@ export default function MyAccountPage() {
           <SummaryCard
             label="Total Spent"
             subtext={(() => {
-              // Show when the Pro plan expires (startDate + 360 days)
+              // Show when the Pro plan expires (startDate + 365 days)
               if (proSub?.startDate) {
                 const expiryMs = proSub.expiryDate
                   ? proSub.expiryDate
-                  : proSub.startDate + 360 * 24 * 60 * 60 * 1000;
+                  : proSub.startDate + 365 * 24 * 60 * 60 * 1000;
                 return `Expires ${fmt(expiryMs)}`;
               }
               return totalSpent > 0 ? "paid" : "";

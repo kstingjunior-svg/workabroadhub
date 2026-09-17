@@ -62,7 +62,7 @@ export function FreemiumGate({
           {ctaText}
           <ArrowRight className="h-4 w-4" />
         </Button>
-        <p className="text-xs text-muted-foreground mt-2">Full access · 360 days · secure payment page</p>
+        <p className="text-xs text-muted-foreground mt-2">Full access · 365 days · secure payment page</p>
       </div>
     </div>
   );

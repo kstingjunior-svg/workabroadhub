@@ -1326,7 +1326,7 @@ export async function seedPlans() {
       planName: "Pro",
       price: 4500,
       features: ["full_tools", "ai_job_assistant", "job_matching", "priority_listings", "unlimited_access", "whatsapp_consultation", "ats_cv_checker", "application_tracker"],
-      description: "Full access for 360 days",
+      description: "Full access for 365 days",
       badge: "Our pick",
       currency: "KES",
       billingPeriod: "yearly",

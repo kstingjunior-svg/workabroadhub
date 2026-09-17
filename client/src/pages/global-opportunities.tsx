@@ -712,7 +712,7 @@ export default function GlobalOpportunitiesPage() {
               Access All Verified Job Portals
             </h2>
             <p className="text-[#B8C5D0] text-base max-w-lg">
-              One subscription — WhatsApp guidance + full resource access for all {totalCountries} countries. 360 days.
+              One subscription — WhatsApp guidance + full resource access for all {totalCountries} countries. 365 days.
             </p>
             <div className="flex flex-wrap gap-6 mt-4">
               {[
@@ -749,7 +749,7 @@ export default function GlobalOpportunitiesPage() {
               </button>
             )}
             <p className="mt-3 text-[#9AACBD] text-sm">
-              Secure payment via M-Pesa · 360 days access
+              Secure payment via M-Pesa · 365 days access
             </p>
           </div>
         </div>

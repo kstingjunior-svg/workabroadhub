@@ -199,7 +199,7 @@ function buildEmail3(
     <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:14px 18px;margin:20px 0;">
       <p style="margin:0;font-size:13px;color:#166534;"><strong>Pro includes:</strong>
          ATS CV rewrite · Cover letter generation · Direct job application links ·
-         Priority WhatsApp support · 360 days full access</p>
+         Priority WhatsApp support · 365 days full access</p>
     </div>
     <p style="color:#6b7280;font-size:13px;">
       Questions? WhatsApp us at +254 111 467 601 or reply to this email.

@@ -158,7 +158,7 @@ export async function sendProActivationEmail(
       <p style="color:#111827;font-size:15px;">Hi ${name},</p>
       <p style="color:#374151;font-size:14px;line-height:1.6;">
         Great news — your <strong>WorkAbroad Hub Pro plan is now active!</strong>
-        You now have full access to all Pro features for 360 days.
+        You now have full access to all Pro features for 365 days.
       </p>
 
       <div style="background:#fefce8;border:1px solid #fde68a;border-radius:10px;padding:18px 20px;margin:22px 0;">

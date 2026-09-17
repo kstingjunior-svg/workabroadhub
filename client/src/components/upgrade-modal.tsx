@@ -517,7 +517,7 @@ export function UpgradeModal() {
             </div>
 
             <div className="grid grid-cols-2 gap-2 mb-4">
-              {["Instant access after payment", "360 days full access", "M-Pesa & PayPal accepted", "No hidden fees"].map((item) => (
+              {["Instant access after payment", "365 days full access", "M-Pesa & PayPal accepted", "No hidden fees"].map((item) => (
                 <div key={item} className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <Shield className="h-3 w-3 text-green-500 flex-shrink-0" />
                   {item}
@@ -562,7 +562,7 @@ export function UpgradeModal() {
               <div className="text-2xl font-black text-amber-600 dark:text-amber-400">
                 {proFinalPrice ? `KES ${proFinalPrice.toLocaleString("en-KE")}` : "—"}
               </div>
-              <div className="text-xs text-amber-600/70 dark:text-amber-500 mt-0.5">360 days Pro access</div>
+              <div className="text-xs text-amber-600/70 dark:text-amber-500 mt-0.5">365 days Pro access</div>
             </div>
 
             {/* PAYPAL — first for non-KE users, always visible */}
