@@ -222,7 +222,30 @@ async function handleFailure(payment: any, code: number, desc: string): Promise<
 }
 
 async function autoTimeoutAwaiting(): Promise<void> {
-  // Payments older than AUTO_TIMEOUT_MINUTES with no callback → move to retry_available
+  // 2026-09 (Tony's "4,500 client not auto-granted" bug): this function used
+  // to mark ANY payment older than AUTO_TIMEOUT_MINUTES with no callback as
+  // retry_available/failed WITHOUT EVER asking Safaricom what actually
+  // happened — the exact "give up before checking" bug already found and
+  // fixed in paypal-recovery.ts this same week. Safaricom's callback is
+  // documented at the top of this file as "unreliable — it sometimes never
+  // arrives", which means a real, successful KES 4,500 payment whose
+  // callback got lost was being auto-declared FAILED at the 5-minute mark,
+  // status moved out of ("pending"/"awaiting_payment"/"processing") into
+  // "retry_available" — which the querying loop below never revisits, since
+  // it only polls RECOVERABLE_STATUSES. That payment then sat there forever
+  // needing a human to notice and manually grant the plan. Confirmed live:
+  // 149 payments (KES 24,108) currently carry the old blunt failReason
+  // ("No callback received within 5 minutes...") without ever having been
+  // verified against Safaricom's own stkQuery API.
+  //
+  // Fix: before declaring a timeout, call stkQuery() ONE more time — same
+  // API the main polling loop below already uses. code 0 → handleSuccess()
+  // (the plan gets activated, exactly like a normal recovered payment).
+  // A FAIL_CODE → handleFailure() (unchanged behavior, just gateway-
+  // verified instead of assumed). Only if the query itself can't resolve
+  // anything (no valid CheckoutRequestID, Safaricom errors, or genuinely
+  // still processing) do we fall back to the original blunt timeout — by
+  // then we've made a real best-effort check, not just watched the clock.
   const cutoff = new Date(Date.now() - AUTO_TIMEOUT_MINUTES * 60 * 1000);
 
   // Try querying with callbackReceivedAt first; fall back to without if column is missing
@@ -261,6 +284,35 @@ async function autoTimeoutAwaiting(): Promise<void> {
     if (inFlight.has(payment.id)) continue;
     inFlight.add(payment.id);
     try {
+      // ── Last-chance live check with Safaricom before giving up ──────────
+      // Reuses the exact same stkQuery() the main polling loop uses below.
+      if (payment.transactionRef?.startsWith("ws_CO_")) {
+        try {
+          const result = await stkQuery(payment.transactionRef);
+          const code = Number(result.ResultCode);
+          console.log(`[StkRecovery][auto-timeout check] Payment ${payment.id} → ResultCode=${code} (${result.ResultDesc})`);
+
+          if (code === 0) {
+            const receipt =
+              result.CallbackMetadata?.Item?.find((i: any) => i.Name === "MpesaReceiptNumber")?.Value
+              || result.MpesaReceiptNumber
+              || `RECOVERED-${Date.now()}`;
+            await handleSuccess(payment, String(receipt));
+            continue; // recovered — skip the timeout fallback entirely
+          }
+
+          if (FAIL_CODES.has(code)) {
+            await handleFailure(payment, code, result.ResultDesc || `STK failed (code ${code})`);
+            continue; // gateway-confirmed failure — handleFailure already notified the user
+          }
+          // Any other code (still processing, ambiguous, etc.) falls through
+          // to the blunt timeout below — we tried, Safaricom just doesn't
+          // have a definitive answer yet either.
+        } catch (queryErr: any) {
+          console.warn(`[StkRecovery][auto-timeout check] Query failed for ${payment.id}, falling back to timeout: ${queryErr?.message}`);
+        }
+      }
+
       const retryCount = payment.retryCount ?? 0;
       const maxRetries = payment.maxRetries ?? 3;
       const canRetry = retryCount < maxRetries;

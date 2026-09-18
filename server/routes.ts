@@ -8199,6 +8199,62 @@ Crawl-delay: 1`);
         }
       }
 
+      // 3. Reconcile "retry_available" plan payments that stk-recovery.ts's
+      // OLD auto-timeout logic declared failed purely on a 5-minute clock,
+      // WITHOUT ever asking Safaricom what actually happened (2026-09,
+      // Tony's "4,500 client not auto-granted" bug — see stk-recovery.ts's
+      // autoTimeoutAwaiting() for the fix and full writeup). That bug is
+      // now fixed going forward, but it already left a backlog: payments
+      // marked retry_available with this exact generic failReason, never
+      // gateway-verified. One-time sweep to recover any that actually
+      // succeeded — safe to run repeatedly, already-resolved rows simply
+      // won't match this filter again once their status changes.
+      const backlogPayments = (await storage.getPaymentsByStatus("retry_available")).filter(
+        (p: any) => p.method === "mpesa"
+          && typeof p.failReason === "string"
+          && p.failReason.startsWith("No callback received within 5 minutes")
+          && p.transactionRef?.startsWith("ws_CO_"),
+      );
+      for (const payment of backlogPayments as any[]) {
+        const checkoutId = payment.transactionRef;
+        try {
+          const { stkQuery: doQuery } = await import("./mpesa");
+          const queryRes = await doQuery(checkoutId);
+          results.push({ type: "backlog_retry_available", id: payment.id, checkoutId, result: queryRes.ResultCode, desc: queryRes.ResultDesc });
+          if (queryRes.ResultCode === 0) {
+            const receipt = queryRes.CallbackMetadata?.Item?.find((i: any) => i.Name === "MpesaReceiptNumber")?.Value
+              || queryRes.MpesaReceiptNumber || `RECONCILED-${Date.now()}`;
+            await storage.updatePayment(payment.id, { status: "success", transactionRef: String(receipt) });
+            const RECON_TIERS = new Set(["trial", "basic", "monthly", "yearly", "pro", "pro_referral"]);
+            const sid = ((payment as any).serviceId ?? "").toLowerCase();
+            const fromService = sid.startsWith("plan_") ? sid.replace("plan_", "") : null;
+            const candidateTier =
+              (fromService && RECON_TIERS.has(fromService)) ? fromService :
+              (payment.planId && RECON_TIERS.has(String(payment.planId).toLowerCase())) ? String(payment.planId).toLowerCase() :
+              null;
+            if (candidateTier) {
+              const { upgradeUserAccount } = await import("./services/upgradeUserAccount");
+              await upgradeUserAccount({
+                userId: payment.userId,
+                planType: candidateTier as any,
+                paymentId: payment.id,
+                transactionId: String(receipt),
+                method: "mpesa",
+                amountKes: Number((payment as any).amount ?? 0),
+              });
+            } else if (sid) {
+              await storage.unlockService(payment.userId, sid, payment.id, { reconciled: true, receipt: String(receipt) })
+                .catch((err: any) => console.warn(`[Reconcile/backlog] unlockService failed: ${err?.message}`));
+            }
+          }
+          // Non-zero, non-definitive codes: leave as retry_available — the
+          // user genuinely still needs to retry, we just now KNOW that
+          // instead of assuming it from a clock.
+        } catch (e: any) {
+          results.push({ type: "backlog_retry_available", id: payment.id, checkoutId, error: e.message });
+        }
+      }
+
       res.json({ reconciled: results.length, results });
     } catch (error: any) {
       console.error("Reconcile error:", error);
