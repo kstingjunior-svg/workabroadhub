@@ -248,9 +248,22 @@ async function tryOpenAIPdfExtract(buf: Buffer, filename?: string): Promise<stri
 
 /**
  * OCR fallback using Tesseract.js.
- * Works on scanned image-PDFs and plain image files.
- * Tesseract v5 internally uses pdfjs to render the first page of a PDF,
- * so a PDF buffer can be passed directly.
+ *
+ * 2026-09 (Tony's "PDF offer letter exits before showing results" audit —
+ * verified directly against tesseract.js@7): this claimed "a PDF buffer can
+ * be passed directly" — NOT TRUE for the installed version. worker.recognize()
+ * on a raw PDF buffer throws "Error in pixReadStream: Pdf reading is not
+ * supported" every time. That's caught below and returns "" like any other
+ * failure, so it silently falls through to tryOpenAIPdfExtract() — which
+ * DOES handle PDFs natively and is therefore doing 100% of the real work
+ * for every scanned/image-only PDF today, at OpenAI's per-call cost. This
+ * step still works correctly on an actual image buffer (confirmed: ~600ms,
+ * 95%+ confidence on a test scan) — it just never receives one, since PDF
+ * callers pass PDF bytes. Rendering a PDF page to a raster image first
+ * would let this free/fast path do that job instead, but pdfjs-dist's
+ * renderer needs a `canvas` implementation, which this codebase deliberately
+ * avoids on Render (see tryPdf's comment above) — so fixing this for real
+ * means picking a canvas-free rasterizer, not a quick patch here.
  * Returns "" on failure so the caller can move to the next fallback.
  */
 async function tryOCR(buf: Buffer, filename?: string): Promise<string> {
