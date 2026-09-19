@@ -466,24 +466,20 @@ export function registerVisaCheckRoute(app: Express): void {
           return res.status(400).json({ message: "Please upload an image (JPG, PNG, WEBP), PDF, or Word document." });
         }
 
-        // 2026-08 (Tony): PDF + Word supported via text-extraction path.
-        // Vision remains default for images (seals, fonts, layout matter
-        // for forgery detection). See visa-verify/analyzer.ts.
-        let analyzerInput: { kind: "image"; imageBase64DataUrl: string } | { kind: "text"; text: string; sourceFilename: string };
-        if (isImage) {
-          const base64 = req.file.buffer.toString("base64");
-          const dataUrl = `data:${mt};base64,${base64}`;
-          analyzerInput = { kind: "image", imageBase64DataUrl: dataUrl };
-        } else {
-          const { extractTextFromBuffer } = await import("../utils/extract-text");
-          const extracted = await extractTextFromBuffer(req.file.buffer, mt, req.file.originalname);
-          if (!extracted?.text || extracted.text.trim().length < 50) {
-            return res.status(400).json({
-              message: "We couldn't read enough text from that file. If it's a scanned PDF, please upload a clear photo (JPG/PNG) instead — our OCR handles those.",
-            });
-          }
-          analyzerInput = { kind: "text", text: extracted.text, sourceFilename: req.file.originalname };
-        }
+        // 2026-09 (Tony's "PDF offer letter exits before showing results"
+        // audit — same bug found in offer-check-endpoint.ts applies here
+        // too, identical shared job pattern): extraction used to run
+        // SYNCHRONOUSLY before the 202 response below. extractTextFromBuffer's
+        // PDF cascade includes Tesseract OCR + an OpenAI file-upload pass
+        // for scanned/image-only PDFs (30-90s each) — exactly the visa
+        // documents most likely to be a scanned photo saved as PDF. Those
+        // blew past Render's ~30s proxy timeout before the client ever got
+        // a jobId to poll, while a plain image upload (no extraction step)
+        // never hit this. Fix: respond 202 first, do extraction inside the
+        // background job — same pattern as offer-check-endpoint.ts.
+        const fileBuffer = req.file.buffer;
+        const fileMime   = mt;
+        const fileName   = req.file.originalname;
 
         const userId: string | null = req.user?.claims?.sub ?? req.user?.id ?? null;
         const jobId = await createToolScanJob("visa_check", userId, req.toolPaymentId ?? null);
@@ -492,6 +488,27 @@ export function registerVisaCheckRoute(app: Express): void {
         (async () => {
           const t0 = Date.now();
           try {
+            // 2026-08 (Tony): PDF + Word supported via text-extraction path.
+            // Vision remains default for images (seals, fonts, layout matter
+            // for forgery detection). See visa-verify/analyzer.ts.
+            let analyzerInput: { kind: "image"; imageBase64DataUrl: string } | { kind: "text"; text: string; sourceFilename: string };
+            if (isImage) {
+              const base64 = fileBuffer.toString("base64");
+              const dataUrl = `data:${fileMime};base64,${base64}`;
+              analyzerInput = { kind: "image", imageBase64DataUrl: dataUrl };
+            } else {
+              const { extractTextFromBuffer } = await import("../utils/extract-text");
+              const extracted = await extractTextFromBuffer(fileBuffer, fileMime, fileName);
+              if (!extracted?.text || extracted.text.trim().length < 50) {
+                await markToolScanJobError(
+                  jobId,
+                  "We couldn't read enough text from that file, even after trying OCR. Please try a clearer scan, or upload a photo (JPG/PNG) instead.",
+                );
+                return;
+              }
+              analyzerInput = { kind: "text", text: extracted.text, sourceFilename: fileName };
+            }
+
             const { analyzeVisa } = await import("../visa-verify/analyzer");
             const report = await analyzeVisa(analyzerInput);
 

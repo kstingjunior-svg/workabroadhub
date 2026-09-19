@@ -433,29 +433,32 @@ export function registerOfferCheckRoute(app: Express): void {
           return res.status(400).json({ message: "Please upload an image (JPG, PNG, WEBP), PDF, or Word document." });
         }
 
-        let analyzerInput: { kind: "image"; imageBase64DataUrl: string } | { kind: "text"; text: string; sourceFilename: string };
-
-        // 2026-08 (Tony): PDF + Word now supported via text-extraction
-        // path. Vision remains the default for images (layout signals
-        // matter for forgery detection). See analyzer.ts comment for the
-        // trade-offs. extractTextFromBuffer handles both PDF and DOCX
-        // via pdf-parse + mammoth.
-        if (isImage) {
-          const base64 = req.file.buffer.toString("base64");
-          const dataUrl = `data:${mt};base64,${base64}`;
-          analyzerInput = { kind: "image", imageBase64DataUrl: dataUrl };
-        } else {
-          const { extractTextFromBuffer } = await import("../utils/extract-text");
-          const extracted = await extractTextFromBuffer(req.file.buffer, mt, req.file.originalname);
-          if (!extracted?.text || extracted.text.trim().length < 50) {
-            console.warn(`[OfferVerify] extraction failed method=${extracted?.method ?? "none"} chars=${extracted?.text?.length ?? 0} file=${req.file.originalname} (${req.file.size} bytes)`);
-            return res.status(400).json({
-              message: "We couldn't read this document. Please screenshot each page as a clear JPG/PNG and upload the images one at a time — our vision engine will read them directly.",
-            });
-          }
-          console.log(`[OfferVerify] extraction OK method=${extracted.method} chars=${extracted.text.length} file=${req.file.originalname}`);
-          analyzerInput = { kind: "text", text: extracted.text, sourceFilename: req.file.originalname };
-        }
+        // 2026-09 (Tony's "PDF offer letter exits before showing results"
+        // report): this used to run extractTextFromBuffer() for PDF/Word
+        // uploads SYNCHRONOUSLY, right here, BEFORE res.status(202) below.
+        // That function's own PDF cascade includes Tesseract OCR and an
+        // OpenAI file-upload extraction pass for scanned/image-only PDFs
+        // (see server/utils/extract-text.ts) — each of which can take
+        // 30-90s on its own. So the exact documents most likely to NEED
+        // that OCR fallback (a scanned or phone-photographed offer letter
+        // saved as PDF — extremely common) were the ones most likely to
+        // blow past Render's ~30s proxy timeout before the client ever
+        // received the 202/jobId response. The request just died — no
+        // error shown, nothing to poll, KES 100 already charged by
+        // requireToolCredit() above. A plain screenshot never hit this at
+        // all, because the image path has no extraction step — it goes
+        // straight to the vision model — which is exactly why Tony's own
+        // screenshot test worked while a client's PDF didn't.
+        //
+        // Fix: respond 202 immediately after validating the upload type,
+        // THEN do extraction (image encoding or the full PDF/DOCX cascade)
+        // inside the same background job that already runs the AI
+        // analysis. The client's poll loop (tool-scan-poll.ts) isn't
+        // subject to the platform's request timeout, so extraction now
+        // gets the same generous runway the analysis already had.
+        const fileBuffer   = req.file.buffer;
+        const fileMime     = mt;
+        const fileName     = req.file.originalname;
 
         const userId: string | null = req.user?.claims?.sub ?? req.user?.id ?? null;
         const jobId = await createToolScanJob("offer_check", userId, req.toolPaymentId ?? null);
@@ -464,6 +467,32 @@ export function registerOfferCheckRoute(app: Express): void {
         (async () => {
           const t0 = Date.now();
           try {
+            let analyzerInput: { kind: "image"; imageBase64DataUrl: string } | { kind: "text"; text: string; sourceFilename: string };
+
+            // 2026-08 (Tony): PDF + Word now supported via text-extraction
+            // path. Vision remains the default for images (layout signals
+            // matter for forgery detection). See analyzer.ts comment for
+            // the trade-offs. extractTextFromBuffer handles both PDF and
+            // DOCX, including OCR fallbacks for scanned documents.
+            if (isImage) {
+              const base64 = fileBuffer.toString("base64");
+              const dataUrl = `data:${fileMime};base64,${base64}`;
+              analyzerInput = { kind: "image", imageBase64DataUrl: dataUrl };
+            } else {
+              const { extractTextFromBuffer } = await import("../utils/extract-text");
+              const extracted = await extractTextFromBuffer(fileBuffer, fileMime, fileName);
+              if (!extracted?.text || extracted.text.trim().length < 50) {
+                console.warn(`[OfferVerify] extraction failed method=${extracted?.method ?? "none"} chars=${extracted?.text?.length ?? 0} file=${fileName} (${fileBuffer.length} bytes)`);
+                await markToolScanJobError(
+                  jobId,
+                  "We couldn't read this document even after trying OCR. Please try a clearer scan or export, or screenshot each page as a JPG/PNG and upload the images one at a time.",
+                );
+                return;
+              }
+              console.log(`[OfferVerify] extraction OK method=${extracted.method} chars=${extracted.text.length} file=${fileName} in ${Date.now() - t0}ms`);
+              analyzerInput = { kind: "text", text: extracted.text, sourceFilename: fileName };
+            }
+
             const { analyzeOffer } = await import("../offer-verify/analyzer");
             const report = await analyzeOffer(analyzerInput);
 

@@ -15,7 +15,15 @@
  */
 
 export const TOOL_SCAN_POLL_INTERVAL_MS = 2000;
-export const TOOL_SCAN_MAX_WAIT_MS = 120_000; // generous — a real gpt-4o run rarely exceeds 45s
+// 2026-09 (Tony's "PDF exits before showing results" bug): was 120_000,
+// sized only for the AI analysis step (~45s). Offer/visa verify now also
+// run PDF text extraction inside this same background job (see
+// offer-check-endpoint.ts) — for a scanned/photographed PDF that cascades
+// through Tesseract OCR and an OpenAI file-upload extraction pass, each
+// of which can take up to ~60-90s on its own. 180s gives that legitimate
+// worst case (extraction + analysis) room to finish instead of the client
+// giving up while the server is still genuinely working.
+export const TOOL_SCAN_MAX_WAIT_MS = 180_000;
 
 export class ToolScanError extends Error {}
 
