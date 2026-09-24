@@ -366,6 +366,22 @@ export function AuthModal({
       const data = await res.json();
 
       if (!res.ok) {
+        // 2026-09 (Tony's "code loop" fix): server signals unverified
+        // account with unverifiedAccount:true. Instead of showing a
+        // scary "invalid password / reset it" error, switch straight
+        // to the code-entry stage — same UI the signup flow uses —
+        // so the user can type the fresh code that was just emailed.
+        if (data.unverifiedAccount === true || data.verificationRequired === true) {
+          const params = new URLSearchParams(window.location.search);
+          const returnTo = params.get("returnTo");
+          const isSafeReturn = returnTo && returnTo.startsWith("/") && !returnTo.startsWith("//");
+          const dest = (isSafeReturn ? returnTo : (localStorage.getItem("auth_redirect") || "/dashboard")) as string;
+          setPendingDest(dest);
+          setStage("verify");
+          setLoading(false);
+          return;
+        }
+
         setServerError(
           data.message ||
             "Something went wrong. Please try again."

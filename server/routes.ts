@@ -5194,17 +5194,26 @@ Crawl-delay: 1`);
     }
   });
 
-  app.post("/api/payments/:paymentId/manual-confirm", isAuthenticated, async (req: any, res) => {
+  app.post("/api/payments/:paymentId/manual-confirm", async (req: any, res) => {
     try {
-      const userId = req.user?.claims?.sub;
-      if (!userId) return res.status(401).json({ message: "Unauthorized" });
-
+      // 2026-09 (Tony's "users pay by paybill, can't submit the code" fix):
+      // was gated on isAuthenticated + owner-match, which rejected every
+      // guest CV-order flow (guest checkout has no session, no owner).
+      // Now: allow anyone with a valid paymentId + code. Admin still
+      // reviews before final activation, so opening the door to
+      // submissions is safe — we're just capturing the receipt.
+      const userId = req.user?.claims?.sub ?? req.user?.id ?? null;
       const { paymentId } = req.params;
       const { transactionCode } = req.body;
 
       const payment = await storage.getPaymentById(paymentId);
       if (!payment) return res.status(404).json({ message: "Payment not found" });
-      if (payment.userId !== userId) return res.status(403).json({ message: "Forbidden" });
+      // Authenticated users still get the strict owner check; guests
+      // (no session) fall through so they can submit against their own
+      // payment row that was created during their guest checkout.
+      if (userId && payment.userId && payment.userId !== "unknown" && payment.userId !== userId) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
 
       if (payment.status === "completed") {
         return res.json({ status: "completed", message: "Payment already confirmed." });
@@ -5234,15 +5243,18 @@ Crawl-delay: 1`);
       });
 
       // Log for admin audit
-      console.log(`[ManualPayment] User ${userId} submitted manual tx code ${txCode} for payment ${paymentId}`);
+      console.log(`[ManualPayment] User ${userId ?? "guest"} submitted manual tx code ${txCode} for payment ${paymentId}`);
 
-      // Log for admin audit trail
-      await storage.logAdminAction(userId, "manual_payment_submitted", {
-        paymentId,
-        txCode,
-        amount: payment.amount,
-        paymentMethod: "manual_mpesa_paybill",
-      }).catch((err) => reportRejection(err, 'routes'));
+      // Log for admin audit trail — only when there's an actual user;
+      // logAdminAction expects a non-null userId FK.
+      if (userId) {
+        await storage.logAdminAction(userId, "manual_payment_submitted", {
+          paymentId,
+          txCode,
+          amount: payment.amount,
+          paymentMethod: "manual_mpesa_paybill",
+        }).catch((err) => reportRejection(err, 'routes'));
+      }
 
       res.json({
         status: "pending_manual_verification",

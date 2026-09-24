@@ -205,12 +205,18 @@ export function registerAuthRoutes(app: Express) {
       // (Mary.K@Gmail.com); the lowercased rawEmail wouldn't match those and
       // the user would see "Invalid email or password" for an email they
       // typed correctly. LOWER() on both sides covers every case.
+      //
+      // 2026-09 (Tony's "users get a code, no place to enter it" fix):
+      // also pull email_verified so we can detect unverified accounts and
+      // route them to the code-entry flow instead of a generic "invalid
+      // password" toast that sends them chasing forgot-password.
       const [user] = await db
         .select({
           id: users.id,
           email: users.email,
           passwordHash: users.passwordHash,
           isActive: users.isActive,
+          emailVerified: users.emailVerified,
         })
         .from(users)
         .where(sql`LOWER(${users.email}) = ${rawEmail}`)
@@ -238,6 +244,27 @@ export function registerAuthRoutes(app: Express) {
       const valid = await bcrypt.compare(password, user.passwordHash);
       step("bcrypt_compare");
       if (!valid) {
+        // 2026-09 (Tony's "users get a code, no place to enter it" fix):
+        // if the account exists but email isn't verified, real-world
+        // users often type their 6-digit verification code into the
+        // password field, hit "Invalid password", then click Forgot
+        // Password, get YET ANOTHER code, and loop. Detect that case
+        // and hand the client a clear signal to switch to code-entry
+        // mode instead of the generic invalid-password toast.
+        if (!user.emailVerified) {
+          // Auto-send a fresh code so whatever's in the user's inbox
+          // is guaranteed valid when the modal switches to verify UI.
+          sendEmailVerificationCode(user.id, user.email).catch((e) =>
+            console.warn("[Auth][login-verify-fallback] send-code failed:", e?.message),
+          );
+          return res.status(403).json({
+            message: "This account isn't verified yet. We just sent a fresh 6-digit code to your email — enter it below to finish signing in.",
+            unverifiedAccount: true,
+            verificationRequired: true,
+            email: user.email,
+          });
+        }
+
         const post = recordFailedLogin(rawEmail, clientIp);
         const willLockNext = post.remainingAttempts === 0;
         return res.status(401).json({
@@ -253,6 +280,23 @@ export function registerAuthRoutes(app: Express) {
 
       // Successful login — clear the failure history for this (email, IP).
       clearFailedAttempts(rawEmail, clientIp);
+
+      // 2026-09 (Tony's "code loop" fix): password is right, but email
+      // still isn't verified. Instead of setting a session (which sends
+      // them to /dashboard where every /api call gets 403'd downstream),
+      // fire a fresh code and tell the client to switch to verify UI.
+      if (!user.emailVerified) {
+        sendEmailVerificationCode(user.id, user.email).catch((e) =>
+          console.warn("[Auth][login-verify-fallback] send-code failed:", e?.message),
+        );
+        return res.status(403).json({
+          message: "Your password is correct, but we still need to confirm your email. We just sent a fresh 6-digit code — enter it below to finish signing in.",
+          unverifiedAccount: true,
+          verificationRequired: true,
+          passwordOk: true,
+          email: user.email,
+        });
+      }
 
       await setSessionUserId(req, user.id);
       step("session_save");
