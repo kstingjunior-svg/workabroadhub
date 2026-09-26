@@ -24,7 +24,7 @@
  */
 
 import type { Express, Request, Response } from "express";
-import { requireToolCredit } from "./tool-pay";
+import { requireToolCredit, releaseToolCredit } from "./tool-pay";
 import { createToolScanJob, markToolScanJobDone, markToolScanJobError } from "./tool-scan-jobs";
 import multer from "multer";
 import crypto from "crypto";
@@ -483,9 +483,14 @@ export function registerOfferCheckRoute(app: Express): void {
               const extracted = await extractTextFromBuffer(fileBuffer, fileMime, fileName);
               if (!extracted?.text || extracted.text.trim().length < 50) {
                 console.warn(`[OfferVerify] extraction failed method=${extracted?.method ?? "none"} chars=${extracted?.text?.length ?? 0} file=${fileName} (${fileBuffer.length} bytes)`);
+                // 2026-09: extraction failure is our fault too (scanned PDF,
+                // corrupted upload) — refund the credit so the customer can
+                // upload a clearer file without paying again.
+                const paymentToken = (req as any).toolPaymentId as string | undefined;
+                if (paymentToken) await releaseToolCredit(paymentToken, "offer_check");
                 await markToolScanJobError(
                   jobId,
-                  "We couldn't read this document even after trying OCR. Please try a clearer scan or export, or screenshot each page as a JPG/PNG and upload the images one at a time.",
+                  "We couldn't read this document — no charge has been kept. Try a clearer scan/export, or screenshot each page as a JPG/PNG and upload the images one at a time.",
                 );
                 return;
               }
@@ -494,9 +499,28 @@ export function registerOfferCheckRoute(app: Express): void {
             }
 
             const { analyzeOffer } = await import("../offer-verify/analyzer");
-            const report = await analyzeOffer(analyzerInput);
+            const paymentToken = (req as any).toolPaymentId as string | undefined;
+
+            let report: Awaited<ReturnType<typeof analyzeOffer>>;
+            try {
+              report = await analyzeOffer(analyzerInput);
+            } catch (analyzerErr: any) {
+              // 2026-09 (Tony's "paid but got no result, had to pay
+              // again" fix): AI call threw — release the credit so the
+              // customer can retry without paying a second KES 100.
+              if (paymentToken) await releaseToolCredit(paymentToken, "offer_check");
+              await markToolScanJobError(
+                jobId,
+                "Our scanner was busy — no charge has been kept. Please retry using the same scan token, or wait a minute and try again.",
+              );
+              console.error(`[OfferVerify] job=${jobId} analyzer threw:`, analyzerErr?.message);
+              return;
+            }
 
             if (!report.ok) {
+              // Same release path for AI-returned failures (extraction
+              // was fine, the model refused / returned an error).
+              if (paymentToken) await releaseToolCredit(paymentToken, "offer_check");
               await markToolScanJobError(jobId, report.message);
               return;
             }
@@ -534,9 +558,14 @@ export function registerOfferCheckRoute(app: Express): void {
             });
           } catch (err: any) {
             console.error(`[OfferVerify] job=${jobId} background error:`, err?.message);
+            // 2026-09: any unhandled failure inside the background job
+            // returns the credit — customer keeps their KES 100 usable
+            // for the same scan.
+            const paymentToken = (req as any).toolPaymentId as string | undefined;
+            if (paymentToken) await releaseToolCredit(paymentToken, "offer_check");
             await markToolScanJobError(
               jobId,
-              "We couldn't verify this offer right now. Please try again shortly, or use the classic verifier at /api/tools/offer-check.",
+              "We couldn't verify this offer right now — no charge has been kept. Please try again shortly.",
             );
           }
         })();

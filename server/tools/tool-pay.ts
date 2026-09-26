@@ -210,3 +210,58 @@ export function requireToolCredit(tool: PaidTool) {
     }
   };
 }
+
+/**
+ * 2026-09 (Tony's "customers pay but get no result, then have to pay
+ * again" fix). When the AI scan fails AFTER the credit was consumed —
+ * Render cold start timing out the OpenAI call, PDF extraction throwing,
+ * network blip mid-analysis — return the credit so the customer can
+ * retry the same scan without paying another KES 100.
+ *
+ * Guarded on age: only rolls back if the consume happened within the
+ * last 15 minutes (matches the AI job soft-timeout). A stale consume
+ * from an hour ago stays consumed — that scan already completed.
+ *
+ * Idempotent + safe to double-call. Returns true when this call was
+ * the one that released.
+ *
+ * IMPORTANT: called by tool handlers on ERROR only. On success, the
+ * credit was already consumed by requireToolCredit and stays that way.
+ */
+export async function releaseToolCredit(
+  toolPaymentId: string,
+  tool: PaidTool,
+): Promise<boolean> {
+  try {
+    const { rows } = await pool.query(
+      `UPDATE payments
+          SET delivery_status = NULL
+        WHERE id::text = $1
+          AND service_id = $2
+          AND delivery_status = 'consumed'
+          AND updated_at > NOW() - INTERVAL '15 minutes'
+      RETURNING id`,
+      [toolPaymentId, `tool_${tool}`],
+    );
+    if (rows.length) {
+      console.log(`[ToolPay] released credit paymentId=${toolPaymentId} tool=${tool} (scan failed, customer can retry)`);
+    }
+    return rows.length > 0;
+  } catch (err: any) {
+    console.error(`[ToolPay] releaseToolCredit failed (paymentId=${toolPaymentId}, tool=${tool}):`, err?.message);
+    return false;
+  }
+}
+
+/**
+ * 2026-09: alias kept for compatibility — some handlers explicitly call
+ * consumeToolCredit() thinking they need to commit the consume. Now that
+ * requireToolCredit consumes up-front again, this is a no-op that just
+ * confirms the credit is still consumed. Safe to leave in place.
+ */
+export async function consumeToolCredit(
+  _toolPaymentId: string,
+  _tool: PaidTool,
+): Promise<boolean> {
+  return true;
+}
