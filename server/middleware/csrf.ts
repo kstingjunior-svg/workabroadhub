@@ -15,6 +15,14 @@ const CSRF_EXEMPT = new Set([
   "/api/whatsapp/status",
   "/api/payments/mpesa/callback",
   "/api/payments/paypal/webhook",
+  // 2026-09 (Tony's Paybill 4153025 C2B auto-activation): Safaricom
+  // POSTs the receipt to these two URLs the moment a customer pays
+  // via Lipa Na M-Pesa Paybill. Safaricom does not send a CSRF token
+  // (or a session cookie) — safaricomIpGuard is the real gate.
+  "/api/pay/c2b/validation",
+  "/api/pay/c2b/confirmation",
+  "/api/mpesa/c2b/validation",
+  "/api/mpesa/c2b/confirmation",
   "/api/log/client-error",
   // Public pricing lookup — read-only, no state changes
   "/api/price",
