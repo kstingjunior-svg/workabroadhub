@@ -120,19 +120,19 @@ export default function AccountVerifyPage() {
       const data: VerificationStatus = await res.json();
       setStatus(data);
       if (!data.emailVerified) {
-        // 2026-09: reveal the code-entry input immediately — never gate it
-        // behind a "Send code" click. If the server already has a valid,
-        // unused code on file (from registration, or an earlier visit /
-        // the banner's Resend button), just show the input as-is. Only
-        // auto-send a fresh one if there truly isn't a live code waiting
-        // AND we haven't already sent one this page visit — this is what
-        // stops the repeated-code loop that was burying users' inboxes.
-        if (data.hasPendingEmailCode) {
-          setEmailCodeSent(true);
-        } else if (!autoSendFired.current) {
-          autoSendFired.current = true;
-          sendEmail();
-        }
+        // 2026-09 (Tony's "keeps sending codes, never verifies" fix):
+        // page load NEVER auto-sends a code. That was the exact bug —
+        // every send invalidates prior codes (invalidatePriorCodes on
+        // the server), so a user who signed up → got their code →
+        // came back later → hit /account/verify would trigger an auto-
+        // send that killed the code sitting in their inbox. Loop.
+        //
+        // New behaviour: input is shown immediately, ready to receive
+        // whatever code the user already has. If they truly need a
+        // fresh one they tap the Resend button explicitly. The server
+        // still hints via hasPendingEmailCode so the label reads
+        // "We already sent your code" vs "Tap Resend to send one".
+        setEmailCodeSent(data.hasPendingEmailCode === true);
       }
       if (data.emailVerified) {
         // 2026-07 (Tony's conversion audit): honour ?returnTo so users
@@ -283,10 +283,12 @@ export default function AccountVerifyPage() {
               {/* 2026-09: input is shown immediately — a code is already on
                   its way (or already sitting in their inbox) the moment
                   this page loads. No extra click needed to reveal it. */}
-              <p className="text-xs text-muted-foreground">
+              <p className="text-sm text-foreground">
                 {emailSending
                   ? "Sending your code\u2026"
-                  : `We've sent a 6-digit code to ${status.email}. Check your inbox (and spam folder).`}
+                  : emailCodeSent
+                    ? `We've sent a 6-digit code to ${status.email}. Check your inbox (and spam folder) and enter it below.`
+                    : `Enter the 6-digit code from the email we sent to ${status.email}. Check inbox and spam folder. If you can't find it, tap Resend below.`}
               </p>
               <div className="space-y-3">
                 <Label htmlFor="email-code">6-digit code from your inbox</Label>
