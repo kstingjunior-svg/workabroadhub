@@ -91,6 +91,21 @@ export function registerAuthRoutes(app: Express) {
       }
       const cleanEmail = emailCheck.normalized;
 
+      // 2026-09 (Tony's "make sure people use real names" mandate):
+      // reject keyboard-mash, sentences ("i went home"), digits in names,
+      // 4+ repeated letters, and names that just copy the email prefix.
+      // Accepts multi-word African / European / Asian names with
+      // apostrophes / hyphens / accented Latin characters — see the
+      // validator for the full ruleset.
+      const { validateFirstAndLastName } = await import("../../utils/name-validator");
+      const nameCheck = validateFirstAndLastName(firstName, lastName, cleanEmail.split("@")[0]);
+      if (!nameCheck.ok) {
+        return res.status(400).json({
+          message: nameCheck.message ?? "Please enter your real first and last name.",
+          reason:  nameCheck.code,
+        });
+      }
+
       if (!password || password.length < 8) {
         return res.status(400).json({ message: "Password must be at least 8 characters." });
       }
