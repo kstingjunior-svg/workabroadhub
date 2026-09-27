@@ -110,9 +110,27 @@ async function tryMatchAndActivate(payload: SafaricomC2BPayload): Promise<void> 
     console.error(`[c2b] Duplicate check failed for ${receipt}:`, err?.message);
   }
 
-  // 2. Try to match a pending payment by (phone + amount) OR (acctRef as paymentId).
-  //    acctRef is the payment id we handed the user in the "pay manually" flow,
-  //    so it's the most reliable match when present.
+  // 2. Try to match a pending payment. Three strategies in order of
+  //    reliability. Only the first hit wins.
+  //
+  //    (a) acctRef == payment.id (customer typed the payment UUID as
+  //        account reference in the paybill fallback flow). 100% reliable.
+  //
+  //    (b) acctRef == payment.short_pay_code (a future ~6-digit code we
+  //        can hand out for easier keypad entry). Reserved for later; the
+  //        pay_code column doesn't exist yet so this branch is a no-op
+  //        until we add it.
+  //
+  //    (c) EXACT amount match, exactly one candidate pending row created
+  //        in the last 5 minutes. This is the phone+amount fallback
+  //        rebuilt without phone — Safaricom C2B v2 in production sends
+  //        us the MSISDN pre-hashed (Kenya Data Protection Act 2019
+  //        compliance) so we cannot match on it. Amount + a 5-min window
+  //        catches the common case: a single user has just fired an STK
+  //        push (creating one pending row) and, when the STK timed out,
+  //        fell back to typing the paybill manually. If there are TWO
+  //        or more same-amount pending rows in the window we bail rather
+  //        than guessing wrong and paying the wrong customer's plan.
   let matchedPaymentId: string | null = null;
   try {
     if (/^[0-9a-f-]{16,}$/i.test(acctRef)) {
@@ -123,17 +141,28 @@ async function tryMatchAndActivate(payload: SafaricomC2BPayload): Promise<void> 
       if (rows.length > 0) matchedPaymentId = String(rows[0].id);
     }
     if (!matchedPaymentId) {
+      // Amount-window fallback. Only match when EXACTLY ONE candidate
+      // exists — ambiguity means we leave it as orphan for admin.
       const { rows } = await pool.query(
-        `SELECT id FROM payments
-          WHERE phone = $1
-            AND amount = $2
+        `SELECT id, created_at, checkout_request_id
+           FROM payments
+          WHERE amount = $1
             AND status IN ('pending', 'pending_manual_verification')
-            AND created_at > NOW() - INTERVAL '24 hours'
+            AND created_at > NOW() - INTERVAL '5 minutes'
           ORDER BY created_at DESC
-          LIMIT 1`,
-        [phone, amountKes],
+          LIMIT 2`,
+        [amountKes],
       );
-      if (rows.length > 0) matchedPaymentId = String(rows[0].id);
+      if (rows.length === 1) {
+        matchedPaymentId = String(rows[0].id);
+        console.log(
+          `[c2b] amount-window match: single pending row for KES ${amountKes} in last 5m → paymentId=${matchedPaymentId}`,
+        );
+      } else if (rows.length > 1) {
+        console.warn(
+          `[c2b] amount-window ambiguous: ${rows.length} pending rows for KES ${amountKes} in last 5m — leaving as orphan for admin review`,
+        );
+      }
     }
   } catch (err: any) {
     console.error(`[c2b] Match query failed for ${receipt}:`, err?.message);
