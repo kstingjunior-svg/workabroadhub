@@ -250,7 +250,35 @@ export function registerMpesaC2BRoutes(app: Express): void {
     });
   });
 
+  // 2026-09 (Tony's Daraja registration): Safaricom's URL Requirements
+  // explicitly disallow the keyword "M-PESA" (and by ambiguous extension
+  // "mpesa") anywhere in the path. Register these alias paths with
+  // Daraja instead — same handlers, safer names.
+  app.post("/api/pay/c2b/validation", safaricomIpGuard, (req: Request, res: Response) => {
+    try {
+      const payload = normalisePayload(req.body);
+      console.log(`[c2b/validation] ref="${payload.BillRefNumber}" amount=${payload.TransAmount} phone=${payload.MSISDN}`);
+    } catch { /* never fail Safaricom's validation over a log line */ }
+    return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted" });
+  });
+
+  app.post("/api/pay/c2b/confirmation", safaricomIpGuard, (req: Request, res: Response) => {
+    let payload: SafaricomC2BPayload;
+    try {
+      payload = normalisePayload(req.body);
+    } catch (err: any) {
+      console.error("[c2b/confirmation] payload parse failed:", err?.message);
+      return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted" });
+    }
+    res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted" });
+    setImmediate(() => {
+      tryMatchAndActivate(payload).catch((err) =>
+        console.error("[c2b/confirmation] tryMatchAndActivate failed:", err?.message),
+      );
+    });
+  });
+
   console.log(
-    "[c2b] ✓ POST /api/mpesa/c2b/validation + POST /api/mpesa/c2b/confirmation registered",
+    "[c2b] ✓ POST /api/mpesa/c2b/{validation,confirmation} + POST /api/pay/c2b/{validation,confirmation} registered",
   );
 }
