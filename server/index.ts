@@ -845,6 +845,15 @@ app.use((req, res, next) => {
       import("./routes/payment-audit")
         .then(({ registerPaymentAuditRoutes }) => registerPaymentAuditRoutes(app))
         .catch((err) => console.error("[Server] payment-audit registration failed:", err?.message));
+
+      // 2026-09 (Tony's "customers pay by paybill, no auto-activation"
+      // fix): register the M-Pesa C2B validation + confirmation
+      // receivers so payments made directly via Lipa Na M-Pesa Paybill
+      // 4153025 auto-match to pending payments and activate without
+      // manual code entry. Behind safaricomIpGuard.
+      import("./routes/mpesa-c2b")
+        .then(({ registerMpesaC2BRoutes }) => registerMpesaC2BRoutes(app))
+        .catch((err) => console.error("[Server] mpesa-c2b registration failed:", err?.message));
     } catch (err: any) {
       console.error("[Server] ❌ CV AI route registration failed:", err?.message);
     }
