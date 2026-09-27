@@ -178,6 +178,17 @@ export function AuthModal({
   const [showPassword, setShowPassword] =
     useState(false);
 
+  // 2026-09 (Tony's referral audit): optional Referral Code input on the
+  // signup form. Pre-fills from localStorage (populated when user clicked
+  // a `?ref=CODE` invite link) but stays editable so a user who typed a
+  // shared code by hand can enter it here directly. Field is OPTIONAL —
+  // an empty value never blocks signup.
+  const [referralCodeInput, setReferralCodeInput] = useState<string>(() => {
+    try {
+      return (localStorage.getItem("referral_code") || "").toUpperCase();
+    } catch { return ""; }
+  });
+
   const [loading, setLoading] =
     useState(false);
 
@@ -315,10 +326,13 @@ export function AuthModal({
           ? `${apiBase}/api/auth/register`
           : `${apiBase}/api/auth/login`;
 
+      // 2026-09 (Tony's referral audit): prefer the value the user just
+      // typed on the form; fall back to whatever a `?ref=CODE` link stored
+      // in localStorage. Either way — empty is fine, server drops silently.
       const referral_code =
-        localStorage.getItem(
-          "referral_code"
-        ) || undefined;
+        referralCodeInput.trim().toUpperCase() ||
+        (localStorage.getItem("referral_code") || "").toUpperCase() ||
+        undefined;
 
       const body =
         tab === "signup"
@@ -1024,6 +1038,36 @@ export function AuthModal({
               />
             )}
           </div>
+
+          {/* 2026-09 (Tony's referral audit): optional Referral Code input.
+              Someone shared a code with the user via WhatsApp / SMS / word
+              of mouth? They paste it here. Empty is fine — signup succeeds
+              either way. Server drops invalid or self-referral codes
+              silently, never blocks the account. */}
+          {tab === "signup" && (
+            <div className="space-y-1.5">
+              <Label htmlFor="auth-referral" className="flex items-center gap-2">
+                Referral code
+                <span className="text-xs font-normal text-muted-foreground">(optional)</span>
+              </Label>
+              <Input
+                id="auth-referral"
+                type="text"
+                inputMode="text"
+                autoCapitalize="characters"
+                autoCorrect="off"
+                spellCheck={false}
+                maxLength={32}
+                placeholder="e.g. TONY123"
+                value={referralCodeInput}
+                onChange={(e) => setReferralCodeInput(e.target.value.toUpperCase().trim())}
+                data-testid="input-referral-code"
+              />
+              <p className="text-xs text-muted-foreground">
+                Got a code from a friend? Enter it here and they earn 10% when you upgrade.
+              </p>
+            </div>
+          )}
 
           <Button
             type="submit"
