@@ -210,6 +210,13 @@ function isWebhookRoute(path: string): boolean {
   return (
     path.startsWith("/api/mpesa/") ||
     path.startsWith("/api/paypal/") ||
+    // 2026-09 (Tony's Paybill C2B fix): Safaricom's server-to-server
+    // C2B validation + confirmation callbacks arrive with NO
+    // User-Agent header, which the bot-detection layer 403s. The
+    // /api/mpesa/* prefix above catches the mpesa alias; this second
+    // prefix covers the "safe" /api/pay/c2b/* alias we registered
+    // with Daraja (safe = no "mpesa"/"safaricom" keyword in path).
+    path.startsWith("/api/pay/c2b/") ||
     path === "/api/callback"
   );
 }
