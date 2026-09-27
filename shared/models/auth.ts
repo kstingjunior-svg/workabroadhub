@@ -79,6 +79,15 @@ export const users = pgTable("users", {
   country: varchar("country"),
   consentAccepted: boolean("consent_accepted").default(false),
   referralCode: varchar("referral_code").unique(),
+  // 2026-09 (Tony's referral audit): the column existed via migration and
+  // was queried by downstream commission code (routes.ts ~L5967), but was
+  // NEVER declared in the Drizzle schema — so `db.insert(users).values({
+  // referredBy })` was silently dropping the field. Result: 11,381 users
+  // signed up over the platform's lifetime, 0 got their referrer linked,
+  // 0 commissions ever recorded in the referrals table.
+  // Stores the REFERRER'S referral_code (a string like "TONY123"), not
+  // their user id. Match by joining on users.referral_code.
+  referredBy: varchar("referred_by"),
 
   // ── Status ──────────────────────────────────────────────────────────────────
   isAdmin: boolean("is_admin").notNull().default(false),

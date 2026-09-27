@@ -55,6 +55,15 @@ export function registerAuthRoutes(app: Express) {
       const password = String(req.body?.password ?? "");
       const firstName = req.body?.firstName ? String(req.body.firstName).trim() : null;
       const lastName  = req.body?.lastName  ? String(req.body.lastName).trim()  : null;
+      // 2026-09 (Tony's referral audit): the client has always sent
+      // `referral_code` (populated from localStorage on landing page /
+      // shared invite links), but this handler ignored it — silently
+      // dropping every referral. 11,215 users had codes to share; 0 of
+      // them ever earned a commission because no signup was linked back.
+      // Accept both snake_case (client convention) and camelCase.
+      const rawReferralCode = String(
+        req.body?.referral_code ?? req.body?.referralCode ?? "",
+      ).trim().toUpperCase().slice(0, 32);
 
       // 2026-07 (pan-African phone): accept structured phone fields from the
       // new PhoneInput. Server re-validates using the canonical E.164 helper
@@ -105,6 +114,45 @@ export function registerAuthRoutes(app: Express) {
         }
       }
 
+      // 2026-09 (Tony's referral audit): validate the referral code
+      // BEFORE inserting the user. Guards:
+      //   1. Code must exist on some other user's users.referral_code.
+      //   2. That other user must not be this same email or phone (no
+      //      self-referral via a second account).
+      // If the code is invalid we DROP it silently — never fail signup
+      // over a bad ref code.
+      let validReferrerCode: string | null = null;
+      if (rawReferralCode && /^[A-Z0-9-]{3,32}$/.test(rawReferralCode)) {
+        try {
+          const [referrerRow] = await db
+            .select({
+              id:              users.id,
+              email:           users.email,
+              phoneNumberE164: users.phoneNumberE164,
+            })
+            .from(users)
+            .where(eq(users.referralCode, rawReferralCode))
+            .limit(1);
+          if (referrerRow) {
+            const isSelfByEmail = referrerRow.email?.toLowerCase() === cleanEmail;
+            const isSelfByPhone = phoneNormalized?.ok
+              && !!referrerRow.phoneNumberE164
+              && referrerRow.phoneNumberE164 === phoneNormalized.e164;
+            if (isSelfByEmail || isSelfByPhone) {
+              console.warn(
+                `[Auth][register] self-referral blocked: newEmail=${cleanEmail} refCode=${rawReferralCode} refUserId=${referrerRow.id} reason=${isSelfByEmail ? "email" : "phone"}`,
+              );
+            } else {
+              validReferrerCode = rawReferralCode;
+            }
+          } else {
+            console.warn(`[Auth][register] unknown referral code, dropping: ${rawReferralCode}`);
+          }
+        } catch (err: any) {
+          console.warn("[Auth][register] referral lookup failed (non-fatal):", err?.message);
+        }
+      }
+
       // 2026-06 PERF: bcrypt cost 10 (was 12). 10 = OWASP minimum + industry
       // standard. Cost 12 took ~500ms on Render Standard CPU; cost 10 is
       // ~120ms — 4× speedup. Existing cost-12 hashes still verify correctly
@@ -127,11 +175,22 @@ export function registerAuthRoutes(app: Express) {
             nationalNumber:  phoneNormalized.national,
             country:         phoneNormalized.countryName,     // populate the human-readable country too
           } : {}),
+          // 2026-09 (Tony's referral audit): link the new user to the
+          // referrer. Downstream commission code in routes.ts ~L5967
+          // reads users.referred_by and matches it against every other
+          // user's referral_code to compute payouts.
+          ...(validReferrerCode ? { referredBy: validReferrerCode } : {}),
         })
         .returning();
 
       if (!created) {
         return res.status(500).json({ message: "Could not create your account. Please try again." });
+      }
+
+      if (validReferrerCode) {
+        console.log(
+          `[Auth][register] ✓ referral linked: newUserId=${created.id} email=${cleanEmail} referredBy=${validReferrerCode}`,
+        );
       }
 
       await setSessionUserId(req, created.id);
