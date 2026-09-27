@@ -854,6 +854,13 @@ app.use((req, res, next) => {
       import("./routes/mpesa-c2b")
         .then(({ registerMpesaC2BRoutes }) => registerMpesaC2BRoutes(app))
         .catch((err) => console.error("[Server] mpesa-c2b registration failed:", err?.message));
+
+      // 2026-09: one-time admin endpoint that calls Daraja's register-URL
+      // API for us — avoids the Safaricom self-service portal's OTP flow.
+      // Behind x-admin-secret header.
+      import("./routes/mpesa-c2b-register")
+        .then(({ registerC2BRegistrationRoutes }) => registerC2BRegistrationRoutes(app))
+        .catch((err) => console.error("[Server] c2b-register registration failed:", err?.message));
     } catch (err: any) {
       console.error("[Server] ❌ CV AI route registration failed:", err?.message);
     }
