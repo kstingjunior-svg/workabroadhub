@@ -112,6 +112,11 @@ export function UpgradeModal() {
   // someone who just wants to look around before committing.
   // (Supersedes the 2026-06 "default to Monthly" decision.)
   const [selectedPlan, setSelectedPlan] = useState<"trial" | "monthly" | "pro">("pro");
+  // 2026-10 (Tony's "most are opting for trial" fix): hide the KES 99 trial
+  // card by default. Only Yearly + Monthly show up as the real choice. A
+  // small opt-in link below reveals the trial for people who really want
+  // to try before committing. Reduces trial-grab reflex for new signups.
+  const [showTrialCard, setShowTrialCard] = useState(false);
   const [phone, setPhone] = useState("");
   const [paymentId, setPaymentId] = useState<string | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(70);
@@ -456,13 +461,15 @@ export function UpgradeModal() {
                 </div>
               </button>
 
-              {/* Trial plan — KES 99 / 1 day — LAST, for someone who just
-                  wants to look around before committing. Not a serious
-                  job-search plan on its own (see founder's reasoning above).
-                  2026-09 (Tony's KES-99-abuse follow-up): hidden entirely
-                  once the user has consumed their one-time trial. Server
+              {/* Trial plan — KES 99 / 1 day
+                  2026-10 (Tony's "most are opting for trial" fix): hidden
+                  behind an opt-in link below the main picks. New users
+                  see only Yearly + Monthly by default and have to
+                  explicitly choose "I just want to try" to see this.
+                  2026-09 (Tony's KES-99-abuse follow-up): also hidden
+                  once a user has consumed their one-time trial. Server
                   authority via /api/subscriptions/trial-eligibility. */}
-              {trialEligible && (
+              {trialEligible && showTrialCard && (
               <button
                 type="button"
                 onClick={() => setSelectedPlan("trial")}
@@ -505,6 +512,23 @@ export function UpgradeModal() {
                 ? `Continue with ${selectedPlan === "trial" ? "1 Day Trial" : selectedPlan === "monthly" ? "Monthly" : "Yearly"} — KES ${proFinalPrice.toLocaleString("en-KE")}`
                 : "Loading prices…"}
             </button>
+
+            {/* 2026-10 (Tony's "most are opting for trial" fix): small
+                opt-in link to reveal the KES 99 trial. We don't lead with
+                it any more — new users default to seeing just Yearly +
+                Monthly, which lifts the average plan value materially. */}
+            {trialEligible && !showTrialCard && (
+              <div className="text-center -mt-3 mb-4">
+                <button
+                  type="button"
+                  onClick={() => { setShowTrialCard(true); setSelectedPlan("trial"); }}
+                  className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-4"
+                  data-testid="link-reveal-trial"
+                >
+                  Just want to try first? KES 99 for 24 hours →
+                </button>
+              </div>
+            )}
 
             {/* Tiny what-you-get bullets (shared across paid tiers) */}
             <div className="mb-4 p-3 rounded-xl bg-muted/30 grid grid-cols-2 gap-1.5">
