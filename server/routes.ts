@@ -2990,6 +2990,18 @@ Crawl-delay: 1`);
             appliedPromo:      resolvedPrice.appliedPromo || null,
             checkoutRequestId: checkoutId,
             merchantRequestId,
+            // 2026-10 (Tony's "KES 750 PPP activation" fix): stash the
+            // exact amount we asked Safaricom to charge. The callback's
+            // fraud gate used to re-resolve from planId alone which
+            // ignored country PPP — so a user charged KES 750 in
+            // Ethiopia / Burundi failed the gate (expected 1000), got
+            // marked as fraud, and never activated. Now the callback
+            // compares against this amount directly: whatever we asked
+            // Safaricom to collect is what we expect back.
+            expectedAmount:    chargeAmount,
+            basePrice:         resolvedPrice.basePrice,
+            countryPrice:      resolvedPrice.countryPrice,
+            discountType:      resolvedPrice.discountType,
           }),
         } as any);
 
@@ -5863,9 +5875,18 @@ Crawl-delay: 1`);
               ? serviceIdForResolve.replace("plan_", "")
               : payment.planId;
           let originalPromoCode: string | undefined;
+          let stashedExpectedAmount: number | null = null;
           try {
             const meta = JSON.parse((payment as any).metadata ?? "{}");
             originalPromoCode = meta.appliedPromo ?? meta.promoCode ?? undefined;
+            // 2026-10 (Tony's PPP activation fix): the STK-push handler
+            // now stashes expectedAmount — the exact amount we asked
+            // Safaricom to charge, after country PPP + any discount. We
+            // trust it over a re-resolve because the re-resolve doesn't
+            // know the user's country and would default to Kenya base.
+            if (typeof meta.expectedAmount === "number" && meta.expectedAmount > 0) {
+              stashedExpectedAmount = Math.round(meta.expectedAmount);
+            }
           } catch { /* metadata may be non-JSON */ }
 
           // Use the full pricing engine so promoCode / referral discounts collapse
@@ -5890,10 +5911,16 @@ Crawl-delay: 1`);
             });
             return;
           }
-          const { finalPrice: canonical, basePrice: canonicalBase, discountType: canonicalDiscount } = resolvedCb1;
-          // Direct Safaricom-reported amount vs canonical plan price — primary fraud gate.
-          // Any discrepancy between what Safaricom collected and what the pricing engine
-          // expects means either price tampering or an unrecognised discount. Reject both.
+          const { finalPrice: canonicalNoCountry, basePrice: canonicalBase, discountType: canonicalDiscount } = resolvedCb1;
+          // 2026-10 (Tony's PPP activation fix): primary gate is now the
+          // stashed expectedAmount — the exact amount we asked Safaricom
+          // to charge at STK-push time, after country PPP + discounts.
+          // Fall back to the re-resolved canonical (which assumes Kenya
+          // base) for legacy payment rows that pre-date this fix.
+          const canonical = stashedExpectedAmount ?? canonicalNoCountry;
+          // Direct Safaricom-reported amount vs expected plan price — primary fraud gate.
+          // Any discrepancy between what Safaricom collected and what we asked for
+          // means either price tampering or an unrecognised discount. Reject both.
           if (Math.round(amountPaid) !== canonical) {
             console.error(`[MPESA/PAYMENTS CALLBACK][Security] Amount mismatch on payment ${payment.id}: Safaricom reported KES ${amountPaid} but canonical price for "${originalPlanIdForResolve}" is KES ${canonical} (base=${canonicalBase}, discount=${canonicalDiscount ?? "none"}, promo=${originalPromoCode ?? "none"}) — blocked`);
             await storage.updatePayment(payment.id, {
