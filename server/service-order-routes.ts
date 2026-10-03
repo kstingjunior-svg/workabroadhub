@@ -1577,7 +1577,14 @@ CRITICAL LENGTH REQUIREMENT — READ CAREFULLY (do not violate):
       // 0.9–1.5x, and rejecting anything <100% created a backlog admin
       // couldn't clear fast enough. 0.85 still catches genuine compression
       // (30-70% content loss cases) but lets normal-length rewrites through.
-      const MIN_RATIO = 0.85;
+      // 2026-10 (Tony's doc-tools audit): loosened MIN_RATIO 0.85 → 0.65.
+      // The 0.85 floor was flagging legitimate rewrites (0.72, 0.78, 0.83
+      // all got kicked to admin review even when the output was fine)
+      // — 24 paying customers piled up over the last 60 days. The AI
+      // often produces slightly-shorter outputs that are still complete
+      // CVs just with tighter language. 0.65 catches genuine compression
+      // (30%+ content loss) without punishing normal rewrites.
+      const MIN_RATIO = 0.65;
       const MAX_RATIO = 2.20;
       const ratio = output.length / inputLen;
 
@@ -2431,6 +2438,24 @@ export function registerServiceOrderRoutes(app: Express, isAuthenticated: Reques
           } else {
             cvText = extracted.text;
           }
+        }
+
+        // 2026-10 (Tony's doc-tools audit): reject obviously-corrupt CV
+        // inputs upfront so customers don't pay for a scan the AI can't
+        // process. Last 60 days: 6+ paying customers uploaded files that
+        // extracted to 69K, 85K, 496K, even 3M chars — not CVs, but
+        // photo PDFs read as binary / corrupted encodings. AI returned
+        // "sorry can't read this" and the guardrail flagged them. Cheaper
+        // and kinder to reject at upload: no charge, clear reason.
+        if (cvText && cvText.length > 50_000) {
+          console.warn(`[ServiceOrder] Rejected oversized CV extract: ${cvText.length} chars for slug=${slug}`);
+          return res.status(400).json({
+            message:
+              "The file you uploaded is too large or looks like a scanned image, not a text CV. " +
+              "Please upload a smaller text-based CV (ideally a PDF or Word doc under 10 pages). " +
+              "If your CV is a photo or scan, convert it to a Word document first.",
+            code: "CV_TOO_LARGE",
+          });
         }
 
         const jobDescription = String(req.body?.jobDescription ?? "").trim() || null;

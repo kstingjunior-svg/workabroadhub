@@ -236,6 +236,71 @@ export async function runServiceOrderReconciler(): Promise<SweepResult> {
   }
 }
 
+/**
+ * 2026-10 (Tony's doc-tools audit): watchdog for orders stuck in
+ * 'processing' status. The ServiceProcessor pipeline normally transitions
+ * processing → completed within 60-120 seconds, but when it crashes
+ * mid-run (Render worker restart, OpenAI timeout mid-request, Node
+ * unhandled rejection), the order stays stuck forever. 6+ orders piled
+ * up over 60 days — Kennedy / FAITH / Aug-era anonymous customers all
+ * had output_text written to the row but status never advanced.
+ *
+ * Watchdog rule:
+ *   • status = 'processing' AND updated_at > 15 min ago
+ *     → if output_text exists with meaningful content (>500 chars):
+ *         flip to 'completed', let customer download
+ *     → otherwise:
+ *         flip to 'failed', flag for admin refund review
+ *
+ * Runs on the same tick as the main reconciler.
+ */
+async function recoverStuckProcessingOrders(): Promise<{
+  recoveredToCompleted: number;
+  flippedToFailed:      number;
+}> {
+  try {
+    const { rows: completedRows } = await pool.query<{ id: string }>(
+      `UPDATE service_orders
+          SET status       = 'completed',
+              completed_at = COALESCE(completed_at, NOW()),
+              updated_at   = NOW(),
+              human_review_notes = COALESCE(human_review_notes, '') ||
+                E'\n[watchdog] auto-recovered from stuck processing (output already generated).'
+        WHERE status = 'processing'
+          AND output_text IS NOT NULL
+          AND LENGTH(output_text) > 500
+          AND updated_at < NOW() - INTERVAL '15 minutes'
+       RETURNING id`,
+    );
+    const { rows: failedRows } = await pool.query<{ id: string }>(
+      `UPDATE service_orders
+          SET status      = 'failed',
+              needs_human_review = true,
+              refund_requested   = true,
+              updated_at  = NOW(),
+              error_message = COALESCE(error_message, '') ||
+                '[watchdog] Stuck in processing >15 min with no usable output. Flagged for admin refund review.',
+              human_review_notes = COALESCE(human_review_notes, '') ||
+                E'\n[watchdog] auto-flipped from stuck processing to failed (no usable output).'
+        WHERE status = 'processing'
+          AND (output_text IS NULL OR LENGTH(output_text) <= 500)
+          AND updated_at < NOW() - INTERVAL '15 minutes'
+       RETURNING id`,
+    );
+    if (completedRows.length > 0 || failedRows.length > 0) {
+      console.warn(
+        `[service-order-reconciler][watchdog] recovered=${completedRows.length} ` +
+        `(stuck processing with usable output → completed) ` +
+        `failed=${failedRows.length} (stuck with no usable output → failed+refund-review)`,
+      );
+    }
+    return { recoveredToCompleted: completedRows.length, flippedToFailed: failedRows.length };
+  } catch (err: any) {
+    console.error("[service-order-reconciler][watchdog] failed:", err?.message);
+    return { recoveredToCompleted: 0, flippedToFailed: 0 };
+  }
+}
+
 export function startServiceOrderReconciler(): void {
   if (_timer) return;
   console.log(`[service-order-reconciler] Started — running every ${SWEEP_INTERVAL_MS / 60_000} min`);
@@ -245,6 +310,7 @@ export function startServiceOrderReconciler(): void {
     if (_running) return;
     _running = true;
     try {
+      await recoverStuckProcessingOrders();
       const r = await runServiceOrderReconciler();
       if (r.scanned > 0 || r.linked > 0 || r.orphaned > 0 || r.errors > 0) {
         console.warn(
@@ -261,6 +327,7 @@ export function startServiceOrderReconciler(): void {
     if (_running) return;
     _running = true;
     try {
+      await recoverStuckProcessingOrders();
       const r = await runServiceOrderReconciler();
       if (r.linked > 0 || r.orphaned > 0 || r.errors > 0) {
         console.warn(
