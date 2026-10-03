@@ -11,7 +11,7 @@
  * Legacy PDF fallback: POST /api/tools/offer-check (v1 heuristic).
  */
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { usePageSeo } from "@/hooks/use-page-seo";
 import { Button } from "@/components/ui/button";
@@ -110,6 +110,50 @@ export default function OfferCheckPage() {
   const [result, setResult] = useState<VerifyResponse | null>(null);
   const [showTechnical, setShowTechnical] = useState(false);
 
+  // 2026-10 (Tony's "customer paid twice because scan never fired" fix):
+  // if payment confirms AFTER the file state was lost (tab backgrounded
+  // for 6 min during STK polling, iPhone Safari evicting the tab, user
+  // navigating away and back), the handleVerify re-run would silently
+  // bail at `if (!file) return;`. User saw nothing happen, assumed
+  // payment failed, and paid again.
+  //
+  // This state holds the unused scan credit so the UI can:
+  //   (a) show a persistent banner "Payment confirmed - upload your
+  //       offer letter to use your paid credit"
+  //   (b) auto-fire handleVerify the moment they re-upload a file.
+  //
+  // Persisted to sessionStorage so a full page refresh survives too.
+  const PAID_CREDIT_STORAGE_KEY = "offer_check_paid_credit";
+  const [paidCreditReady, setPaidCreditReady] = useState<string | null>(() => {
+    try { return sessionStorage.getItem(PAID_CREDIT_STORAGE_KEY) || null; }
+    catch { return null; }
+  });
+  function stashPaidCredit(token: string) {
+    setPaidCreditReady(token);
+    try { sessionStorage.setItem(PAID_CREDIT_STORAGE_KEY, token); } catch {}
+  }
+  function clearPaidCredit() {
+    setPaidCreditReady(null);
+    try { sessionStorage.removeItem(PAID_CREDIT_STORAGE_KEY); } catch {}
+  }
+
+  // 2026-10 (Tony's customer-recovery flow): URL ?scanToken=XXX restores
+  // a paid credit so admins can send a direct recovery link to any
+  // customer whose scan silently failed. Mounts once; the banner picks
+  // it up from paidCreditReady state the same way.
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const tokenFromUrl = params.get("scanToken")?.trim();
+      if (tokenFromUrl && tokenFromUrl.length >= 16) {
+        stashPaidCredit(tokenFromUrl);
+        // Scrub the URL so a refresh / share doesn't leak the token.
+        window.history.replaceState(null, "", window.location.pathname);
+      }
+    } catch { /* no window / no URL — SSR-safe */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // 2026-08 (Tony): accept PDF + Word docs too. Many offer letters arrive
   // as attachments — restricting to images made users take a screenshot
   // of the PDF first. Server (offer-check-endpoint.ts) already handles
@@ -137,21 +181,49 @@ export default function OfferCheckPage() {
     // Only images render inline as a preview; PDF/Word show a document
     // card in the UI below (renders based on file.type).
     setPreview(f.type.startsWith("image/") ? URL.createObjectURL(f) : null);
+
+    // 2026-10 (Tony's "paid twice" fix): if a prior payment left a paid
+    // credit waiting, auto-fire the scan now with that credit. The user
+    // doesn't need to click Verify again — they already paid.
+    if (paidCreditReady) {
+      // defer by a tick so the setFile/setResult above have flushed
+      setTimeout(() => handleVerify(paidCreditReady), 0);
+    }
   }
 
   async function handleVerify(freshToken?: string) {
+    const token: string = freshToken ?? pay.scanToken ?? paidCreditReady ?? "";
+
+    // 2026-10 (Tony's "paid twice because scan never fired" fix): if we
+    // DO have a paid credit but the file was lost (tab backgrounded, iOS
+    // Safari tab eviction, full page refresh), stash the credit and
+    // surface a clear banner so the user can re-upload. Previous
+    // behaviour was `if (!file) return` which silently did nothing and
+    // the user paid again, thinking the first charge had failed.
+    if (!file && token) {
+      stashPaidCredit(token);
+      toast({
+        title: "Payment confirmed",
+        description: "Re-upload your offer letter to run your paid scan. No extra charge.",
+        duration: 12000,
+      });
+      return;
+    }
     if (!file) return;
+
     // 2026-09 (Tony's monetisation directive): KES 100 per scan. If no paid
     // credit is held, collect payment first — handleVerify re-runs
     // automatically the moment M-Pesa confirms. The retry gets the token
     // passed in directly (not re-read from pay.scanToken, which is frozen
     // at its pre-payment value inside this closure) so it can't loop back
     // into asking for payment again.
-    const token: string = freshToken ?? pay.scanToken ?? "";
     if (!token) {
       pay.requestScan((t) => handleVerify(t));
       return;
     }
+    // We're about to actually fire the scan with this credit — clear the
+    // stashed one so a success doesn't leave a stale banner around.
+    if (paidCreditReady) clearPaidCredit();
     setLoading(true);
     setResult(null);
     // 2026-09 (Tony's screenshot: "Network issue — check your connection"
@@ -253,6 +325,36 @@ export default function OfferCheckPage() {
         </div>
 
         <pay.PayModal />
+
+        {/* 2026-10 (Tony's "paid twice because the UI never ran the scan"
+            fix): if we have a paid credit sitting but no file (payment
+            confirmed after the file state was lost — e.g. tab backgrounded
+            during STK polling), tell the user prominently so they re-upload
+            instead of paying again. */}
+        {paidCreditReady && !file && !result && (
+          <div
+            className="rounded-xl border-2 border-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 dark:border-emerald-700 p-4 flex items-start gap-3"
+            data-testid="paid-credit-banner"
+          >
+            <CheckCircle2 className="h-6 w-6 text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5" />
+            <div className="flex-1 text-sm">
+              <p className="font-semibold text-emerald-900 dark:text-emerald-200">
+                Your payment was received.
+              </p>
+              <p className="text-emerald-800 dark:text-emerald-300 mt-0.5 leading-relaxed">
+                Upload your offer letter below to run your paid scan. <strong>No extra charge</strong> — your credit is still here.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={clearPaidCredit}
+              className="text-xs text-emerald-700 dark:text-emerald-300 hover:underline flex-shrink-0"
+              data-testid="btn-dismiss-paid-credit"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
 
         {!result && (
           <Card className="border-2 border-dashed border-teal-300 dark:border-teal-800">
