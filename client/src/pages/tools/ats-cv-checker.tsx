@@ -612,19 +612,65 @@ export default function ATSCVChecker() {
                 signed-in users hitting /api/login and felt nonsensical. */}
             {result.locked ? (
               !user ? (
-                <Card className="border-blue-200 bg-blue-50 dark:bg-blue-900/10 dark:border-blue-800">
-                  <CardContent className="p-6 text-center space-y-3">
-                    <Lock className="h-8 w-8 mx-auto text-blue-500" />
-                    <h3 className="font-semibold">Sign in to see the full report</h3>
-                    <p className="text-sm text-muted-foreground">{result.message ?? "Create a free account to unlock strengths, weaknesses, missing keywords, and suggestions."}</p>
-                    <Link href="/login?next=/tools/ats-cv-checker">
-                      <Button className="w-full" data-testid="button-sign-in-for-full">
-                        Sign In (free)
-                        <ChevronRight className="h-4 w-4 ml-1" />
-                      </Button>
-                    </Link>
-                  </CardContent>
-                </Card>
+                /* 2026-10 (Tony's monetisation ask): anonymous users used to
+                   see ONLY the "Sign In" CTA. That left all organic search
+                   traffic — who've just felt the pain of a sub-90 score —
+                   with no path to pay. Now they get BOTH: Fix my CV right
+                   now (KES 99 guest checkout) as the primary tripwire,
+                   plus Sign In as the free alternative. Order matches
+                   intent — someone with a bad score mostly wants it
+                   fixed, not to open an account first. */
+                <div className="space-y-3">
+                  <Card className="border-2 border-amber-300 dark:border-amber-700 bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-50 dark:from-amber-950/40 dark:via-orange-950/40 dark:to-yellow-950/40 shadow-md">
+                    <CardContent className="p-5 sm:p-6 space-y-4">
+                      <div className="flex items-start gap-3">
+                        <div className="shrink-0 w-12 h-12 rounded-2xl bg-amber-500 flex items-center justify-center text-white text-2xl">⚡</div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap mb-1">
+                            <Badge className="bg-amber-500 text-white border-0">Most Popular</Badge>
+                            <Badge variant="outline" className="border-emerald-400 text-emerald-700 dark:text-emerald-300">
+                              ⏱ Delivered in 3 minutes
+                            </Badge>
+                          </div>
+                          <h3 className="text-lg font-bold leading-tight">
+                            Fix my CV now — KES 99
+                          </h3>
+                          <p className="text-sm text-muted-foreground leading-relaxed mt-1">
+                            Your CV scored {result.score}/100. Our writers restructure the
+                            formatting, fix grammar, and rewrite weak sections so it passes
+                            ATS — delivered in 3 minutes. No account needed to pay.
+                          </p>
+                        </div>
+                      </div>
+                      {/* Anonymous users go through the full guest-friendly
+                          order flow at /services/order/cv_fix_lite which
+                          already collects name/email/phone for guest
+                          checkouts. The instant-pay modal above assumes an
+                          authenticated session, so routing anon users
+                          there would just stall them on an empty profile. */}
+                      <Link
+                        href="/services/order/cv_fix_lite?from=ats-checker"
+                        className="inline-flex w-full items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-bold text-sm py-3 px-4 rounded-xl shadow-md hover:shadow-lg transition-all"
+                        data-testid="button-anon-cv-fix"
+                      >
+                        🎯 Fix My CV for KES 99
+                        <ChevronRight className="h-4 w-4" />
+                      </Link>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-blue-200 bg-blue-50 dark:bg-blue-900/10 dark:border-blue-800">
+                    <CardContent className="p-5 text-center space-y-2">
+                      <h3 className="text-sm font-semibold">Or sign in free to see the full report</h3>
+                      <p className="text-xs text-muted-foreground">{result.message ?? "Unlock strengths, weaknesses, missing keywords and suggestions — no charge."}</p>
+                      <Link href="/login?next=/tools/ats-cv-checker">
+                        <Button variant="outline" className="w-full" data-testid="button-sign-in-for-full">
+                          Sign In (free)
+                          <ChevronRight className="h-4 w-4 ml-1" />
+                        </Button>
+                      </Link>
+                    </CardContent>
+                  </Card>
+                </div>
               ) : (
                 <Card className="border-2 border-amber-300 dark:border-amber-700 bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-50 dark:from-amber-950/40 dark:via-orange-950/40 dark:to-yellow-950/40 shadow-md">
                   <CardContent className="p-5 sm:p-6 space-y-4">
