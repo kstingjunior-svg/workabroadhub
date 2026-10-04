@@ -25,6 +25,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import OtpInput from "@/components/otp-input";
 
 interface VerificationStatus {
   email: string;
@@ -290,18 +291,26 @@ export default function AccountVerifyPage() {
                     ? `We've sent a 6-digit code to ${status.email}. Check your inbox (and spam folder) and enter it below.`
                     : `Enter the 6-digit code from the email we sent to ${status.email}. Check inbox and spam folder. If you can't find it, tap Resend below.`}
               </p>
-              <div className="space-y-3">
-                <Label htmlFor="email-code">6-digit code from your inbox</Label>
-                <Input
-                  id="email-code"
+              <div className="space-y-4">
+                <Label className="block text-center">Paste or type the 6-digit code</Label>
+                <OtpInput
                   value={emailCode}
-                  onChange={(e) => setEmailCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
+                  onChange={setEmailCode}
+                  onComplete={(code) => {
+                    // Netflix-style: as soon as all 6 digits land
+                    // (typed, pasted, or auto-pulled from clipboard
+                    // on focus), auto-submit. No "click Verify"
+                    // needed. Guard against double-fire while a
+                    // submit is already in flight.
+                    if (!emailVerifying) {
+                      setEmailCode(code);
+                      // run submit on next tick so state settles
+                      setTimeout(() => submitEmailCode(), 0);
+                    }
+                  }}
+                  disabled={emailVerifying}
                   autoFocus
-                  maxLength={6}
-                  placeholder="123456"
-                  className="font-mono text-center text-lg tracking-widest"
+                  data-testid="email-otp"
                 />
                 <div className="flex gap-2">
                   <Button onClick={submitEmailCode} disabled={emailVerifying || emailCode.length !== 6} className="flex-1">

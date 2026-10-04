@@ -15,6 +15,7 @@ import { PhoneInput } from "@/components/phone-input";
 import { Label } from "@/components/ui/label";
 import { useLocation, Link } from "wouter";
 import { queryClient } from "@/lib/queryClient";
+import OtpInput from "@/components/otp-input";
 
 type Tab = "login" | "signup";
 // 2026-07 (Tony's inline-verify request): "verify" is a stage the modal
@@ -701,30 +702,27 @@ export function AuthModal({
         {stage === "verify" && (
           <div className="p-6 pt-4 space-y-4" data-testid="stage-verify">
             <div>
-              <Label htmlFor="verify-code" className="mb-2 block">
-                Enter the 6-digit code
+              <Label className="mb-3 block text-center">
+                Paste or type the 6-digit code
               </Label>
-              <Input
-                id="verify-code"
-                type="text"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                pattern="[0-9]{6}"
-                maxLength={6}
-                autoFocus
-                placeholder="123456"
+              <OtpInput
                 value={verifyCode}
-                onChange={(e) =>
-                  setVerifyCode(
-                    e.target.value.replace(/\D/g, "").slice(0, 6),
-                  )
-                }
-                className="text-center text-2xl tracking-[0.5em] font-mono h-14"
+                onChange={setVerifyCode}
+                onComplete={(code) => {
+                  // Netflix-style auto-submit the moment all 6 digits
+                  // land (typed, pasted, clipboard-pulled or iOS/Android
+                  // native OTP autofill).
+                  if (!verifying) {
+                    setVerifyCode(code);
+                    setTimeout(() => submitVerify(), 0);
+                  }
+                }}
                 disabled={verifying}
+                autoFocus
                 data-testid="input-verify-code"
               />
               {verifyError && (
-                <p className="text-xs text-red-600 dark:text-red-400 mt-2">
+                <p className="text-xs text-red-600 dark:text-red-400 mt-3 text-center">
                   {verifyError}
                 </p>
               )}
