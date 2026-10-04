@@ -99,15 +99,45 @@ export async function sendEmailVerificationCode(
   // numeric codes in subject, and thin HTML — replaced with a plain
   // conversational subject and richer body that reads like a real
   // person wrote it.
-  const html = `<div style="font-family:-apple-system,Segoe UI,sans-serif;max-width:520px;margin:auto;padding:24px;color:#1a2530;line-height:1.55;">
-    <p style="margin:0 0 16px;">Hi,</p>
-    <p style="margin:0 0 16px;">Here's the sign-in code you asked for:</p>
-    <p style="font-size:32px;font-weight:700;letter-spacing:8px;background:#f0fdf4;color:#15803d;text-align:center;padding:16px;border-radius:8px;margin:24px 0;">${code}</p>
-    <p style="margin:0 0 16px;">Just type these 6 numbers on the WorkAbroadHub page to finish signing in. It works for 30 minutes.</p>
-    <p style="margin:0 0 16px;color:#475569;font-size:13px;">Didn't ask for this? You can safely ignore this email — nothing will happen.</p>
-    <p style="margin:24px 0 0;color:#475569;font-size:13px;">— Tony<br>WorkAbroad Hub, Nairobi<br><a href="https://workabroadhub.tech" style="color:#475569;">workabroadhub.tech</a></p>
-  </div>`;
-  const text = `Hi,\n\nHere's the sign-in code you asked for: ${code}\n\nJust type these 6 numbers on the WorkAbroadHub page to finish signing in. It works for 30 minutes.\n\nDidn't ask for this? You can safely ignore this email — nothing will happen.\n\n— Tony\nWorkAbroad Hub, Nairobi\nworkabroadhub.tech`;
+  // 2026-10 (Tony): Netflix-style layout. Big brand header, prominent
+  // "Enter this code to sign in" heading, large spaced code, expiry +
+  // security line, signature. Table-based so Gmail/Outlook/Yahoo render
+  // it the same way. Keeps the deliverability-friendly subject.
+  const codeDigits = code.split("").map(d => `<td style="width:38px;height:48px;border:1px solid #e5e7eb;border-radius:6px;text-align:center;font-family:'Segoe UI',Arial,sans-serif;font-size:28px;font-weight:700;color:#111827;background:#ffffff;">${d}</td><td style="width:8px;">&nbsp;</td>`).join("");
+  const html = `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f6f7f9;font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;color:#111827;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f6f7f9;padding:32px 16px;">
+      <tr><td align="center">
+        <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+          <tr><td style="background:#15803d;padding:20px 32px;">
+            <div style="font-family:-apple-system,'Segoe UI',Arial,sans-serif;font-size:22px;font-weight:800;color:#ffffff;letter-spacing:-0.5px;">WorkAbroad<span style="color:#bbf7d0;">Hub</span></div>
+          </td></tr>
+          <tr><td style="padding:40px 32px 8px;">
+            <h1 style="margin:0 0 8px;font-size:26px;font-weight:700;color:#111827;line-height:1.25;">Enter this code to sign in</h1>
+          </td></tr>
+          <tr><td style="padding:16px 32px 8px;">
+            <table role="presentation" cellpadding="0" cellspacing="0"><tr>${codeDigits}</tr></table>
+          </td></tr>
+          <tr><td style="padding:16px 32px 0;color:#374151;font-size:15px;line-height:1.55;">
+            Enter the code above on WorkAbroadHub to finish signing in. This code will expire in 30 minutes.
+          </td></tr>
+          <tr><td style="padding:16px 32px 0;color:#374151;font-size:15px;line-height:1.55;">
+            If you didn't request this, you can ignore this email — nothing will happen to your account.
+          </td></tr>
+          <tr><td style="padding:16px 32px 32px;color:#374151;font-size:15px;line-height:1.55;">
+            To keep your account safe, please don't share this code with anyone.
+          </td></tr>
+          <tr><td style="padding:24px 32px;border-top:1px solid #e5e7eb;color:#6b7280;font-size:13px;line-height:1.55;">
+            <div style="font-weight:600;color:#374151;margin-bottom:4px;">The WorkAbroad Hub team</div>
+            Nairobi, Kenya &middot; <a href="https://workabroadhub.tech" style="color:#15803d;text-decoration:none;">workabroadhub.tech</a>
+          </td></tr>
+        </table>
+        <div style="max-width:560px;margin:16px auto 0;color:#9ca3af;font-size:12px;text-align:center;line-height:1.5;">
+          This message was sent to ${dest} because a sign-in code was requested on WorkAbroadHub.
+        </div>
+      </td></tr>
+    </table>
+  </body></html>`;
+  const text = `Enter this code to sign in\n\n${code}\n\nEnter the code above on WorkAbroadHub to finish signing in. This code will expire in 30 minutes.\n\nIf you didn't request this, you can ignore this email.\n\nTo keep your account safe, please don't share this code with anyone.\n\n— The WorkAbroad Hub team\nNairobi, Kenya\nworkabroadhub.tech`;
 
   const result = await sendEmail({
     to: dest,
