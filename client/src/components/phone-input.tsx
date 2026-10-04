@@ -104,6 +104,13 @@ export function PhoneInput({
   //   2. Include a city/alt-name alias map for common searches (Dubai,
   //      Abu Dhabi, London, Riyadh, New York, etc.) so people naturally
   //      find their country.
+  // 2026-10 (Tony): rank by match quality so typing "ke" shows Kenya +254
+  // first — not Burkina Faso just because it contains "ke". Order:
+  //   1. ISO exact match (ke → KE)
+  //   2. Name starts with needle (ke → Kenya)
+  //   3. Dial code starts with needle (254 → Kenya, Rwanda, …)
+  //   4. City/alias match (nairobi → Kenya)
+  //   5. Name contains needle anywhere (ke → Burkina Faso)
   const filteredCountries = useMemo(() => {
     const raw = search.trim();
     if (!raw) return AFRICAN_COUNTRIES;
@@ -155,12 +162,23 @@ export function PhoneInput({
     };
     const aliasIso = aliases[needle];
 
-    return AFRICAN_COUNTRIES.filter((c) =>
-      (aliasIso && c.iso === aliasIso) ||
-      c.name.toLowerCase().includes(needle) ||
-      c.iso.toLowerCase().includes(needle) ||
-      c.dialCode.includes(needle),
-    );
+    const scored = AFRICAN_COUNTRIES
+      .map((c) => {
+        const nameLc = c.name.toLowerCase();
+        const isoLc = c.iso.toLowerCase();
+        let score = 0;
+        if (isoLc === needle) score = 100;                   // ISO exact: ke → KE
+        else if (nameLc.startsWith(needle)) score = 90;      // "Kenya".startsWith("ke")
+        else if (c.dialCode.startsWith(needle)) score = 80;  // 254 → Kenya
+        else if (aliasIso && c.iso === aliasIso) score = 70; // nairobi → KE
+        else if (nameLc.includes(` ${needle}`)) score = 60;  // word-start inside name
+        else if (nameLc.includes(needle)) score = 40;        // substring anywhere
+        else if (c.dialCode.includes(needle)) score = 30;    // dial-code substring
+        return { c, score };
+      })
+      .filter((x) => x.score > 0)
+      .sort((a, b) => b.score - a.score || a.c.name.localeCompare(b.c.name));
+    return scored.map((x) => x.c);
   }, [search]);
 
   const validation = validateNationalNumber(country, national);
@@ -196,16 +214,26 @@ export function PhoneInput({
         {/* Country selector */}
         <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
           <PopoverTrigger asChild>
+            {/* 2026-10 (Tony): Naukri-style wider picker with country NAME
+                visible, so users see "Search / change country" at a glance
+                instead of a tiny "+1 ▼" they can miss. Name is hidden on
+                very narrow phones to keep the field tap-friendly. */}
             <Button
               type="button"
               variant="outline"
               disabled={disabled}
-              className="h-10 px-3 gap-2 flex-shrink-0"
+              className="h-10 px-3 gap-2 flex-shrink-0 justify-start min-w-0 max-w-[180px] sm:max-w-[220px]"
               data-testid={`${testId}-country-picker`}
+              aria-label={`Country: ${country.name}. Click to search and change.`}
             >
-              <span className="text-lg">{country.flag}</span>
-              <span className="font-mono text-sm">+{country.dialCode}</span>
-              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-lg leading-none">{country.flag}</span>
+              <span className="hidden sm:inline truncate text-sm font-medium">
+                {country.name}
+              </span>
+              <span className="font-mono text-sm text-muted-foreground">
+                +{country.dialCode}
+              </span>
+              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground ml-auto flex-shrink-0" />
             </Button>
           </PopoverTrigger>
           <PopoverContent
@@ -220,10 +248,10 @@ export function PhoneInput({
                 <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                 <Input
                   autoFocus
-                  placeholder="Search country…"
+                  placeholder="Type a country or code (e.g. ke, +254, nairobi)"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="pl-7 h-8 text-sm"
+                  className="pl-7 h-9 text-sm"
                   data-testid={`${testId}-country-search`}
                 />
               </div>
