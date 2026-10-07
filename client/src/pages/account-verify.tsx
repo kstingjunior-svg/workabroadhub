@@ -204,14 +204,19 @@ export default function AccountVerifyPage() {
     }
   }
 
-  async function submitEmailCode() {
-    if (emailCode.replace(/\D/g, "").length !== 6) {
+  async function submitEmailCode(explicitCode?: string) {
+    // 2026-10 fix: accept an explicit code so the OTP input's
+    // auto-submit (fires right after setEmailCode) doesn't race the
+    // React state flush. Falls back to state when called from the
+    // Verify button click.
+    const codeToSubmit = (explicitCode ?? emailCode).replace(/\D/g, "");
+    if (codeToSubmit.length !== 6) {
       toast({ title: "Enter the 6-digit code", variant: "destructive" });
       return;
     }
     setEmailVerifying(true);
     try {
-      await jsonPost("/api/auth/verify-email", { code: emailCode });
+      await jsonPost("/api/auth/verify-email", { code: codeToSubmit });
       // 2026-08 (Tony's "verify not responsive" report): force the user
       // object to re-fetch so the banner + Pro gates + Nav all see
       // emailVerified=true immediately. Without this, react-query's 2 min
@@ -297,15 +302,13 @@ export default function AccountVerifyPage() {
                   value={emailCode}
                   onChange={setEmailCode}
                   onComplete={(code) => {
-                    // Netflix-style: as soon as all 6 digits land
-                    // (typed, pasted, or auto-pulled from clipboard
-                    // on focus), auto-submit. No "click Verify"
-                    // needed. Guard against double-fire while a
-                    // submit is already in flight.
+                    // Netflix-style auto-submit the moment the input
+                    // has 6 digits (typed, pasted, or clipboard-pulled).
+                    // 2026-10 fix: pass code explicitly so we don't
+                    // race the React state flush of setEmailCode.
                     if (!emailVerifying) {
                       setEmailCode(code);
-                      // run submit on next tick so state settles
-                      setTimeout(() => submitEmailCode(), 0);
+                      submitEmailCode(code);
                     }
                   }}
                   disabled={emailVerifying}

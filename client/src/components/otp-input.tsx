@@ -83,51 +83,75 @@ export default function OtpInput({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoFocus]);
 
-  // ── The Netflix magic: on window focus, peek at clipboard ────────────
+  // ── The Netflix magic: on window RE-focus, peek at clipboard ─────────
   // If the clipboard holds a 6-digit code (user just copied it from the
-  // email), fill the boxes automatically. Silently swallows permission
-  // errors — some browsers block clipboard reads outside a user gesture
-  // or in insecure contexts. On those browsers, the user just pastes
-  // manually and the paste handler below takes over.
+  // email in another tab/window), fill the boxes automatically.
+  //
+  // 2026-10 fix (Tony "sign-in code request has issue"):
+  //   - DO NOT read clipboard on mount. That triggered an intrusive
+  //     "Allow this site to read clipboard?" prompt the moment the
+  //     verify page loaded, before the user had done anything. Many
+  //     users denied → every subsequent OTP in the session was broken.
+  //     Clipboard is only touched after the user leaves AND comes
+  //     back, which is the only time it would plausibly contain a
+  //     freshly-copied code anyway.
+  //   - Guard visibilitychange with document.visibilityState so we
+  //     only run on SHOW, not on HIDE.
+  //   - Guard against reading clipboard when the user is actively
+  //     typing in the inputs (focus event may fire during normal use).
   useEffect(() => {
     if (disabled) return;
     let cancelled = false;
+    let hasBeenHidden = false; // only autofill after a round-trip away
 
     const tryClipboard = async () => {
       try {
         if (!navigator.clipboard?.readText) return;
-        const text = await navigator.clipboard.readText();
-        if (cancelled) return;
-        const match = text?.match(new RegExp(`\\b(\\d{${length}})\\b`));
-        if (!match) return;
+        // Only fire if the page is actually visible — Firefox throws
+        // on hidden pages, Chrome returns stale cached clipboard.
+        if (document.visibilityState !== "visible") return;
         // Only autofill if the input is still empty — don't clobber
         // whatever the user is already typing.
         if (value.replace(/\D/g, "").length > 0) return;
+        const text = await navigator.clipboard.readText();
+        if (cancelled) return;
+        if (!text) return;
+        // Accept either a clean 6-digit code OR a code copied out of
+        // our Netflix-style boxed digits (which may paste as
+        // "1 2 3 4 5 6" or "1\n2\n3\n4\n5\n6" depending on the email
+        // client). Strip whitespace, then look for exactly `length`
+        // digits in a row.
+        const stripped = text.replace(/\s+/g, "");
+        const match = stripped.match(new RegExp(`(?:^|\\D)(\\d{${length}})(?:$|\\D)`));
+        if (!match) return;
+        if (value.replace(/\D/g, "").length > 0) return; // re-check after await
         setDigits(match[1].split(""));
-        // Focus the last box so Enter/Verify is one keystroke away
         setTimeout(() => focusBox(length - 1), 0);
       } catch {
         // Clipboard permission denied / not available — fine, user
-        // will paste manually.
+        // will paste manually with Ctrl+V and the paste handler
+        // below fills all 6 boxes.
       }
     };
 
-    const onFocus = () => {
-      // tiny delay so the browser has settled the focus event before
-      // we ask for clipboard access
+    const onVisibilityOrFocus = () => {
+      if (document.visibilityState === "hidden") {
+        hasBeenHidden = true;
+        return;
+      }
+      // Only on returning from away
+      if (!hasBeenHidden) return;
+      hasBeenHidden = false;
+      // tiny delay so the browser has settled the focus event
       setTimeout(tryClipboard, 50);
     };
 
-    // Try once on mount (covers "user navigates to /account/verify
-    // with the code already in their clipboard")
-    tryClipboard();
-
-    window.addEventListener("focus", onFocus);
-    document.addEventListener("visibilitychange", onFocus);
+    window.addEventListener("focus", onVisibilityOrFocus);
+    document.addEventListener("visibilitychange", onVisibilityOrFocus);
     return () => {
       cancelled = true;
-      window.removeEventListener("focus", onFocus);
-      document.removeEventListener("visibilitychange", onFocus);
+      window.removeEventListener("focus", onVisibilityOrFocus);
+      document.removeEventListener("visibilitychange", onVisibilityOrFocus);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [disabled, length]);
@@ -182,6 +206,8 @@ export default function OtpInput({
 
   const handlePaste = (i: number, e: React.ClipboardEvent<HTMLInputElement>) => {
     const text = e.clipboardData.getData("text") || "";
+    // Strip ALL non-digits — tolerates "1 2 3 4 5 6", "1-2-3-4-5-6",
+    // "Your code: 123456", "123 456", etc. First `length` digits win.
     const d = text.replace(/\D/g, "").slice(0, length);
     if (!d) return;
     e.preventDefault();

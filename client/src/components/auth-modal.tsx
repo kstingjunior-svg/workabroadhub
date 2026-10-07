@@ -542,9 +542,12 @@ export function AuthModal({
   // close the modal + navigate to pendingDest (the same dest we would have
   // gone to had verification not been required). On failure, show the
   // error inline in the modal.
-  const submitVerify = async () => {
+  const submitVerify = async (explicitCode?: string) => {
     setVerifyError("");
-    const clean = verifyCode.replace(/\D/g, "");
+    // 2026-10 fix: accept an explicit code so the OTP input's
+    // auto-submit (fires right after setVerifyCode) doesn't race
+    // the React state flush.
+    const clean = (explicitCode ?? verifyCode).replace(/\D/g, "");
     if (clean.length !== 6) {
       setVerifyError("Enter the 6-digit code from your email.");
       return;
@@ -710,11 +713,11 @@ export function AuthModal({
                 onChange={setVerifyCode}
                 onComplete={(code) => {
                   // Netflix-style auto-submit the moment all 6 digits
-                  // land (typed, pasted, clipboard-pulled or iOS/Android
-                  // native OTP autofill).
+                  // land. 2026-10 fix: pass code explicitly so we
+                  // don't race the React state flush of setVerifyCode.
                   if (!verifying) {
                     setVerifyCode(code);
-                    setTimeout(() => submitVerify(), 0);
+                    submitVerify(code);
                   }
                 }}
                 disabled={verifying}
