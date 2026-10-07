@@ -84,10 +84,18 @@ export function registerAuthRoutes(app: Express) {
         }
       }
 
-      // Real-identity email validation
+      // Real-identity email validation (syntax → typo-check → disposable
+      // → MX → suppression-list — all five layers; see email-validator.ts).
       const emailCheck = await validateEmail(rawEmail);
       if (emailCheck.valid === false) {
-        return res.status(400).json({ message: emailCheck.message, reason: emailCheck.reason });
+        // 2026-10 (Tony): include `suggestion` so the signup form can
+        // offer a one-click "Did you mean grace@gmail.com?" fix for
+        // typo'd provider domains.
+        return res.status(400).json({
+          message: emailCheck.message,
+          reason: emailCheck.reason,
+          suggestion: (emailCheck as any).suggestion,
+        });
       }
       const cleanEmail = emailCheck.normalized;
 

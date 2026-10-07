@@ -10,6 +10,7 @@
  */
 
 import { promises as dns } from "dns";
+import { isEmailSuppressed } from "../lib/email-suppressions";
 
 const SYNTACTIC_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -153,7 +154,64 @@ const DISPOSABLE_DOMAINS: ReadonlySet<string> = new Set([
 
 export type EmailValidationResult =
   | { valid: true; normalized: string }
-  | { valid: false; reason: "syntax" | "disposable" | "obvious_fake" | "no_mx" | "lookup_failed"; message: string };
+  | { valid: false; reason: "syntax" | "disposable" | "obvious_fake" | "no_mx" | "lookup_failed" | "typo" | "suppressed"; message: string; suggestion?: string };
+
+// 2026-10 (Tony: pre-signup typo check — bounced-emails tab was full of
+// addresses that look like typos of real providers). Common misspellings
+// of the top mail providers → the real domain. Low false-positive risk:
+// nobody has a legitimate email at "gnail.com" or "yaoo.com".
+const COMMON_TYPO_DOMAINS: Readonly<Record<string, string>> = {
+  // Gmail — the big one
+  "gnail.com": "gmail.com",
+  "gmial.com": "gmail.com",
+  "gmil.com": "gmail.com",
+  "gmaill.com": "gmail.com",
+  "gmaail.com": "gmail.com",
+  "gmaio.com": "gmail.com",
+  "gmaik.com": "gmail.com",
+  "gmali.com": "gmail.com",
+  "gmain.com": "gmail.com",
+  "gmsil.com": "gmail.com",
+  "gmaio.co": "gmail.com",
+  "gmil.co": "gmail.com",
+  "gnmail.com": "gmail.com",
+  "gemail.com": "gmail.com",
+  "gmail.co": "gmail.com",      // missing m
+  "gmail.cm": "gmail.com",
+  "gmail.con": "gmail.com",
+  "gmail.om": "gmail.com",
+  "gmail.cim": "gmail.com",
+  "gmail.vom": "gmail.com",
+  // Yahoo
+  "yahooo.com": "yahoo.com",
+  "yaoo.com": "yahoo.com",
+  "yhoo.com": "yahoo.com",
+  "yaho.com": "yahoo.com",
+  "yahhoo.com": "yahoo.com",
+  "yahoo.con": "yahoo.com",
+  "yahoo.cm": "yahoo.com",
+  "yahoo.co": "yahoo.com",
+  // Outlook / Hotmail / Microsoft
+  "outlok.com": "outlook.com",
+  "outllook.com": "outlook.com",
+  "outlook.con": "outlook.com",
+  "hotnail.com": "hotmail.com",
+  "hotmaill.com": "hotmail.com",
+  "hotmil.com": "hotmail.com",
+  "hotmai.com": "hotmail.com",
+  "hotmali.com": "hotmail.com",
+  "hotmail.con": "hotmail.com",
+  "hotmail.co": "hotmail.com",
+  "hotmail.cm": "hotmail.com",
+  // iCloud
+  "iclod.com": "icloud.com",
+  "icoud.com": "icloud.com",
+  "icloud.con": "icloud.com",
+  // Proton
+  "protonmai.com": "protonmail.com",
+  "protomail.com": "protonmail.com",
+  "proton.co": "proton.me",
+};
 
 /** Cache MX lookup results for 24 h to avoid re-checking the same domain on every signup. */
 const MX_CACHE = new Map<string, { hasMx: boolean; expiresAt: number }>();
@@ -177,6 +235,22 @@ export async function validateEmail(rawEmail: string): Promise<EmailValidationRe
   }
 
   const domain = email.split("@")[1];
+  const localPart = email.split("@")[0];
+
+  // 2026-10 (Tony: pre-signup typo check). Catch obvious misspellings of
+  // the top mail providers BEFORE the MX lookup — the typo'd domain may
+  // actually resolve (gnail.com is a squatter with MX), so MX alone won't
+  // save us. Low false-positive risk since we only reject very narrow
+  // misspellings of 5-6 major providers.
+  if (COMMON_TYPO_DOMAINS[domain]) {
+    const corrected = COMMON_TYPO_DOMAINS[domain];
+    return {
+      valid: false,
+      reason: "typo",
+      message: `Did you mean ${localPart}@${corrected}? "${domain}" looks like a typo — please check your email address.`,
+      suggestion: `${localPart}@${corrected}`,
+    };
+  }
 
   // 3) Disposable provider blocklist
   if (DISPOSABLE_DOMAINS.has(domain)) {
@@ -213,6 +287,19 @@ export async function validateEmail(rawEmail: string): Promise<EmailValidationRe
     // DNS lookup itself failed (network/transient) — fail open, don't block legitimate users
     // The MX cache will retry on next signup
     console.warn(`[email-validator] MX lookup failed for ${domain} — allowing through`);
+  }
+
+  // 2026-10 (Tony): final gate — reject sign-ups with an address that's
+  // already on our hard-bounce suppression list. Otherwise the user signs
+  // up, the verification code bounces, they can never verify, and the
+  // whole stuck-account loop restarts.
+  if (await isEmailSuppressed(email)) {
+    return {
+      valid: false,
+      reason: "suppressed",
+      message:
+        "This email address previously bounced back as undeliverable. Please check the spelling or try a different email address.",
+    };
   }
 
   return { valid: true, normalized: email };

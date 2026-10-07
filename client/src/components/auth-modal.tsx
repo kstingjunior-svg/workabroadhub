@@ -102,26 +102,35 @@ function suggestEmailFix(email: string): string | null {
   const [local, domain] = trimmed.split("@");
   if (!local || !domain || domain.length < 4) return null;
 
+  // 2026-10: keep in sync with server/utils/email-validator.ts
+  // COMMON_TYPO_DOMAINS. Server is the authoritative gate (will reject
+  // typos we miss here), but doing it client-side lets us show the
+  // suggestion live as the user types instead of after signup submit.
   const typos: Record<string, string> = {
-    "gmial.com":     "gmail.com",
-    "gnail.com":     "gmail.com",
-    "gamil.com":     "gmail.com",
-    "gmai.com":      "gmail.com",
-    "gmal.com":      "gmail.com",
-    "gmailc.om":     "gmail.com",
-    "gmail.co":      "gmail.com",
-    "gmail.cm":      "gmail.com",
-    "gmail.con":     "gmail.com",
-    "gmailcom":      "gmail.com",
-    "yahho.com":     "yahoo.com",
-    "yaho.com":      "yahoo.com",
-    "yahoo.co":      "yahoo.com",
-    "yahoocom":      "yahoo.com",
-    "hotmial.com":   "hotmail.com",
-    "hotmai.com":    "hotmail.com",
-    "hotmail.co":    "hotmail.com",
-    "outlok.com":    "outlook.com",
-    "outloo.com":    "outlook.com",
+    // Gmail (dominant provider for KE user base)
+    "gmial.com": "gmail.com", "gnail.com": "gmail.com", "gamil.com": "gmail.com",
+    "gmai.com": "gmail.com",  "gmal.com": "gmail.com",  "gmailc.om": "gmail.com",
+    "gmail.co": "gmail.com",  "gmail.cm": "gmail.com",  "gmail.con": "gmail.com",
+    "gmailcom": "gmail.com",  "gmil.com": "gmail.com",  "gmaill.com": "gmail.com",
+    "gmaail.com": "gmail.com","gmaio.com": "gmail.com", "gmaik.com": "gmail.com",
+    "gmali.com": "gmail.com", "gmain.com": "gmail.com", "gmsil.com": "gmail.com",
+    "gnmail.com": "gmail.com","gemail.com": "gmail.com","gmail.om": "gmail.com",
+    "gmail.cim": "gmail.com", "gmail.vom": "gmail.com",
+    // Yahoo
+    "yahho.com": "yahoo.com", "yaho.com": "yahoo.com",   "yahoo.co": "yahoo.com",
+    "yahoocom": "yahoo.com",  "yahooo.com": "yahoo.com", "yaoo.com": "yahoo.com",
+    "yhoo.com": "yahoo.com",  "yahhoo.com": "yahoo.com", "yahoo.con": "yahoo.com",
+    "yahoo.cm": "yahoo.com",
+    // Outlook / Hotmail
+    "hotmial.com": "hotmail.com", "hotmai.com": "hotmail.com", "hotmail.co": "hotmail.com",
+    "outlok.com": "outlook.com",  "outloo.com": "outlook.com", "outllook.com": "outlook.com",
+    "outlook.con": "outlook.com", "hotnail.com": "hotmail.com","hotmaill.com": "hotmail.com",
+    "hotmil.com": "hotmail.com",  "hotmali.com": "hotmail.com","hotmail.con": "hotmail.com",
+    "hotmail.cm": "hotmail.com",
+    // iCloud
+    "iclod.com": "icloud.com",  "icoud.com": "icloud.com",  "icloud.con": "icloud.com",
+    // Proton
+    "protonmai.com": "protonmail.com", "protomail.com": "protonmail.com", "proton.co": "proton.me",
   };
   const fix = typos[domain];
   if (fix && fix !== domain) return `${local}@${fix}`;

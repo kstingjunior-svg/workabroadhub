@@ -1063,6 +1063,18 @@ app.use((req, res, next) => {
       console.error("[Server] ❌ Hub route registration failed:", err?.message);
     }
 
+    // 2026-10 (Tony: "15 bounces, mostly repeats"): email suppression webhook.
+    // MUST register BEFORE registerRoutes() for the same catch-all reason
+    // noted above. Resend will POST to /api/webhooks/resend on every
+    // email.bounced event; we auto-add hard-bouncing addresses to the
+    // suppression list so sendEmail() refuses to try them again.
+    try {
+      const { registerEmailWebhooks } = await import("./routes/email-webhooks");
+      registerEmailWebhooks(app);
+    } catch (err: any) {
+      console.error("[Server] ❌ Email webhooks registration failed:", err?.message);
+    }
+
     await registerRoutes(httpServer, app);
 
     // Bootstrap can run after registerRoutes — it only touches the DB.

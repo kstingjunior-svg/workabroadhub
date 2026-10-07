@@ -4,6 +4,7 @@
 // failover + diagnostic logging lives in lib/email-providers.ts.
 import nodemailer from "nodemailer";
 import { sendWithFailover, clearProviderCache } from "./lib/email-providers";
+import { isEmailSuppressed } from "./lib/email-suppressions";
 
 /** Escapes user-controlled strings before interpolating into HTML email templates. */
 function escapeHtml(value: string | null | undefined): string {
@@ -87,6 +88,21 @@ export async function sendEmail(options: {
   html: string;
   text?: string;
 }): Promise<EmailResult> {
+  // 2026-10 (Tony — "15 bounces, mostly repeats to the same dead addresses").
+  // SUPPRESSION GATE: refuse to even attempt delivery to an address that
+  // already hard-bounced. Each repeat-send to a known-bad address degrades
+  // our Gmail sender reputation and risks delivery for the 11,370+ real
+  // users. This also stops the stuck-account loop: a user who signed up
+  // with a typo email keeps triggering retry sends (verification code →
+  // 48h reminder → 6h warning → deletion) all to the same dead address.
+  const to = String(options.to || "").trim().toLowerCase();
+  if (to && await isEmailSuppressed(to)) {
+    console.warn(`[Email] suppressed send to ${to} (subject: ${options.subject})`);
+    return {
+      success: false,
+      error: "Recipient address is on the suppression list (previous hard bounce).",
+    };
+  }
   // 2026-06: use multi-provider failover (Gmail → Resend) + diagnostic logging.
   // Fixes "users not receiving verification codes" caused by Gmail SMTP being
   // intermittently rejected (revoked app password, header rewrite, etc.).
