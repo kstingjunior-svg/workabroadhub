@@ -61,14 +61,25 @@ function statusBadge(statusOverride: string | null | undefined, expiryDate: stri
   const isExpiredByDate = hasExpiry && expiryTime! < now;
   const isValidByDate = hasExpiry && expiryTime! >= now;
 
-  // Admin overrides take precedence
-  if (override === "revoked")   return { kind: "danger"  as const, label: "REVOKED",   icon: XCircle };
-  if (override === "suspended") return { kind: "danger"  as const, label: "SUSPENDED", icon: AlertTriangle };
-  if (override === "verified")  return { kind: "ok"      as const, label: "VERIFIED",  icon: CheckCircle2 };
+  // 2026-10 (Tony: "expired agencies still show green/verified").
+  // CRITICAL ORDERING FIX:
+  //   - Negative admin overrides (revoked/suspended/blacklisted) ALWAYS win,
+  //     even over a future expiry date — a suspended agency is suspended
+  //     regardless of what their paper license says.
+  //   - EXPIRY-BY-DATE wins over a POSITIVE override ("verified"). The seed
+  //     job stamps every imported agency with status_override='verified' at
+  //     import time; if we honored that override after the real NEA license
+  //     expired, the agency would show a green "VERIFIED" badge forever.
+  //     The actual NEA expiry date must win.
+  if (override === "revoked")     return { kind: "danger" as const, label: "REVOKED",     icon: XCircle };
+  if (override === "suspended")   return { kind: "danger" as const, label: "SUSPENDED",   icon: AlertTriangle };
   if (override === "blacklisted") return { kind: "danger" as const, label: "BLACKLISTED", icon: XCircle };
 
-  // Time-based status (the standard case for most agencies)
+  // Time-based truth (the standard case for every seeded NEA agency).
+  // Check expiry FIRST so a stale 'verified' override can't resurrect
+  // an expired license.
   if (isExpiredByDate)  return { kind: "danger" as const, label: "EXPIRED",            icon: AlertTriangle };
+  if (override === "verified")  return { kind: "ok"     as const, label: "VERIFIED",  icon: CheckCircle2 };
   if (isValidByDate)    return { kind: "ok"     as const, label: "ACTIVE & LICENSED",  icon: CheckCircle2 };
 
   // No expiry date AND no override → truly unknown

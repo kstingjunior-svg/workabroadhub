@@ -630,20 +630,38 @@ export async function ensureNeaAgenciesSeeded(): Promise<void> {
         // We refresh agencyName, email, serviceType, expiryDate, and
         // statusOverride on every run so NEA portal changes propagate.
         // isPublished stays true unless an admin explicitly hides it.
+        // 2026-10 (Tony: "expired agencies still show green") —
+        // DO NOT force status_override='verified' on every run. That
+        // overrode the actual NEA expiry date and left agencies
+        // showing a green VERIFIED badge for months after their
+        // real license had expired. Instead:
+        //   - On INSERT (new agency), set override='verified' ONLY if
+        //     the imported expiry_date is still in the future.
+        //   - On UPDATE (existing agency), refresh name/email/service/
+        //     expiry but LEAVE status_override alone — the admin or
+        //     the nightly sweep own it. If expiry has passed, flip
+        //     any stale 'verified' back to NULL so expiry-by-date
+        //     takes over.
+        const initialOverride = new Date(a.expiryDate) >= new Date() ? "verified" : null;
         const result = await client.query<{ inserted: boolean }>(
           `INSERT INTO nea_agencies
              (agency_name, license_number, email, service_type, issue_date,
               expiry_date, status_override, is_published, last_updated)
-           VALUES ($1, $2, $3, $4, $5::date, $6::date, 'verified', true, NOW())
+           VALUES ($1, $2, $3, $4, $5::date, $6::date, $7, true, NOW())
            ON CONFLICT (license_number) DO UPDATE
              SET agency_name = EXCLUDED.agency_name,
                  email = EXCLUDED.email,
                  service_type = EXCLUDED.service_type,
                  expiry_date = EXCLUDED.expiry_date,
-                 status_override = 'verified',
+                 status_override = CASE
+                   WHEN nea_agencies.status_override = 'verified'
+                        AND EXCLUDED.expiry_date < CURRENT_DATE
+                     THEN NULL
+                   ELSE nea_agencies.status_override
+                 END,
                  last_updated = NOW()
            RETURNING (xmax = 0) AS inserted`,
-          [a.agencyName, a.licenseNumber, a.email, a.serviceType, a.issueDate, a.expiryDate],
+          [a.agencyName, a.licenseNumber, a.email, a.serviceType, a.issueDate, a.expiryDate, initialOverride],
         );
         if (result.rows[0]?.inserted) inserted++;
         else updated++;
