@@ -259,6 +259,41 @@ export function PhoneInput({
             {/* overscroll-contain stops the touch scroll here from
                 dragging the parent modal on mobile Safari + Chrome. */}
             <div className="flex-1 overflow-y-auto overscroll-contain py-1" style={{ WebkitOverflowScrolling: "touch" }}>
+              {/* 2026-10 (Tony): quick-pick strip for the top signup
+                  corridors — only shown when the user hasn't started
+                  searching, so it doesn't clutter the search results. */}
+              {search.trim() === "" && (
+                <div className="px-3 pt-1 pb-2 border-b border-gray-100 dark:border-gray-800 mb-1">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+                    Popular
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {["KE", "UG", "TZ", "AE", "SA", "QA", "GB", "US"]
+                      .map((iso) => findCountryByIso(iso))
+                      .filter((c): c is AfricanCountry => Boolean(c))
+                      .map((c) => (
+                        <button
+                          key={`quick-${c.iso}`}
+                          type="button"
+                          onClick={() => handleCountrySelect(c.iso)}
+                          className={`inline-flex items-center gap-1 px-2 py-1 text-xs rounded-full border transition ${
+                            c.iso === country.iso
+                              ? "bg-teal-100 border-teal-300 text-teal-900 dark:bg-teal-900/30 dark:border-teal-700 dark:text-teal-100"
+                              : "bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100 dark:bg-gray-900 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-800"
+                          }`}
+                          data-testid={`${testId}-quick-${c.iso}`}
+                        >
+                          <span>{c.flag}</span>
+                          <span className="font-medium">{c.iso}</span>
+                          <span className="font-mono text-muted-foreground">
+                            +{c.dialCode}
+                          </span>
+                        </button>
+                      ))}
+                  </div>
+                </div>
+              )}
+
               {filteredCountries.length === 0 && (
                 <p className="px-3 py-4 text-xs text-center text-muted-foreground">
                   No country matches "{search}". WorkAbroadHub supports 150+ countries worldwide — try a shorter search or the ISO code (US, GB, IN).
