@@ -1375,7 +1375,14 @@ app.use((req, res, next) => {
     if (process.env.NEAIMS_SYNC_ENABLED === "true") {
       import("./nea/neaimsSync")
         .then((m) => {
-          const SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
+          // 2026-10 (Tony: "connect NEAIMS for near-real-time updates").
+          // NEAIMS has no webhooks, so we poll. 6-hour interval keeps the
+          // directory within a quarter-day of the official registry while
+          // staying well under any reasonable rate limit (~4 calls/day
+          // against a public endpoint their own SPA hits on every pageview).
+          // Admins can also trigger an on-demand sync from /admin/nea-sync
+          // the moment NEA publishes a known change.
+          const SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000;  // 6 hours
           const BOOT_DELAY_MS    = 30 * 1000;           // 30 seconds
           // Delay the boot-time run so we don't compete with startup traffic
           // and give the DB pool time to warm up.
