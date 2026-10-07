@@ -1151,6 +1151,14 @@ app.use((req, res, next) => {
       // block now only starts the weekly scheduler.
       const { startNEASyncScheduler } = await import("./lib/nea-sync/scheduler");
       startNEASyncScheduler();
+
+      // 2026-10 (Tony: "expired agencies still show green/VERIFIED"):
+      // nightly sweep to clear stale status_override='verified' flags
+      // the moment an agency's expiry_date ticks into the past, so we
+      // don't wait until the weekly sync for the DB-stored status to
+      // reflect reality.
+      const { startAgencyExpirySweepScheduler } = await import("./lib/agency-expiry-sweep");
+      startAgencyExpirySweepScheduler();
     } catch (err: any) {
       console.error("[Server] ❌ NEA sync bootstrap failed:", err?.message);
     }
