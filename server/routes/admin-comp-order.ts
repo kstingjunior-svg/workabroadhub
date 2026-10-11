@@ -38,10 +38,25 @@ import crypto from "crypto";
 export function registerAdminCompOrderRoutes(app: Express): void {
   app.post("/api/admin/comp-order", async (req: Request, res: Response) => {
     try {
-      const user = (req as any).user;
-      if (!user?.isAdmin) {
+      // 2026-10 fix: this endpoint was reading `req.user.isAdmin` which only
+      // the oidc isAuthenticated middleware populates — we weren't passing
+      // that middleware in, so req.user was always undefined and every
+      // call 403'd with "admin only". Switched to the same session-based
+      // admin lookup pattern used by admin-nea-sync.ts: pull userId from
+      // the session, SELECT is_admin from the users table directly.
+      const userId = (req.session as any)?.customUserId as string | undefined;
+      if (!userId) {
+        return res.status(401).json({ error: "Please sign in first." });
+      }
+      const { rows: adminRows } = await pool.query<{ is_admin: boolean; role: string; email: string }>(
+        `SELECT is_admin, role, email FROM users WHERE id = $1`,
+        [userId],
+      );
+      const callerRow = adminRows[0];
+      if (!callerRow?.is_admin && callerRow?.role !== "ADMIN" && callerRow?.role !== "SUPER_ADMIN") {
         return res.status(403).json({ error: "admin only" });
       }
+      const callerLabel = callerRow.email ?? userId;
 
       const {
         userEmail,
@@ -136,7 +151,7 @@ export function registerAdminCompOrderRoutes(app: Express): void {
           cvText || null,
           targetCountry || null,
           extraInput || null,
-          `[COMP by admin ${user.id ?? user.email ?? "unknown"}] ${reason || "no reason given"}`,
+          `[COMP by admin ${callerLabel}] ${reason || "no reason given"}`,
         ],
       );
 
