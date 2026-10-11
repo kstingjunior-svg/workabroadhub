@@ -1075,6 +1075,18 @@ app.use((req, res, next) => {
       console.error("[Server] ❌ Email webhooks registration failed:", err?.message);
     }
 
+    // 2026-10 (Tony: Saidi Dzimba refund + comp): admin tool to deliver a
+    // paid service for free when a customer gets burned by a bug. Creates
+    // a service_orders row with payment_method='comp' and fires the normal
+    // AI pipeline so delivery flows via email + WhatsApp just like a paid
+    // order. See server/routes/admin-comp-order.ts.
+    try {
+      const { registerAdminCompOrderRoutes } = await import("./routes/admin-comp-order");
+      registerAdminCompOrderRoutes(app);
+    } catch (err: any) {
+      console.error("[Server] ❌ Admin comp-order registration failed:", err?.message);
+    }
+
     await registerRoutes(httpServer, app);
 
     // Bootstrap can run after registerRoutes — it only touches the DB.
