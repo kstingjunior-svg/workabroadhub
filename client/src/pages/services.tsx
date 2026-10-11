@@ -180,7 +180,25 @@ export default function Services() {
   // your 5 application kits" notification forever but no delivery. These
   // slugs MUST route through /services/order/:slug so the CV upload →
   // payment → processOrder pipeline actually runs.
+  // 2026-10 (Tony: audit after Saidi's stuck Assisted Apply order).
+  // Any service that has a non-empty `systemPrompt` in the server's
+  // SERVICE_CATALOG (server/service-order-routes.ts) is an AI-delivered
+  // product and MUST be in this set — otherwise clicking "Get Started"
+  // routes through /api/pay (STK push only) which charges M-Pesa but
+  // never fires processOrder, leaving the customer with the "we're
+  // preparing it" notification forever and no actual delivery.
+  //
+  // DO NOT add here:
+  //   - Human-serviced slugs (ielts_prep, visa_guidance, job_pack_5,
+  //     employer_verification, pre_departure_pack) — those use /api/pay
+  //     + a delivery.ts case that honestly says "our team will contact
+  //     you" instead of pretending AI is coming.
+  //   - work_permit_*_pro (empty systemPrompt — intentionally manual
+  //     "full hand-holding" service).
+  //   - Hub products (hub_vault_monthly, hub_visa_concierge) which have
+  //     their own in-hub purchase flow, not /services.
   const AI_DELIVERY_SLUGS = new Set([
+    // CV + application writing
     "cv_fix_lite",
     "ats_cv_optimization",
     "cv_rewrite",
@@ -190,9 +208,24 @@ export default function Services() {
     "linkedin_optimization",
     "interview_coaching",
     "ats_cover_bundle",
-    "assisted_apply_lite",   // ← added 2026-10 (was silently broken)
+    "interview_prep_pack",   // ← added 2026-10 (was silently broken)
+    "contract_review",       // ← added 2026-10
+    "application_tracking",  // ← added 2026-10
+    "deadline_alerts",       // ← added 2026-10
+    // Apply flows
+    "assisted_apply_lite",   // ← added 2026-10 (Saidi's stuck order)
     "assisted_apply",        // ← added 2026-10
     "guided_apply",          // ← added 2026-10
+    // Visa / work permit guides (light + mid tiers have real AI
+    // generation; pro tier is intentionally human-delivered)
+    "visit_visa_kit",                                          // ← added 2026-10
+    "work_permit_uk_light", "work_permit_uk_mid",              // ← added 2026-10
+    "work_permit_uae_light", "work_permit_uae_mid",            // ← added 2026-10
+    "work_permit_saudi_light", "work_permit_saudi_mid",        // ← added 2026-10
+    "work_permit_canada_light", "work_permit_canada_mid",      // ← added 2026-10
+    "work_permit_qatar_light", "work_permit_qatar_mid",        // ← added 2026-10
+    // Hub (one-shot unlock, has AI generation)
+    "hub_score_unlock",      // ← added 2026-10
   ]);
 
   // 2026-07 (production fix): free tools have no payment — they navigate
