@@ -1122,6 +1122,24 @@ function getConfig(slug: string): ServiceConfig | null {
   return SERVICE_CONFIGS[slug.toLowerCase()] ?? null;
 }
 
+/**
+ * 2026-10 (Tony — defensive rail after Saidi Dzimba's stuck Assisted Apply
+ * order): source-of-truth check for whether a slug is an AI-delivered
+ * service and therefore MUST go through the /services/order/:slug flow
+ * (which uploads CV, creates a service_orders row, and fires processOrder).
+ *
+ * `/api/pay` uses this to reject AI slugs with a 400 so a drifted client
+ * (missing from AI_DELIVERY_SLUGS) can no longer silently charge M-Pesa
+ * without triggering AI generation. If this returns true, the only
+ * correct way to purchase is the order flow.
+ */
+export function isAiDeliveredSlug(slug: string): boolean {
+  const cfg = SERVICE_CONFIGS[String(slug || "").toLowerCase()];
+  if (!cfg) return false;
+  if ((cfg as any).manualOnly) return false;
+  return typeof cfg.systemPrompt === "string" && cfg.systemPrompt.trim().length > 0;
+}
+
 // ── Helper: extract CV text ─────────────────────────────────────────────────
 //
 // 2026-08 LONG-TERM (Tony's "stuck at Creating order..." fix): tiered flow.

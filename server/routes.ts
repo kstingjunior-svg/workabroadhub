@@ -23667,6 +23667,39 @@ If your instinct says "3,500", STOP and re-read the SERVICES block above.`;
         });
       }
 
+      // 2026-10 (Tony — defensive rail after Saidi Dzimba's stuck Assisted
+      // Apply order). If this service is AI-delivered (SERVICE_CONFIGS has
+      // a non-empty systemPrompt for its slug), the ONLY correct purchase
+      // path is /services/order/:slug — that flow uploads the CV, creates
+      // a service_orders row, and fires processOrder (the AI step). Hitting
+      // /api/pay for an AI-delivered slug would charge M-Pesa but never
+      // trigger AI generation, leaving the customer with a "preparing..."
+      // notification forever and no deliverable (exactly what happened to
+      // Saidi on 2026-10-07 — KES 1,499 charged, zero kits produced).
+      //
+      // This check makes that class of bug impossible even if the client's
+      // AI_DELIVERY_SLUGS set drifts out of sync. SERVICE_CONFIGS is the
+      // single source of truth.
+      try {
+        const { isAiDeliveredSlug } = await import("./service-order-routes");
+        if (service.slug && isAiDeliveredSlug(service.slug)) {
+          console.warn(
+            `[POST /api/pay] REJECTED: slug="${service.slug}" is AI-delivered but was ordered via /api/pay. ` +
+            `Client must route to /services/order/${service.slug} instead. userId=${userId}`,
+          );
+          return res.status(400).json({
+            message: "This service requires the order flow (CV upload + AI delivery). Please tap Get Started again — if you keep seeing this, refresh the page.",
+            code: "WRONG_FLOW_FOR_AI_SERVICE",
+            correctPath: `/services/order/${service.slug}`,
+          });
+        }
+      } catch (err: any) {
+        // Fail OPEN: if the catalogue import blows up, allow the payment
+        // through (we'd rather accept a few bad orders than block all
+        // legitimate ones). Logged loudly so this gets attention.
+        console.error("[POST /api/pay] AI-delivery guard failed to run:", err?.message);
+      }
+
       // 2. Resolve user phone — required for STK push
       const userRow = await storage.getUserById(userId);
       if (!userRow?.phone) {
