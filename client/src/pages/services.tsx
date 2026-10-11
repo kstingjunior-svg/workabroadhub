@@ -170,6 +170,16 @@ export default function Services() {
   // Services that use the new unified upload → pay → AI → download flow.
   // For these, redirect to /services/order/:slug instead of calling /api/pay
   // directly — the order page handles file upload, payment, and download.
+  //
+  // 2026-10 (Tony: "someone paid for assisted-apply and got nothing") —
+  // CRITICAL FIX: assisted_apply_lite / assisted_apply / guided_apply were
+  // MISSING from this set, so clicking "Get Started" routed through the
+  // legacy /api/pay flow which charges M-Pesa but never creates a
+  // service_orders row, so processOrder (the AI step that actually builds
+  // the 5 application kits) was never fired. The user got the "Preparing
+  // your 5 application kits" notification forever but no delivery. These
+  // slugs MUST route through /services/order/:slug so the CV upload →
+  // payment → processOrder pipeline actually runs.
   const AI_DELIVERY_SLUGS = new Set([
     "cv_fix_lite",
     "ats_cv_optimization",
@@ -180,6 +190,9 @@ export default function Services() {
     "linkedin_optimization",
     "interview_coaching",
     "ats_cover_bundle",
+    "assisted_apply_lite",   // ← added 2026-10 (was silently broken)
+    "assisted_apply",        // ← added 2026-10
+    "guided_apply",          // ← added 2026-10
   ]);
 
   // 2026-07 (production fix): free tools have no payment — they navigate
