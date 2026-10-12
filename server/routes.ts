@@ -23504,22 +23504,58 @@ If your instinct says "3,500", STOP and re-read the SERVICES block above.`;
 
       let reply = "Samahani, kuna tatizo kidogo. Tafadhali jaribu tena! 🙏";
       try {
-        const { openai } = await import("./lib/openai");
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 25000);
-        const completion = await openai.chat.completions.create(
-          {
-            model: "gpt-4o-mini",
-            messages: [{ role: "system", content: systemPrompt }, ...session.messages],
-            max_tokens: 400,
-            temperature: 0.65,
-          },
-          { signal: controller.signal }
+        // 2026-10 (Tony's "Nanjila still her old version" report):
+        // CRITICAL FIX — this endpoint was calling openai.chat.completions
+        // directly with gpt-4o-mini, bypassing nanjilaAgent() entirely.
+        // That meant none of our work landed:
+        //   • Rich persona rewrite (never applied — used WA_BASE_PROMPT)
+        //   • Orchestrator with tools (never invoked)
+        //   • verify_agency / agency_stats / remember / recall tools
+        //   • gpt-4o upgrade (stayed on gpt-4o-mini)
+        //   • User memory
+        //   • Env vars for orchestrator (irrelevant — code path dead)
+        // The entire /api/nanjila/chat endpoint now routes through
+        // nanjilaAgent() where all those capabilities live.
+        const { nanjilaAgent } = await import("./ai/nanjila");
+        const authUser = (req as any).user;
+        const userForAgent = dbUser
+          ? {
+              id:       dbUser.id as any,
+              name:     dbUser.firstName || undefined,
+              phone:    dbUser.phone || undefined,
+              email:    dbUser.email || undefined,
+              language: undefined as string | undefined,
+            }
+          : null;
+        reply = await nanjilaAgent(
+          userForAgent as any,
+          userMessage,
+          undefined, // activitySummary — nanjilaAgent builds its own context
+          undefined, // systemCatalogue
+          undefined, // adminKpi
         );
-        clearTimeout(timeout);
-        reply = completion.choices[0]?.message?.content?.trim() || reply;
       } catch (aiErr: any) {
-        console.error("[NanjilChat] AI error:", aiErr.message);
+        console.error("[NanjilChat] nanjilaAgent error:", aiErr.message);
+        // Degraded fallback — single-shot gpt-4o-mini with the live
+        // price-injected prompt so the user never gets a dead chat.
+        try {
+          const { openai } = await import("./lib/openai");
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 25000);
+          const completion = await openai.chat.completions.create(
+            {
+              model: "gpt-4o-mini",
+              messages: [{ role: "system", content: systemPrompt }, ...session.messages],
+              max_tokens: 400,
+              temperature: 0.65,
+            },
+            { signal: controller.signal }
+          );
+          clearTimeout(timeout);
+          reply = completion.choices[0]?.message?.content?.trim() || reply;
+        } catch (fallbackErr: any) {
+          console.error("[NanjilChat] fallback AI error:", fallbackErr.message);
+        }
       }
 
       // ── Price sanitizer — last line of defence ─────────────────────────────
