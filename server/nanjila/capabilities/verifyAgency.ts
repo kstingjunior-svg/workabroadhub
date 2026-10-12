@@ -202,7 +202,6 @@ async function verifyAgencyHandler(
                 regexp_replace(LOWER(agency_name),                   '[^a-z0-9]+', '', 'g') AS name_alnum,
                 regexp_replace(LOWER(COALESCE(license_number,'')),   '[^a-z0-9]+', '', 'g') AS lic_alnum
            FROM nea_agencies
-          WHERE is_published = true
        ),
        candidates AS (
          SELECT *,

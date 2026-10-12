@@ -29,6 +29,7 @@ import { kaziKaribuReviewCapability } from "./kaziKaribuReview";
 import { verifyAgencyCapability } from "./verifyAgency";
 import { rememberAboutUserCapability } from "./rememberAboutUser";
 import { recallAboutUserCapability } from "./recallAboutUser";
+import { agencyStatsCapability } from "./agencyStats";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Public types
@@ -70,6 +71,7 @@ const ALL_CAPABILITIES: CapabilityDefinition[] = [
   verifyAgencyCapability,         // 2026-10 (Tony): "ask Nanjila if an agency is legit"
   rememberAboutUserCapability,    // 2026-10 (Tony): "give her intelligence to study people"
   recallAboutUserCapability,      // 2026-10 — the read side of memory
+  agencyStatsCapability,          // 2026-10 (Tony): "she quoted 566 but dashboard says 758"
   // Add new capabilities here as Phase B-D lands.
 ];
 
