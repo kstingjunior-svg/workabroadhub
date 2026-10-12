@@ -1218,17 +1218,19 @@ async function createOrder(args: {
 }): Promise<{ id: string; downloadToken: string | null }> {
   const id = crypto.randomUUID();
 
-  // 2026-08 anonymous-checkout: mint a download token for GUEST orders only.
-  // 48 hex chars = 24 bytes of entropy → far beyond brute-forceable. Stored
-  // in plain text (not hashed) because we need to look it up by exact value
-  // from a URL — hashing would require a scan. Compensating controls:
-  // partial unique index + rate-limited endpoint + 30-day expiry + download
-  // count cap. Logged-in users don't need a token (they auth via session).
+  // 2026-10 (Tony — "Saidi got the email, link asked him to pay again").
+  // ALWAYS mint a download token, for logged-in and guest orders alike.
+  // The old "logged-in users don't need a token, they auth via session"
+  // assumption broke when users opened the completion email on a device
+  // where they weren't signed in (phone browser vs. web where they signed
+  // up). The /my-documents link bounced them to the paywall and the whole
+  // comp-order delivery looked like it was asking for payment again.
+  // Now every completion email carries a /download/:token magic link that
+  // works on any device without login. 48 hex chars = 24 bytes of entropy,
+  // 30-day expiry, server-side rate limit, download count cap.
   const isGuest = !args.userId;
-  const downloadToken = isGuest ? crypto.randomBytes(24).toString("hex") : null;
-  const downloadExpiresAt = isGuest
-    ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)  // 30 days
-    : null;
+  const downloadToken = crypto.randomBytes(24).toString("hex");
+  const downloadExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
 
   // Sanitize the referrer token — must look like a UUID, must NOT be the
   // user's own prior order (self-referral is meaningless). Silently drop
@@ -2008,16 +2010,19 @@ async function notifyOrderCompleted(orderId: string): Promise<void> {
     const documentsUrl = `${appOrigin}/my-documents`;
     // Direct order page — mobile-first, big PDF + Word buttons already there.
     const orderUrl = `${appOrigin}/order/${orderId}`;
-    // Direct PDF download URL — one-tap on mobile if the user still has a session
-    // OR appended with the download token for guest orders.
-    const tokenSuffix = isGuestDelivery && order.download_token ? `?token=${order.download_token}` : "";
+    // 2026-10 (Tony — "Saidi's email button asked him to pay again"): every
+    // order now has a download_token (not just guests), so every completion
+    // email can carry a magic-link URL that works without login on ANY device.
+    // The old logged-in path pointed at /my-documents which bounced phone
+    // users through the paywall when they weren't signed in on that device.
+    const tokenSuffix = order.download_token ? `?token=${order.download_token}` : "";
     const directPdfUrl = `${appOrigin}/api/services/order/${orderId}/download/pdf${tokenSuffix}`;
-    // Guest magic download page — token in the URL, no login required.
-    const guestDownloadUrl = isGuestDelivery && order.download_token
+    // Magic download page — token in the URL, no login required.
+    const magicDownloadUrl = order.download_token
       ? `${appOrigin}/download/${order.download_token}`
-      : documentsUrl;
-    // Which URL to feature as the primary CTA (works for both paths).
-    const primaryDownloadUrl = isGuestDelivery ? guestDownloadUrl : documentsUrl;
+      : documentsUrl;  // fallback for legacy pre-token orders only
+    // Always feature the magic link as the primary CTA now.
+    const primaryDownloadUrl = magicDownloadUrl;
     // For guest emails, keep old vars in scope but redefine so the existing
     // template below uses the guest link seamlessly.
     // (documentsUrl still referenced below — leave it pointing to /my-documents
@@ -2036,12 +2041,12 @@ async function notifyOrderCompleted(orderId: string): Promise<void> {
         const { sendWithFailover } = await import("./lib/email-providers");
         // Guest emails feature the magic-link download page as the ONE CTA.
         // Logged-in emails keep the old two-link layout (dashboard + direct PDF).
-        const primaryCtaLabel = isGuestDelivery
-          ? "Download my document →"
-          : "Download my document →";
-        const guestExpiryNote = isGuestDelivery
-          ? `<p style="font-size:12px;line-height:1.5;color:#94a3b8;margin:16px 0 0">This download link works for 30 days. Save it or download your document now.</p>`
-          : `<p style="font-size:13px;line-height:1.55;margin:24px 0 8px;color:#64748b">Prefer a direct download? <a href="${directPdfUrl}" style="color:#0f766e;font-weight:600">Grab the PDF here</a> (sign in required).</p>`;
+        const primaryCtaLabel = "Download my document →";
+        // 2026-10: same expiry note for everyone — magic link works on
+        // any device, no login required. Removed the old "(sign in
+        // required)" fallback that confused logged-in users opening the
+        // email on a phone where they weren't signed in.
+        const guestExpiryNote = `<p style="font-size:12px;line-height:1.5;color:#94a3b8;margin:16px 0 0">This download link works for 30 days from any device — no sign-in needed. Save it so you can come back later.</p>`;
         const html = `
           <div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1e293b">
             <h1 style="font-size:22px;font-weight:700;color:#0f766e;margin:0 0 8px">Your ${serviceName} is ready 🎉</h1>
@@ -2058,9 +2063,8 @@ async function notifyOrderCompleted(orderId: string): Promise<void> {
             </p>
           </div>
         `;
-        const text = isGuestDelivery
-          ? `Your ${serviceName} is ready.\n\nHi ${firstName}, we've just finished your ${serviceName.toLowerCase()}. Download it here:\n\n${primaryDownloadUrl}\n\nThis link works for 30 days.\n\n— WorkAbroad Hub`
-          : `Your ${serviceName} is ready.\n\nHi ${firstName}, we've just finished your ${serviceName.toLowerCase()}. Download it here:\n\n${documentsUrl}\n\nOr grab the PDF directly (sign in required): ${directPdfUrl}\n\n— WorkAbroad Hub`;
+        // 2026-10: unified plain-text — same magic link for everyone.
+        const text = `Your ${serviceName} is ready.\n\nHi ${firstName}, we've just finished your ${serviceName.toLowerCase()}. Download it here (works for 30 days, no sign-in needed):\n\n${primaryDownloadUrl}\n\n— WorkAbroad Hub`;
         await sendWithFailover({
           to: recipientEmail,
           subject: `Your ${serviceName} is ready — download it here`,
