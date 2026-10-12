@@ -573,17 +573,46 @@ export default function NanjilaChatWidget() {
   // Browser-native speech-to-text — zero cost, works in Chrome/Edge/Safari
   // (desktop + Android) and offline on recent Chrome. Starts live
   // transcription into the textarea; auto-sends when user stops speaking
-  // for 1.2s. Falls back silently to text-only on browsers without the
+  // for 1.5s. Falls back silently to text-only on browsers without the
   // SpeechRecognition API (Firefox, older iOS Safari).
+  //
+  // 2026-10 v2 (Tony: "it doesn't even show a wave showing it's recording"):
+  //   • Explicit getUserMedia() first to force Chrome's mic-permission
+  //     prompt — SpeechRecognition on its own silently fails when the user
+  //     dismisses the subtle address-bar permission request.
+  //   • Audio-level meter: tap mic → see a real-time animated wave that
+  //     responds to the user's voice. If the wave is flat, they know the
+  //     mic isn't hearing them.
+  //   • Visible error messages (permission denied, no mic, etc.) so users
+  //     don't tap into a dead microphone.
   const [listening, setListening] = useState(false);
   const [micSupported, setMicSupported] = useState(false);
+  const [micLevel, setMicLevel] = useState(0);   // 0-100 current audio volume
+  const [micError, setMicError] = useState<string | null>(null);
   const recognitionRef = useRef<any>(null);
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const micStreamRef = useRef<MediaStream | null>(null);
+  const levelFrameRef = useRef<number | null>(null);
 
   useEffect(() => {
     const SR: any = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     setMicSupported(Boolean(SR));
   }, []);
+
+  function stopLevelMeter() {
+    if (levelFrameRef.current) {
+      cancelAnimationFrame(levelFrameRef.current);
+      levelFrameRef.current = null;
+    }
+    try { micStreamRef.current?.getTracks().forEach((t) => t.stop()); } catch {}
+    micStreamRef.current = null;
+    try { audioCtxRef.current?.close(); } catch {}
+    audioCtxRef.current = null;
+    analyserRef.current = null;
+    setMicLevel(0);
+  }
 
   function stopListening() {
     try { recognitionRef.current?.stop(); } catch {}
@@ -591,21 +620,71 @@ export default function NanjilaChatWidget() {
       clearTimeout(silenceTimerRef.current);
       silenceTimerRef.current = null;
     }
+    stopLevelMeter();
     setListening(false);
   }
 
-  function toggleMic() {
+  async function toggleMic() {
     if (listening) { stopListening(); return; }
+    setMicError(null);
     const SR: any = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SR) return;
+    if (!SR) {
+      setMicError("Voice input isn't supported in this browser. Try Chrome, Edge or Safari.");
+      return;
+    }
+
+    // ── Step 1: explicitly request mic access so the user gets the native
+    // permission prompt BEFORE we start SpeechRecognition. If we skip this,
+    // Chrome shows a tiny icon in the address bar that users easily miss,
+    // the user denies / dismisses by accident, and SpeechRecognition then
+    // reports no audio with no error shown.
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (err: any) {
+      const code = String(err?.name || err?.message || "");
+      if (code.includes("NotAllowed") || code.includes("Permission")) {
+        setMicError("Microphone blocked. Tap the padlock in your address bar → Site settings → allow microphone, then try again.");
+      } else if (code.includes("NotFound") || code.includes("Devices")) {
+        setMicError("No microphone found on this device.");
+      } else {
+        setMicError("Can't access the microphone. Make sure no other app is using it.");
+      }
+      return;
+    }
+    micStreamRef.current = stream;
+
+    // ── Step 2: start the live audio-level meter so the user SEES the mic
+    // is picking them up.
+    try {
+      const AudioCtx = (window.AudioContext || (window as any).webkitAudioContext);
+      const ctx = new AudioCtx();
+      audioCtxRef.current = ctx;
+      const src = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 256;
+      src.connect(analyser);
+      analyserRef.current = analyser;
+      const data = new Uint8Array(analyser.frequencyBinCount);
+      const tick = () => {
+        if (!analyserRef.current) return;
+        analyserRef.current.getByteFrequencyData(data);
+        let sum = 0;
+        for (let i = 0; i < data.length; i++) sum += data[i];
+        const avg = sum / data.length;
+        setMicLevel(Math.min(100, Math.round((avg / 128) * 100)));
+        levelFrameRef.current = requestAnimationFrame(tick);
+      };
+      tick();
+    } catch (err: any) {
+      console.warn("[Nanjila][mic] level meter failed:", err?.message);
+      // Non-fatal — recognition can still run.
+    }
+
+    // ── Step 3: start SpeechRecognition.
     const rec = new SR();
     rec.continuous = true;
     rec.interimResults = true;
-    // Match Nanjila's bilingual persona — Swahili + English both recognised.
-    // The Chrome SpeechRecognition only honours a single lang at a time; use
-    // the user's browser locale when it's en-* or sw-*, otherwise default
-    // to en-KE which handles both Kenyan English and the Swahili peppered
-    // through it reasonably well.
     const nav = navigator.language || "en-KE";
     rec.lang = /^sw/i.test(nav) ? "sw-KE" : nav.startsWith("en") ? nav : "en-KE";
     recognitionRef.current = rec;
@@ -620,29 +699,52 @@ export default function NanjilaChatWidget() {
       }
       const combined = (committed + " " + interim).replace(/\s+/g, " ").trim();
       setInput(combined);
-      // Auto-send 1.2s after the last word
+      // Auto-send 1.5s after the last word
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
       silenceTimerRef.current = setTimeout(() => {
         if (committed.trim().length > 0) {
+          const payload = committed.trim();
           stopListening();
-          sendMessage(committed.trim());
+          sendMessage(payload);
         }
-      }, 1200);
+      }, 1500);
     };
     rec.onerror = (ev: any) => {
-      console.warn("[Nanjila][mic] error:", ev?.error);
+      const code = String(ev?.error || "");
+      console.warn("[Nanjila][mic] recognition error:", code);
+      if (code === "not-allowed" || code === "service-not-allowed") {
+        setMicError("Microphone permission was blocked. Enable it in your browser's site settings.");
+      } else if (code === "no-speech") {
+        setMicError("I didn't hear anything. Make sure your mic is on and speak closer.");
+      } else if (code === "audio-capture") {
+        setMicError("No audio captured. Check your microphone connection.");
+      } else if (code === "network") {
+        setMicError("Voice service couldn't reach the internet.");
+      } else if (code && code !== "aborted") {
+        setMicError(`Mic error: ${code}`);
+      }
       stopListening();
     };
-    rec.onend = () => setListening(false);
+    rec.onend = () => {
+      stopLevelMeter();
+      setListening(false);
+    };
 
     try {
       rec.start();
       setListening(true);
     } catch (err: any) {
       console.warn("[Nanjila][mic] start failed:", err?.message);
-      setListening(false);
+      setMicError("Couldn't start voice input. Try again.");
+      stopListening();
     }
   }
+
+  // Clean up mic resources on unmount
+  useEffect(() => {
+    return () => stopLevelMeter();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const waLink = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent("Hi Nanjila, I need help with WorkAbroad Hub...")}`;
 
@@ -769,6 +871,49 @@ export default function NanjilaChatWidget() {
             {loading && <TypingIndicator />}
             <div ref={messagesEndRef} />
           </div>
+
+          {/* ── Mic error banner ─────────────────────────────────────────────── */}
+          {micError && (
+            <div className="flex-shrink-0 bg-red-50 border-t border-red-200 px-3 py-2 flex items-start gap-2">
+              <svg viewBox="0 0 24 24" className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5 fill-current">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
+              </svg>
+              <p className="text-xs text-red-700 leading-snug flex-1">{micError}</p>
+              <button
+                onClick={() => setMicError(null)}
+                className="text-red-400 hover:text-red-600 text-xs font-bold"
+                aria-label="Dismiss"
+              >✕</button>
+            </div>
+          )}
+
+          {/* ── Live listening indicator with waveform ───────────────────────── */}
+          {listening && (
+            <div className="flex-shrink-0 bg-red-50 border-t border-red-200 px-3 py-2 flex items-center gap-3">
+              <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+              <span className="text-xs font-medium text-red-700">Listening…</span>
+              {/* Animated 7-bar waveform — heights react to mic input level */}
+              <div className="flex items-end gap-0.5 h-5 flex-1" aria-hidden="true">
+                {[0, 1, 2, 3, 4, 5, 6].map((i) => {
+                  // Scale per-bar by position so middle bars are tallest at
+                  // the same level — looks more like a real voice waveform
+                  // than a flat line. Multiply by current level (0-100).
+                  const factor = [0.5, 0.75, 0.9, 1.0, 0.9, 0.75, 0.5][i];
+                  const h = Math.max(2, (micLevel * factor) / 5);
+                  return (
+                    <div
+                      key={i}
+                      className="w-1 rounded-full bg-red-500 transition-all duration-75"
+                      style={{ height: `${h}px` }}
+                    />
+                  );
+                })}
+              </div>
+              <span className="text-[10px] text-red-500 font-mono">
+                {micLevel < 5 ? "silent" : micLevel < 20 ? "quiet" : micLevel < 50 ? "ok" : "loud"}
+              </span>
+            </div>
+          )}
 
           {/* ── Input area ───────────────────────────────────────────────────── */}
           <div className="flex-shrink-0 border-t border-gray-200 bg-white px-3 py-2">
