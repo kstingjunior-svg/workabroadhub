@@ -704,37 +704,62 @@ export default function NanjilaChatWidget() {
     rec.lang = /^sw/i.test(nav) ? "sw-KE" : nav.startsWith("en") ? nav : "en-KE";
     recognitionRef.current = rec;
 
-    // 2026-10 fix (Tony: "it kept saying is-is-is-twin-twin-palm-twin-palm-palm").
-    // The bug was accumulating interim results on top of previously-emitted
-    // interim results, causing massive duplication on mobile Chrome where
-    // the recognizer re-emits overlapping guesses as it refines them.
-    // Correct pattern: rebuild the FULL transcript from scratch on every
-    // onresult tick, iterating over ev.results (which contains the entire
-    // accumulated session). Then dedupe adjacent repeated words as a
-    // belt-and-braces guard against the recognizer glitching.
+    // 2026-10 v3 fix (Tony: "it's still recording doubled words").
+    // The real bug on Android Chrome: it fires a NEW `isFinal:true` result
+    // for every word of a growing phrase, where each result is a SUPERSET
+    // of the previous one. So after saying "is twin palm agency registered"
+    // the results array looks like:
+    //   [0] isFinal:true "is"
+    //   [1] isFinal:true "is twin"
+    //   [2] isFinal:true "is twin palm"
+    //   [3] isFinal:true "is twin palm agency"
+    //   [4] isFinal:true "is twin palm agency registered"
+    // Concatenating all of them yielded the pile Tony saw. Fix: walk the
+    // final results in order; whenever the next final is a superset of
+    // the previous, REPLACE the previous instead of appending.
     rec.onresult = (ev: any) => {
-      let finalText = "";
-      let interimText = "";
+      const finals: string[] = [];
+      let interim = "";
       for (let i = 0; i < ev.results.length; i++) {
         const r = ev.results[i];
-        const text = String(r[0]?.transcript ?? "");
-        if (r.isFinal) finalText += text;
-        else interimText += text;
+        const text = String(r[0]?.transcript ?? "").replace(/\s+/g, " ").trim();
+        if (!text) continue;
+        if (r.isFinal) finals.push(text);
+        else interim += " " + text;
       }
-      // Collapse multi-space and trim; also squash any adjacent duplicate
-      // word (e.g. "twin twin palm" → "twin palm") that Android Chrome
-      // sometimes leaves behind when interim guesses overlap.
+      // Superset dedupe: if finals[k+1] starts with finals[k], finals[k+1]
+      // IS the running phrase — drop finals[k]. If finals[k] already
+      // starts with finals[k+1], finals[k+1] is a stale shorter guess —
+      // skip it.
+      const reduced: string[] = [];
+      for (const f of finals) {
+        const fLc = f.toLowerCase();
+        const prev = reduced[reduced.length - 1];
+        if (prev) {
+          const pLc = prev.toLowerCase();
+          if (fLc.startsWith(pLc) && fLc.length > pLc.length) {
+            reduced[reduced.length - 1] = f;  // f supersedes prev
+            continue;
+          }
+          if (pLc.startsWith(fLc)) {
+            continue;  // f is a stale shorter version of prev
+          }
+        }
+        reduced.push(f);
+      }
+      const finalText = reduced.join(" ").replace(/\s+/g, " ").trim();
+      const interimClean = interim.replace(/\s+/g, " ").trim();
+
+      // One more belt-and-braces: squash any remaining adjacent duplicates
+      // ("twin twin palm" → "twin palm").
       const squashDupes = (s: string) =>
-        s.replace(/\s+/g, " ")
-         .trim()
-         .replace(/\b(\w+)(?:\s+\1\b)+/gi, "$1");
+        s.replace(/\b(\w+)(?:\s+\1\b)+/gi, "$1");
 
       const committed = squashDupes(finalText);
-      const combined = squashDupes(`${finalText} ${interimText}`);
+      const combined  = squashDupes(`${finalText} ${interimClean}`.trim());
       setInput(combined);
 
-      // Auto-send 1.5s after the last FINAL result lands (not interim —
-      // interim thrash would re-start the silence timer constantly).
+      // Auto-send 1.5s after we have ANY committed final text.
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
       silenceTimerRef.current = setTimeout(() => {
         if (committed.length > 0) {
