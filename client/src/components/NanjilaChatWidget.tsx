@@ -569,6 +569,81 @@ export default function NanjilaChatWidget() {
     e.target.value = "";
   }
 
+  // ── 2026-10 (Tony): voice input via Web Speech API ───────────────────────
+  // Browser-native speech-to-text — zero cost, works in Chrome/Edge/Safari
+  // (desktop + Android) and offline on recent Chrome. Starts live
+  // transcription into the textarea; auto-sends when user stops speaking
+  // for 1.2s. Falls back silently to text-only on browsers without the
+  // SpeechRecognition API (Firefox, older iOS Safari).
+  const [listening, setListening] = useState(false);
+  const [micSupported, setMicSupported] = useState(false);
+  const recognitionRef = useRef<any>(null);
+  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const SR: any = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    setMicSupported(Boolean(SR));
+  }, []);
+
+  function stopListening() {
+    try { recognitionRef.current?.stop(); } catch {}
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
+    setListening(false);
+  }
+
+  function toggleMic() {
+    if (listening) { stopListening(); return; }
+    const SR: any = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) return;
+    const rec = new SR();
+    rec.continuous = true;
+    rec.interimResults = true;
+    // Match Nanjila's bilingual persona — Swahili + English both recognised.
+    // The Chrome SpeechRecognition only honours a single lang at a time; use
+    // the user's browser locale when it's en-* or sw-*, otherwise default
+    // to en-KE which handles both Kenyan English and the Swahili peppered
+    // through it reasonably well.
+    const nav = navigator.language || "en-KE";
+    rec.lang = /^sw/i.test(nav) ? "sw-KE" : nav.startsWith("en") ? nav : "en-KE";
+    recognitionRef.current = rec;
+
+    let committed = "";
+    rec.onresult = (ev: any) => {
+      let interim = "";
+      for (let i = ev.resultIndex; i < ev.results.length; i++) {
+        const r = ev.results[i];
+        if (r.isFinal) committed += (committed ? " " : "") + String(r[0].transcript).trim();
+        else interim += r[0].transcript;
+      }
+      const combined = (committed + " " + interim).replace(/\s+/g, " ").trim();
+      setInput(combined);
+      // Auto-send 1.2s after the last word
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = setTimeout(() => {
+        if (committed.trim().length > 0) {
+          stopListening();
+          sendMessage(committed.trim());
+        }
+      }, 1200);
+    };
+    rec.onerror = (ev: any) => {
+      console.warn("[Nanjila][mic] error:", ev?.error);
+      stopListening();
+    };
+    rec.onend = () => setListening(false);
+
+    try {
+      rec.start();
+      setListening(true);
+    } catch (err: any) {
+      console.warn("[Nanjila][mic] start failed:", err?.message);
+      setListening(false);
+    }
+  }
+
   const waLink = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent("Hi Nanjila, I need help with WorkAbroad Hub...")}`;
 
   return (
@@ -729,6 +804,34 @@ export default function NanjilaChatWidget() {
                 style={{ lineHeight: "1.4" }}
                 data-testid="nanjila-message-input"
               />
+              {/* 2026-10 (Tony): voice input. Hidden entirely on browsers
+                  that don't support SpeechRecognition (Firefox / older iOS)
+                  so users don't see a dead button. When live, pulses red
+                  while listening. */}
+              {micSupported && (
+                <button
+                  onClick={toggleMic}
+                  disabled={loading || greetingLoading}
+                  className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-all mb-0.5 disabled:opacity-40 ${
+                    listening
+                      ? "bg-red-500 text-white animate-pulse"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  }`}
+                  title={listening ? "Tap to stop recording" : "Hold or tap to speak"}
+                  aria-label={listening ? "Stop recording" : "Start voice input"}
+                  data-testid="nanjila-mic-btn"
+                >
+                  {listening ? (
+                    <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current">
+                      <rect x="6" y="6" width="12" height="12" rx="2" />
+                    </svg>
+                  ) : (
+                    <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current">
+                      <path d="M12 14a3 3 0 003-3V5a3 3 0 10-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 006 6.92V22h2v-4.08A7 7 0 0019 11h-2z" />
+                    </svg>
+                  )}
+                </button>
+              )}
               <button
                 onClick={() => sendMessage(input)}
                 disabled={loading || greetingLoading || !input.trim()}
