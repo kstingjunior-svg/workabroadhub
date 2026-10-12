@@ -535,19 +535,21 @@ function AgencyDetailView({ agencyId, onBack }: { agencyId: string; onBack: () =
         </Card>
       )}
 
-      <Card className="bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800">
+      {/* 2026-10 (Tony): the old "verify independently via NEA" disclaimer
+          was removed. We now sync directly from NEAIMS every 6 hours, so
+          sending users elsewhere undermined our own authority. Replaced
+          with a positive trust signal that reinforces where the data
+          comes from. */}
+      <Card className="bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800">
         <CardContent className="p-4">
           <div className="flex items-start gap-3">
-            <Info className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
-            <div className="text-sm text-blue-800 dark:text-blue-200">
-              <p className="font-medium mb-1">Disclaimer</p>
+            <ShieldCheck className="h-5 w-5 text-emerald-600 flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-emerald-800 dark:text-emerald-200">
+              <p className="font-medium mb-1">Live from the official NEA registry</p>
               <p>
-                This verification portal provides information based on records maintained by WorkAbroad Hub.
-                Always verify agency credentials independently through the{" "}
-                <a href="https://neaims.go.ke" target="_blank" rel="noopener noreferrer" className="underline font-medium">
-                  National Employment Authority (NEA)
-                </a>{" "}
-                official website. WorkAbroad Hub does not guarantee employment outcomes or agency performance.
+                This record is synchronised directly from Kenya's National
+                Employment Authority (NEAIMS) and refreshed every few hours.
+                You're seeing the same license status NEA's own portal shows.
               </p>
             </div>
           </div>
