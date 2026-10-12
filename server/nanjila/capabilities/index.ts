@@ -27,6 +27,8 @@ import type { UserEntitlement } from "./types";
 import { checkPaymentCapability } from "./checkPayment";
 import { kaziKaribuReviewCapability } from "./kaziKaribuReview";
 import { verifyAgencyCapability } from "./verifyAgency";
+import { rememberAboutUserCapability } from "./rememberAboutUser";
+import { recallAboutUserCapability } from "./recallAboutUser";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Public types
@@ -65,7 +67,9 @@ export interface CapabilityContext {
 const ALL_CAPABILITIES: CapabilityDefinition[] = [
   checkPaymentCapability,
   kaziKaribuReviewCapability,
-  verifyAgencyCapability,  // 2026-10 (Tony): "ask Nanjila if an agency is legit"
+  verifyAgencyCapability,         // 2026-10 (Tony): "ask Nanjila if an agency is legit"
+  rememberAboutUserCapability,    // 2026-10 (Tony): "give her intelligence to study people"
+  recallAboutUserCapability,      // 2026-10 — the read side of memory
   // Add new capabilities here as Phase B-D lands.
 ];
 

@@ -66,8 +66,15 @@ export interface OrchestrateResult {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const ORCHESTRATOR_MAX_ITERATIONS = 4;
-const DEFAULT_MODEL = "gpt-4o-mini";
-const DEFAULT_TEMPERATURE = 0.6;
+// 2026-10 (Tony's intelligence directive): upgraded default from
+// gpt-4o-mini → gpt-4o. 10x cost but night-and-day warmth, humor,
+// Swahili fluency, pattern-spotting. User-facing conversations are
+// where Nanjila has to feel alive. Background tasks (kazi karibu
+// review, etc.) can override to a cheaper model via opts.model.
+const DEFAULT_MODEL = "gpt-4o";
+// Raised 0.6 → 0.8 for more personality variance. The persona guards
+// catch anything that drifts out of character.
+const DEFAULT_TEMPERATURE = 0.8;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Orchestrator entry point
