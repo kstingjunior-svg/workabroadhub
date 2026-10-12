@@ -755,18 +755,25 @@ export default function NanjilaChatWidget() {
       const squashDupes = (s: string) =>
         s.replace(/\b(\w+)(?:\s+\1\b)+/gi, "$1");
 
-      const committed = squashDupes(finalText);
-      const combined  = squashDupes(`${finalText} ${interimClean}`.trim());
+      const combined = squashDupes(`${finalText} ${interimClean}`.trim());
       setInput(combined);
 
-      // Auto-send 1.5s after we have ANY committed final text.
-      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-      silenceTimerRef.current = setTimeout(() => {
-        if (committed.length > 0) {
-          stopListening();
-          sendMessage(committed);
-        }
-      }, 1500);
+      // 2026-10 v4 fix (Tony: "it cuts off after two words. I said
+      // 'legit manpower' and it sent 'legit man'"). Removed auto-send
+      // on silence completely. The 1.5s timer was firing between
+      // natural word pauses and sending half-sentences. New behaviour,
+      // matching Claude/ChatGPT/WhatsApp voice:
+      //
+      //   • Mic stays listening indefinitely until the user taps it
+      //     again to stop.
+      //   • When they tap stop, the full transcript is left in the
+      //     textarea so they can review/edit before sending.
+      //   • They tap the ✈ send button themselves (or hit Enter) to
+      //     dispatch — which also means a stray word they didn't
+      //     intend doesn't just fly out.
+      //
+      // Chrome's own recognizer auto-stops after ~60s of total silence,
+      // so we don't need our own timeout for session termination.
     };
     // 2026-10: waveform now driven by SR's own audio events instead of a
     // competing MediaStream. onspeechstart = user starting to talk,
@@ -979,8 +986,12 @@ export default function NanjilaChatWidget() {
                   );
                 })}
               </div>
-              <span className="text-[10px] text-red-500 font-mono">
-                {micLevel < 10 ? "waiting…" : micLevel < 30 ? "listening" : "hearing you"}
+              {/* 2026-10 (Tony: "it keeps cutting off after two words"):
+                  swapped the misleading "silent/loud" meter for a
+                  user-facing instruction. Mic no longer auto-sends on
+                  silence — the user controls when they're done. */}
+              <span className="text-[10px] text-red-600 font-medium whitespace-nowrap">
+                Tap mic to stop
               </span>
             </div>
           )}
@@ -1032,7 +1043,7 @@ export default function NanjilaChatWidget() {
                       ? "bg-red-500 text-white animate-pulse"
                       : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                   }`}
-                  title={listening ? "Tap to stop recording" : "Hold or tap to speak"}
+                  title={listening ? "Tap to stop — then review & tap send" : "Tap to speak — mic stays on until you tap again"}
                   aria-label={listening ? "Stop recording" : "Start voice input"}
                   data-testid="nanjila-mic-btn"
                 >
