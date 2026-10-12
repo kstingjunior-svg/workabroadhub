@@ -633,14 +633,55 @@ export default function NanjilaChatWidget() {
       return;
     }
 
-    // ── Step 1: explicitly request mic access so the user gets the native
-    // permission prompt BEFORE we start SpeechRecognition. If we skip this,
-    // Chrome shows a tiny icon in the address bar that users easily miss,
-    // the user denies / dismisses by accident, and SpeechRecognition then
-    // reports no audio with no error shown.
-    let stream: MediaStream;
+    // 2026-10 (Tony: "when I tap the mic while Nanjila is still talking,
+    // her voice cuts off but my own voice doesn't record"). SILENCE
+    // NANJILA FIRST. Any audio playing — the greeting MP3, a replayed
+    // message, or the browser TTS fallback — must stop immediately,
+    // otherwise:
+    //   (a) her voice bleeds through the speaker and gets picked up by
+    //       the mic, polluting the transcript, and
+    //   (b) on some phones the audio pipeline is still owned by the
+    //       <audio> element, so SpeechRecognition can't acquire the mic
+    //       cleanly and silently fails ("Listening..." shows but zero
+    //       words are captured — exactly what Tony reported).
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Stop the greeting if it's playing
+      if (greetingAudioRef.current) {
+        greetingAudioRef.current.pause();
+        greetingAudioRef.current.currentTime = 0;
+        greetingAudioRef.current = null;
+      }
+      // Stop ANY <audio> element currently playing in the widget
+      // (e.g. a replayed Nanjila message)
+      document.querySelectorAll("audio").forEach((el) => {
+        try { el.pause(); el.currentTime = 0; } catch {}
+      });
+      // Stop the browser Speech Synthesis TTS fallback
+      if ("speechSynthesis" in window) {
+        try { window.speechSynthesis.cancel(); } catch {}
+      }
+      setIsSpeaking(false);
+    } catch (err: any) {
+      console.warn("[Nanjila][mic] couldn't silence TTS cleanly:", err?.message);
+    }
+
+    // Tiny breather so the audio pipeline is fully released before we
+    // ask for the microphone. On Android Chrome this is the difference
+    // between "nothing happens" and "transcript flows". 150ms is below
+    // the perceptual threshold — the user won't notice the delay.
+    await new Promise((r) => setTimeout(r, 150));
+
+    // ── Step 1: trigger the mic permission prompt by probing getUserMedia,
+    // then IMMEDIATELY release the stream. On Android Chrome, holding our
+    // own getUserMedia stream open while SpeechRecognition tries to run
+    // meant SR couldn't claim the mic — the on-screen waveform showed
+    // "loud" (because we were analysing our own stream) but zero words
+    // transcribed (because SR had no audio). Release the probe stream
+    // the moment permission is granted so SR has exclusive mic access.
+    try {
+      const probe = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Immediately kill the probe so SpeechRecognition can claim the mic.
+      probe.getTracks().forEach((t) => t.stop());
     } catch (err: any) {
       const code = String(err?.name || err?.message || "");
       if (code.includes("NotAllowed") || code.includes("Permission")) {
@@ -652,36 +693,10 @@ export default function NanjilaChatWidget() {
       }
       return;
     }
-    micStreamRef.current = stream;
 
-    // ── Step 2: start the live audio-level meter so the user SEES the mic
-    // is picking them up.
-    try {
-      const AudioCtx = (window.AudioContext || (window as any).webkitAudioContext);
-      const ctx = new AudioCtx();
-      audioCtxRef.current = ctx;
-      const src = ctx.createMediaStreamSource(stream);
-      const analyser = ctx.createAnalyser();
-      analyser.fftSize = 256;
-      src.connect(analyser);
-      analyserRef.current = analyser;
-      const data = new Uint8Array(analyser.frequencyBinCount);
-      const tick = () => {
-        if (!analyserRef.current) return;
-        analyserRef.current.getByteFrequencyData(data);
-        let sum = 0;
-        for (let i = 0; i < data.length; i++) sum += data[i];
-        const avg = sum / data.length;
-        setMicLevel(Math.min(100, Math.round((avg / 128) * 100)));
-        levelFrameRef.current = requestAnimationFrame(tick);
-      };
-      tick();
-    } catch (err: any) {
-      console.warn("[Nanjila][mic] level meter failed:", err?.message);
-      // Non-fatal — recognition can still run.
-    }
-
-    // ── Step 3: start SpeechRecognition.
+    // ── Step 2: start SpeechRecognition. (The visual waveform now runs
+    // off recognition's own events — onspeechstart, onresult — instead
+    // of a parallel audio analyser that would compete for the mic.)
     const rec = new SR();
     rec.continuous = true;
     rec.interimResults = true;
@@ -728,6 +743,17 @@ export default function NanjilaChatWidget() {
         }
       }, 1500);
     };
+    // 2026-10: waveform now driven by SR's own audio events instead of a
+    // competing MediaStream. onspeechstart = user starting to talk,
+    // onspeechend = silence detected. Between them we pulse the bars so
+    // the user has visual feedback even without a parallel audio analyser.
+    rec.onspeechstart = () => setMicLevel(70);
+    rec.onsoundstart  = () => setMicLevel(40);
+    rec.onspeechend   = () => setMicLevel(10);
+    rec.onsoundend    = () => setMicLevel(5);
+    rec.onaudiostart  = () => setMicLevel(20);
+    rec.onaudioend    = () => setMicLevel(0);
+
     rec.onerror = (ev: any) => {
       const code = String(ev?.error || "");
       console.warn("[Nanjila][mic] recognition error:", code);
@@ -929,7 +955,7 @@ export default function NanjilaChatWidget() {
                 })}
               </div>
               <span className="text-[10px] text-red-500 font-mono">
-                {micLevel < 5 ? "silent" : micLevel < 20 ? "quiet" : micLevel < 50 ? "ok" : "loud"}
+                {micLevel < 10 ? "waiting…" : micLevel < 30 ? "listening" : "hearing you"}
               </span>
             </div>
           )}
