@@ -689,23 +689,42 @@ export default function NanjilaChatWidget() {
     rec.lang = /^sw/i.test(nav) ? "sw-KE" : nav.startsWith("en") ? nav : "en-KE";
     recognitionRef.current = rec;
 
-    let committed = "";
+    // 2026-10 fix (Tony: "it kept saying is-is-is-twin-twin-palm-twin-palm-palm").
+    // The bug was accumulating interim results on top of previously-emitted
+    // interim results, causing massive duplication on mobile Chrome where
+    // the recognizer re-emits overlapping guesses as it refines them.
+    // Correct pattern: rebuild the FULL transcript from scratch on every
+    // onresult tick, iterating over ev.results (which contains the entire
+    // accumulated session). Then dedupe adjacent repeated words as a
+    // belt-and-braces guard against the recognizer glitching.
     rec.onresult = (ev: any) => {
-      let interim = "";
-      for (let i = ev.resultIndex; i < ev.results.length; i++) {
+      let finalText = "";
+      let interimText = "";
+      for (let i = 0; i < ev.results.length; i++) {
         const r = ev.results[i];
-        if (r.isFinal) committed += (committed ? " " : "") + String(r[0].transcript).trim();
-        else interim += r[0].transcript;
+        const text = String(r[0]?.transcript ?? "");
+        if (r.isFinal) finalText += text;
+        else interimText += text;
       }
-      const combined = (committed + " " + interim).replace(/\s+/g, " ").trim();
+      // Collapse multi-space and trim; also squash any adjacent duplicate
+      // word (e.g. "twin twin palm" → "twin palm") that Android Chrome
+      // sometimes leaves behind when interim guesses overlap.
+      const squashDupes = (s: string) =>
+        s.replace(/\s+/g, " ")
+         .trim()
+         .replace(/\b(\w+)(?:\s+\1\b)+/gi, "$1");
+
+      const committed = squashDupes(finalText);
+      const combined = squashDupes(`${finalText} ${interimText}`);
       setInput(combined);
-      // Auto-send 1.5s after the last word
+
+      // Auto-send 1.5s after the last FINAL result lands (not interim —
+      // interim thrash would re-start the silence timer constantly).
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
       silenceTimerRef.current = setTimeout(() => {
-        if (committed.trim().length > 0) {
-          const payload = committed.trim();
+        if (committed.length > 0) {
           stopListening();
-          sendMessage(payload);
+          sendMessage(committed);
         }
       }, 1500);
     };

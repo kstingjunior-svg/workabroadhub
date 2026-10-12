@@ -159,14 +159,29 @@ async function verifyAgencyHandler(
   const limit = Math.max(1, Math.min(10, input.limit ?? 5));
   const appOrigin = (process.env.APP_ORIGIN || "https://workabroadhub.tech").replace(/\/$/, "");
 
-  // Strip leading "+" / brackets / stray punctuation so a licence-number
-  // lookup like "PVT-8LU76GZM" works even with lazy user typing.
-  const needle = raw.replace(/^\s*[+(]/, "").trim();
-  const needleLc = needle.toLowerCase();
-  const needleWildcard = `%${needle}%`;
+  // 2026-10 fix (Tony: "if someone just says 'twin', she should find
+  // Twinpalm; if they say 'twin palm global' she should also find
+  // TWINPALM GLOBAL even though the DB has no space"). Three parallel
+  // match strategies, each stripped of non-alphanumerics so punctuation
+  // and spacing don't block hits:
+  //   • needleRaw        = "twin palm global" (as typed, lowercase)
+  //   • needleDespaced   = "twinpalmglobal"   (spaces + punct stripped,
+  //                                             so "twin palm" matches
+  //                                             "TWINPALM")
+  //   • needleFirstWord  = "twin"             (first word only — users
+  //                                             often remember only the
+  //                                             distinctive first word)
+  // Both the needles AND the compared columns go through the same
+  // alphanumeric-only normalisation. That way "AL-NAHDA" matches
+  // "al nahda" and vice versa.
+  const needleRaw     = raw.replace(/^\s*[+(]/, "").trim().toLowerCase();
+  const needleAlnum   = needleRaw.replace(/[^a-z0-9]+/g, "");
+  const needleFirst   = (needleRaw.split(/\s+/).filter(Boolean)[0] || needleRaw);
+  // Columns normalised the same way via regexp_replace in SQL.
+  // Minimum useful length for a prefix-only search is 3 chars — avoids
+  // "is" matching 400 agencies.
+  const needleFirstPrefix = needleFirst.length >= 3 ? needleFirst : needleAlnum;
 
-  // Query both name and licence number. Score so a licence-number exact
-  // hit or a name-prefix hit ranks above a mid-string substring.
   try {
     const { rows } = await pool.query<{
       id:              string;
@@ -181,32 +196,41 @@ async function verifyAgencyHandler(
       score:           number;
       total:           number;
     }>(
-      `WITH candidates AS (
+      `WITH norm AS (
          SELECT id, agency_name, license_number, status_override, expiry_date,
                 service_type, email, city, country,
-                CASE
-                  WHEN LOWER(license_number) = $1              THEN 100
-                  WHEN LOWER(agency_name)    = $1              THEN 95
-                  WHEN LOWER(license_number) LIKE $1 || '%'    THEN 90
-                  WHEN LOWER(agency_name)    LIKE $1 || '%'    THEN 85
-                  WHEN POSITION($1 IN LOWER(agency_name)) = 1  THEN 80
-                  WHEN LOWER(license_number) LIKE '%' || $1 || '%' THEN 60
-                  WHEN LOWER(agency_name)    LIKE '%' || $1 || '%' THEN 40
-                  ELSE 0
-                END AS score
+                regexp_replace(LOWER(agency_name),                   '[^a-z0-9]+', '', 'g') AS name_alnum,
+                regexp_replace(LOWER(COALESCE(license_number,'')),   '[^a-z0-9]+', '', 'g') AS lic_alnum
            FROM nea_agencies
           WHERE is_published = true
-            AND (
-              LOWER(agency_name)    LIKE $2
-              OR LOWER(COALESCE(license_number,'')) LIKE $2
-            )
+       ),
+       candidates AS (
+         SELECT *,
+                CASE
+                  -- 1. Exact ISO licence number match (highest)
+                  WHEN lic_alnum = $2  AND LENGTH($2) >= 4 THEN 100
+                  WHEN name_alnum = $2 AND LENGTH($2) >= 3 THEN 95
+                  -- 2. Prefix matches on name or licence (very strong)
+                  WHEN name_alnum LIKE $2 || '%' AND LENGTH($2) >= 3 THEN 90
+                  WHEN lic_alnum  LIKE $2 || '%' AND LENGTH($2) >= 4 THEN 88
+                  -- 3. First-word-only prefix match (user said "twin" →
+                  --    finds "twinpalm", "twinbright" etc.)
+                  WHEN $3 <> '' AND name_alnum LIKE $3 || '%' THEN 75
+                  -- 4. Substring anywhere in name
+                  WHEN name_alnum LIKE '%' || $2 || '%' AND LENGTH($2) >= 3 THEN 50
+                  WHEN lic_alnum  LIKE '%' || $2 || '%' AND LENGTH($2) >= 4 THEN 45
+                  ELSE 0
+                END AS score
+           FROM norm
        )
-       SELECT *, COUNT(*) OVER() AS total
+       SELECT id, agency_name, license_number, status_override, expiry_date,
+              service_type, email, city, country, score,
+              COUNT(*) OVER() AS total
          FROM candidates
         WHERE score > 0
         ORDER BY score DESC, agency_name ASC
-        LIMIT $3`,
-      [needleLc, needleWildcard.toLowerCase(), limit + 1],
+        LIMIT $4`,
+      [needleRaw, needleAlnum, needleFirstPrefix, limit + 1],
     );
 
     const total = rows[0] ? Number(rows[0].total) : 0;
