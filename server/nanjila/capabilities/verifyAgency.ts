@@ -196,11 +196,12 @@ async function verifyAgencyHandler(
       score:           number;
       total:           number;
     }>(
-      // 2026-10 fix (Tony: "Nanjila still has no access"). Node-pg can't
-      // infer parameter types when the same placeholder is used in
-      // multiple string contexts (LIKE, =, LENGTH), so Postgres rejected
-      // with "could not determine data type of parameter $1". Fix: cast
-      // every text parameter explicitly to ::text and the int to ::int.
+      // 2026-10 fix v2 (Tony: "still has no access"). First fix cast
+      // $2/$3/$4 but $1 (needleRaw) was passed in the params array yet
+      // never referenced in the query — Postgres saw an untyped
+      // parameter and crashed with "could not determine data type of
+      // parameter $1". Dropped needleRaw from params (it was dead) and
+      // renumbered. All remaining params explicitly cast.
       `WITH norm AS (
          SELECT id, agency_name, license_number, status_override, expiry_date,
                 service_type, email, city, country,
@@ -212,17 +213,17 @@ async function verifyAgencyHandler(
          SELECT *,
                 CASE
                   -- 1. Exact ISO licence number match (highest)
-                  WHEN lic_alnum = ($2::text)  AND LENGTH($2::text) >= 4 THEN 100
-                  WHEN name_alnum = ($2::text) AND LENGTH($2::text) >= 3 THEN 95
+                  WHEN lic_alnum = ($1::text)  AND LENGTH($1::text) >= 4 THEN 100
+                  WHEN name_alnum = ($1::text) AND LENGTH($1::text) >= 3 THEN 95
                   -- 2. Prefix matches on name or licence (very strong)
-                  WHEN name_alnum LIKE ($2::text) || '%' AND LENGTH($2::text) >= 3 THEN 90
-                  WHEN lic_alnum  LIKE ($2::text) || '%' AND LENGTH($2::text) >= 4 THEN 88
+                  WHEN name_alnum LIKE ($1::text) || '%' AND LENGTH($1::text) >= 3 THEN 90
+                  WHEN lic_alnum  LIKE ($1::text) || '%' AND LENGTH($1::text) >= 4 THEN 88
                   -- 3. First-word-only prefix match (user said "twin" →
                   --    finds "twinpalm", "twinbright" etc.)
-                  WHEN ($3::text) <> '' AND name_alnum LIKE ($3::text) || '%' THEN 75
+                  WHEN ($2::text) <> '' AND name_alnum LIKE ($2::text) || '%' THEN 75
                   -- 4. Substring anywhere in name
-                  WHEN name_alnum LIKE '%' || ($2::text) || '%' AND LENGTH($2::text) >= 3 THEN 50
-                  WHEN lic_alnum  LIKE '%' || ($2::text) || '%' AND LENGTH($2::text) >= 4 THEN 45
+                  WHEN name_alnum LIKE '%' || ($1::text) || '%' AND LENGTH($1::text) >= 3 THEN 50
+                  WHEN lic_alnum  LIKE '%' || ($1::text) || '%' AND LENGTH($1::text) >= 4 THEN 45
                   ELSE 0
                 END AS score
            FROM norm
@@ -233,8 +234,8 @@ async function verifyAgencyHandler(
          FROM candidates
         WHERE score > 0
         ORDER BY score DESC, agency_name ASC
-        LIMIT ($4::int)`,
-      [needleRaw, needleAlnum, needleFirstPrefix, limit + 1],
+        LIMIT ($3::int)`,
+      [needleAlnum, needleFirstPrefix, limit + 1],
     );
 
     const total = rows[0] ? Number(rows[0].total) : 0;

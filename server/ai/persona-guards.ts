@@ -188,9 +188,16 @@ export interface SignatureOptions {
  *   • Explicit opts.mode overrides everything.
  */
 export function appendSignature(reply: string, opts: SignatureOptions = {}): string {
-  const mode = opts.mode ?? "auto";
+  // 2026-10 (Tony: "underscore I'm Nanjila. Let's build your future
+  // abroad, that is childish, I want her as smart as you"). Real people
+  // don't sign every WhatsApp message with the same slogan. Removed
+  // auto-signatures entirely. Signatures only append now if the caller
+  // *explicitly* passes mode === "warning" or "celebration" (e.g. the
+  // scam detector tool wants to end with a clear "I've got your back"
+  // beat on a serious warning). Default behaviour: no signature.
+  const mode = opts.mode ?? "none";
 
-  if (mode === "none") return reply;
+  if (mode === "none" || mode === "auto" || mode === "standard") return reply;
 
   const cleaned = reply.trim();
   if (!cleaned) return reply;
@@ -198,22 +205,10 @@ export function appendSignature(reply: string, opts: SignatureOptions = {}): str
   // Already signed? Don't double-sign.
   if (/i'?m nanjila/i.test(cleaned)) return reply;
 
-  // Too short?
-  if (cleaned.length < SIGNATURE_MIN_REPLY_LENGTH && mode === "auto") return reply;
-
-  // Explicit override.
   if (mode === "warning")     return `${cleaned}\n\n_${SIGNATURE_WARNING}_`;
   if (mode === "celebration") return `${cleaned}\n\n_${SIGNATURE_CELEBRATION}_`;
-  if (mode === "standard")    return `${cleaned}\n\n_${SIGNATURE_STANDARD}_`;
 
-  // Auto-detect.
-  if (opts.hasCelebration || looksLikeCelebration(cleaned)) {
-    return `${cleaned}\n\n_${SIGNATURE_CELEBRATION}_`;
-  }
-  if (opts.hasWarning || looksLikeWarning(cleaned)) {
-    return `${cleaned}\n\n_${SIGNATURE_WARNING}_`;
-  }
-  return `${cleaned}\n\n_${SIGNATURE_STANDARD}_`;
+  return reply;
 }
 
 /**
