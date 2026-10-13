@@ -148,18 +148,22 @@ export default function ApplyPrepPage() {
   // navigation happens with the user's intent — not silently behind their
   // back — so the browser's "you're leaving this page" affordance fires
   // and they consciously make the choice.
+  //
+  // 2026-10 (Tony — customer screenshot "nothing happens when I click"):
+  // Chrome Android (especially when the site runs as an installed PWA)
+  // treats programmatic window.open() as a popup even when fired from a
+  // user tap, and silently blocks it. Native <a target="_blank"> clicks
+  // are NEVER blocked because the browser treats anchor navigation as
+  // explicit user intent. We now render an <a href=> for direct URLs
+  // and keep the handler only for the fallback server-redirect path.
   const externalUrl = queryUrl || job?.applyLink || `/api/visa-jobs/${jobId}/apply`;
   const portal = portalNameFromUrl(externalUrl);
+  const hasDirectUrl = Boolean(queryUrl || job?.applyLink);
 
   const handleContinue = () => {
-    if (queryUrl || job?.applyLink) {
-      window.open(externalUrl, "_blank", "noopener,noreferrer");
-    } else {
-      // No direct URL — let the server's paid-tier gate handle it.
-      // It redirects to the external portal on success or /pricing on
-      // free-user upgrade required (HTML detection fix from earlier).
-      window.location.href = externalUrl;
-    }
+    // Only used for the server-redirect fallback (jobs without a direct
+    // applyLink). The direct-URL path now goes through the <a> tag.
+    window.location.href = externalUrl;
   };
 
   const flag = job ? FLAG[job.country] || "🌍" : "🌍";
@@ -249,20 +253,38 @@ export default function ApplyPrepPage() {
           </CardContent>
         </Card>
 
-        {/* Continue button — single big primary action */}
+        {/* Continue button — single big primary action.
+            2026-10 fix: direct URLs use a real <a target="_blank"> so
+            mobile Chrome / PWA never blocks the click. Server-redirect
+            fallback still uses onClick → window.location. */}
         <Card className="border-2 border-emerald-300 dark:border-emerald-700">
           <CardContent className="p-4">
-            <Button
-              size="lg"
-              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
-              onClick={handleContinue}
-              data-testid="button-continue-to-portal"
-            >
-              Continue to {portal}
-              <ExternalLink className="h-4 w-4 ml-2" />
-            </Button>
+            {hasDirectUrl ? (
+              <a
+                href={externalUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full inline-flex items-center justify-center h-11 px-8 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-base no-underline"
+                data-testid="button-continue-to-portal"
+              >
+                Continue to {portal}
+                <ExternalLink className="h-4 w-4 ml-2" />
+              </a>
+            ) : (
+              <Button
+                size="lg"
+                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+                onClick={handleContinue}
+                data-testid="button-continue-to-portal"
+              >
+                Continue to {portal}
+                <ExternalLink className="h-4 w-4 ml-2" />
+              </Button>
+            )}
             <p className="text-[11px] text-muted-foreground text-center mt-2">
-              Opens in a new tab so you don't lose this page.
+              {hasDirectUrl
+                ? "Opens in a new tab so you don't lose this page."
+                : "We'll take you to the employer's portal."}
             </p>
           </CardContent>
         </Card>
