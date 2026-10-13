@@ -114,7 +114,7 @@ function deriveStatus(row: {
 
 function composeHeadline(matches: AgencyMatch[], raw: string): string {
   if (matches.length === 0) {
-    return `No agency named "${raw}" is in the NEA registry. Agencies that aren't registered with NEA cannot legally recruit for overseas jobs. Be very cautious — ask them for their NEA licence number and let me check it directly.`;
+    return `No agency named "${raw}" is in the NEA registry. [red]Agencies not registered with NEA cannot legally recruit for overseas jobs[/red]. Be very cautious — ask them for their NEA licence number and let me check it directly.`;
   }
   if (matches.length === 1) {
     const m = matches[0];
@@ -122,18 +122,18 @@ function composeHeadline(matches: AgencyMatch[], raw: string): string {
     switch (m.status) {
       case "active": {
         const expiryBit = m.daysUntilExpiry !== null && m.daysUntilExpiry <= 30
-          ? ` BUT their licence expires in just ${m.daysUntilExpiry} day${m.daysUntilExpiry === 1 ? "" : "s"} — renewal check recommended.`
-          : m.expiryDate ? ` Current licence valid until ${m.expiryDate}.` : "";
-        return `✅ ${m.agencyName}${lic} is currently licensed by Kenya's National Employment Authority.${expiryBit}`;
+          ? ` BUT their licence [amber]expires in just ${m.daysUntilExpiry} day${m.daysUntilExpiry === 1 ? "" : "s"}[/amber] — renewal check recommended.`
+          : m.expiryDate ? ` Current licence valid until [green]${m.expiryDate}[/green].` : "";
+        return `✅ ${m.agencyName}${lic} is [green]currently licensed[/green] by Kenya's National Employment Authority.${expiryBit}`;
       }
       case "expired":
-        return `⚠️ ${m.agencyName}${lic}'s NEA licence expired on ${m.expiryDate ?? "an unspecified date"}. They CANNOT legally recruit right now — do not pay them until they renew.`;
+        return `⚠️ ${m.agencyName}${lic}'s NEA licence [red]expired on ${m.expiryDate ?? "an unspecified date"}[/red]. [red]They CANNOT legally recruit right now[/red] — do not pay them until they renew.`;
       case "revoked":
-        return `🚨 ${m.agencyName}${lic}'s NEA licence has been REVOKED. Do not pay them. If they contacted you, report it to NEA on 0800-721-253 or complaints@nea.go.ke.`;
+        return `🚨 ${m.agencyName}${lic}'s NEA licence has been [red]REVOKED[/red]. Do not pay them. If they contacted you, report it to NEA on 0800-721-253 or complaints@nea.go.ke.`;
       case "suspended":
-        return `🚨 ${m.agencyName}${lic} is currently SUSPENDED by NEA. Do not transact with them until their licence is reinstated.`;
+        return `🚨 ${m.agencyName}${lic} is currently [red]SUSPENDED[/red] by NEA. Do not transact with them until their licence is reinstated.`;
       case "blacklisted":
-        return `🚨 ${m.agencyName}${lic} is BLACKLISTED. Do not engage. Report any contact to NEA immediately.`;
+        return `🚨 ${m.agencyName}${lic} is [red]BLACKLISTED[/red]. Do not engage. Report any contact to NEA immediately.`;
       default:
         return `I found ${m.agencyName}${lic} in the registry but their status is unclear. Please view the full record for the latest info: ${m.verifyUrl}`;
     }

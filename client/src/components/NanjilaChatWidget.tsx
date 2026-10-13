@@ -51,9 +51,29 @@ function escapeHtml(s: string | null | undefined): string {
 }
 
 function formatText(text: string | null | undefined): string {
-  return escapeHtml(text)
+  // 2026-10 (Tony: "can she write expired agencies in red?"). Added a
+  // simple colour-tag convention Nanjila can emit when quoting agency
+  // status: [red]…[/red] for expired/revoked/suspended, [green]…[/green]
+  // for active & licensed, [amber]…[/amber] for expiring-soon warnings.
+  // Tags are escaped first (so a user typing "[red]" literally still
+  // renders as text), then our known tags are converted back to styled
+  // spans. Any unknown tag passes through as escaped text — no XSS.
+  let out = escapeHtml(text)
     .replace(/\*([^*]+)\*/g, "<strong>$1</strong>")
     .replace(/\n/g, "<br/>");
+
+  // Colour tags (operate on escaped text — look for the escaped square
+  // brackets &#39; are not involved; [ and ] are unescaped by escapeHtml
+  // so the literal bracket chars still survive).
+  out = out
+    .replace(/\[red\]([\s\S]+?)\[\/red\]/gi,
+      '<span style="color:#dc2626;font-weight:600">$1</span>')
+    .replace(/\[green\]([\s\S]+?)\[\/green\]/gi,
+      '<span style="color:#16a34a;font-weight:600">$1</span>')
+    .replace(/\[amber\]([\s\S]+?)\[\/amber\]/gi,
+      '<span style="color:#d97706;font-weight:600">$1</span>');
+
+  return out;
 }
 
 // ── Browser Speech Synthesis fallback ────────────────────────────────────────
