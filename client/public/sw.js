@@ -7,10 +7,11 @@ const APP_NAME = "WorkAbroad Hub";
 // static assets and refetch after the big anonymous-checkout deploy —
 // stops "Just a small detour" from surfacing to users whose in-app browser
 // (WhatsApp/Messenger) was still holding pre-deploy chunk hashes.
-// 2026-10 (Tony: "mic still cuts after 2 words"). Bumping cache version
-// forces every installed PWA / cached browser to purge the old JS bundle
-// on next visit. Users were stuck on the pre-mic-fix build via the SW.
-const CACHE_VERSION = "v8";
+// 2026-10 (Tony: "KES 99 trial still showing after I removed it"). Bumping
+// cache version again — the landing-final-cta build is new, but every
+// visitor is still being served the cached JS bundle from the service
+// worker. v9 forces a purge on next page load.
+const CACHE_VERSION = "v9";
 const STATIC_CACHE = `workabroad-static-${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `workabroad-dynamic-${CACHE_VERSION}`;
 
