@@ -70,5 +70,26 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
   if (req.isAuthenticated && req.isAuthenticated()) {
     return next();
   }
+
+  // 2026-10 (customer dancanmwangi008 saw raw JSON "Authentication
+  // required" when clicking a protected link). Detect whether the caller
+  // is a browser (navigating directly) vs an API client (fetch / XHR /
+  // mobile app) and respond appropriately:
+  //   • Browser visiting a protected URL → 302 redirect to landing page
+  //     with ?signin=1 so the login modal opens and ?redirect= so they
+  //     land back on the original page after signing in.
+  //   • API/XHR/fetch client → keep the JSON contract so our React
+  //     frontend's existing error-handling still works.
+  // Detection: a real browser navigation sends
+  //   Accept: text/html,application/xhtml+xml,...
+  // whereas fetch/XHR defaults to Accept: */* (and sometimes application/json).
+  // We only redirect when text/html is EXPLICITLY in Accept AND the method
+  // is GET (don't redirect form POSTs — those should still get the JSON).
+  const acceptsHtml = String(req.headers.accept || "").includes("text/html");
+  if (req.method === "GET" && acceptsHtml) {
+    const redirectBack = encodeURIComponent(req.originalUrl || "/");
+    return res.redirect(302, `/?signin=1&redirect=${redirectBack}`);
+  }
+
   return res.status(401).json({ message: "Authentication required.", code: "UNAUTHENTICATED" });
 };
