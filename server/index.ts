@@ -1087,6 +1087,18 @@ app.use((req, res, next) => {
       console.error("[Server] ❌ Admin comp-order registration failed:", err?.message);
     }
 
+    // 2026-10 (Tony: Faith Mbugua forensics): admin M-Pesa Transaction
+    // Status endpoint — query Safaricom directly for any payment to find
+    // out whether the customer was actually debited. Optional auto-
+    // reconcile flips our DB row to 'success' + triggers delivery if
+    // Safaricom confirms the money moved but our callback got lost.
+    try {
+      const { registerAdminMpesaStatusRoutes } = await import("./routes/admin-mpesa-status");
+      registerAdminMpesaStatusRoutes(app);
+    } catch (err: any) {
+      console.error("[Server] ❌ Admin M-Pesa status registration failed:", err?.message);
+    }
+
     await registerRoutes(httpServer, app);
 
     // Bootstrap can run after registerRoutes — it only touches the DB.
