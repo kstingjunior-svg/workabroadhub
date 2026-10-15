@@ -220,7 +220,7 @@ export function KenyaCareersApplySheet({
             <div className="py-2" data-testid="apply-signin">
               <div className="flex items-start gap-2 p-3 mb-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 ring-1 ring-amber-200 dark:ring-amber-800 text-sm">
                 <Lock className="h-4 w-4 text-amber-700 dark:text-amber-300 shrink-0 mt-0.5" />
-                <span>Sign in or sign up first — applying is included with the <strong>KES 99 trial</strong> that also unlocks overseas jobs.</span>
+                <span>Sign in or sign up first — applying is included with the <strong>KES 1,000 Monthly plan</strong> that also unlocks overseas jobs.</span>
               </div>
               <Button
                 className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
@@ -247,7 +247,7 @@ export function KenyaCareersApplySheet({
                 </p>
                 <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
                   <li><strong>Unlimited applications</strong> — we don't charge per apply</li>
-                  <li>KES 99 = 24 hours &nbsp;·&nbsp; KES 1,000 = 30 days &nbsp;·&nbsp; KES 4,500 = 365 days</li>
+                  <li>KES 1,000 = 30 days &nbsp;·&nbsp; KES 4,500 = 365 days</li>
                   <li>Verified overseas jobs in 9 countries</li>
                   <li>Salary comparison + country roadmaps</li>
                   <li>CV check + interview practice</li>

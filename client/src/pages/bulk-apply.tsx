@@ -347,7 +347,7 @@ export default function BulkApply() {
                 </Link>
               </div>
               <p className="text-xs text-muted-foreground">
-                Direct applying is unlimited on any paid plan (KES 99 for 24h, KES 1,000 for 30d, KES 4,500 for 365d). Bulk Apply is the AI cover-letter writer — it has its own generation limit because each letter costs real AI compute.
+                Direct applying is unlimited on any paid plan (KES 1,000 for 30d, KES 4,500 for 365d). Bulk Apply is the AI cover-letter writer — it has its own generation limit because each letter costs real AI compute.
               </p>
             </CardContent>
           </Card>
@@ -360,7 +360,7 @@ export default function BulkApply() {
               <Lock className="h-8 w-8 mx-auto text-amber-500" />
               <h3 className="font-bold">Bulk Apply — Paid Feature</h3>
               <p className="text-sm text-muted-foreground">
-                Bulk Apply uses AI to write cover letters for many jobs at once. Available on any paid plan (KES 99 trial = 25 AI drafts / 24h, Monthly &amp; Yearly = unlimited AI drafts). Applying to jobs one-by-one is unlimited on every paid tier.
+                Bulk Apply uses AI to write cover letters for many jobs at once. Available on any paid plan (Monthly &amp; Yearly = unlimited AI drafts). Applying to jobs one-by-one is unlimited on every paid tier.
               </p>
               <div className="flex flex-col gap-2">
                 <Link href="/pricing">

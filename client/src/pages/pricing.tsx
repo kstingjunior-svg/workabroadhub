@@ -33,8 +33,8 @@ const TRUST_ITEMS = [
 
 const FAQ_ITEMS = [
   {
-    q: "What's the difference between the 4 plans?",
-    a: "Free is self-service — you can look up 3 recruitment agencies per day, browse a preview of jobs, and read all visa guides. The paid plans are personal career-consultation packages with a human advisor. 1-Day Consultation Trial (KES 99) gives you 24 hours of WhatsApp advisor access. Monthly Consultation (KES 1,000) covers 30 days with your personal advisor. Yearly Career Consultation (KES 4,500) is the best value — a full 365-day career-advisory relationship with 1-on-1 WhatsApp support, personal CV review, and personalised agency verification.",
+    q: "What's the difference between the plans?",
+    a: "Free is self-service — you can look up 3 recruitment agencies per day, browse a preview of jobs, and read all visa guides. The paid plans are personal career-consultation packages with a human advisor. Monthly Consultation (KES 1,000) covers 30 days with your personal advisor. Yearly Career Consultation (KES 4,500) is the best value — a full 365-day career-advisory relationship with 1-on-1 WhatsApp support, personal CV review, and personalised agency verification, saving you KES 7,500 vs paying monthly.",
   },
   {
     q: "How does M-Pesa payment work?",

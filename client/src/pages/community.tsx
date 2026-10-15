@@ -445,7 +445,7 @@ export default function Community() {
                       You can read everything, but posting needs an active plan
                     </p>
                     <p className="text-xs leading-snug mb-2">
-                      Any paid tier (KES 99 trial, KES 1,000 monthly, or KES 4,500 yearly) unlocks posting. Or refer a friend — once they pay, you get 3 free posts per day.
+                      Any paid tier (KES 1,000 monthly or KES 4,500 yearly) unlocks posting. Or refer a friend — once they pay, you get 3 free posts per day.
                     </p>
                     <div className="flex gap-2 flex-wrap">
                       <Link href="/pricing">

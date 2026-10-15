@@ -39,18 +39,13 @@ export function LandingFinalCta({ onStartClick }: LandingFinalCtaProps) {
             <strong className="text-gray-900 dark:text-white">your own pace</strong>.
           </p>
 
-          {/* 2026-06: surface all 4 tiers so users see Free + KES 99 + KES 1,000
-              + KES 4,500 BEFORE they get the M-Pesa STK prompt. Founder feedback:
-              too many cancellations because only the KES 4,500 figure was
-              visible on the landing CTA. */}
-          <div className="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-2 max-w-2xl mx-auto text-[11px]">
+          {/* 2026-10 (Tony's bold-move directive): KES 99 trial card
+              removed from the landing CTA. Now surfaces 3 tiers only —
+              Free, Monthly, Yearly — centred as a 3-column grid. */}
+          <div className="mt-5 grid grid-cols-3 gap-2 max-w-xl mx-auto text-[11px]">
             <div className="rounded-xl bg-white/70 dark:bg-gray-900/50 border border-emerald-200 dark:border-emerald-900/40 px-3 py-2">
               <div className="font-bold text-base text-gray-900 dark:text-white">Free</div>
               <div className="text-gray-500 dark:text-gray-400">Browse & preview</div>
-            </div>
-            <div className="rounded-xl bg-white/70 dark:bg-gray-900/50 border border-emerald-200 dark:border-emerald-900/40 px-3 py-2">
-              <div className="font-bold text-base text-gray-900 dark:text-white">KES 99</div>
-              <div className="text-gray-500 dark:text-gray-400">1 Day full access</div>
             </div>
             <div className="rounded-xl bg-blue-50 dark:bg-blue-950/40 border-2 border-blue-400 dark:border-blue-600 px-3 py-2 ring-2 ring-blue-200/40 dark:ring-blue-900/30">
               <div className="font-bold text-base text-blue-700 dark:text-blue-300">KES 1,000</div>
@@ -78,7 +73,7 @@ export function LandingFinalCta({ onStartClick }: LandingFinalCtaProps) {
               data-testid="final-cta-pricing"
             >
               <CreditCard className="h-5 w-5" />
-              See all 4 plans
+              See all plans
             </Link>
           </div>
 
