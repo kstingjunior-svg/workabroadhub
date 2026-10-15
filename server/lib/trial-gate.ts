@@ -112,32 +112,46 @@ export async function isTrialConsumed(input: TrialCheckInput): Promise<boolean> 
 // ── 3. HTTP endpoint the frontend hits to know whether to render the card ────
 
 export function registerTrialEligibilityRoute(app: Express): void {
-  app.get("/api/subscriptions/trial-eligibility", async (req: any, res) => {
+  app.get("/api/subscriptions/trial-eligibility", async (_req: any, res) => {
+    // 2026-10 (Tony's bold-move directive): the KES 99 24-hour trial is
+    // withdrawn from new signups. Only Yearly (KES 4,500) and Monthly
+    // (KES 1,000) remain purchasable. This endpoint now unconditionally
+    // returns eligible=false so every UI surface (pricing page, upgrade
+    // modal, anywhere else checking this flag) hides the trial card.
+    //
+    // Set `TRIAL_PLAN_WITHDRAWN=false` in env to revert without a code
+    // deploy if the trial ever needs to come back.
+    const withdrawn = (process.env.TRIAL_PLAN_WITHDRAWN ?? "true").toLowerCase() !== "false";
+    if (withdrawn) {
+      return res.json({ eligible: false, code: "TRIAL_WITHDRAWN" });
+    }
+    // Legacy path — only hit if an admin explicitly re-enables the trial.
     try {
       const userId: string | undefined =
-        req.user?.claims?.sub ?? req.user?.id ?? undefined;
-      // Phone hint: authenticated user's stored phone, or explicit ?phone=
-      // query param for guest pricing-page renders. Never trusted for
-      // ACTIVATION — the /upgrade endpoint re-checks. Only used to hide
-      // the card so a returning user doesn't see stale KES 99 options.
-      const phoneHint = String(req.query?.phone ?? "").trim() || undefined;
-
+        _req.user?.claims?.sub ?? _req.user?.id ?? undefined;
+      const phoneHint = String(_req.query?.phone ?? "").trim() || undefined;
       const consumed = await isTrialConsumed({
         userId: userId ?? null,
         phone:  phoneHint ?? null,
       });
       res.json({
         eligible: !consumed,
-        // Include a stable code so the client can key its copy off it.
         code:     consumed ? "TRIAL_ALREADY_USED" : "TRIAL_ELIGIBLE",
       });
     } catch (err: any) {
       console.error("[trial-gate] eligibility check failed:", err?.message);
-      // Fail OPEN for UI purposes — the /upgrade endpoint is the real
-      // gate. The worst case here is the card renders and the payment
-      // gets rejected server-side with a friendly TRIAL_ALREADY_USED.
       res.json({ eligible: true, code: "TRIAL_ELIGIBLE_FALLBACK" });
     }
   });
-  console.log("[trial-gate] ✓ GET /api/subscriptions/trial-eligibility registered");
+  console.log("[trial-gate] ✓ GET /api/subscriptions/trial-eligibility registered (default: WITHDRAWN)");
+}
+
+/**
+ * 2026-10 (Tony's bold-move directive): server-side kill-switch helper.
+ * The /upgrade and /pay routes call this to reject any attempt to buy
+ * the trial plan even if someone constructs the URL manually. Returns
+ * true when the plan should be refused.
+ */
+export function isTrialPlanWithdrawn(): boolean {
+  return (process.env.TRIAL_PLAN_WITHDRAWN ?? "true").toLowerCase() !== "false";
 }

@@ -461,40 +461,11 @@ export function UpgradeModal() {
                 </div>
               </button>
 
-              {/* Trial plan — KES 99 / 1 day
-                  2026-10 (Tony's "most are opting for trial" fix): hidden
-                  behind an opt-in link below the main picks. New users
-                  see only Yearly + Monthly by default and have to
-                  explicitly choose "I just want to try" to see this.
-                  2026-09 (Tony's KES-99-abuse follow-up): also hidden
-                  once a user has consumed their one-time trial. Server
-                  authority via /api/subscriptions/trial-eligibility. */}
-              {trialEligible && showTrialCard && (
-              <button
-                type="button"
-                onClick={() => setSelectedPlan("trial")}
-                className={`relative rounded-xl border-2 overflow-hidden flex flex-col text-left transition-all ${
-                  selectedPlan === "trial"
-                    ? "border-green-500 shadow-lg shadow-green-200/60 dark:shadow-green-900/40 ring-2 ring-green-300/40"
-                    : "border-border hover:border-green-300"
-                }`}
-                data-testid="plan-card-trial"
-              >
-                <div className={`px-2 py-3 text-center ${selectedPlan === "trial" ? "bg-green-500 text-white" : "bg-green-100 dark:bg-green-900/30 text-green-900 dark:text-green-200"}`}>
-                  <div className="font-bold text-sm">Just Want to Try?</div>
-                  <div className="text-base sm:text-lg font-black mt-1">
-                    {trialPrice ? `KES ${trialPrice.toLocaleString("en-KE")}` : "—"}
-                  </div>
-                  <div className={`text-[9px] ${selectedPlan === "trial" ? "text-white/80" : "text-green-700/80 dark:text-green-300/80"}`}>24-hour access</div>
-                </div>
-                <div className="p-2 flex-1 text-[10px] text-muted-foreground text-center">
-                  A quick look, not a full job search
-                </div>
-                <div className="p-2 pt-0 text-center text-[10px] font-bold text-green-700 dark:text-green-300">
-                  {selectedPlan === "trial" ? "✓ Selected" : "Tap to pick"}
-                </div>
-              </button>
-              )}
+              {/* 2026-10 (Tony's bold-move directive): KES 99 trial card
+                  removed entirely from the upgrade modal. Only Yearly +
+                  Monthly are offered now. Trial PLAN remains active in
+                  the DB so existing trial subscribers aren't broken; it
+                  just can't be purchased from the UI anymore. */}
             </div>
 
             {/* Single proceed button at full width — uses whichever tier the user picked */}
@@ -513,20 +484,12 @@ export function UpgradeModal() {
                 : "Loading prices…"}
             </button>
 
-            {/* 2026-10 (Tony's "most are opting for trial" fix): small
-                opt-in link to reveal the KES 99 trial. We don't lead with
-                it any more — new users default to seeing just Yearly +
-                Monthly, which lifts the average plan value materially. */}
-            {trialEligible && !showTrialCard && (
+            {/* 2026-10 (Tony's bold-move directive): the "Just want to
+                try first?" opt-in link is also removed. New users must
+                commit to Monthly or Yearly — no 24-hour trial exit ramp. */}
+            {false && (
               <div className="text-center -mt-3 mb-4">
-                <button
-                  type="button"
-                  onClick={() => { setShowTrialCard(true); setSelectedPlan("trial"); }}
-                  className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-4"
-                  data-testid="link-reveal-trial"
-                >
-                  Just want to try first? KES 99 for 24 hours →
-                </button>
+                <button type="button" className="hidden"></button>
               </div>
             )}
 

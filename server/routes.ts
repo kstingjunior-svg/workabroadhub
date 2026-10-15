@@ -2749,6 +2749,20 @@ Crawl-delay: 1`);
       if (!planId || !VALID_PLAN_IDS.includes(planId)) {
         return res.status(400).json({ message: "planId must be one of: trial, monthly, pro, pro_referral" });
       }
+      // 2026-10 (Tony's bold-move directive): the KES 99 24-hour trial is
+      // withdrawn from new purchases. Reject any direct POST to this
+      // endpoint for the trial plan — the UI already hides it, this is
+      // the defence-in-depth server guard against manual URL construction.
+      // Toggle TRIAL_PLAN_WITHDRAWN=false in env to re-enable.
+      if (planId === "trial") {
+        const { isTrialPlanWithdrawn } = await import("./lib/trial-gate");
+        if (isTrialPlanWithdrawn()) {
+          return res.status(400).json({
+            message: "Our KES 99 trial is no longer available. Please choose Monthly (KES 1,000) or Yearly (KES 4,500).",
+            code: "TRIAL_WITHDRAWN",
+          });
+        }
+      }
       if (!phoneNumber) {
         return res.status(400).json({ message: "phoneNumber is required" });
       }

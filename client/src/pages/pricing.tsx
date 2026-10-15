@@ -156,8 +156,8 @@ export default function PricingPage() {
   // 2026-08 SEO: pricing page had generic homepage title. Now targets
   // "workabroad hub pricing" and cost-comparison queries.
   usePageSeo({
-    title:       "Pricing — Career Consultation from KES 99 · Pay by M-Pesa or PayPal | WorkAbroad Hub",
-    description: "Transparent pricing for Kenya's leading overseas-jobs platform. Start free, upgrade to Basic (KES 1,000/mo) or Pro (KES 4,500/mo). One-time career services from KES 99. M-Pesa + PayPal accepted.",
+    title:       "Pricing — Career Consultation from KES 1,000/mo · Pay by M-Pesa or PayPal | WorkAbroad Hub",
+    description: "Transparent pricing for Kenya's leading overseas-jobs platform. Start free, upgrade to Monthly (KES 1,000/mo) or Yearly (KES 4,500/yr — save KES 7,500). M-Pesa + PayPal accepted.",
     path:        "/pricing",
     keywords:    [
       "workabroad hub pricing",
@@ -214,9 +214,18 @@ export default function PricingPage() {
     }
     return { ...ui, price, ...extra };
   }).filter((plan) => {
-    // Hide the KES 99 trial card once the user has consumed their
-    // one-time trial. The primary gate is server-side; this just cleans
-    // up the UI so they never see a KES 99 button they can't use.
+    // 2026-10 (Tony's bold-move directive): the KES 99 24-hour trial is
+    // now permanently hidden from new signups. Decision rationale —
+    // trial-tier buyers churned at near 100% and clogged the delivery
+    // queue without covering their marginal AI cost. Monthly at KES 1,000
+    // is already the easy entry point. Yearly at KES 4,500 is the
+    // conviction tier. The trial PLAN remains in the DB so existing trial
+    // customers keep working through their 24h window; we just stop
+    // offering it as a new-signup option.
+    if (plan.id === "trial") return false;
+    // (Legacy guard preserved as a backup even though the above makes it
+    // unreachable — if someone later re-enables trial, this still prevents
+    // showing it to users who already consumed their one-time trial.)
     if (plan.id === "trial" && !trialEligible) return false;
     return true;
   });
@@ -288,12 +297,10 @@ export default function PricingPage() {
               : "Choose the plan that fits your timeline."}
           </p>
 
-          {/* 2026-06 update: surface all 4 tiers in the hero so users see
-              they have options. 2026-09 reorder (Tony): Yearly leads, then
-              Monthly, then the KES 99 trial last — still visible, just not
-              the first thing people are pushed toward. */}
+          {/* 2026-10 (Tony's bold-move directive): KES 99 trial removed
+              from the hero. Only Yearly + Monthly surfaced as paid tiers. */}
           <p className="text-white/85 text-sm mb-6 max-w-md mx-auto leading-snug">
-            <strong className="text-white">Free</strong> to browse · <strong className="text-white">KES 4,500</strong> for a year · <strong className="text-white">KES 1,000</strong> for a month · <strong className="text-white">KES 99</strong> to just try a day
+            <strong className="text-white">Free</strong> to browse · <strong className="text-white">KES 4,500</strong> for a year · <strong className="text-white">KES 1,000</strong> for a month
           </p>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 max-w-2xl mx-auto mb-8 text-[11px]">
