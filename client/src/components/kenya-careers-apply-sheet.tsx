@@ -258,7 +258,7 @@ export function KenyaCareersApplySheet({
                 onClick={() => navigate("/pricing")}
                 data-testid="btn-upgrade-from-apply"
               >
-                See plans (from KES 99)
+                See plans (from KES 1,000)
               </Button>
             </div>
           )}

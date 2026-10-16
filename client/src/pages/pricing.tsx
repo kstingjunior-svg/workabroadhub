@@ -303,7 +303,8 @@ export default function PricingPage() {
             <strong className="text-white">Free</strong> to browse · <strong className="text-white">KES 4,500</strong> for a year · <strong className="text-white">KES 1,000</strong> for a month
           </p>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 max-w-2xl mx-auto mb-8 text-[11px]">
+          {/* 2026-10: KES 99 trial chip removed — 3 tiers only. */}
+          <div className="grid grid-cols-3 gap-2 max-w-xl mx-auto mb-8 text-[11px]">
             <div className="rounded-xl bg-white/15 backdrop-blur-sm border border-white/20 px-3 py-2">
               <div className="font-bold text-base text-white">Free</div>
               <div className="text-white/70">Browse & preview</div>
@@ -315,10 +316,6 @@ export default function PricingPage() {
             <div className="rounded-xl bg-white/15 backdrop-blur-sm border border-white/20 px-3 py-2">
               <div className="font-bold text-base text-white">KES 1,000</div>
               <div className="text-white/70">1 Month · flexible</div>
-            </div>
-            <div className="rounded-xl bg-white/15 backdrop-blur-sm border border-white/20 px-3 py-2">
-              <div className="font-bold text-base text-white">KES 99</div>
-              <div className="text-white/70">1 Day · just to try</div>
             </div>
           </div>
 
@@ -591,7 +588,7 @@ export default function PricingPage() {
               <tbody>
                 {([
                   ...PLAN_COMPARISON,
-                  { label: "Price", free: "Free forever", pro: "From KES 99" },
+                  { label: "Price", free: "Free forever", pro: "From KES 1,000" },
                 ] as { label: string; free: boolean | string; pro: boolean | string }[]).map((row) => (
                   <tr key={row.label} className="border-b border-border last:border-0 hover:bg-muted/20">
                     <td className="px-5 py-3.5 font-medium text-foreground">{row.label}</td>

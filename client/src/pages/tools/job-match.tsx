@@ -262,7 +262,7 @@ export default function JobMatchPage() {
                         className="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-semibold"
                         data-testid={`btn-upgrade-to-apply-${m.id ?? ""}`}
                       >
-                        <Lock className="h-3 w-3 mr-1" /> Upgrade to apply · from KES 99
+                        <Lock className="h-3 w-3 mr-1" /> Upgrade to apply · from KES 1,000
                       </Button>
                     </Link>
                   ) : (

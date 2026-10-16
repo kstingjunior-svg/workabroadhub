@@ -151,7 +151,7 @@ export function DashboardVisaJobsLocked() {
             data-testid="link-upgrade-from-jobs"
           >
             <span className="inline-flex items-center gap-1 text-[11px] font-bold">
-              <Lock className="h-3 w-3" /> Unlock from KES 99
+              <Lock className="h-3 w-3" /> Unlock from KES 1,000
             </span>
             <span className="flex items-center gap-1 leading-tight font-normal opacity-95">
               <span>KES 99 / day</span>
