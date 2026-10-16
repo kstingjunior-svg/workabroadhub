@@ -1639,6 +1639,29 @@ export class DatabaseStorage implements IStorage {
       // the userId string so different users don't contend.
       await client.query(`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, [userId]);
 
+      // 2026-10 (Tony's audit — Elizabeth got 2 years instead of 1 because
+      // her callback fired twice). After the advisory lock, check whether
+      // THIS SPECIFIC paymentId has already produced an active subscription.
+      // If yes, return it unchanged instead of stacking another duration on
+      // top. "Extend on renewal" is correct behaviour for a NEW payment but
+      // wrong for a replayed callback of the SAME payment.
+      if (paymentId) {
+        const { rows: dupeRows } = await client.query<UserSubscription>(
+          `SELECT * FROM user_subscriptions
+            WHERE user_id = $1 AND payment_id = $2 AND status = 'active'
+            LIMIT 1`,
+          [userId, paymentId],
+        );
+        if (dupeRows[0]) {
+          await client.query("COMMIT");
+          console.log(
+            `[activateUserPlan] IDEMPOTENT return for userId=${userId} paymentId=${paymentId} ` +
+            `— subscription already activated by an earlier callback, not stacking.`,
+          );
+          return dupeRows[0];
+        }
+      }
+
       // Expire all currently-active rows for this user (keeps the table tidy)
       await client.query(
         `UPDATE user_subscriptions
