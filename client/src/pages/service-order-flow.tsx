@@ -155,6 +155,50 @@ export default function ServiceOrderFlow() {
   const [guestEmail, setGuestEmail] = useState<string>("");
   const [guestPhone, setGuestPhone] = useState<string>("");
   const [downloadToken, setDownloadToken] = useState<string | null>(null);
+  // 2026-10 (Tony's audit — "someone retried 6 times then gave up"):
+  // inline per-field error state so a bad email or phone shows the fix
+  // right under the field, in red, instead of a disappearing toast.
+  const [fieldErrors, setFieldErrors] = useState<{
+    guestName?: string;
+    guestEmail?: string;
+    guestPhone?: string;
+  }>({});
+  // Refs for scroll-into-view on the first errored field.
+  const guestNameRef  = useRef<HTMLInputElement>(null);
+  const guestEmailRef = useRef<HTMLInputElement>(null);
+  const guestPhoneRef = useRef<HTMLInputElement>(null);
+
+  function validateGuestField(field: "guestName" | "guestEmail" | "guestPhone", value: string): string | null {
+    const v = value.trim();
+    if (field === "guestName") {
+      if (!v) return "Enter your full name so we know who to email.";
+      if (v.length < 2) return "That name's too short — give us your full name.";
+      return null;
+    }
+    if (field === "guestEmail") {
+      if (!v) return "Enter your email — we'll send your finished CV here.";
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) {
+        return "That doesn't look like a valid email — check for typos (e.g. you@gmail.com).";
+      }
+      return null;
+    }
+    if (field === "guestPhone") {
+      if (!v) return "Enter your Safaricom M-Pesa number.";
+      const digits = v.replace(/\D/g, "");
+      if (digits.length < 9) {
+        return "That phone number looks too short — Safaricom numbers have 9-12 digits (e.g. 0712345678).";
+      }
+      if (digits.length > 15) {
+        return "That phone number looks too long — check for extra digits.";
+      }
+      // Kenyan-friendly pattern — 07XXXXXXXX, 01XXXXXXXX, or +254 variants
+      if (!/^(?:0|254|\+254)?(7|1)\d{8}$/.test(v.replace(/\s+/g, ""))) {
+        return "Use a Safaricom number: 07XXXXXXXX, 01XXXXXXXX, or +254XXXXXXXXX.";
+      }
+      return null;
+    }
+    return null;
+  }
 
   // Restore token from localStorage on mount so refreshes / return visits
   // keep working. Keyed by orderId (set once we have one).
@@ -421,19 +465,25 @@ export default function ServiceOrderFlow() {
       return;
     }
     // Guest checkout: name/email/phone all required (server double-validates).
-    // We front-load the check so the user sees the error inline before waiting
-    // for a network round-trip.
+    // 2026-10 fix: switched from one-at-a-time destructive toasts to inline
+    // per-field red error text + red borders. Catches ALL errors at once,
+    // highlights the specific field, and scrolls the first errored one into
+    // view. Fixes the "user hits submit 6 times with no idea what's wrong"
+    // leak Tony caught in logs.
     if (isAnonymous) {
-      if (!guestName.trim() || !guestEmail.trim() || !guestPhone.trim()) {
-        toast({
-          title: "A few quick details",
-          description: "Please enter your name, email, and phone so we can email you your finished document.",
-          variant: "destructive",
-        });
-        return;
-      }
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail.trim())) {
-        toast({ title: "Check your email", description: "That email doesn't look right — please double-check it.", variant: "destructive" });
+      const nextErrors = {
+        guestName:  validateGuestField("guestName",  guestName)  ?? undefined,
+        guestEmail: validateGuestField("guestEmail", guestEmail) ?? undefined,
+        guestPhone: validateGuestField("guestPhone", guestPhone) ?? undefined,
+      };
+      setFieldErrors(nextErrors);
+      const firstBrokenField =
+        nextErrors.guestName  ? guestNameRef  :
+        nextErrors.guestEmail ? guestEmailRef :
+        nextErrors.guestPhone ? guestPhoneRef : null;
+      if (firstBrokenField) {
+        firstBrokenField.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+        firstBrokenField.current?.focus({ preventScroll: true });
         return;
       }
     }
@@ -548,6 +598,32 @@ export default function ServiceOrderFlow() {
           const returnTo = encodeURIComponent(window.location.pathname + window.location.search);
           setTimeout(() => navigate(`/account/verify?returnTo=${returnTo}`), 1200);
           return;
+        }
+        // 2026-10 (Tony's audit): if the server returned a 400 with
+        // missingFields metadata OR an email/phone-shaped message, surface
+        // the exact field inline instead of just a generic error toast.
+        if (res.status === 400) {
+          const serverErrors: typeof fieldErrors = {};
+          if (data?.missingFields?.guestName)  serverErrors.guestName  = "Please add your full name.";
+          if (data?.missingFields?.guestEmail) serverErrors.guestEmail = "Please add your email.";
+          if (data?.missingFields?.guestPhone) serverErrors.guestPhone = "Please add your phone number.";
+          const msg = String(data?.message ?? "");
+          if (/email/i.test(msg) && !serverErrors.guestEmail) {
+            serverErrors.guestEmail = msg;
+          }
+          if (/phone/i.test(msg) && !serverErrors.guestPhone) {
+            serverErrors.guestPhone = msg;
+          }
+          if (Object.keys(serverErrors).length > 0) {
+            setFieldErrors((prev) => ({ ...prev, ...serverErrors }));
+            const firstBrokenField =
+              serverErrors.guestName  ? guestNameRef  :
+              serverErrors.guestEmail ? guestEmailRef :
+              serverErrors.guestPhone ? guestPhoneRef : null;
+            firstBrokenField?.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+            firstBrokenField?.current?.focus({ preventScroll: true });
+            return; // swallow — the inline red text IS the user-visible error
+          }
         }
         throw new Error(data?.message || "Could not create order.");
       }
@@ -905,44 +981,92 @@ export default function ServiceOrderFlow() {
                       </p>
                     </div>
                   </div>
+                  {/* 2026-10 fix: inline field errors — red border on the
+                      broken input + red helper text below. Clears on typing,
+                      re-validates on blur. */}
                   <div className="grid gap-3 sm:grid-cols-3">
                     <div>
                       <Label htmlFor="guest-name" className="text-xs">Full name</Label>
                       <Input
                         id="guest-name"
+                        ref={guestNameRef}
                         type="text"
                         autoComplete="name"
                         placeholder="Jane Wanjiku"
                         value={guestName}
-                        onChange={(e) => setGuestName(e.target.value)}
+                        onChange={(e) => {
+                          setGuestName(e.target.value);
+                          if (fieldErrors.guestName) setFieldErrors((s) => ({ ...s, guestName: undefined }));
+                        }}
+                        onBlur={(e) => {
+                          const err = validateGuestField("guestName", e.target.value);
+                          setFieldErrors((s) => ({ ...s, guestName: err ?? undefined }));
+                        }}
+                        aria-invalid={!!fieldErrors.guestName}
+                        className={fieldErrors.guestName ? "border-red-500 focus-visible:ring-red-500" : ""}
                         data-testid="input-guest-name"
                       />
+                      {fieldErrors.guestName && (
+                        <p className="text-xs text-red-600 mt-1" data-testid="error-guest-name">
+                          {fieldErrors.guestName}
+                        </p>
+                      )}
                     </div>
                     <div>
                       <Label htmlFor="guest-email" className="text-xs">Email (for delivery)</Label>
                       <Input
                         id="guest-email"
+                        ref={guestEmailRef}
                         type="email"
                         autoComplete="email"
                         inputMode="email"
                         placeholder="you@example.com"
                         value={guestEmail}
-                        onChange={(e) => setGuestEmail(e.target.value)}
+                        onChange={(e) => {
+                          setGuestEmail(e.target.value);
+                          if (fieldErrors.guestEmail) setFieldErrors((s) => ({ ...s, guestEmail: undefined }));
+                        }}
+                        onBlur={(e) => {
+                          const err = validateGuestField("guestEmail", e.target.value);
+                          setFieldErrors((s) => ({ ...s, guestEmail: err ?? undefined }));
+                        }}
+                        aria-invalid={!!fieldErrors.guestEmail}
+                        className={fieldErrors.guestEmail ? "border-red-500 focus-visible:ring-red-500" : ""}
                         data-testid="input-guest-email"
                       />
+                      {fieldErrors.guestEmail && (
+                        <p className="text-xs text-red-600 mt-1" data-testid="error-guest-email">
+                          {fieldErrors.guestEmail}
+                        </p>
+                      )}
                     </div>
                     <div>
                       <Label htmlFor="guest-phone" className="text-xs">Phone (for M-Pesa)</Label>
                       <Input
                         id="guest-phone"
+                        ref={guestPhoneRef}
                         type="tel"
                         autoComplete="tel"
                         inputMode="tel"
                         placeholder="0712345678"
                         value={guestPhone}
-                        onChange={(e) => setGuestPhone(e.target.value)}
+                        onChange={(e) => {
+                          setGuestPhone(e.target.value);
+                          if (fieldErrors.guestPhone) setFieldErrors((s) => ({ ...s, guestPhone: undefined }));
+                        }}
+                        onBlur={(e) => {
+                          const err = validateGuestField("guestPhone", e.target.value);
+                          setFieldErrors((s) => ({ ...s, guestPhone: err ?? undefined }));
+                        }}
+                        aria-invalid={!!fieldErrors.guestPhone}
+                        className={fieldErrors.guestPhone ? "border-red-500 focus-visible:ring-red-500" : ""}
                         data-testid="input-guest-phone"
                       />
+                      {fieldErrors.guestPhone && (
+                        <p className="text-xs text-red-600 mt-1" data-testid="error-guest-phone">
+                          {fieldErrors.guestPhone}
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>
