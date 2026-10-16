@@ -137,7 +137,7 @@ export function DashboardCanadaCard() {
               <div className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-red-700 dark:text-red-300">
                 {isPaid
                   ? <>{angle.cta} <ArrowRight className="h-3 w-3" /></>
-                  : <>Upgrade to unlock — from KES 99 <ArrowRight className="h-3 w-3" /></>}
+                  : <>Subscribers only — unlock from KES 1,000 <ArrowRight className="h-3 w-3" /></>}
               </div>
             </div>
           </div>

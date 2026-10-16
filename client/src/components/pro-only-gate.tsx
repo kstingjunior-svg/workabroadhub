@@ -20,7 +20,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Lock, Sparkles, CheckCircle2, Loader2, ArrowRight, Zap, Crown } from "lucide-react";
+import { Lock, Sparkles, CheckCircle2, Loader2, ArrowRight, Crown } from "lucide-react";
 
 const PAID_TIERS = new Set(["trial", "basic", "monthly", "yearly", "pro", "pro_referral"]);
 
@@ -102,26 +102,8 @@ export function ProOnlyGate({ featureName, pitch, bullets, returnTo, children }:
           <h2 className="font-bold mb-3 flex items-center gap-2">
             <Crown className="h-4 w-4 text-amber-600" /> Pick a plan that fits
           </h2>
-          <div className="grid md:grid-cols-3 gap-3">
-            <Card className="border-2 hover:border-blue-300 transition-colors">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2 mb-1">
-                  <Zap className="h-4 w-4 text-blue-600" />
-                  <div className="font-bold text-sm">24-hour Trial</div>
-                </div>
-                <div className="text-2xl font-bold tabular-nums">KES 99</div>
-                <div className="text-[11px] text-muted-foreground mb-3">Full access for 24 hours</div>
-                <ul className="text-xs space-y-1 mb-3">
-                  <li>✓ All Pro features</li>
-                  <li>✓ Canada Express Entry hub</li>
-                  <li>✓ Test before committing</li>
-                </ul>
-                <Link href={`/pricing${returnTo ? `?return=${encodeURIComponent(returnTo)}` : ""}`}>
-                  <Button size="sm" variant="outline" className="w-full">Start trial</Button>
-                </Link>
-              </CardContent>
-            </Card>
-
+          {/* 2026-10: KES 99 trial withdrawn — only Monthly + Yearly offered. */}
+          <div className="grid md:grid-cols-2 gap-3">
             <Card className="border-2 border-red-300 dark:border-red-700 bg-red-50/40 dark:bg-red-950/20 relative">
               <Badge className="absolute -top-2 left-3 bg-red-600 text-white text-[10px]">Most popular</Badge>
               <CardContent className="p-4">
