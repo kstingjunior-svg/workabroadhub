@@ -578,7 +578,10 @@ export function AuthModal({
             "X-CSRF-Token": csrfToken,
           },
           credentials: "include",
-          body: JSON.stringify({ code: clean }),
+          // 2026-10: send the email we know belongs to the pending
+          // verification so the server can resolve the user even if the
+          // session cookie got dropped between signup and verification.
+          body: JSON.stringify({ code: clean, email }),
         },
       );
       const data = await res.json().catch(() => ({}));

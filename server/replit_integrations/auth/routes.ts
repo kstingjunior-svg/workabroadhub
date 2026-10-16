@@ -1028,9 +1028,61 @@ export function registerAuthRoutes(app: Express) {
   });
 
   app.post("/api/auth/verify-email", async (req: Request, res: Response) => {
-    const userId = getSessionUserId(req);
-    if (!userId) return res.status(401).json({ message: "Please sign in first." });
-    const code = String(req.body?.code ?? "");
+    // 2026-10 (Tony: Lawrence Menya stuck in verify loop for 2hrs). The
+    // old handler required a session cookie — but users commonly open the
+    // verification email on a different device/tab, or the session drops
+    // between signup and verification, which left them with no recovery
+    // path. The 6-digit code is itself proof of email ownership (only
+    // someone who read the inbox can produce it), so we accept the code
+    // alone and resolve the user from it. Session is still used as a
+    // hint when present; falls back to looking up the user by the code's
+    // hash + the hinted email in the request body.
+    const code = String(req.body?.code ?? "").trim();
+    const hintedEmail = String(req.body?.email ?? "").trim().toLowerCase();
+    if (!/^\d{6}$/.test(code)) {
+      return res.status(400).json({ message: "Enter the 6-digit code from your email." });
+    }
+
+    let userId = getSessionUserId(req);
+
+    // Session missing — look up the user by the code hash + optional email hint.
+    if (!userId) {
+      try {
+        const { sha256 } = await import("../../services/identityVerification");
+        const codeHash = sha256(code);
+        const { rows } = await pool.query<{ user_id: string; email: string }>(
+          `SELECT vc.user_id, u.email
+             FROM verification_codes vc
+             JOIN users u ON u.id = vc.user_id
+            WHERE vc.channel = 'email'
+              AND vc.code_hash = $1
+              AND vc.used_at IS NULL
+              AND vc.expires_at > NOW()
+              ${hintedEmail ? "AND LOWER(u.email) = $2" : ""}
+            ORDER BY vc.created_at DESC
+            LIMIT 1`,
+          hintedEmail ? [codeHash, hintedEmail] : [codeHash],
+        );
+        if (rows[0]) {
+          userId = rows[0].user_id;
+          // Opportunistically re-establish the session so subsequent
+          // requests from this tab are authenticated.
+          try {
+            await setSessionUserId(req, userId);
+          } catch { /* session store flaky — the verify itself still works */ }
+        }
+      } catch (err: any) {
+        console.warn("[Auth][verify-email] sessionless lookup failed:", err?.message);
+      }
+    }
+
+    if (!userId) {
+      return res.status(400).json({
+        message: "That code doesn't match any pending verification. It may have expired or been replaced by a newer code — tap Resend to get a fresh one.",
+        reason: "code_not_found",
+      });
+    }
+
     const result = await verifyCode(userId, "email", code);
     if (!result.ok) return res.status(400).json({ message: result.message, reason: result.reason });
     res.json({ ok: true, message: result.message });

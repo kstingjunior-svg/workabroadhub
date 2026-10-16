@@ -216,7 +216,7 @@ export default function AccountVerifyPage() {
     }
     setEmailVerifying(true);
     try {
-      await jsonPost("/api/auth/verify-email", { code: codeToSubmit });
+      await jsonPost("/api/auth/verify-email", { code: codeToSubmit, email: status?.email });
       // 2026-08 (Tony's "verify not responsive" report): force the user
       // object to re-fetch so the banner + Pro gates + Nav all see
       // emailVerified=true immediately. Without this, react-query's 2 min

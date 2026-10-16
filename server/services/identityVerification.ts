@@ -25,7 +25,10 @@ const MAX_ATTEMPTS = 5;
 // still preventing pure abuse.
 const MAX_CODES_PER_HOUR = 6;
 
-function sha256(s: string): string {
+// 2026-10 (sessionless verify): exported so the /verify-email handler
+// can hash a submitted 6-digit code and look up the row without needing
+// a session cookie.
+export function sha256(s: string): string {
   return crypto.createHash("sha256").update(s).digest("hex");
 }
 
