@@ -301,23 +301,22 @@ export default function KenyaCareers() {
           </p>
           {/* 2026-06 SAFETY: honest disclosure in the hero. Every listing is
               labelled "Sample" until the employer onboards. No misrepresentation. */}
-          <p className="text-emerald-100/90 text-xs mt-2 max-w-md mx-auto">
-            All current listings are samples — we're onboarding employers now. Tap "Notify me" on any role to be alerted when real applications open.
-          </p>
+          {/* 2026-10 (Tony, pre-outreach): disclosure promoted from small print
+              to a clear banner, and hero stats reworded so nothing implies
+              these employers are hiring through us yet. */}
+          <div className="mt-4 mx-auto max-w-xl rounded-xl bg-white/15 border border-white/30 px-4 py-3 text-sm text-white">
+            <strong>Heads up:</strong> the employers below are <strong>not yet WorkAbroad Hub partners</strong>.
+            The roles shown are sample listings based on typical openings. Tap "Notify me" and we'll alert you
+            when an employer joins and posts real vacancies.
+          </div>
 
           {stats && (
-            <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm pt-2 text-emerald-50">
-              <span><strong className="text-white">{stats.totalJobs}</strong> open positions</span>
+            <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm pt-3 text-emerald-50">
+              <span><strong className="text-white">{stats.totalJobs}</strong> sample roles</span>
               <span className="opacity-50">·</span>
-              <span><strong className="text-white">{stats.totalEmployers}</strong> employers</span>
+              <span><strong className="text-white">{stats.totalEmployers}</strong> employers we're inviting</span>
               <span className="opacity-50">·</span>
               <span><strong className="text-white">{stats.totalCounties}</strong> counties</span>
-              {stats.totalVacancies > 0 && (
-                <>
-                  <span className="opacity-50">·</span>
-                  <span><strong className="text-white">{stats.totalVacancies}</strong> vacancies</span>
-                </>
-              )}
             </div>
           )}
         </div>
@@ -353,9 +352,9 @@ export default function KenyaCareers() {
           <section className="mt-6">
             <div className="flex items-baseline justify-between mb-3">
               <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-                Featured employers
+                Employers we're inviting
               </h2>
-              <span className="text-xs text-muted-foreground">{employers.length} on the platform</span>
+              <span className="text-xs text-muted-foreground">Not yet partners · {employers.length} invited</span>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
               {employers.map((e) => (
@@ -374,8 +373,11 @@ export default function KenyaCareers() {
                       <BadgeCheck className="h-3.5 w-3.5 text-emerald-600 shrink-0" aria-label="Verified employer" />
                     )}
                   </div>
+                  {/* 2026-10: "X open" removed — counts were sample listings
+                      and implied real vacancies. Verified tick only shows
+                      once an employer actually claims their page. */}
                   <div className="text-[10px] text-muted-foreground mb-2">
-                    {e.jobCount} open · {e.industry ?? "—"}
+                    {e.verified ? `${e.jobCount} open` : "Notify me when they hire"} · {e.industry ?? "—"}
                   </div>
                   <div className="flex items-center gap-1">
                     <button

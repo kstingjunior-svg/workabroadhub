@@ -183,6 +183,12 @@ export default function KenyaCareersCompany() {
                 {company.industry && (
                   <p className="text-sm text-muted-foreground mt-1">{company.industry}</p>
                 )}
+                {/* 2026-10: honest status for employers who haven't joined. */}
+                {!company.verified && (
+                  <p className="text-xs mt-2 inline-block rounded-md bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 px-2 py-1">
+                    {company.name} is not yet a WorkAbroad Hub partner. Roles below are samples, not live vacancies.
+                  </p>
+                )}
                 {company.headquarters.county && (
                   <p className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1">
                     <MapPin className="h-3 w-3" /> Headquarters: {company.headquarters.county}
@@ -310,7 +316,7 @@ export default function KenyaCareersCompany() {
         <Card className="mt-4">
           <CardContent className="p-5">
             <h2 className="font-semibold mb-3 flex items-center gap-1.5">
-              <Briefcase className="h-4 w-4" /> Open positions ({company.jobs.length})
+              <Briefcase className="h-4 w-4" /> {company.verified ? "Open positions" : "Sample roles"} ({company.jobs.length})
             </h2>
             {company.jobs.length === 0 ? (
               <div className="text-center py-6 text-muted-foreground text-sm">
