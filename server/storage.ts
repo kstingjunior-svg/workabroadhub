@@ -1646,9 +1646,13 @@ export class DatabaseStorage implements IStorage {
       // top. "Extend on renewal" is correct behaviour for a NEW payment but
       // wrong for a replayed callback of the SAME payment.
       if (paymentId) {
+        // 2026-10 v2: ANY status, not just 'active'. An expired trial must
+        // never be revived by replaying its payment (reconciler loop gave
+        // KES 99 trials up to 7 days of access).
         const { rows: dupeRows } = await client.query<UserSubscription>(
           `SELECT * FROM user_subscriptions
-            WHERE user_id = $1 AND payment_id = $2 AND status = 'active'
+            WHERE user_id = $1 AND payment_id = $2
+            ORDER BY created_at ASC
             LIMIT 1`,
           [userId, paymentId],
         );

@@ -103,6 +103,16 @@ export async function runPaidButFreeReconciler(): Promise<SweepResult> {
         AND p.created_at > NOW() - INTERVAL '${MAX_LOOKBACK_DAYS} days'
         AND u.is_active = true
         AND COALESCE(u.plan, 'free') = 'free'
+        -- 2026-10 (Tony: "users still getting 24h for KES 99"). CRITICAL:
+        -- only rescue payments that were NEVER activated. Previously a
+        -- trial that legitimately expired after 24h (plan → 'free') looked
+        -- identical to "paid but never activated", so this sweep re-
+        -- activated it every day for the 7-day lookback — one KES 99
+        -- payment = up to 7 days of access. If ANY subscription row (any
+        -- status) already references this payment, it was delivered.
+        AND NOT EXISTS (
+          SELECT 1 FROM user_subscriptions us WHERE us.payment_id = p.id
+        )
       ORDER BY p.created_at DESC
       LIMIT ${RECOVERY_BATCH_CAP}
     `);
@@ -202,6 +212,12 @@ export async function recoverMyPayment(userId: string): Promise<{ recovered: boo
       AND p.plan_id IN ('trial', 'basic', 'monthly', 'yearly', 'pro', 'pro_referral')
       AND p.created_at > NOW() - INTERVAL '24 hours'
       AND COALESCE(u.plan, 'free') = 'free'
+      -- 2026-10: same guard as the sweep — never re-activate a payment
+      -- that already produced a subscription (stops "recover-mine" being
+      -- used to restart an expired trial).
+      AND NOT EXISTS (
+        SELECT 1 FROM user_subscriptions us WHERE us.payment_id = p.id
+      )
     ORDER BY p.created_at DESC
     LIMIT 5
   `, [userId]);
