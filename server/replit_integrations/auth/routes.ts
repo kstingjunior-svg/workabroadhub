@@ -120,20 +120,61 @@ export function registerAuthRoutes(app: Express) {
 
       const [existing] = await db.select().from(users).where(eq(users.email, cleanEmail)).limit(1);
       if (existing) {
-        return res.status(409).json({ message: "An account with that email already exists. Try signing in instead." });
+        return res.status(409).json({
+          message: "An account with that email already exists. Try signing in instead.",
+          code: "EMAIL_TAKEN",
+        });
       }
 
-      // Duplicate phone check — if we have an E.164, refuse a second account on it.
+      // 2026-10 (Tony's duplicate-cleanup follow-up): check for a duplicate
+      // phone using the SAME normalization as the DB unique index — last 9
+      // digits of digit-stripped phone, matched against BOTH the legacy
+      // `phone` column AND the newer `phone_number_e164`. Covers users who
+      // typed the same number in different formats (0712..., 254712...,
+      // +254712...). Returns a masked hint of the registered email so the
+      // user knows which account to sign into.
       if (phoneNormalized?.ok) {
-        const [existingPhone] = await db
-          .select({ id: users.id })
-          .from(users)
-          .where(eq(users.phoneNumberE164, phoneNormalized.e164))
-          .limit(1);
-        if (existingPhone) {
-          return res.status(409).json({
-            message: "An account with that mobile number already exists. Try signing in instead.",
-          });
+        try {
+          const digitsOnly = phoneNormalized.e164.replace(/\D/g, "");
+          const last9 = digitsOnly.slice(-9);
+          // Skip the known-placeholder slot (people entering a fake number)
+          // and Tony's admin pair.
+          if (last9 && last9.length === 9 && last9 !== "712345678" && last9 !== "704454609") {
+            const { rows } = await pool.query<{ id: string; email: string }>(
+              `SELECT id, email FROM users
+                WHERE deleted_at IS NULL
+                  AND email NOT LIKE 'merged-%@merged.workabroadhub.local'
+                  AND email NOT LIKE 'deleted-%@deleted.workabroadhub.local'
+                  AND RIGHT(regexp_replace(COALESCE(phone,''), '[^0-9]', '', 'g'), 9) = $1
+                LIMIT 1`,
+              [last9],
+            );
+            const existingPhone = rows[0];
+            if (existingPhone) {
+              // Mask the email → "d******i@gmail.com"
+              const maskEmail = (e: string) => {
+                const [local, domain] = e.split("@");
+                if (!local || !domain) return e;
+                const head = local.slice(0, 1);
+                const tail = local.length > 1 ? local.slice(-1) : "";
+                const stars = "*".repeat(Math.max(1, Math.min(8, local.length - 2)));
+                return `${head}${stars}${tail}@${domain}`;
+              };
+              return res.status(409).json({
+                message:
+                  "That mobile number already has an account. Did you mean to sign in with " +
+                  maskEmail(existingPhone.email) + "?",
+                code:        "PHONE_TAKEN",
+                maskedEmail: maskEmail(existingPhone.email),
+                suggestSignIn: true,
+              });
+            }
+          }
+        } catch (dupErr: any) {
+          console.warn("[Auth][register] phone dup check failed non-fatally:", dupErr?.message);
+          // Fail OPEN — the DB unique index is the real guard; this is just
+          // for a friendlier error message. If the check breaks we fall
+          // through and the index will catch it with a 500 at insert time.
         }
       }
 
@@ -181,30 +222,57 @@ export function registerAuthRoutes(app: Express) {
       // ~120ms — 4× speedup. Existing cost-12 hashes still verify correctly
       // because bcrypt stores the cost in the hash itself.
       const passwordHash = await bcrypt.hash(password, 10);
-      const [created] = await db
-        .insert(users)
-        .values({
-          email: cleanEmail,
-          passwordHash,
-          authMethod: "email",
-          firstName,
-          lastName,
-          // Structured phone fields (populated when the user provided a valid one)
-          ...(phoneNormalized?.ok ? {
-            phone:           phoneNormalized.e164,             // legacy column, keep in sync
-            phoneNumberE164: phoneNormalized.e164,
-            countryIso:      phoneNormalized.countryIso,
-            dialCode:        phoneNormalized.dialCode,
-            nationalNumber:  phoneNormalized.national,
-            country:         phoneNormalized.countryName,     // populate the human-readable country too
-          } : {}),
-          // 2026-09 (Tony's referral audit): link the new user to the
-          // referrer. Downstream commission code in routes.ts ~L5967
-          // reads users.referred_by and matches it against every other
-          // user's referral_code to compute payouts.
-          ...(validReferrerCode ? { referredBy: validReferrerCode } : {}),
-        })
-        .returning();
+      // 2026-10 (Tony's duplicate-cleanup follow-up): wrap the INSERT so a
+      // race-condition unique-constraint violation (same phone registered
+      // by two simultaneous signup attempts) comes back as a friendly 409
+      // instead of a bare 500. The pre-check above handles the common case;
+      // this is the defense-in-depth net for the race.
+      let created: typeof users.$inferSelect | undefined;
+      try {
+        [created] = await db
+          .insert(users)
+          .values({
+            email: cleanEmail,
+            passwordHash,
+            authMethod: "email",
+            firstName,
+            lastName,
+            // Structured phone fields (populated when the user provided a valid one)
+            ...(phoneNormalized?.ok ? {
+              phone:           phoneNormalized.e164,             // legacy column, keep in sync
+              phoneNumberE164: phoneNormalized.e164,
+              countryIso:      phoneNormalized.countryIso,
+              dialCode:        phoneNormalized.dialCode,
+              nationalNumber:  phoneNormalized.national,
+              country:         phoneNormalized.countryName,     // populate the human-readable country too
+            } : {}),
+            // 2026-09 (Tony's referral audit): link the new user to the
+            // referrer. Downstream commission code in routes.ts ~L5967
+            // reads users.referred_by and matches it against every other
+            // user's referral_code to compute payouts.
+            ...(validReferrerCode ? { referredBy: validReferrerCode } : {}),
+          })
+          .returning();
+      } catch (insertErr: any) {
+        const code = String(insertErr?.code ?? insertErr?.cause?.code ?? "");
+        const msg  = String(insertErr?.message ?? "");
+        // 23505 = unique_violation. Could be either the email unique
+        // constraint OR our new phone unique index.
+        if (code === "23505" || /duplicate key|unique/i.test(msg)) {
+          if (/email/i.test(msg)) {
+            return res.status(409).json({
+              message: "An account with that email already exists. Try signing in instead.",
+              code: "EMAIL_TAKEN",
+            });
+          }
+          return res.status(409).json({
+            message: "That mobile number already has an account. Try signing in with the email you used before.",
+            code: "PHONE_TAKEN",
+            suggestSignIn: true,
+          });
+        }
+        throw insertErr;
+      }
 
       if (!created) {
         return res.status(500).json({ message: "Could not create your account. Please try again." });

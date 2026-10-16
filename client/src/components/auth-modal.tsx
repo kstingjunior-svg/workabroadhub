@@ -406,6 +406,20 @@ export function AuthModal({
           return;
         }
 
+        // 2026-10 (Tony's duplicate-cleanup follow-up): if the server
+        // tells us this phone / email already has an account, flip the
+        // user to the Login tab with a prefilled hint instead of showing
+        // a dead-end error. One-tap recovery.
+        if (data.code === "PHONE_TAKEN" || data.code === "EMAIL_TAKEN" || data.suggestSignIn === true) {
+          setServerError(data.message || "That account already exists — sign in instead.");
+          // Flip to login tab. If the server told us the masked email,
+          // leave the user's typed email in place so they can edit it;
+          // the masked hint stays visible in the error banner.
+          setLoading(false);
+          setTimeout(() => setTab("login"), 400);
+          return;
+        }
+
         setServerError(
           data.message ||
             "Something went wrong. Please try again."
