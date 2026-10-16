@@ -7,11 +7,10 @@ const APP_NAME = "WorkAbroad Hub";
 // static assets and refetch after the big anonymous-checkout deploy —
 // stops "Just a small detour" from surfacing to users whose in-app browser
 // (WhatsApp/Messenger) was still holding pre-deploy chunk hashes.
-// 2026-10 (Tony: "KES 99 trial still showing after I removed it"). Bumping
-// cache version again — the landing-final-cta build is new, but every
-// visitor is still being served the cached JS bundle from the service
-// worker. v9 forces a purge on next page load.
-const CACHE_VERSION = "v9";
+// 2026-10 (Tony's screenshot: OTP input boxes were invisible on white
+// modal — critical signup bug). Bumping to v10 to force every PWA /
+// cached browser to pick up the new high-contrast OTP input styling.
+const CACHE_VERSION = "v10";
 const STATIC_CACHE = `workabroad-static-${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `workabroad-dynamic-${CACHE_VERSION}`;
 

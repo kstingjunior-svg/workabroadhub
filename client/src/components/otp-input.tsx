@@ -235,7 +235,12 @@ export default function OtpInput({
           onKeyDown={(e) => handleKeyDown(i, e)}
           onPaste={(e) => handlePaste(i, e)}
           onFocus={(e) => e.currentTarget.select()}
-          className="w-11 h-14 sm:w-12 sm:h-14 text-center text-2xl font-bold font-mono rounded-md border border-input bg-background text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary disabled:opacity-60 disabled:cursor-not-allowed"
+          // 2026-10 fix (Tony's screenshot: boxes invisible on white modal).
+          // Replaced the near-white `border-input` with a solid gray border
+          // and off-white fill so the 6 boxes are unmistakably visible on
+          // every background, device, and theme. Also bumped to w-12 h-14
+          // minimum and increased spacing for comfortable mobile tapping.
+          className="w-12 h-14 sm:w-14 sm:h-16 text-center text-2xl sm:text-3xl font-bold font-mono rounded-lg border-2 border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary hover:border-gray-400 dark:hover:border-gray-500 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
           aria-label={`Digit ${i + 1} of ${length}`}
           data-testid={`${testId ?? "otp"}-digit-${i}`}
         />
