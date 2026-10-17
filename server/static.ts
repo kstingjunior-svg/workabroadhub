@@ -46,9 +46,11 @@ export function installBootGate(app: Express) {
     if (req.method !== "GET" && req.method !== "HEAD") return next();
     if (GATE_SKIP.test(req.path)) return next();
     assets(req, res, () => {
-      // Not a file in dist → serve the SPA shell for page navigations only.
-      const wantsHtml = (req.headers.accept || "").includes("text/html");
-      if (!wantsHtml || path.extname(req.path)) return next();
+      // Not a file in dist → serve the SPA shell for any extensionless path
+      // (same as the normal SPA fallback). Don't require Accept: text/html —
+      // uptime monitors (Sentry) and some in-app browsers don't send it and
+      // were getting 404s on "/" during boot.
+      if (path.extname(req.path)) return next();
       res.set({
         "Cache-Control": "no-cache, no-store, must-revalidate",
         "Pragma": "no-cache",
