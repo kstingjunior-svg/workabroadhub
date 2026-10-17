@@ -148,6 +148,14 @@ export default function Landing() {
       // Clean the redirect param from the URL bar
       window.history.replaceState({}, "", window.location.pathname);
     }
+    // 2026-10 (sign-in QA): explicit ?auth=login|signup (sent by /login and
+    // /signup redirectors) always opens the modal, even with no redirect.
+    const authMode = urlParams.get("auth");
+    if (authMode === "login" || authMode === "signup") {
+      setAuthModalTab(authMode);
+      setAuthModalOpen(true);
+      window.history.replaceState({}, "", window.location.pathname);
+    }
   }, []);
   
   const features = [

@@ -758,7 +758,10 @@ export function AuthModal({
             </div>
 
             <Button
-              onClick={submitVerify}
+              // 2026-10 (sign-in QA): was onClick={submitVerify}, which passed
+              // the click event as `explicitCode` → event.replace() threw →
+              // tapping Verify silently did nothing. Call with no args.
+              onClick={() => submitVerify()}
               disabled={
                 verifying ||
                 verifyCode.replace(/\D/g, "").length !== 6
@@ -1124,6 +1127,29 @@ export function AuthModal({
                 data-testid="link-forgot-password">
                 Forgot your password?
               </Link>
+            </p>
+          )}
+          {/* 2026-10 (sign-in QA): small text switch, not the old toggle.
+              People who never registered kept hitting "Invalid email or
+              password" with no route to sign-up except closing the modal. */}
+          {tab === "login" && (
+            <p className="text-center text-sm text-muted-foreground -mt-2">
+              New here?{" "}
+              <button type="button" className="text-primary font-medium hover:underline"
+                onClick={() => { setTab("signup"); setStage("signup"); }}
+                data-testid="link-switch-to-signup">
+                Create a free account
+              </button>
+            </p>
+          )}
+          {tab === "signup" && (
+            <p className="text-center text-sm text-muted-foreground -mt-1">
+              Already have an account?{" "}
+              <button type="button" className="text-primary font-medium hover:underline"
+                onClick={() => { setTab("login"); setStage("login"); }}
+                data-testid="link-switch-to-login">
+                Sign in
+              </button>
             </p>
           )}
         </form>

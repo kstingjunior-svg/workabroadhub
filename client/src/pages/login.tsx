@@ -16,8 +16,14 @@ export default function LoginRedirect() {
     // after a successful login. Reject anything that doesn't start with a
     // single forward slash (so `//evil.com` and `https://...` are both out).
     const safe = redirect && /^\/(?![/\\])/.test(redirect) ? redirect : null;
-    const target = safe ? `/?redirect=${encodeURIComponent(safe)}` : "/";
-    navigate(target, { replace: true });
+    // 2026-10 (sign-in QA): the old version sent plain "/" with no flag, so
+    // /login, /signup and every "Back to sign in" link (reset-password,
+    // forgot-password, employer pages) just dumped users on the homepage
+    // with no form open. Pass auth=login|signup so landing.tsx opens it.
+    const mode = window.location.pathname.startsWith("/signup") ? "signup" : "login";
+    const qs = new URLSearchParams({ auth: mode });
+    if (safe) qs.set("redirect", safe);
+    navigate(`/?${qs.toString()}`, { replace: true });
   }, []);
   return null;
 }
