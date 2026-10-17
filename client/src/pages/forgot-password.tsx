@@ -8,12 +8,18 @@ export default function ForgotPassword() {
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
+  // 2026-10: honest "no account" answer + masked destination on success.
+  const [noAccount, setNoAccount] = useState<{ message: string; hint: string | null } | null>(null);
+  const [sentMsg, setSentMsg] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    if (!email.includes("@") || !email.includes(".")) {
-      setError("Please enter a valid email address.");
+    setNoAccount(null);
+    const v = email.trim();
+    const looksPhone = !v.includes("@") && v.replace(/\D/g, "").length >= 9;
+    if (!looksPhone && (!v.includes("@") || !v.includes("."))) {
+      setError("Enter your email address or the phone number you signed up with.");
       return;
     }
     setLoading(true);
@@ -22,13 +28,18 @@ export default function ForgotPassword() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ email: email.trim().toLowerCase() }),
+        body: JSON.stringify({ identifier: v.toLowerCase() }),
       });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
+      const data = await res.json().catch(() => ({}));
+      if (data?.noAccount) {
+        setNoAccount({ message: data.message, hint: data.similarAccountHint ?? null });
+        return;
+      }
+      if (!res.ok || data?.ok === false) {
         setError(data.message || "Something went wrong. Please try again.");
         return;
       }
+      setSentMsg(data.message || "");
       setSent(true);
     } catch {
       setError("Network error. Please check your connection and try again.");
@@ -69,7 +80,7 @@ export default function ForgotPassword() {
               Reset your password
             </h1>
             <p className="text-[#5A6A7A] text-sm">
-              Enter your email and we'll send instructions to reset your password.
+              Enter your email or phone number. We'll send a reset link to the email on your account.
             </p>
           </div>
 
@@ -80,7 +91,7 @@ export default function ForgotPassword() {
               </div>
               <h2 className="text-lg font-semibold text-[#1A2530] mb-2">Check your inbox</h2>
               <p className="text-sm text-[#5A6A7A] mb-6">
-                If <strong>{email}</strong> has an account, you'll receive reset instructions shortly.
+                {sentMsg || "Reset link sent. Check your inbox (and spam)."}
               </p>
               <button
                 onClick={() => navigate("/login")}
@@ -101,18 +112,36 @@ export default function ForgotPassword() {
                 </div>
               )}
 
+              {noAccount && (
+                <div className="bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3 rounded-[8px] text-sm space-y-3" data-testid="forgot-no-account">
+                  <div>{noAccount.message}</div>
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/signup${email.includes("@") ? `?email=${encodeURIComponent(email.trim().toLowerCase())}` : ""}`)}
+                    className="w-full py-2.5 bg-[#1A2530] text-white font-semibold rounded-[10px] hover:bg-[#2A3A4A]"
+                    data-testid="btn-forgot-create-account"
+                  >
+                    Create my free account
+                  </button>
+                </div>
+              )}
+
               <div>
                 <label className="block text-sm font-medium text-[#1A2530] mb-1.5">
-                  Email address <span className="text-red-500">*</span>
+                  Email or phone number <span className="text-red-500">*</span>
                 </label>
                 <input
-                  type="email"
+                  type="text"
+                  inputMode="email"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                   value={email}
                   onChange={e => setEmail(e.target.value)}
-                  placeholder="you@example.com"
+                  placeholder="grace@gmail.com or 0712 345 678"
                   disabled={loading}
                   required
-                  autoComplete="email"
+                  autoComplete="username"
                   data-testid="input-forgot-email"
                   className="w-full px-[14px] py-[14px] border-[1.5px] border-[#E2DDD5] rounded-[12px] text-base text-[#1A2530] placeholder:text-[#B0BAC4] focus:outline-none focus:border-[#1A2530] disabled:opacity-60 transition-colors"
                 />

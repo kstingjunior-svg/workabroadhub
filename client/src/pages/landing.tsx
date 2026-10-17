@@ -39,6 +39,7 @@ export default function Landing() {
   const { user: currentUser } = useAuth();
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authModalTab, setAuthModalTab] = useState<"login" | "signup">("signup");
+  const [authPrefillEmail, setAuthPrefillEmail] = useState<string>("");
   const [authRedirectPath, setAuthRedirectPath] = useState<string | undefined>(undefined);
   const [submitModalOpen, setSubmitModalOpen] = useState(false);
   // 2026-09 (mobile overhaul): the nav bar (logo + full link list + language
@@ -152,6 +153,8 @@ export default function Landing() {
     // /signup redirectors) always opens the modal, even with no redirect.
     const authMode = urlParams.get("auth");
     if (authMode === "login" || authMode === "signup") {
+      const pre = urlParams.get("email");
+      if (pre && pre.includes("@")) setAuthPrefillEmail(pre);
       setAuthModalTab(authMode);
       setAuthModalOpen(true);
       window.history.replaceState({}, "", window.location.pathname);
@@ -2084,6 +2087,7 @@ export default function Landing() {
         open={authModalOpen}
         onClose={() => setAuthModalOpen(false)}
         defaultTab={authModalTab}
+        prefillEmail={authPrefillEmail}
         redirectPath={authRedirectPath}
       />
     </div>

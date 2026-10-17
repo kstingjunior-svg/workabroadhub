@@ -23,6 +23,8 @@ export default function LoginRedirect() {
     const mode = window.location.pathname.startsWith("/signup") ? "signup" : "login";
     const qs = new URLSearchParams({ auth: mode });
     if (safe) qs.set("redirect", safe);
+    const prefill = params.get("email");
+    if (prefill && prefill.includes("@") && prefill.length < 255) qs.set("email", prefill);
     navigate(`/?${qs.toString()}`, { replace: true });
   }, []);
   return null;

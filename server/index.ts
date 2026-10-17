@@ -632,6 +632,10 @@ app.use("/api/auth/forgot-password", authLimiter);
 app.use("/api/auth/reset-password", authLimiter);
 app.use("/api/auth/send-email-code", authLimiter);
 app.use("/api/auth/send-phone-code", authLimiter);
+// 2026-10: passwordless sign-in code endpoints + sessionless verify.
+app.use("/api/auth/login-code/request", authLimiter);
+app.use("/api/auth/login-code/verify", authLimiter);
+app.use("/api/auth/verify-email", authLimiter);
 app.use("/api/mpesa/callback", mpesaCallbackLimiter);
 app.use("/api/payments/mpesa/callback", mpesaCallbackLimiter);
 // Payment-initiate endpoints — block STK-push harassment / brute force

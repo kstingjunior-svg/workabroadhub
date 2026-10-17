@@ -31,6 +31,8 @@ interface AuthModalProps {
   onClose: () => void;
   defaultTab?: Tab;
   redirectPath?: string;
+  /** 2026-10: prefill the email box (e.g. "Create account with this email"). */
+  prefillEmail?: string;
 }
 
 interface FieldErrors {
@@ -142,6 +144,7 @@ export function AuthModal({
   onClose,
   defaultTab = "login",
   redirectPath,
+  prefillEmail,
 }: AuthModalProps) {
   const [tab, setTab] =
     useState<Tab>(defaultTab);
@@ -220,6 +223,15 @@ export function AuthModal({
   const [successMsg, setSuccessMsg] =
     useState("");
 
+  // 2026-10 (Tony: "sign up is everything"): honest no-account answer with a
+  // one-tap create path, and passwordless "email me a code" sign-in.
+  const [noAccountInfo, setNoAccountInfo] = useState<{ message: string; hint: string | null } | null>(null);
+  const [codeOffer, setCodeOffer] = useState(false);
+  const [codeLogin, setCodeLogin] = useState(false);       // verify stage is a sign-in code, not signup verify
+  const [codeIdentifier, setCodeIdentifier] = useState(""); // what the user typed (email or phone)
+  const [codeMasked, setCodeMasked] = useState("");
+  const [sendingCode, setSendingCode] = useState(false);
+
   const resetForm = () => {
     setFirstName("");
     setLastName("");
@@ -229,6 +241,13 @@ export function AuthModal({
     setServerRecovery(null);
     setFieldErrors({});
     setSuccessMsg("");
+    setNoAccountInfo(null);
+    setCodeOffer(false);
+    setCodeLogin(false);
+    setCodeIdentifier("");
+    setCodeMasked("");
+    setVerifyCode("");
+    setVerifyError("");
   };
 
   // 2026-09 (Tony's "Login brings Sign Up too" fix): Login and Sign Up are
@@ -245,9 +264,10 @@ export function AuthModal({
       setTab(defaultTab);
       setStage(defaultTab);
       resetForm();
+      if (prefillEmail) setEmail(prefillEmail);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, defaultTab]);
+  }, [open, defaultTab, prefillEmail]);
 
   const validate = (): boolean => {
     const errs: FieldErrors = {};
@@ -276,10 +296,13 @@ export function AuthModal({
     // New regex catches: missing @, missing dot in domain, dot at end,
     // trailing spaces (auto-trimmed), and doubles like grace@gmail..com.
     const emailTrimmed = email.trim();
+    const loginByPhone = tab === "login" && !emailTrimmed.includes("@") && emailTrimmed.replace(/\D/g, "").length >= 9;
     if (!emailTrimmed) {
-      errs.email = "Please enter your email";
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(emailTrimmed)) {
-      errs.email = "Please enter a valid email address";
+      errs.email = tab === "login" ? "Enter your email or phone number" : "Please enter your email";
+    } else if (!loginByPhone && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(emailTrimmed)) {
+      errs.email = tab === "login"
+        ? "Enter a valid email, or the phone number you signed up with"
+        : "Please enter a valid email address";
     }
 
     if (tab === "signup") {
@@ -312,6 +335,8 @@ export function AuthModal({
     setServerError("");
     setServerRecovery(null);
     setSuccessMsg("");
+    setNoAccountInfo(null);
+    setCodeOffer(false);
 
     if (!validate()) return;
 
@@ -371,6 +396,7 @@ export function AuthModal({
                 : {}),
             }
           : {
+              identifier: email.trim(),
               email: email.trim(),
               password,
             };
@@ -410,6 +436,13 @@ export function AuthModal({
         // tells us this phone / email already has an account, flip the
         // user to the Login tab with a prefilled hint instead of showing
         // a dead-end error. One-tap recovery.
+        // 2026-10: no account → say so and offer one-tap create.
+        if (data.noAccount === true) {
+          setNoAccountInfo({ message: data.message, hint: data.similarAccountHint ?? null });
+          setLoading(false);
+          return;
+        }
+
         if (data.code === "PHONE_TAKEN" || data.code === "EMAIL_TAKEN" || data.suggestSignIn === true) {
           setServerError(data.message || "That account already exists — sign in instead.");
           // Flip to login tab. If the server told us the masked email,
@@ -424,6 +457,7 @@ export function AuthModal({
           data.message ||
             "Something went wrong. Please try again."
         );
+        if (data.offerCode === true) setCodeOffer(true);
         // 2026-06: capture the recovery breadcrumbs the server now ships
         // (forgotPasswordUrl, locked flag, supportEmail) so the error box
         // can render a clickable Reset Password button instead of dead text.
@@ -565,6 +599,55 @@ export function AuthModal({
   // close the modal + navigate to pendingDest (the same dest we would have
   // gone to had verification not been required). On failure, show the
   // error inline in the modal.
+  // 2026-10: passwordless sign-in. Sends a 6-digit code to the account's
+  // email, then reuses the verify stage UI. Works with email OR phone typed.
+  const requestLoginCode = async (opts?: { resend?: boolean }) => {
+    const ident = (opts?.resend ? codeIdentifier : email).trim();
+    if (!ident) {
+      setFieldErrors({ email: "Enter your email or phone number first" });
+      return;
+    }
+    setSendingCode(true);
+    setServerError("");
+    setServerRecovery(null);
+    setNoAccountInfo(null);
+    setVerifyError("");
+    try {
+      const apiBase = import.meta.env.VITE_API_URL || "";
+      const { csrfToken } = await (await fetch(`${apiBase}/api/csrf-token`, { credentials: "include" })).json();
+      const res = await fetch(`${apiBase}/api/auth/login-code/request`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken },
+        credentials: "include",
+        body: JSON.stringify({ identifier: ident }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (data?.noAccount) {
+        setNoAccountInfo({ message: data.message, hint: data.similarAccountHint ?? null });
+        return;
+      }
+      if (!res.ok) {
+        if (opts?.resend) setVerifyError(data?.message || "Couldn't send a code. Try again.");
+        else setServerError(data?.message || "Couldn't send a code. Try again.");
+        return;
+      }
+      const params = new URLSearchParams(window.location.search);
+      const returnTo = params.get("returnTo");
+      const isSafeReturn = returnTo && returnTo.startsWith("/") && !returnTo.startsWith("//");
+      setPendingDest((isSafeReturn ? returnTo : (redirectPath || localStorage.getItem("auth_redirect") || "/dashboard")) as string);
+      setCodeIdentifier(ident);
+      setCodeMasked(data.maskedEmail || "");
+      setCodeLogin(true);
+      setVerifyCode("");
+      setStage("verify");
+      setResendCooldown(30);
+    } catch {
+      setServerError("Network error. Please check your connection and try again.");
+    } finally {
+      setSendingCode(false);
+    }
+  };
+
   const submitVerify = async (explicitCode?: string) => {
     setVerifyError("");
     // 2026-10 fix: accept an explicit code so the OTP input's
@@ -584,7 +667,7 @@ export function AuthModal({
       );
       const { csrfToken } = await csrfRes.json();
       const res = await fetch(
-        `${apiBase}/api/auth/verify-email`,
+        codeLogin ? `${apiBase}/api/auth/login-code/verify` : `${apiBase}/api/auth/verify-email`,
         {
           method: "POST",
           headers: {
@@ -595,7 +678,7 @@ export function AuthModal({
           // 2026-10: send the email we know belongs to the pending
           // verification so the server can resolve the user even if the
           // session cookie got dropped between signup and verification.
-          body: JSON.stringify({ code: clean, email }),
+          body: JSON.stringify(codeLogin ? { code: clean, identifier: codeIdentifier } : { code: clean, email }),
         },
       );
       const data = await res.json().catch(() => ({}));
@@ -606,6 +689,13 @@ export function AuthModal({
         );
         return;
       }
+      // 2026-10: make sure the app sees the fresh session before navigating
+      // (code sign-in has no prior session; signup verify flips emailVerified).
+      try {
+        const userRes = await fetch(`${apiBase}/api/auth/user`, { credentials: "include" });
+        if (userRes.ok) queryClient.setQueryData(["/api/auth/user"], await userRes.json());
+        else if (codeLogin && data?.id) queryClient.setQueryData(["/api/auth/user"], { id: data.id, email: data.email } as any);
+      } catch { /* non-fatal */ }
       // Success — close modal + go to destination
       // 2026-08: clear localStorage AFTER navigating, so if this path also
       // races the App-level effect the redirect is still recoverable.
@@ -625,6 +715,7 @@ export function AuthModal({
   const resendCode = async () => {
     if (resendCooldown > 0) return;
     setVerifyError("");
+    if (codeLogin) { await requestLoginCode({ resend: true }); return; }
     try {
       const apiBase = import.meta.env.VITE_API_URL || "";
       const csrfRes = await fetch(
@@ -709,7 +800,7 @@ export function AuthModal({
 
           <h2 className="text-xl font-bold text-foreground mt-2">
             {stage === "verify"
-              ? "Verify your email"
+              ? (codeLogin ? "Enter your sign-in code" : "Verify your email")
               : tab === "login"
               ? "Welcome back"
               : "Create your free account"}
@@ -717,7 +808,7 @@ export function AuthModal({
 
           <p className="text-sm text-muted-foreground mt-0.5">
             {stage === "verify"
-              ? `We sent a 6-digit code to ${email}. Check your inbox and spam folder.`
+              ? `We sent a 6-digit code to ${codeLogin ? (codeMasked || "your email") : email}. Check your inbox and spam folder.`
               : tab === "login"
               ? "Sign in to access your overseas career tools"
               : "Join professionals worldwide building overseas careers"}
@@ -770,7 +861,7 @@ export function AuthModal({
               size="lg"
               data-testid="button-verify-code"
             >
-              {verifying ? "Verifying..." : "Verify & continue"}
+              {verifying ? (codeLogin ? "Signing in..." : "Verifying...") : (codeLogin ? "Sign in" : "Verify & continue")}
             </Button>
 
             <div className="text-center">
@@ -786,6 +877,19 @@ export function AuthModal({
                   : "Didn't get it? Resend code"}
               </button>
             </div>
+
+            {codeLogin && (
+              <div className="text-center">
+                <button
+                  type="button"
+                  onClick={() => { setCodeLogin(false); setStage("login"); setVerifyCode(""); setVerifyError(""); }}
+                  className="text-xs text-muted-foreground hover:underline"
+                  data-testid="button-use-password-instead"
+                >
+                  Use my password instead
+                </button>
+              </div>
+            )}
 
             <div className="text-[11px] text-muted-foreground text-center leading-relaxed">
               The code should appear on your phone within seconds as an
@@ -820,11 +924,23 @@ export function AuthModal({
 
               <div className="flex-1">
                 <div>{serverError}</div>
+                {/* 2026-10: one tap → 6-digit code → signed in. No reset link. */}
+                {codeOffer && tab === "login" && (
+                  <Button
+                    type="button"
+                    onClick={() => requestLoginCode()}
+                    disabled={sendingCode}
+                    className="mt-3 w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
+                    data-testid="button-email-me-code"
+                  >
+                    {sendingCode ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Sending code…</> : "Email me a sign-in code"}
+                  </Button>
+                )}
                 {/* 2026-06: when the server flags a recovery path, surface
                     real clickable buttons. Locked users get a prominent
                     "Reset password now" CTA — biggest unlock the founder
                     asked for: "let them smoothly log in back." */}
-                {serverRecovery?.forgotPasswordUrl && (
+                {serverRecovery?.forgotPasswordUrl && !codeOffer && (
                   <div className="mt-3 flex flex-wrap items-center gap-2">
                     <a
                       href={serverRecovery.forgotPasswordUrl}
@@ -858,6 +974,32 @@ export function AuthModal({
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {noAccountInfo && tab === "login" && (
+            <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-sm space-y-3" data-testid="box-no-account">
+              <div>{noAccountInfo.message}</div>
+              <Button
+                type="button"
+                onClick={() => {
+                  setNoAccountInfo(null);
+                  setServerError("");
+                  setPassword("");
+                  if (!email.includes("@")) setEmail("");
+                  setTab("signup");
+                  setStage("signup");
+                }}
+                className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
+                data-testid="button-create-from-no-account"
+              >
+                {email.includes("@") ? "Create my free account with this email" : "Create my free account"}
+              </Button>
+              {noAccountInfo.hint && (
+                <p className="text-xs text-amber-800">
+                  Signed up with {noAccountInfo.hint}? Type that email above instead.
+                </p>
+              )}
             </div>
           )}
 
@@ -947,7 +1089,7 @@ export function AuthModal({
 
           <div className="space-y-1.5">
             <Label htmlFor="auth-email">
-              Email address{" "}
+              {tab === "login" ? "Email or phone number" : "Email address"}{" "}
               <span className="text-red-500">
                 *
               </span>
@@ -955,14 +1097,16 @@ export function AuthModal({
 
             <Input
               id="auth-email"
-              type="email"
+              // 2026-10: login accepts email OR phone, so plain text there.
+              type={tab === "login" ? "text" : "email"}
               // 2026-07 UX: Kenya-common placeholder + mobile-optimized keyboard hints
-              placeholder="grace@gmail.com"
+              placeholder={tab === "login" ? "grace@gmail.com or 0712 345 678" : "grace@gmail.com"}
               value={email}
-              onChange={(e) =>
-                setEmail(e.target.value)
-              }
-              autoComplete="email"
+              onChange={(e) => {
+                setEmail(e.target.value);
+                if (noAccountInfo) setNoAccountInfo(null);
+              }}
+              autoComplete={tab === "login" ? "username" : "email"}
               inputMode="email"
               autoCapitalize="none"
               autoCorrect="off"
@@ -1123,9 +1267,21 @@ export function AuthModal({
 
           {tab === "login" && (
             <p className="text-center text-sm text-muted-foreground -mt-1">
-              <Link href="/forgot-password" className="text-primary hover:underline"
-                data-testid="link-forgot-password">
-                Forgot your password?
+              {/* 2026-10: "Forgot password" now signs you in with an emailed
+                  code right here — no reset link, no new password needed.
+                  The classic reset page is still one tap away. */}
+              <button
+                type="button"
+                onClick={() => requestLoginCode()}
+                disabled={sendingCode}
+                className="text-primary font-medium hover:underline disabled:opacity-60"
+                data-testid="link-forgot-password"
+              >
+                {sendingCode ? "Sending code…" : "Forgot password? Sign in with an email code"}
+              </button>
+              <br />
+              <Link href="/forgot-password" className="text-xs text-muted-foreground hover:underline">
+                or reset my password
               </Link>
             </p>
           )}

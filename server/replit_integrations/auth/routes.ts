@@ -48,6 +48,111 @@ function setSessionUserId(req: Request, userId: string): Promise<void> {
   });
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// 2026-10 (Tony: "sign up is everything" — ~50% of login attempts were
+// failing and 312/370 forgot-password requests in 7 days were for emails
+// with NO account, who were silently told "a link has been sent").
+// Shared helpers for: email-OR-phone sign-in, honest "no account" answers
+// with a one-tap create path + "did you sign up with j•••@yahoo.com?" hint,
+// passwordless sign-in codes, and an auth_login_events funnel log so a
+// spike in failures is visible immediately.
+// ─────────────────────────────────────────────────────────────────────────
+
+type AuthEvent =
+  | "password_ok" | "wrong_password" | "no_account" | "unverified" | "locked"
+  | "deleted" | "code_sent" | "code_ok" | "code_wrong" | "reset_no_account" | "reset_sent";
+
+function clientIpOf(req: Request): string {
+  return String(req.headers["x-forwarded-for"] || req.ip || "unknown").split(",")[0].trim().slice(0, 60);
+}
+
+function logAuthEvent(req: Request, event: AuthEvent, kind: "email" | "phone" | "invalid" | null, userId: string | null) {
+  pool.query(
+    `INSERT INTO auth_login_events (event, identifier_kind, user_id, ip) VALUES ($1, $2, $3, $4)`,
+    [event, kind, userId, clientIpOf(req)],
+  ).catch(() => { /* telemetry must never break auth */ });
+}
+
+export function maskEmail(email: string): string {
+  const [local, domain] = email.split("@");
+  if (!local || !domain) return email;
+  const keep = local.length <= 2 ? local.slice(0, 1) : local.slice(0, 2);
+  return `${keep}${"•".repeat(Math.max(3, local.length - keep.length))}@${domain}`;
+}
+
+type LoginUserRow = {
+  id: string;
+  email: string;
+  password_hash: string | null;
+  is_active: boolean | null;
+  email_verified: boolean | null;
+  first_name: string | null;
+};
+
+/**
+ * Resolve "email or phone" typed into the sign-in box to a user.
+ * Phone matching uses the last 9 digits — the exact same expression as the
+ * uniq_users_phone_normalized index — so 0712…, 712…, 254712… and +254712…
+ * all find the same account regardless of which format it was stored in.
+ */
+async function resolveLoginIdentifier(rawInput: string): Promise<{
+  kind: "email" | "phone" | "invalid";
+  key: string;              // lockout / rate-limit key
+  user: LoginUserRow | null;
+}> {
+  const raw = rawInput.trim().toLowerCase();
+  if (raw.includes("@")) {
+    const { rows } = await pool.query<LoginUserRow>(
+      `SELECT id, email, password_hash, is_active, email_verified, first_name
+         FROM users WHERE LOWER(email) = $1 LIMIT 1`,
+      [raw],
+    );
+    return { kind: "email", key: raw, user: rows[0] ?? null };
+  }
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length < 9 || digits.length > 15) return { kind: "invalid", key: raw, user: null };
+  const last9 = digits.slice(-9);
+  const { rows } = await pool.query<LoginUserRow>(
+    `SELECT id, email, password_hash, is_active, email_verified, first_name
+       FROM users
+      WHERE deleted_at IS NULL AND phone IS NOT NULL AND phone <> ''
+        AND right(regexp_replace(COALESCE(phone, ''), '[^0-9]', '', 'g'), 9) = $1
+        AND right(regexp_replace(COALESCE(phone, ''), '[^0-9]', '', 'g'), 9) <> ALL (ARRAY['712345678','704454609'])
+      ORDER BY (is_active IS NOT FALSE) DESC, last_login DESC NULLS LAST
+      LIMIT 1`,
+    [last9],
+  );
+  return { kind: "phone", key: `phone:${last9}`, user: rows[0] ?? null };
+}
+
+/** "Did you sign up with jo•••@yahoo.com?" — same name part, other provider. */
+async function similarAccountHint(email: string): Promise<string | null> {
+  const local = email.split("@")[0];
+  if (!local || local.length < 3) return null;
+  try {
+    const { rows } = await pool.query<{ email: string }>(
+      `SELECT email FROM users
+        WHERE split_part(LOWER(email), '@', 1) = $1 AND LOWER(email) <> $2
+          AND is_active IS NOT FALSE
+        ORDER BY last_login DESC NULLS LAST LIMIT 1`,
+      [local, email],
+    );
+    return rows[0] ? maskEmail(rows[0].email.toLowerCase()) : null;
+  } catch { return null; }
+}
+
+function noAccountPayload(identifierKind: "email" | "phone", typed: string, hint: string | null) {
+  const what = identifierKind === "phone" ? "that phone number" : typed;
+  return {
+    noAccount: true,
+    identifierKind,
+    similarAccountHint: hint,
+    message: hint
+      ? `We couldn't find an account for ${what}. Did you sign up with ${hint}? Try that — or create a free account in 30 seconds.`
+      : `There's no account for ${what} yet. Create your free account in 30 seconds — it's quick.`,
+  };
+}
+
 export function registerAuthRoutes(app: Express) {
   app.post("/api/auth/register", async (req: Request, res: Response) => {
     try {
@@ -318,12 +423,19 @@ export function registerAuthRoutes(app: Express) {
       if (dt > 200) console.warn(`[Auth][login] step=${label} ms=${dt}`);
     };
     try {
-      const rawEmail = String(req.body?.email ?? "").trim().toLowerCase();
+      // 2026-10: the box accepts email OR phone ("identifier"); `email` kept
+      // for older cached clients.
+      const typed = String(req.body?.identifier ?? req.body?.email ?? "").trim();
       const password = String(req.body?.password ?? "");
 
-      if (!rawEmail || !password) {
-        return res.status(400).json({ message: "Email and password are required." });
+      if (!typed || !password) {
+        return res.status(400).json({ message: "Enter your email (or phone number) and password." });
       }
+      const resolved = await resolveLoginIdentifier(typed);
+      if (resolved.kind === "invalid") {
+        return res.status(400).json({ message: "Enter your email address or the phone number you signed up with." });
+      }
+      const rawEmail = resolved.key; // lockout key (email, or phone:last9)
 
       // 2026-06 SECURITY: brute-force lockout check BEFORE we touch the DB.
       // 5 failed attempts in a 15-min window locks (email + IP) for 15 min.
@@ -339,10 +451,12 @@ export function registerAuthRoutes(app: Express) {
         // are users who hit lockout and never see a way out. Now we tell
         // them about /forgot-password explicitly.
         res.setHeader("Retry-After", String(lockoutStatus.retryAfterSeconds));
+        logAuthEvent(req, "locked", resolved.kind, resolved.user?.id ?? null);
         return res.status(429).json({
-          message: `Too many failed attempts. You can either wait ${Math.ceil(lockoutStatus.retryAfterSeconds / 60)} minute(s) — or reset your password right now and skip the wait.`,
+          message: `Too many password attempts. Skip the wait — we can email you a sign-in code right now.`,
           retryAfterSeconds: lockoutStatus.retryAfterSeconds,
           locked: true,
+          offerCode: !!resolved.user,
           forgotPasswordUrl: "/forgot-password",
         });
       }
@@ -360,30 +474,31 @@ export function registerAuthRoutes(app: Express) {
       // also pull email_verified so we can detect unverified accounts and
       // route them to the code-entry flow instead of a generic "invalid
       // password" toast that sends them chasing forgot-password.
-      const [user] = await db
-        .select({
-          id: users.id,
-          email: users.email,
-          passwordHash: users.passwordHash,
-          isActive: users.isActive,
-          emailVerified: users.emailVerified,
-        })
-        .from(users)
-        .where(sql`LOWER(${users.email}) = ${rawEmail}`)
-        .limit(1);
+      const r = resolved.user;
+      const user = r ? {
+        id: r.id,
+        email: r.email,
+        passwordHash: r.password_hash,
+        isActive: r.is_active,
+        emailVerified: r.email_verified,
+      } : null;
       step("user_lookup");
-      if (!user || !user.passwordHash) {
-        // Record failure on an unknown email too — prevents enumeration via
-        // timing differences and frustrates credential-stuffing reconnaissance.
+      if (!user) {
+        // 2026-10: be honest. Signup already reveals "email already exists",
+        // so hiding it here protected nothing and cost us real signups —
+        // people kept retrying / resetting an account that never existed.
+        // Still counted toward the lockout to slow bulk probing.
         recordFailedLogin(rawEmail, clientIp);
-        return res.status(401).json({
-          message: "Invalid email or password. If you're sure your email is right, reset your password to get straight back in.",
-          forgotPasswordUrl: "/forgot-password",
-        });
+        logAuthEvent(req, "no_account", resolved.kind, null);
+        const hint = resolved.kind === "email" ? await similarAccountHint(rawEmail) : null;
+        return res.status(404).json(
+          noAccountPayload(resolved.kind as "email" | "phone", typed, hint),
+        );
       }
 
       // Block deleted (anonymised) accounts.
       if (user.isActive === false) {
+        logAuthEvent(req, "deleted", resolved.kind, user.id);
         return res.status(403).json({
           message: "This account has been deleted. Please sign up with a new account, or contact support if this is a mistake.",
           accountDeleted: true,
@@ -391,7 +506,9 @@ export function registerAuthRoutes(app: Express) {
         });
       }
 
-      const valid = await bcrypt.compare(password, user.passwordHash);
+      // No password on file (admin-created stub etc.) → can't match; the
+      // client's "email me a code" path is their way in.
+      const valid = user.passwordHash ? await bcrypt.compare(password, user.passwordHash) : false;
       step("bcrypt_compare");
       if (!valid) {
         // 2026-09 (Tony's "users get a code, no place to enter it" fix):
@@ -407,6 +524,7 @@ export function registerAuthRoutes(app: Express) {
           sendEmailVerificationCode(user.id, user.email).catch((e) =>
             console.warn("[Auth][login-verify-fallback] send-code failed:", e?.message),
           );
+          logAuthEvent(req, "unverified", resolved.kind, user.id);
           return res.status(403).json({
             message: "This account isn't verified yet. We just sent a fresh 6-digit code to your email — enter it below to finish signing in.",
             unverifiedAccount: true,
@@ -416,13 +534,16 @@ export function registerAuthRoutes(app: Express) {
         }
 
         const post = recordFailedLogin(rawEmail, clientIp);
-        const willLockNext = post.remainingAttempts === 0;
+        logAuthEvent(req, "wrong_password", resolved.kind, user.id);
+        // 2026-10: the account exists — say so, and offer the one-tap
+        // passwordless code instead of sending them off to reset.
         return res.status(401).json({
-          message: willLockNext
-            ? "Invalid email or password — and this was your last attempt. Reset your password now to get straight back in instead of waiting 15 minutes."
-            : post.remainingAttempts > 0 && post.remainingAttempts <= 2
-              ? `Invalid email or password. ${post.remainingAttempts} attempt${post.remainingAttempts === 1 ? "" : "s"} left before a 15-minute lockout. Forgot it? Reset now — much faster.`
-              : "Invalid email or password. Forgot it? You can reset it right now.",
+          message: user.passwordHash
+            ? "That password doesn't match. No problem — we can email you a sign-in code instead."
+            : "This account doesn't have a password yet. We can email you a sign-in code instead.",
+          wrongPassword: true,
+          offerCode: true,
+          maskedEmail: maskEmail(user.email.toLowerCase()),
           remainingAttempts: post.remainingAttempts,
           forgotPasswordUrl: "/forgot-password",
         });
@@ -439,6 +560,7 @@ export function registerAuthRoutes(app: Express) {
         sendEmailVerificationCode(user.id, user.email).catch((e) =>
           console.warn("[Auth][login-verify-fallback] send-code failed:", e?.message),
         );
+        logAuthEvent(req, "unverified", resolved.kind, user.id);
         return res.status(403).json({
           message: "Your password is correct, but we still need to confirm your email. We just sent a fresh 6-digit code — enter it below to finish signing in.",
           unverifiedAccount: true,
@@ -450,6 +572,7 @@ export function registerAuthRoutes(app: Express) {
 
       await setSessionUserId(req, user.id);
       step("session_save");
+      logAuthEvent(req, "password_ok", resolved.kind, user.id);
       // 2026-06 PERF: invalidate the auth-user cache so the very next
       // /api/auth/user call (which the client fires right after login) doesn't
       // return a stale negative.
@@ -848,10 +971,27 @@ export function registerAuthRoutes(app: Express) {
   // The user-facing response is still uniform — nothing about the delivery
   // outcome leaks to protect against enumeration.
   app.post("/api/auth/forgot-password", async (req: Request, res: Response) => {
-    const rawEmail = String(req.body?.email ?? "").trim().toLowerCase();
-    if (!rawEmail || !EMAIL_RE.test(rawEmail)) {
-      return res.status(400).json({ message: "Please enter a valid email address." });
+    // 2026-10: accept email OR phone, and be honest when there's no account
+    // (312 of 370 reset requests in one week were for emails that never
+    // signed up — they waited for an email that could never arrive).
+    const typedId = String(req.body?.identifier ?? req.body?.email ?? "").trim();
+    const resolvedId = typedId ? await resolveLoginIdentifier(typedId).catch(() => null) : null;
+    if (!resolvedId || resolvedId.kind === "invalid" || (resolvedId.kind === "email" && !EMAIL_RE.test(resolvedId.key))) {
+      return res.status(400).json({ message: "Enter your email address or the phone number you signed up with." });
     }
+    if (!resolvedId.user || resolvedId.user.is_active === false) {
+      logAuthEvent(req, "reset_no_account", resolvedId.kind, null);
+      try {
+        await pool.query(
+          `INSERT INTO password_reset_attempts (user_id, email, email_status, ip_address) VALUES (NULL, $1, 'skipped', $2)`,
+          [resolvedId.key.slice(0, 255), clientIpOf(req)],
+        );
+      } catch { /* non-fatal */ }
+      const hint = resolvedId.kind === "email" ? await similarAccountHint(resolvedId.key) : null;
+      return res.status(404).json(noAccountPayload(resolvedId.kind, typedId, hint));
+    }
+    const rawEmail = resolvedId.user.email.toLowerCase();
+    logAuthEvent(req, "reset_sent", resolvedId.kind, resolvedId.user.id);
 
     const ip = String(req.ip || req.headers["x-forwarded-for"] || "").split(",")[0].trim().slice(0, 60) || null;
     const ua = String(req.headers["user-agent"] || "").slice(0, 400) || null;
@@ -866,7 +1006,7 @@ export function registerAuthRoutes(app: Express) {
     let whatsappError: string | null = null;
 
     try {
-      const [user] = await db.select().from(users).where(eq(users.email, rawEmail)).limit(1);
+      const [user] = await db.select().from(users).where(eq(users.id, resolvedId.user.id)).limit(1);
       if (user) {
         userId = user.id;
         const token = crypto.randomBytes(48).toString("hex");
@@ -942,7 +1082,93 @@ export function registerAuthRoutes(app: Express) {
       console.error("[forgot-password] could not log attempt:", logErr?.message);
     }
 
-    res.json({ ok: true, message: "If an account exists for that email, a reset link has been sent." });
+    res.json({
+      ok: emailStatus !== "failed" || whatsappStatus === "sent",
+      sentTo: maskEmail(rawEmail),
+      viaWhatsApp: whatsappStatus === "sent",
+      message: emailStatus === "failed" && whatsappStatus !== "sent"
+        ? "We couldn't deliver the reset email just now. Please try again in a minute, or contact support@workabroadhub.tech."
+        : `Reset link sent to ${maskEmail(rawEmail)}${whatsappStatus === "sent" ? " and your WhatsApp" : ""}. Check your inbox (and spam).`,
+    });
+  });
+
+  // ── 2026-10: passwordless sign-in code ───────────────────────────────────
+  // Forgot / wrong password → "Email me a code" → type 6 digits → signed in.
+  // No reset link, no new password, never leaves the modal. Reuses the same
+  // verification_codes table + per-destination hourly rate limit + 5-attempt
+  // cap as email verification. A successful code also verifies the email
+  // (it proves inbox ownership).
+  app.post("/api/auth/login-code/request", async (req: Request, res: Response) => {
+    try {
+      const typed = String(req.body?.identifier ?? req.body?.email ?? "").trim();
+      const resolved = typed ? await resolveLoginIdentifier(typed) : null;
+      if (!resolved || resolved.kind === "invalid") {
+        return res.status(400).json({ message: "Enter your email address or the phone number you signed up with." });
+      }
+      if (!resolved.user) {
+        logAuthEvent(req, "no_account", resolved.kind, null);
+        const hint = resolved.kind === "email" ? await similarAccountHint(resolved.key) : null;
+        return res.status(404).json(noAccountPayload(resolved.kind, typed, hint));
+      }
+      if (resolved.user.is_active === false) {
+        logAuthEvent(req, "deleted", resolved.kind, resolved.user.id);
+        return res.status(403).json({
+          message: "This account has been deleted. Please create a new account, or contact support if this is a mistake.",
+          accountDeleted: true,
+          supportEmail: "support@workabroadhub.tech",
+        });
+      }
+      const result = await sendEmailVerificationCode(resolved.user.id, resolved.user.email);
+      if (!result.ok) {
+        return res.status(result.code === "rate_limited" ? 429 : 502).json({
+          message: result.code === "rate_limited"
+            ? "You've requested several codes in the last hour. Use the newest code in your inbox, or try again a bit later."
+            : "We couldn't send the code just now. Please try again in a minute.",
+          code: result.code,
+        });
+      }
+      logAuthEvent(req, "code_sent", resolved.kind, resolved.user.id);
+      res.json({
+        ok: true,
+        email: resolved.user.email.toLowerCase(),
+        maskedEmail: maskEmail(resolved.user.email.toLowerCase()),
+        codeHint: (result as any).codeHint,
+      });
+    } catch (err: any) {
+      console.error("[Auth][login-code/request] error:", err?.message);
+      res.status(500).json({ message: "Couldn't send a code right now. Please try again." });
+    }
+  });
+
+  app.post("/api/auth/login-code/verify", async (req: Request, res: Response) => {
+    try {
+      const typed = String(req.body?.identifier ?? req.body?.email ?? "").trim();
+      const code = String(req.body?.code ?? "").replace(/\D/g, "");
+      if (!/^\d{6}$/.test(code)) return res.status(400).json({ message: "Enter the 6-digit code from your email." });
+      const resolved = typed ? await resolveLoginIdentifier(typed) : null;
+      if (!resolved?.user || resolved.user.is_active === false) {
+        return res.status(400).json({ message: "That code doesn't match. Tap Resend for a fresh one." });
+      }
+      // verifyCode enforces expiry + 5 wrong attempts per code.
+      const result = await verifyCode(resolved.user.id, "email", code);
+      if (!result.ok) {
+        logAuthEvent(req, "code_wrong", resolved.kind, resolved.user.id);
+        return res.status(400).json({ message: result.message, reason: result.reason });
+      }
+      await setSessionUserId(req, resolved.user.id);
+      try {
+        const { clearAllAttemptsForEmail } = await import("../../lib/security-guard");
+        clearAllAttemptsForEmail(resolved.user.email.toLowerCase());
+        if (resolved.kind === "phone") clearAllAttemptsForEmail(resolved.key);
+      } catch { /* non-fatal */ }
+      (app as any).invalidateAuthUserCache?.(resolved.user.id);
+      invalidateAuthUserCache(resolved.user.id);
+      logAuthEvent(req, "code_ok", resolved.kind, resolved.user.id);
+      res.json({ id: resolved.user.id, email: resolved.user.email });
+    } catch (err: any) {
+      console.error("[Auth][login-code/verify] error:", err?.message);
+      res.status(500).json({ message: "Couldn't sign you in right now. Please try again." });
+    }
   });
 
   app.post("/api/auth/reset-password", async (req: Request, res: Response) => {
@@ -1113,8 +1339,34 @@ export function registerAuthRoutes(app: Express) {
 
     let userId = getSessionUserId(req);
 
-    // Session missing — look up the user by the code hash + optional email hint.
+    // Session missing — look up the user by the code hash + email hint.
+    // 2026-10 SECURITY: the email hint is now REQUIRED. Without it, a 6-digit
+    // guess was matched against every active code in the system (and wrong
+    // guesses never counted), so spraying codes could sign someone into a
+    // random account. With the email we resolve one user and let verifyCode
+    // apply its 5-attempt cap.
     if (!userId) {
+      if (!hintedEmail) {
+        return res.status(400).json({
+          message: "Please sign in again and we'll send you a fresh code.",
+          reason: "email_required",
+        });
+      }
+      try {
+        const { rows: byEmail } = await pool.query<{ id: string }>(
+          `SELECT id FROM users WHERE LOWER(email) = $1 AND is_active IS NOT FALSE LIMIT 1`,
+          [hintedEmail],
+        );
+        if (byEmail[0]) {
+          const r = await verifyCode(byEmail[0].id, "email", code);
+          if (!r.ok) return res.status(400).json({ message: r.message, reason: r.reason });
+          try { await setSessionUserId(req, byEmail[0].id); } catch { /* non-fatal */ }
+          invalidateAuthUserCache(byEmail[0].id);
+          return res.json({ ok: true, message: r.message, signedIn: true });
+        }
+      } catch (err: any) {
+        console.warn("[Auth][verify-email] sessionless email lookup failed:", err?.message);
+      }
       try {
         const { sha256 } = await import("../../services/identityVerification");
         const codeHash = sha256(code);
