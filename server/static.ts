@@ -6,7 +6,63 @@ import path from "path";
 //   - server bundle lives at dist/server/index.js  (tsconfig.server.json outDir)
 //   - frontend bundle lives at dist/public/        (vite.config.ts build.outDir)
 // __dirname here is `dist/server`, so the static assets are one level up.
+// ─────────────────────────────────────────────────────────────────────────
+// 2026-10 (Tony: "site shows 'Cannot GET /' on every deploy"). serveStatic()
+// only runs at the END of a long boot (seeding, schedulers, schema checks),
+// so for 1–3 minutes after each deploy every page visit hit Express with no
+// route and got "Cannot GET /". The boot gate is mounted at the very start
+// (right after compression) and serves the built frontend IMMEDIATELY —
+// hashed assets + index.html for page navigations — until serveStatic() has
+// registered the real handlers, then it steps aside. API routes are not
+// touched (they're registered early anyway, so the SPA works during boot).
+// ─────────────────────────────────────────────────────────────────────────
+let staticReady = false;
+
+const GATE_SKIP = /^\/(api|ws|health|audio)(\/|$)|^\/robots\.txt$/;
+
+export function installBootGate(app: Express) {
+  if (process.env.NODE_ENV !== "production") return;
+  const distPath = path.resolve(__dirname, "..", "public");
+  const indexHtml = path.resolve(distPath, "index.html");
+  if (!fs.existsSync(indexHtml)) {
+    console.error(`[bootGate] no frontend bundle at ${indexHtml} — gate disabled`);
+    return;
+  }
+  const assets = express.static(distPath, {
+    index: false,
+    etag: false,
+    lastModified: false,
+    fallthrough: true,
+    setHeaders(res, filePath) {
+      if (/\/assets\//.test(filePath)) {
+        res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+      } else {
+        res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+      }
+    },
+  });
+  app.use((req, res, next) => {
+    if (staticReady) return next();
+    if (req.method !== "GET" && req.method !== "HEAD") return next();
+    if (GATE_SKIP.test(req.path)) return next();
+    assets(req, res, () => {
+      // Not a file in dist → serve the SPA shell for page navigations only.
+      const wantsHtml = (req.headers.accept || "").includes("text/html");
+      if (!wantsHtml || path.extname(req.path)) return next();
+      res.set({
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0",
+      });
+      res.sendFile(indexHtml);
+    });
+  });
+  console.log("[bootGate] frontend served from first second of boot");
+}
+
 export function serveStatic(app: Express) {
+  // From here on the normal handlers below take over from the boot gate.
+  staticReady = true;
   const distPath = path.resolve(__dirname, "..", "public");
   const indexHtml = path.resolve(distPath, "index.html");
   const bundleExists = fs.existsSync(distPath) && fs.existsSync(indexHtml);

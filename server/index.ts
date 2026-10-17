@@ -112,7 +112,7 @@ import { initSentry, attachSentryErrorHandler, captureException } from "./lib/se
 // so import-time errors in any route module can still be captured.
 // No-op when SENTRY_DSN is not set.
 initSentry();
-import { serveStatic } from "./static";
+import { serveStatic, installBootGate } from "./static";
 import { initSocketIO } from "./socket";
 // 2026-08 (P0 CSP audit): analytics WebSocket was defined but never wired
 // to the HTTP server, so every client hit `WebSocket connection failed` on
@@ -511,6 +511,10 @@ app.use(
     threshold: 1024,
   })
 );
+
+// 2026-10: serve the frontend from the first second of boot, so deploys no
+// longer show "Cannot GET /" while the long startup sequence runs.
+installBootGate(app);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // REQUEST IDS
