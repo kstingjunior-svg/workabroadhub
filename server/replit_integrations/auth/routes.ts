@@ -521,12 +521,12 @@ export function registerAuthRoutes(app: Express) {
         if (!user.emailVerified) {
           // Auto-send a fresh code so whatever's in the user's inbox
           // is guaranteed valid when the modal switches to verify UI.
-          sendEmailVerificationCode(user.id, user.email).catch((e) =>
+          sendEmailVerificationCode(user.id, user.email, { onlyIfNone: true }).catch((e) =>
             console.warn("[Auth][login-verify-fallback] send-code failed:", e?.message),
           );
           logAuthEvent(req, "unverified", resolved.kind, user.id);
           return res.status(403).json({
-            message: "This account isn't verified yet. We just sent a fresh 6-digit code to your email — enter it below to finish signing in.",
+            message: "This account isn't verified yet. Enter the 6-digit code we emailed you (it works for 10 minutes) to finish signing in.",
             unverifiedAccount: true,
             verificationRequired: true,
             email: user.email,
@@ -557,12 +557,12 @@ export function registerAuthRoutes(app: Express) {
       // them to /dashboard where every /api call gets 403'd downstream),
       // fire a fresh code and tell the client to switch to verify UI.
       if (!user.emailVerified) {
-        sendEmailVerificationCode(user.id, user.email).catch((e) =>
+        sendEmailVerificationCode(user.id, user.email, { onlyIfNone: true }).catch((e) =>
           console.warn("[Auth][login-verify-fallback] send-code failed:", e?.message),
         );
         logAuthEvent(req, "unverified", resolved.kind, user.id);
         return res.status(403).json({
-          message: "Your password is correct, but we still need to confirm your email. We just sent a fresh 6-digit code — enter it below to finish signing in.",
+          message: "Your password is correct — just confirm your email. Enter the 6-digit code we emailed you (it works for 10 minutes).",
           unverifiedAccount: true,
           verificationRequired: true,
           passwordOk: true,
@@ -1127,9 +1127,11 @@ export function registerAuthRoutes(app: Express) {
           code: result.code,
         });
       }
-      logAuthEvent(req, "code_sent", resolved.kind, resolved.user.id);
+      if (!result.reused) logAuthEvent(req, "code_sent", resolved.kind, resolved.user.id);
       res.json({
         ok: true,
+        reused: !!result.reused,
+        expiresAt: result.expiresAt,
         email: resolved.user.email.toLowerCase(),
         maskedEmail: maskEmail(resolved.user.email.toLowerCase()),
         codeHint: (result as any).codeHint,
@@ -1277,7 +1279,11 @@ export function registerAuthRoutes(app: Express) {
     // users can find the right email even when it's buried in Spam.
     res.json({
       ok: true,
-      message: "Verification code sent. Check your inbox (and spam).",
+      reused: !!result.reused,
+      expiresAt: result.expiresAt,
+      message: result.reused
+        ? "We just sent you a code — use that one. It's still valid."
+        : "Verification code sent. Check your inbox (and spam).",
       codeHint: (result as any).codeHint,
     });
   });

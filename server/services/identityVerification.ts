@@ -3,9 +3,11 @@
  *
  * - Generates a 6-digit code, stores sha256 hash in DB
  * - Sends via sendEmail() or Twilio SMS
- * - Code expires in 10 minutes
- * - Max 5 verification attempts before a code is invalidated
- * - Rate limit: max 3 codes per destination per hour
+ * - Code expires in 10 minutes (industry standard; shown to the user)
+ * - Any still-valid code works — a resend does NOT kill earlier codes
+ * - Resend within 60 s of the last code sends nothing (reuses it)
+ * - Max 5 wrong attempts per code window
+ * - Rate limit: max 6 codes per destination per hour
  */
 
 import crypto from "crypto";
@@ -17,7 +19,14 @@ import { sendEmail } from "../email";
 // notification, replies to friend, comes back 12 minutes later, enters code,
 // gets "code expired" — thinks the site is broken. 30 min covers 95%+ of
 // real-world lag between receiving and entering.
-const CODE_TTL_MS = 30 * 60 * 1000;          // 30 minutes
+// 2026-10 (Tony: "use the standard one" — stop resend spam). Back to the
+// standard 10 minutes, but the UI now shows the exact expiry time and
+// earlier codes stay valid, so the old "code expired / wrong code" loop
+// that drove the 30-min bump no longer happens.
+export const CODE_TTL_MS = 10 * 60 * 1000;   // 10 minutes
+export const CODE_TTL_MINUTES = 10;
+// A code sent less than this long ago is reused instead of emailing again.
+const RESEND_COOLDOWN_MS = 60 * 1000;
 const MAX_ATTEMPTS = 5;
 // 2026-06: bumped from 3 to 6. Three was too aggressive — users hitting "resend"
 // twice while panicking (one for "didn't arrive", one for spam-folder thinking)
@@ -49,7 +58,23 @@ async function exceededRateLimit(destination: string, channel: "email" | "sms"):
   return Number(rows[0]?.count ?? 0) >= MAX_CODES_PER_HOUR;
 }
 
-async function invalidatePriorCodes(userId: string, channel: "email" | "sms"): Promise<void> {
+/** Newest unused, unexpired code for this user/channel (if any). */
+export async function getActiveCode(
+  userId: string,
+  channel: "email" | "sms",
+): Promise<{ createdAt: Date; expiresAt: Date } | null> {
+  const { rows } = await pool.query<{ created_at: Date; expires_at: Date }>(
+    `SELECT created_at, expires_at FROM verification_codes
+      WHERE user_id = $1 AND channel = $2 AND used_at IS NULL AND expires_at > NOW()
+      ORDER BY created_at DESC LIMIT 1`,
+    [userId, channel],
+  );
+  return rows[0] ? { createdAt: new Date(rows[0].created_at), expiresAt: new Date(rows[0].expires_at) } : null;
+}
+
+// Kept for callers that explicitly want a hard reset (not used by send paths
+// any more — killing earlier codes is what caused the "invalid code" loop).
+export async function invalidatePriorCodes(userId: string, channel: "email" | "sms"): Promise<void> {
   await pool.query(
     `UPDATE verification_codes
         SET used_at = NOW()
@@ -69,6 +94,15 @@ export interface SendCodeResult {
    * Promotions with 50 other emails.
    */
   codeHint?: string;
+  /** 2026-10: when the code stops working (ISO). Shown to the user. */
+  expiresAt?: string;
+  /** true = a valid code was sent moments ago, so nothing new was sent. */
+  reused?: boolean;
+}
+
+export interface SendCodeOptions {
+  /** Only send if the user has NO valid code right now (login fallbacks). */
+  onlyIfNone?: boolean;
 }
 
 /**
@@ -77,8 +111,16 @@ export interface SendCodeResult {
 export async function sendEmailVerificationCode(
   userId: string,
   email: string,
+  opts: SendCodeOptions = {},
 ): Promise<SendCodeResult> {
   const dest = email.trim().toLowerCase();
+  const active = await getActiveCode(userId, "email");
+  // Reuse when sent <60 s ago, or (login fallbacks) when it still has a
+  // useful amount of life left — never hand someone a code about to die.
+  const msLeft = active ? active.expiresAt.getTime() - Date.now() : 0;
+  if (active && (Date.now() - active.createdAt.getTime() < RESEND_COOLDOWN_MS || (opts.onlyIfNone && msLeft > 2 * 60 * 1000))) {
+    return { ok: true, reused: true, expiresAt: active.expiresAt.toISOString() };
+  }
   if (await exceededRateLimit(dest, "email")) {
     return {
       ok: false,
@@ -87,7 +129,6 @@ export async function sendEmailVerificationCode(
     };
   }
 
-  await invalidatePriorCodes(userId, "email");
   const code = generateCode();
   const expiresAt = new Date(Date.now() + CODE_TTL_MS);
 
@@ -121,7 +162,7 @@ export async function sendEmailVerificationCode(
             <table role="presentation" cellpadding="0" cellspacing="0"><tr>${codeDigits}</tr></table>
           </td></tr>
           <tr><td style="padding:16px 32px 0;color:#374151;font-size:15px;line-height:1.55;">
-            Enter the code above on WorkAbroadHub to finish signing in. This code will expire in 30 minutes.
+            Enter the code above on WorkAbroadHub to finish signing in. This code expires in ${CODE_TTL_MINUTES} minutes.
           </td></tr>
           <tr><td style="padding:16px 32px 0;color:#374151;font-size:15px;line-height:1.55;">
             If you didn't request this, you can ignore this email — nothing will happen to your account.
@@ -140,7 +181,7 @@ export async function sendEmailVerificationCode(
       </td></tr>
     </table>
   </body></html>`;
-  const text = `Enter this code to sign in\n\n${code}\n\nEnter the code above on WorkAbroadHub to finish signing in. This code will expire in 30 minutes.\n\nIf you didn't request this, you can ignore this email.\n\nTo keep your account safe, please don't share this code with anyone.\n\n— The WorkAbroad Hub team\nNairobi, Kenya\nworkabroadhub.tech`;
+  const text = `Enter this code to sign in\n\n${code}\n\nEnter the code above on WorkAbroadHub to finish signing in. This code expires in ${CODE_TTL_MINUTES} minutes.\n\nIf you didn't request this, you can ignore this email.\n\nTo keep your account safe, please don't share this code with anyone.\n\n— The WorkAbroad Hub team\nNairobi, Kenya\nworkabroadhub.tech`;
 
   const result = await sendEmail({
     to: dest,
@@ -153,7 +194,7 @@ export async function sendEmailVerificationCode(
     text,
     replyTo: "support@workabroadhub.tech",
   } as any);
-  if (result.success) return { ok: true, codeHint: code.slice(-2) } as any;
+  if (result.success) return { ok: true, codeHint: code.slice(-2), expiresAt: expiresAt.toISOString() };
   console.error(`[Verification] email send failed for ${dest}: ${result.error}`);
   return {
     ok: false,
@@ -183,7 +224,6 @@ export async function mintEmailVerificationCode(
   if (await exceededRateLimit(dest, "email")) {
     return { ok: false, reason: "rate_limited" };
   }
-  await invalidatePriorCodes(userId, "email");
   const code = generateCode();
   const expiresAt = new Date(Date.now() + CODE_TTL_MS);
   await pool.query(
@@ -202,6 +242,10 @@ export async function sendSmsVerificationCode(
   phone: string,
 ): Promise<SendCodeResult> {
   const dest = phone.trim();
+  const activeSms = await getActiveCode(userId, "sms");
+  if (activeSms && Date.now() - activeSms.createdAt.getTime() < RESEND_COOLDOWN_MS) {
+    return { ok: true, reused: true, expiresAt: activeSms.expiresAt.toISOString() };
+  }
   if (await exceededRateLimit(dest, "sms")) {
     return {
       ok: false,
@@ -210,7 +254,6 @@ export async function sendSmsVerificationCode(
     };
   }
 
-  await invalidatePriorCodes(userId, "sms");
   const code = generateCode();
   const expiresAt = new Date(Date.now() + CODE_TTL_MS);
 
@@ -233,7 +276,7 @@ export async function sendSmsVerificationCode(
   }
 
   try {
-    const body = `Your WorkAbroad Hub verification code is ${code}. Expires in 10 minutes.`;
+    const body = `Your WorkAbroad Hub verification code is ${code}. Expires in ${CODE_TTL_MINUTES} minutes.`;
     const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
     const credentials = Buffer.from(`${accountSid}:${authToken}`).toString("base64");
     const form = new URLSearchParams({ To: dest, From: fromNumber, Body: body });
@@ -251,7 +294,7 @@ export async function sendSmsVerificationCode(
       console.error(`[Verification] Twilio SMS failed status=${res.status} body=${errBody.slice(0, 200)}`);
       return { ok: false, code: "send_failed", message: "Could not send SMS code. Please try again." };
     }
-    return { ok: true };
+    return { ok: true, expiresAt: expiresAt.toISOString() };
   } catch (err: any) {
     console.error("[Verification] SMS exception:", err.message);
     return { ok: false, code: "send_failed", message: "Could not send SMS code. Please try again." };
@@ -277,60 +320,55 @@ export async function verifyCode(
     return { ok: false, reason: "wrong_code", message: "Please enter the 6-digit code." };
   }
 
-  const { rows } = await pool.query(
-    `SELECT id, code_hash, attempts, expires_at, used_at
+  // 2026-10: every still-valid code works (a resend no longer kills the
+  // earlier ones), so check the submitted digits against all of them.
+  const { rows } = await pool.query<{ id: string; code_hash: string; attempts: number; expires_at: Date }>(
+    `SELECT id, code_hash, attempts, expires_at
        FROM verification_codes
       WHERE user_id = $1 AND channel = $2
-        AND used_at IS NULL
+        AND used_at IS NULL AND expires_at > NOW()
       ORDER BY created_at DESC
-      LIMIT 1`,
+      LIMIT 10`,
     [userId, channel],
   );
-  const row = rows[0];
-  if (!row) {
-    return { ok: false, reason: "no_code", message: "No active verification code. Please tap Resend to get a fresh code." };
+  if (rows.length === 0) {
+    const { rows: recent } = await pool.query(
+      `SELECT 1 FROM verification_codes
+        WHERE user_id = $1 AND channel = $2 AND used_at IS NULL
+          AND expires_at <= NOW() AND expires_at > NOW() - INTERVAL '1 day'
+        LIMIT 1`,
+      [userId, channel],
+    );
+    return recent.length
+      ? { ok: false, reason: "expired", message: `This code has expired (codes last ${CODE_TTL_MINUTES} minutes). Tap Resend for a fresh one.` }
+      : { ok: false, reason: "no_code", message: "No active code. Tap Resend to get a fresh one." };
   }
-  if (new Date(row.expires_at) < new Date()) {
-    return { ok: false, reason: "expired", message: "This code has expired (30 min limit). Please tap Resend to get a fresh one." };
+  const newest = rows[0];
+  if (newest.attempts >= MAX_ATTEMPTS) {
+    return { ok: false, reason: "too_many_attempts", message: "Too many wrong tries. Tap Resend for a fresh code." };
   }
-  // 2026-08: helpful message when user is entering an OLD code from an
-  // earlier email — every Resend invalidates prior codes, so if they
-  // grabbed the code from an older email in their inbox it won't match
-  // the current active hash. Guide them explicitly.
-  if (row.attempts === 0) {
-    // Log the first attempt so support can see who's hitting each failure mode.
-    console.log(`[verify] first-attempt userId=${userId} channel=${channel} code_len=${clean.length}`);
-  }
-  if (row.attempts >= MAX_ATTEMPTS) {
-    return {
-      ok: false,
-      reason: "too_many_attempts",
-      message: "Too many failed attempts. Please request a new code.",
-    };
-  }
-
-  if (sha256(clean) !== row.code_hash) {
-    await pool.query(`UPDATE verification_codes SET attempts = attempts + 1 WHERE id = $1`, [row.id]);
-    const left = MAX_ATTEMPTS - (row.attempts + 1);
-    // 2026-08 (Tony's "can't verify" report): if this is the FIRST wrong
-    // attempt, the user probably grabbed an OLD code from a previous email
-    // (every Resend invalidates prior codes, so old email codes silently
-    // become dead). Guide them to use the NEWEST email.
-    const hint = row.attempts === 0
-      ? " Tip: use the code from your MOST RECENT email — earlier codes stop working when you tap Resend."
-      : "";
-    console.warn(`[verify] wrong_code userId=${userId} channel=${channel} attempts=${row.attempts + 1}/${MAX_ATTEMPTS} left=${left}`);
+  const match = rows.find((r) => r.code_hash === sha256(clean));
+  if (!match) {
+    await pool.query(`UPDATE verification_codes SET attempts = attempts + 1 WHERE id = $1`, [newest.id]);
+    const left = MAX_ATTEMPTS - (newest.attempts + 1);
+    console.warn(`[verify] wrong_code userId=${userId} channel=${channel} attempts=${newest.attempts + 1}/${MAX_ATTEMPTS}`);
     return {
       ok: false,
       reason: "wrong_code",
       message: left > 0
-        ? `Incorrect code.${hint} ${left} attempt${left === 1 ? "" : "s"} left.`
-        : "Too many failed attempts. Please tap Resend for a fresh code.",
+        ? `That code doesn't match. Check the digits — ${left} ${left === 1 ? "try" : "tries"} left.`
+        : "Too many wrong tries. Tap Resend for a fresh code.",
     };
   }
+  const row = match;
 
-  // Success — mark code used + update user
-  await pool.query(`UPDATE verification_codes SET used_at = NOW() WHERE id = $1`, [row.id]);
+  // Success — retire this AND every other outstanding code for this channel
+  // so none of them can be replayed.
+  await pool.query(
+    `UPDATE verification_codes SET used_at = NOW() WHERE user_id = $1 AND channel = $2 AND used_at IS NULL`,
+    [userId, channel],
+  );
+  void row;
 
   if (channel === "email") {
     await pool.query(

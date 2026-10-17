@@ -128,7 +128,7 @@ export function EmailVerifyBanner() {
         toast({
           title: "Code sent — check inbox AND spam folder",
           description: hint
-            ? `Look for an email from Tony · code ending in ${hint} · Subject: 'Your sign-in code from Tony'. It works for 30 minutes.`
+            ? `Look for an email from Tony · code ending in ${hint} · Subject: 'Your sign-in code from Tony'. It works for 10 minutes — earlier codes keep working too.`
             : "Look for an email from Tony · Subject: 'Your sign-in code from Tony'. Check spam if you don't see it.",
           duration: 15000,
         });

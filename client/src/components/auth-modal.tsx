@@ -231,6 +231,14 @@ export function AuthModal({
   const [codeIdentifier, setCodeIdentifier] = useState(""); // what the user typed (email or phone)
   const [codeMasked, setCodeMasked] = useState("");
   const [sendingCode, setSendingCode] = useState(false);
+  // 2026-10 (Tony: "standard expiry, stop resend spam"): codes last 10 min.
+  // Show the exact expiry so people use the code they have instead of
+  // hammering Resend; Resend waits 60 s and reuses a just-sent code.
+  const CODE_TTL_MIN = 10;
+  const RESEND_WAIT_S = 60;
+  const [codeExpiresAt, setCodeExpiresAt] = useState<number>(0);
+  const [codeInfo, setCodeInfo] = useState("");
+  const [nowTick, setNowTick] = useState(Date.now());
 
   const resetForm = () => {
     setFirstName("");
@@ -248,6 +256,8 @@ export function AuthModal({
     setCodeMasked("");
     setVerifyCode("");
     setVerifyError("");
+    setCodeExpiresAt(0);
+    setCodeInfo("");
   };
 
   // 2026-09 (Tony's "Login brings Sign Up too" fix): Login and Sign Up are
@@ -638,9 +648,11 @@ export function AuthModal({
       setCodeIdentifier(ident);
       setCodeMasked(data.maskedEmail || "");
       setCodeLogin(true);
-      setVerifyCode("");
+      if (!opts?.resend) setVerifyCode("");
+      setCodeExpiresAt(data.expiresAt ? new Date(data.expiresAt).getTime() : Date.now() + CODE_TTL_MIN * 60_000);
+      setCodeInfo(data.reused ? "We sent you a code moments ago — use that one, it still works." : (opts?.resend ? "New code sent. Your earlier code also still works until it expires." : ""));
       setStage("verify");
-      setResendCooldown(30);
+      setResendCooldown(RESEND_WAIT_S);
     } catch {
       setServerError("Network error. Please check your connection and try again.");
     } finally {
@@ -723,7 +735,7 @@ export function AuthModal({
         { credentials: "include" },
       );
       const { csrfToken } = await csrfRes.json();
-      await fetch(
+      const rr = await fetch(
         `${apiBase}/api/auth/send-email-code`,
         {
           method: "POST",
@@ -735,13 +747,34 @@ export function AuthModal({
           body: JSON.stringify({}),
         },
       );
-      setResendCooldown(30);
+      const rd = await rr.json().catch(() => ({}));
+      if (!rr.ok) {
+        setVerifyError(rd?.message || "Could not resend the code. Please try again in a moment.");
+      } else {
+        if (rd?.expiresAt) setCodeExpiresAt(new Date(rd.expiresAt).getTime());
+        setCodeInfo(rd?.reused ? "We sent you a code moments ago — use that one, it still works." : "New code sent. Your earlier code also still works until it expires.");
+      }
+      setResendCooldown(RESEND_WAIT_S);
     } catch {
       setVerifyError(
         "Could not resend the code. Please try again in a moment.",
       );
     }
   };
+
+  // Start the 10-min clock whenever we land on the code screen without one.
+  useEffect(() => {
+    if (stage === "verify") {
+      setCodeExpiresAt((t) => (t > Date.now() ? t : Date.now() + CODE_TTL_MIN * 60_000));
+      setResendCooldown((c) => (c > 0 ? c : RESEND_WAIT_S));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stage]);
+  useEffect(() => {
+    if (stage !== "verify") return;
+    const id = setInterval(() => setNowTick(Date.now()), 15_000);
+    return () => clearInterval(id);
+  }, [stage]);
 
   // Countdown for the resend button
   useEffect(() => {
@@ -845,6 +878,23 @@ export function AuthModal({
                 <p className="text-xs text-red-600 dark:text-red-400 mt-3 text-center">
                   {verifyError}
                 </p>
+              )}
+              {codeExpiresAt > 0 && (() => {
+                const msLeft = codeExpiresAt - nowTick;
+                const until = new Date(codeExpiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+                return msLeft > 0 ? (
+                  <p className="text-xs text-muted-foreground mt-3 text-center" data-testid="text-code-expiry">
+                    Code works for {CODE_TTL_MIN} minutes — until <strong>{until}</strong>
+                    {" "}({Math.max(1, Math.ceil(msLeft / 60_000))} min left)
+                  </p>
+                ) : (
+                  <p className="text-xs text-amber-700 mt-3 text-center" data-testid="text-code-expired">
+                    This code has expired. Tap Resend below for a new one.
+                  </p>
+                );
+              })()}
+              {codeInfo && !verifyError && (
+                <p className="text-xs text-green-700 mt-2 text-center">{codeInfo}</p>
               )}
             </div>
 

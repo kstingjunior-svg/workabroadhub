@@ -174,7 +174,7 @@ export default function AccountVerifyPage() {
     try {
       const result = await jsonPost("/api/auth/send-email-code", {}) as any;
       setEmailCodeSent(true);
-      setResendCooldown(30);
+      setResendCooldown(60);
       // 2026-08 (deliverability): show last-2-digits hint so users can
       // pick the right email even when it's buried in Spam / Promotions
       // with dozens of other messages from us.
@@ -316,7 +316,7 @@ export default function AccountVerifyPage() {
                   data-testid="email-otp"
                 />
                 <div className="flex gap-2">
-                  <Button onClick={submitEmailCode} disabled={emailVerifying || emailCode.length !== 6} className="flex-1">
+                  <Button onClick={() => submitEmailCode()} disabled={emailVerifying || emailCode.length !== 6} className="flex-1">
                     {emailVerifying ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
                     Verify
                   </Button>

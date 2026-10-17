@@ -105,7 +105,7 @@ function buildEmail(opts: {
       ${freshCode ? `
       <p><b>Your fresh verification code:</b></p>
       <p style="font-size:32px;font-weight:700;letter-spacing:8px;background:#f0fdf4;color:#15803d;text-align:center;padding:16px;border-radius:8px;margin:16px 0;">${escapeHtml(freshCode)}</p>
-      <p style="font-size:13px;color:#475569;margin:0 0 16px;">Type these 6 numbers on the verification page — it works for 30 minutes. No need to hunt through spam for the original.</p>
+      <p style="font-size:13px;color:#475569;margin:0 0 16px;">Type these 6 numbers on the verification page — it works for 10 minutes. No need to hunt through spam for the original.</p>
       ` : `
       <p><b>What to do:</b> tap the button below to open the verification page, then request a fresh 6-digit code and enter it.</p>
       <p><b>Can't find our email?</b> Check your <b>Spam</b> or <b>Promotions</b> folder — the code comes from <code>noreply@workabroadhub.tech</code>.</p>
@@ -126,7 +126,7 @@ function buildEmail(opts: {
     </div>`;
 
   const codeBlock = freshCode
-    ? `\n\nYour fresh verification code: ${freshCode}\nType these 6 numbers on the verification page — it works for 30 minutes.\n`
+    ? `\n\nYour fresh verification code: ${freshCode}\nType these 6 numbers on the verification page — it works for 10 minutes.\n`
     : `\n\nCan't find our email? Check your Spam or Promotions folder — the code comes from noreply@workabroadhub.tech.\n`;
   const text = `Hi ${name},\n\n${openingLine.replace(/<[^>]+>/g, "")}${codeBlock}\nVerify here: ${verifyUrl}\n\nSigned up by mistake? No action needed — the account will be automatically deleted within ${hoursLeftLabel}.\n\n— Tony & the WorkAbroadHub team, Nairobi`;
 
