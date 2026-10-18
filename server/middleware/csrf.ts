@@ -15,6 +15,8 @@ const CSRF_EXEMPT = new Set([
   "/api/whatsapp/status",
   "/api/payments/mpesa/callback",
   "/api/payments/paypal/webhook",
+  // 2026-10: Resend bounce/complaint webhook (Svix-signed, no session).
+  "/api/webhooks/resend",
   // 2026-09 (Tony's Paybill 4153025 C2B auto-activation): Safaricom
   // POSTs the receipt to these two URLs the moment a customer pays
   // via Lipa Na M-Pesa Paybill. Safaricom does not send a CSRF token

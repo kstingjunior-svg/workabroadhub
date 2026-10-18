@@ -675,6 +675,12 @@ app.use(
 app.use(
   express.json({
     limit: "100kb",
+    // 2026-10: keep the exact raw body for signed webhooks (Resend/Svix).
+    // Without this the webhook's own raw reader waited for a stream this
+    // parser had already consumed → every Resend call hung.
+    verify: (req, _res, buf) => {
+      if ((req as any).url?.startsWith("/api/webhooks/")) (req as any).rawBody = buf.toString("utf8");
+    },
   })
 );
 

@@ -89,6 +89,12 @@ export function registerEmailWebhooks(app: Express): void {
   // Capture raw body for signature verification — mount a dedicated JSON
   // middleware that preserves the raw string.
   const rawJson = (req: Request, _res: Response, next: Function) => {
+    // 2026-10: the global express.json() already parsed the body (and kept
+    // the raw string via its verify hook) — don't wait on a drained stream.
+    if ((req as any)._body || typeof (req as any).rawBody === "string") {
+      if (typeof (req as any).rawBody !== "string") (req as any).rawBody = JSON.stringify(req.body ?? {});
+      return next();
+    }
     let data = "";
     req.setEncoding("utf8");
     req.on("data", (chunk: string) => (data += chunk));
@@ -125,7 +131,9 @@ export function registerEmailWebhooks(app: Express): void {
         // Only suppress on permanent / undetermined bounces. Soft bounces
         // (temporary — full inbox, DNS blip) are retried by Resend and
         // usually resolve on their own.
-        if (bounceType === "soft") {
+        // Resend/SES label temporary bounces "Transient" (full inbox, DNS
+        // blip); only "Permanent"/"Undetermined" should suppress.
+        if (bounceType === "soft" || bounceType === "transient") {
           console.log(`[email-webhooks] soft bounce for ${toList.join(",")} — not suppressing`);
           return res.json({ received: true, action: "ignored_soft_bounce" });
         }
