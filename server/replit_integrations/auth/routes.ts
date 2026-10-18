@@ -60,7 +60,8 @@ function setSessionUserId(req: Request, userId: string): Promise<void> {
 
 type AuthEvent =
   | "password_ok" | "wrong_password" | "no_account" | "unverified" | "locked"
-  | "deleted" | "code_sent" | "code_ok" | "code_wrong" | "reset_no_account" | "reset_sent";
+  | "deleted" | "code_sent" | "code_ok" | "code_wrong" | "reset_no_account" | "reset_sent"
+  | "verify_ok" | "email_changed";
 
 function clientIpOf(req: Request): string {
   return String(req.headers["x-forwarded-for"] || req.ip || "unknown").split(",")[0].trim().slice(0, 60);
@@ -1390,6 +1391,7 @@ export function registerAuthRoutes(app: Express) {
           if (!r.ok) return res.status(400).json({ message: r.message, reason: r.reason });
           try { await setSessionUserId(req, byEmail[0].id); } catch { /* non-fatal */ }
           invalidateAuthUserCache(byEmail[0].id);
+          logAuthEvent(req, "verify_ok", "email", byEmail[0].id);
           return res.json({ ok: true, message: r.message, signedIn: true });
         }
       } catch (err: any) {
@@ -1433,7 +1435,68 @@ export function registerAuthRoutes(app: Express) {
 
     const result = await verifyCode(userId, "email", code);
     if (!result.ok) return res.status(400).json({ message: result.message, reason: result.reason });
+    logAuthEvent(req, "verify_ok", "email", userId);
     res.json({ ok: true, message: result.message });
+  });
+
+  // ── 2026-10: fix a typo'd email on an UNVERIFIED account ─────────────────
+  // People who mistype their email at signup can never receive the code
+  // (it bounces), so they're stuck. Let them correct it from the code
+  // screen. Allowed only while the account is unverified. Proof of
+  // ownership: the signup session, OR current email + password (the
+  // login-unverified path has no session).
+  app.post("/api/auth/change-unverified-email", async (req: Request, res: Response) => {
+    try {
+      const newRaw = String(req.body?.newEmail ?? "").trim().toLowerCase();
+      let userId = getSessionUserId(req);
+      if (!userId) {
+        const cur = String(req.body?.currentEmail ?? "").trim().toLowerCase();
+        const pw = String(req.body?.password ?? "");
+        if (!cur || !pw) return res.status(401).json({ message: "Please sign in again to change your email." });
+        const { rows } = await pool.query<{ id: string; password_hash: string | null }>(
+          `SELECT id, password_hash FROM users WHERE LOWER(email) = $1 AND is_active IS NOT FALSE LIMIT 1`, [cur],
+        );
+        const okPw = rows[0]?.password_hash ? await bcrypt.compare(pw, rows[0].password_hash) : false;
+        if (!okPw) return res.status(401).json({ message: "Please sign in again to change your email." });
+        userId = rows[0].id;
+      }
+      const { rows: me } = await pool.query<{ email: string; email_verified: boolean | null }>(
+        `SELECT email, email_verified FROM users WHERE id = $1`, [userId],
+      );
+      if (!me[0]) return res.status(404).json({ message: "Account not found." });
+      if (me[0].email_verified) {
+        return res.status(400).json({ message: "Your email is already confirmed. Change it from your profile instead." });
+      }
+      const check = await validateEmail(newRaw);
+      if (check.valid === false) {
+        return res.status(400).json({ message: check.message, reason: check.reason, suggestion: (check as any).suggestion });
+      }
+      const clean = check.normalized;
+      if (clean === me[0].email.toLowerCase()) {
+        return res.status(400).json({ message: "That's the same email. Check the spelling, or try a different address." });
+      }
+      const { rowCount: taken } = await pool.query(
+        `SELECT 1 FROM users WHERE LOWER(email) = $1 AND id <> $2 LIMIT 1`, [clean, userId],
+      );
+      if (taken) {
+        return res.status(409).json({ message: "That email already has an account. Sign in with it instead.", code: "EMAIL_TAKEN" });
+      }
+      await pool.query(`UPDATE users SET email = $1, updated_at = NOW() WHERE id = $2 AND email_verified IS NOT TRUE`, [clean, userId]);
+      invalidateAuthUserCache(userId);
+      try { await setSessionUserId(req, userId); } catch { /* non-fatal */ }
+      logAuthEvent(req, "email_changed", "email", userId);
+      console.log(`[Auth][change-unverified-email] userId=${userId} ${me[0].email} -> ${clean}`);
+      const sent = await sendEmailVerificationCode(userId, clean);
+      res.json({
+        ok: true,
+        email: clean,
+        expiresAt: sent.expiresAt,
+        message: sent.ok ? `Email updated. We sent a new code to ${clean}.` : (sent.message || "Email updated, but we couldn't send the code. Tap Resend."),
+      });
+    } catch (err: any) {
+      console.error("[Auth][change-unverified-email] error:", err?.message);
+      res.status(500).json({ message: "Couldn't update your email right now. Please try again." });
+    }
   });
 
   app.post("/api/auth/verify-phone", async (req: Request, res: Response) => {

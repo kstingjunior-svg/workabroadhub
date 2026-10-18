@@ -93,6 +93,14 @@ export default function ForgotPassword() {
               <p className="text-sm text-[#5A6A7A] mb-6">
                 {sentMsg || "Reset link sent. Check your inbox (and spam)."}
               </p>
+              {/* 2026-10: faster path — no new password needed. */}
+              <button
+                onClick={() => navigate(`/login?code=1&email=${encodeURIComponent(email.trim().toLowerCase())}`)}
+                className="w-full mb-3 py-[14px] bg-[#C2461E] text-white font-semibold text-base rounded-[12px] hover:opacity-90 transition-opacity"
+                data-testid="btn-forgot-use-code"
+              >
+                Faster: sign in with a 6-digit code instead
+              </button>
               <button
                 onClick={() => navigate("/login")}
                 className="w-full py-[14px] bg-[#1A2530] text-white font-semibold text-base rounded-[12px] hover:bg-[#2A3A4A] transition-colors"

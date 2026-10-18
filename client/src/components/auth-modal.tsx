@@ -33,6 +33,8 @@ interface AuthModalProps {
   redirectPath?: string;
   /** 2026-10: prefill the email box (e.g. "Create account with this email"). */
   prefillEmail?: string;
+  /** 2026-10: open straight into "email me a sign-in code" for prefillEmail. */
+  autoRequestCode?: boolean;
 }
 
 interface FieldErrors {
@@ -145,6 +147,7 @@ export function AuthModal({
   defaultTab = "login",
   redirectPath,
   prefillEmail,
+  autoRequestCode,
 }: AuthModalProps) {
   const [tab, setTab] =
     useState<Tab>(defaultTab);
@@ -239,6 +242,10 @@ export function AuthModal({
   const [codeExpiresAt, setCodeExpiresAt] = useState<number>(0);
   const [codeInfo, setCodeInfo] = useState("");
   const [nowTick, setNowTick] = useState(Date.now());
+  // 2026-10: fix a typo'd email from the code screen (bounced codes = stuck).
+  const [changingEmail, setChangingEmail] = useState(false);
+  const [newEmailInput, setNewEmailInput] = useState("");
+  const [savingEmail, setSavingEmail] = useState(false);
 
   const resetForm = () => {
     setFirstName("");
@@ -258,6 +265,8 @@ export function AuthModal({
     setVerifyError("");
     setCodeExpiresAt(0);
     setCodeInfo("");
+    setChangingEmail(false);
+    setNewEmailInput("");
   };
 
   // 2026-09 (Tony's "Login brings Sign Up too" fix): Login and Sign Up are
@@ -611,8 +620,8 @@ export function AuthModal({
   // error inline in the modal.
   // 2026-10: passwordless sign-in. Sends a 6-digit code to the account's
   // email, then reuses the verify stage UI. Works with email OR phone typed.
-  const requestLoginCode = async (opts?: { resend?: boolean }) => {
-    const ident = (opts?.resend ? codeIdentifier : email).trim();
+  const requestLoginCode = async (opts?: { resend?: boolean; identifier?: string }) => {
+    const ident = (opts?.identifier ?? (opts?.resend ? codeIdentifier : email)).trim();
     if (!ident) {
       setFieldErrors({ email: "Enter your email or phone number first" });
       return;
@@ -724,6 +733,42 @@ export function AuthModal({
     }
   };
 
+  const saveNewEmail = async () => {
+    const v = newEmailInput.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v)) {
+      setVerifyError("Enter a valid email address.");
+      return;
+    }
+    setSavingEmail(true);
+    setVerifyError("");
+    try {
+      const apiBase = import.meta.env.VITE_API_URL || "";
+      const { csrfToken } = await (await fetch(`${apiBase}/api/csrf-token`, { credentials: "include" })).json();
+      const res = await fetch(`${apiBase}/api/auth/change-unverified-email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken },
+        credentials: "include",
+        body: JSON.stringify({ newEmail: v, currentEmail: email.trim(), password }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setVerifyError(data?.suggestion ? `${data.message} Did you mean ${data.suggestion}?` : (data?.message || "Couldn't update your email."));
+        return;
+      }
+      setEmail(data.email || v);
+      setChangingEmail(false);
+      setNewEmailInput("");
+      setVerifyCode("");
+      setCodeExpiresAt(data.expiresAt ? new Date(data.expiresAt).getTime() : Date.now() + CODE_TTL_MIN * 60_000);
+      setCodeInfo(data.message || "Email updated — check your inbox for the new code.");
+      setResendCooldown(RESEND_WAIT_S);
+    } catch {
+      setVerifyError("Could not reach the server. Please try again.");
+    } finally {
+      setSavingEmail(false);
+    }
+  };
+
   const resendCode = async () => {
     if (resendCooldown > 0) return;
     setVerifyError("");
@@ -747,7 +792,27 @@ export function AuthModal({
           body: JSON.stringify({}),
         },
       );
-      const rd = await rr.json().catch(() => ({}));
+      let rd = await rr.json().catch(() => ({}));
+      // 2026-10: the login→unverified path has no session, so
+      // send-email-code 401s. Fall back to the sessionless code endpoint.
+      if (rr.status === 401 && email.trim()) {
+        const r2 = await fetch(`${apiBase}/api/auth/login-code/request`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken },
+          credentials: "include",
+          body: JSON.stringify({ identifier: email.trim() }),
+        });
+        rd = await r2.json().catch(() => ({}));
+        if (r2.ok) {
+          if (rd?.expiresAt) setCodeExpiresAt(new Date(rd.expiresAt).getTime());
+          setCodeInfo(rd?.reused ? "We sent you a code moments ago — use that one, it still works." : "New code sent. Your earlier code also still works until it expires.");
+          setResendCooldown(RESEND_WAIT_S);
+          return;
+        }
+        setVerifyError(rd?.message || "Could not resend the code. Please try again in a moment.");
+        setResendCooldown(RESEND_WAIT_S);
+        return;
+      }
       if (!rr.ok) {
         setVerifyError(rd?.message || "Could not resend the code. Please try again in a moment.");
       } else {
@@ -761,6 +826,12 @@ export function AuthModal({
       );
     }
   };
+
+  // 2026-10: forgot-password page → "sign in with a code instead".
+  useEffect(() => {
+    if (open && autoRequestCode && prefillEmail) requestLoginCode({ identifier: prefillEmail });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, autoRequestCode, prefillEmail]);
 
   // Start the 10-min clock whenever we land on the code screen without one.
   useEffect(() => {
@@ -927,6 +998,53 @@ export function AuthModal({
                   : "Didn't get it? Resend code"}
               </button>
             </div>
+
+            {!codeLogin && (
+              <div className="text-center" data-testid="block-change-email">
+                {!changingEmail ? (
+                  <button
+                    type="button"
+                    onClick={() => { setChangingEmail(true); setNewEmailInput(email); setVerifyError(""); }}
+                    className="text-xs text-muted-foreground hover:underline"
+                    data-testid="button-wrong-email"
+                  >
+                    Wrong email? <span className="text-primary font-medium">Change it</span>
+                  </button>
+                ) : (
+                  <div className="space-y-2 text-left">
+                    <Label htmlFor="auth-new-email" className="text-xs">Correct email address</Label>
+                    <Input
+                      id="auth-new-email"
+                      type="email"
+                      value={newEmailInput}
+                      onChange={(e) => setNewEmailInput(e.target.value)}
+                      autoComplete="email"
+                      inputMode="email"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      data-testid="input-new-email"
+                    />
+                    {(() => {
+                      const sug = suggestEmailFix(newEmailInput);
+                      return sug ? (
+                        <button type="button" onClick={() => setNewEmailInput(sug)} className="text-xs text-amber-600 hover:underline">
+                          Did you mean <strong>{sug}</strong>? Tap to fix
+                        </button>
+                      ) : null;
+                    })()}
+                    <div className="flex gap-2">
+                      <Button type="button" onClick={saveNewEmail} disabled={savingEmail} className="flex-1" data-testid="button-save-new-email">
+                        {savingEmail ? "Saving…" : "Save & send code"}
+                      </Button>
+                      <Button type="button" variant="outline" onClick={() => setChangingEmail(false)} disabled={savingEmail}>
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {codeLogin && (
               <div className="text-center">

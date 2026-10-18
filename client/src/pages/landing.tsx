@@ -40,6 +40,7 @@ export default function Landing() {
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authModalTab, setAuthModalTab] = useState<"login" | "signup">("signup");
   const [authPrefillEmail, setAuthPrefillEmail] = useState<string>("");
+  const [authAutoCode, setAuthAutoCode] = useState(false);
   const [authRedirectPath, setAuthRedirectPath] = useState<string | undefined>(undefined);
   const [submitModalOpen, setSubmitModalOpen] = useState(false);
   // 2026-09 (mobile overhaul): the nav bar (logo + full link list + language
@@ -154,7 +155,8 @@ export default function Landing() {
     const authMode = urlParams.get("auth");
     if (authMode === "login" || authMode === "signup") {
       const pre = urlParams.get("email");
-      if (pre && pre.includes("@")) setAuthPrefillEmail(pre);
+      if (pre && (pre.includes("@") || authMode === "login")) setAuthPrefillEmail(pre);
+      if (authMode === "login" && pre && urlParams.get("code") === "1") setAuthAutoCode(true);
       setAuthModalTab(authMode);
       setAuthModalOpen(true);
       window.history.replaceState({}, "", window.location.pathname);
@@ -2088,6 +2090,7 @@ export default function Landing() {
         onClose={() => setAuthModalOpen(false)}
         defaultTab={authModalTab}
         prefillEmail={authPrefillEmail}
+        autoRequestCode={authAutoCode}
         redirectPath={authRedirectPath}
       />
     </div>

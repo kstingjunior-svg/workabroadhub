@@ -640,6 +640,7 @@ app.use("/api/auth/send-phone-code", authLimiter);
 app.use("/api/auth/login-code/request", authLimiter);
 app.use("/api/auth/login-code/verify", authLimiter);
 app.use("/api/auth/verify-email", authLimiter);
+app.use("/api/auth/change-unverified-email", authLimiter);
 app.use("/api/mpesa/callback", mpesaCallbackLimiter);
 app.use("/api/payments/mpesa/callback", mpesaCallbackLimiter);
 // Payment-initiate endpoints — block STK-push harassment / brute force

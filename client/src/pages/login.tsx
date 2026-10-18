@@ -24,7 +24,8 @@ export default function LoginRedirect() {
     const qs = new URLSearchParams({ auth: mode });
     if (safe) qs.set("redirect", safe);
     const prefill = params.get("email");
-    if (prefill && prefill.includes("@") && prefill.length < 255) qs.set("email", prefill);
+    if (prefill && prefill.length < 255) qs.set("email", prefill);
+    if (params.get("code") === "1") qs.set("code", "1");
     navigate(`/?${qs.toString()}`, { replace: true });
   }, []);
   return null;
