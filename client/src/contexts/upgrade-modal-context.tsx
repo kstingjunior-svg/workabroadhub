@@ -106,7 +106,8 @@ export function UpgradeModalProvider({ children }: { children: React.ReactNode }
         // they can't complete payment and get a clear error at that step.
         // Far better than blocking a paying user.
       }
-      const isVerified = emailVerifiedRaw === true || emailVerifiedRaw === undefined;
+      const isVerified = emailVerifiedRaw === true || emailVerifiedRaw === undefined
+        || (authUser as any)?.emailVerificationExempt === true; // 2026-10: paying customers
       if (!isAnonymous && !isVerified) {
         toast({
           title: "Please verify your email first",

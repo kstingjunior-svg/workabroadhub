@@ -80,34 +80,13 @@ export function EmailVerifyBanner() {
     return false;
   }, [user, isLoading, location, emailVerifiedRaw, emailVerifiedFieldMissing]);
 
-  // 2026-08 (Tony's 72h auto-delete policy): compute remaining time from
-  // users.created_at so the banner escalates urgency as the deadline nears.
-  // Server-side sweep also deletes at 72h; this just shows the same countdown.
-  const countdown = useMemo(() => {
-    const createdRaw =
-      (user as any)?.createdAt ??
-      (user as any)?.created_at ??
-      null;
-    if (!createdRaw) return null;
-    const created = new Date(createdRaw).getTime();
-    if (Number.isNaN(created)) return null;
-    const deletionAtMs = created + 72 * 60 * 60 * 1000;
-    const hoursLeft = (deletionAtMs - Date.now()) / (60 * 60 * 1000);
-    if (hoursLeft <= 0) return { text: "less than 1 hour", tone: "final" as const };
-    if (hoursLeft <= 6)  return { text: `${Math.max(1, Math.ceil(hoursLeft))} hour${Math.ceil(hoursLeft) === 1 ? "" : "s"}`, tone: "final"   as const };
-    if (hoursLeft <= 24) return { text: `${Math.ceil(hoursLeft)} hours`, tone: "warning" as const };
-    if (hoursLeft <= 48) return { text: `${Math.ceil(hoursLeft / 24 * 10) / 10} days`, tone: "reminder" as const };
-    return { text: `${Math.ceil(hoursLeft / 24)} days`, tone: "gentle" as const };
-  }, [user]);
+  // 2026-10: unverified accounts are no longer auto-deleted, so the 72h
+  // countdown / "will be deleted" threat is gone. One calm amber banner.
+  const exempt = (user as any)?.emailVerificationExempt === true;
 
   if (shouldHide || dismissed) return null;
 
-  // Escalate color as the deadline approaches.
-  const bg =
-    countdown?.tone === "final"    ? "bg-red-600 text-white" :
-    countdown?.tone === "warning"  ? "bg-orange-500 text-white" :
-    countdown?.tone === "reminder" ? "bg-amber-500 text-amber-950" :
-                                     "bg-amber-400 text-amber-950";
+  const bg = "bg-amber-400 text-amber-950";
 
   const resend = async () => {
     if (resending) return;
@@ -161,17 +140,15 @@ export function EmailVerifyBanner() {
         <AlertTriangle className="h-4 w-4 shrink-0" />
         <div className="flex-1 min-w-0 leading-snug">
           <span className="font-semibold">
-            {countdown?.tone === "final"
-              ? "Final warning — verify your email now."
-              : "Verify your email to continue."}
+            {exempt ? "Please confirm your email address." : "Confirm your email to open your account."}
           </span>{" "}
           <span className="hidden sm:inline">
             We sent a code to <b className="break-all">{(user as any)?.email ?? "your inbox"}</b>. Check your <b>inbox and spam folder</b>.
           </span>
           <span className="sm:hidden">Check inbox + spam folder.</span>
-          {countdown && (
-            <div className="text-xs font-semibold mt-0.5 opacity-90">
-              Your account will be automatically deleted in <b>{countdown.text}</b> if not verified.
+          {exempt && (
+            <div className="text-xs mt-0.5 opacity-90">
+              Your paid access works as normal — confirming just keeps your account secure and lets us reach you.
             </div>
           )}
         </div>

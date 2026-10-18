@@ -4,6 +4,7 @@ import crypto from "crypto";
 import { eq, sql } from "drizzle-orm";
 import { db, pool } from "../../db";
 import { users } from "@shared/models/auth";
+import { hasSuccessfulPayment } from "../../lib/paying-user";
 import { sendEmail } from "../../email";
 import { validateEmail } from "../../utils/email-validator";
 import { validatePhone } from "../../utils/phone-validator";
@@ -541,7 +542,7 @@ export function registerAuthRoutes(app: Express) {
         // Password, get YET ANOTHER code, and loop. Detect that case
         // and hand the client a clear signal to switch to code-entry
         // mode instead of the generic invalid-password toast.
-        if (!user.emailVerified) {
+        if (!user.emailVerified && !(await hasSuccessfulPayment(user.id))) {
           // Auto-send a fresh code so whatever's in the user's inbox
           // is guaranteed valid when the modal switches to verify UI.
           sendEmailVerificationCode(user.id, user.email, { onlyIfNone: true }).catch((e) =>
@@ -579,7 +580,7 @@ export function registerAuthRoutes(app: Express) {
       // still isn't verified. Instead of setting a session (which sends
       // them to /dashboard where every /api call gets 403'd downstream),
       // fire a fresh code and tell the client to switch to verify UI.
-      if (!user.emailVerified) {
+      if (!user.emailVerified && !(await hasSuccessfulPayment(user.id))) {
         sendEmailVerificationCode(user.id, user.email, { onlyIfNone: true }).catch((e) =>
           console.warn("[Auth][login-verify-fallback] send-code failed:", e?.message),
         );
@@ -950,6 +951,8 @@ export function registerAuthRoutes(app: Express) {
               // Always coerce to booleans — never send undefined to the client
               emailVerified: dbEmailVerified === true,
               phoneVerified: dbPhoneVerified === true,
+              // 2026-10: paying customers skip the hard verify wall (soft banner only).
+              emailVerificationExempt: dbEmailVerified === true ? false : await hasSuccessfulPayment(userId),
             };
         setCachedUser(userId, payload);
         res.setHeader("Cache-Control", "private, max-age=5");

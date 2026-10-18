@@ -2,6 +2,7 @@ import type { RequestHandler } from "express";
 import { storage } from "../storage";
 import { isUserPro } from "../supabaseClient";
 import { pool } from "../db";
+import { hasSuccessfulPayment } from "../lib/paying-user";
 
 interface AccessViolation {
   userId: string | null;
@@ -76,7 +77,8 @@ export const requireAnyPaidPlan: RequestHandler = async (req: any, res, next) =>
     // Gmail addresses before the payment-init gate was added kept plan=pro
     // but never proved they own the email. This forces them back through
     // /verify-email before any paid feature works.
-    if (user && !user.email_verified) {
+    // 2026-10: paying customers are exempt (they proved they're real by paying).
+    if (user && !user.email_verified && !(await hasSuccessfulPayment(userId))) {
       logViolation({ userId, endpoint, method, ip, reason: "email_not_verified", planId: "unverified", timestamp: ts });
       return res.status(403).json({
         error: "Email verification required",

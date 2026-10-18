@@ -266,6 +266,7 @@ export const getQueryFn: <T>(options: {
       const isExemptUser =
         !cachedUser ||
         cachedUser.emailVerified !== false ||
+        cachedUser.emailVerificationExempt === true || // 2026-10: paying customers
         cachedUser.isAdmin === true ||
         cachedUser.role === "ADMIN" ||
         cachedUser.role === "SUPER_ADMIN";
@@ -404,6 +405,7 @@ if (typeof window !== "undefined" && !(window as any).__wahEmailVerifiedFetchPat
         const isBlockedUser =
           !!cachedUser &&
           cachedUser.emailVerified === false &&
+          cachedUser.emailVerificationExempt !== true && // 2026-10: paying customers
           cachedUser.isAdmin !== true &&
           cachedUser.role !== "ADMIN" &&
           cachedUser.role !== "SUPER_ADMIN";

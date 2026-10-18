@@ -24,6 +24,7 @@
 import type { RequestHandler } from "express";
 import { pool } from "../db";
 import { isEmailVerificationExempt } from "../../shared/email-verification-gate";
+import { hasSuccessfulPayment } from "../lib/paying-user";
 
 
 export const requireEmailVerifiedApi: RequestHandler = async (req: any, res, next) => {
@@ -56,7 +57,8 @@ export const requireEmailVerifiedApi: RequestHandler = async (req: any, res, nex
     // Admin bypass — never lock ourselves out.
     if (u.is_admin === true || u.role === "ADMIN" || u.role === "SUPER_ADMIN") return next();
 
-    if (!u.email_verified) {
+    // 2026-10: paying customers are exempt from the hard wall.
+    if (!u.email_verified && !(await hasSuccessfulPayment(userId))) {
       return res.status(403).json({
         error: "email_verification_required",
         message: "Please verify your email address to continue using WorkAbroadHub. Check your inbox and spam folder for the verification code.",

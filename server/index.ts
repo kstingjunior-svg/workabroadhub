@@ -253,6 +253,13 @@ httpServer.listen(PORT, "0.0.0.0", () => {
     } catch (err: any) {
       console.error("[Server] ❌ Verification reminder sweep failed to start:", err?.message);
     }
+    // 2026-10: one-time "welcome back" drip to paying-but-unverified users.
+    try {
+      const { startWelcomeBackDrip } = await import("./lib/welcome-back-drip");
+      startWelcomeBackDrip();
+    } catch (err: any) {
+      console.error("[Server] ❌ Welcome-back drip failed to start:", err?.message);
+    }
 
     // 2026-06: paid-but-free reconciler — every 15 min, find users whose
     // payment status is 'success'/'completed' but whose users.plan is still
