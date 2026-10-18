@@ -245,8 +245,11 @@ export function registerAuthRoutes(app: Express) {
           // Skip the known-placeholder slot (people entering a fake number)
           // and Tony's admin pair.
           if (last9 && last9.length === 9 && last9 !== "712345678" && last9 !== "704454609") {
-            const { rows } = await pool.query<{ id: string; email: string }>(
-              `SELECT id, email FROM users
+            const { rows } = await pool.query<{ id: string; email: string; email_verified: boolean | null; paid: boolean }>(
+              `SELECT id, email, email_verified,
+                      EXISTS (SELECT 1 FROM payments p WHERE p.user_id = users.id
+                               AND p.status IN ('success','completed')) AS paid
+                 FROM users
                 WHERE deleted_at IS NULL
                   AND email NOT LIKE 'merged-%@merged.workabroadhub.local'
                   AND email NOT LIKE 'deleted-%@deleted.workabroadhub.local'
@@ -254,7 +257,26 @@ export function registerAuthRoutes(app: Express) {
                 LIMIT 1`,
               [last9],
             );
-            const existingPhone = rows[0];
+            let existingPhone = rows[0];
+            // 2026-10 (Tony: stop auto-deleting unverified signups): the 72h
+            // wipe used to free the phone of someone who typo'd their email.
+            // Now we keep unverified accounts, so if the phone's only holder
+            // is NEVER verified and NEVER paid, treat this signup as the same
+            // person starting over: retire the stale record (soft — kept for
+            // history) and let them through. Verified or paying accounts are
+            // still protected by PHONE_TAKEN below.
+            if (existingPhone && existingPhone.email_verified === false && !existingPhone.paid) {
+              await pool.query(
+                `UPDATE users
+                    SET email = 'superseded-' || id || '@deleted.workabroadhub.local',
+                        phone = NULL, phone_number_e164 = NULL,
+                        is_active = false, deleted_at = NOW(), updated_at = NOW()
+                  WHERE id = $1 AND email_verified = false`,
+                [existingPhone.id],
+              );
+              console.log(`[Auth][register] superseded unverified account ${existingPhone.id} (${existingPhone.email}) — same phone re-registering as ${cleanEmail}`);
+              existingPhone = undefined as any;
+            }
             if (existingPhone) {
               // Mask the email → "d******i@gmail.com"
               const maskEmail = (e: string) => {

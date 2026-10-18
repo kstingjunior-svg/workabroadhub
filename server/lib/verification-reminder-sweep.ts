@@ -1,5 +1,15 @@
 /**
- * Verification lifecycle sweep — escalating reminders + auto-delete at 72h.
+ * Verification lifecycle sweep — friendly reminders, NO auto-delete.
+ *
+ * 2026-10 (Tony: "sign up is everything"): auto-deleting unverified signups
+ * after 72h threw away real leads — ~76 people (name + email + phone) in
+ * three days. Accounts are now KEPT; the sweep only sends 4 friendly
+ * reminders (6h, 24h, 3 days, 7 days) with a fresh code, and stops after
+ * 14 days. A re-signup with the same phone supersedes a never-verified,
+ * never-paid record (see /api/auth/register), so typo'd emails don't lock
+ * anyone out. Set AUTO_DELETE_UNVERIFIED=true to restore the old wipe.
+ *
+ * (History below kept for context.)
  *
  * 2026-08 (Tony's fake-email + soft-delete request):
  *   - Immediate deletion is too harsh — someone might have signed up on a
@@ -33,7 +43,9 @@ import { sendEmail } from "../email";
 const SWEEP_INTERVAL_MS = 30 * 60 * 1000;   // every 30 min
 const BATCH_LIMIT = 100;                     // per sweep per stage
 const SEND_PAUSE_MS = 250;                   // gap between sends
-const DELETION_GRACE_HOURS = 72;             // hard deletion cutoff
+const DELETION_GRACE_HOURS = 72;             // only used if AUTO_DELETE_UNVERIFIED=true
+const REMINDER_WINDOW_HOURS = 14 * 24;       // stop reminding after 14 days
+const AUTO_DELETE = String(process.env.AUTO_DELETE_UNVERIFIED || "").toLowerCase() === "true";
 
 // Tier definitions: each has (name, min age hours, tier index).
 // Tier index maps 1-to-1 to verification_reminder_count so we can skip
@@ -45,10 +57,10 @@ const TIERS: ReadonlyArray<{
   subject: string;
   urgency: "gentle" | "reminder" | "warning" | "final";
 }> = [
-  { stage: 1, minAgeHours: 6,  hoursLeftLabel: "66 hours",       subject: "Verify your email to keep your WorkAbroadHub account",         urgency: "gentle"   },
-  { stage: 2, minAgeHours: 24, hoursLeftLabel: "48 hours",       subject: "Reminder — verify your email within 48 hours",                 urgency: "reminder" },
-  { stage: 3, minAgeHours: 48, hoursLeftLabel: "24 hours",       subject: "24 hours left to verify your WorkAbroadHub account",           urgency: "warning"  },
-  { stage: 4, minAgeHours: 66, hoursLeftLabel: "6 hours",        subject: "Final warning — verify in the next 6 hours",                   urgency: "final"    },
+  { stage: 1, minAgeHours: 6,   hoursLeftLabel: "", subject: "One step left to open your WorkAbroadHub account",   urgency: "gentle"   },
+  { stage: 2, minAgeHours: 24,  hoursLeftLabel: "", subject: "Your WorkAbroadHub account is waiting for you",      urgency: "reminder" },
+  { stage: 3, minAgeHours: 72,  hoursLeftLabel: "", subject: "Here's a fresh code to finish signing up",          urgency: "warning"  },
+  { stage: 4, minAgeHours: 168, hoursLeftLabel: "", subject: "Still planning to work abroad? Your account is saved", urgency: "final"    },
 ];
 
 let _timer: NodeJS.Timeout | null = null;
@@ -86,19 +98,20 @@ function buildEmail(opts: {
     urgency === "reminder" ? "#0F766E" :
                              "#C2461E";
 
+  // 2026-10: no deletion threats any more — the account is kept.
   const openingLine =
     urgency === "final"
-      ? `<b>Final reminder</b> — your WorkAbroadHub account will be deleted in about <b>${hoursLeftLabel}</b> if the email is not verified.`
+      ? `Your WorkAbroadHub account is still saved. Confirm your email and you can pick up right where you left off — verified job portals, CV help and agency checks.`
       : urgency === "warning"
-        ? `Your unverified WorkAbroadHub account will be automatically deleted in about <b>${hoursLeftLabel}</b>.`
+        ? `You started signing up a few days ago. Here's a fresh code so you can finish in under a minute.`
         : urgency === "reminder"
-          ? `You started signing up on WorkAbroadHub but haven't verified your email yet. You have about <b>${hoursLeftLabel}</b> left before the account is auto-deleted.`
-          : `Welcome ${escapeHtml(name)} — one small step left. Please verify your email so we can activate your account. If you don't verify within about <b>${hoursLeftLabel}</b>, the account will be automatically deleted.`;
+          ? `You started signing up on WorkAbroadHub yesterday but haven't confirmed your email yet. It takes a few seconds.`
+          : `Welcome ${escapeHtml(name)} — one small step left. Please confirm your email so we can open your account.`;
 
   const html = `
     <div style="font-family:-apple-system,Segoe UI,sans-serif;max-width:520px;margin:auto;padding:24px;color:#1a2530;">
       <div style="background:${bannerColor};color:#fff;padding:14px 18px;border-radius:8px;margin-bottom:16px;font-weight:600;font-size:15px;">
-        ${urgency === "final" ? "⚠ Final warning" : urgency === "warning" ? "24 hours remaining" : urgency === "reminder" ? "48 hours remaining" : "Please verify your email"}
+        ${urgency === "final" ? "Your account is saved" : urgency === "warning" ? "A fresh code for you" : urgency === "reminder" ? "Your account is waiting" : "One step left"}
       </div>
       <p>Hi ${escapeHtml(name)},</p>
       <p>${openingLine}</p>
@@ -118,7 +131,7 @@ function buildEmail(opts: {
         </a>
       </p>
       <p style="font-size:13px;color:#475569;">
-        Signed up by mistake? No action needed — the account will be automatically deleted within ${hoursLeftLabel}.
+        Signed up by mistake? Just ignore this email.
       </p>
       <p style="margin-top:32px;font-size:13px;color:#475569;">
         — Tony &amp; the WorkAbroadHub team, Nairobi
@@ -128,7 +141,7 @@ function buildEmail(opts: {
   const codeBlock = freshCode
     ? `\n\nYour fresh verification code: ${freshCode}\nType these 6 numbers on the verification page — it works for 10 minutes.\n`
     : `\n\nCan't find our email? Check your Spam or Promotions folder — the code comes from noreply@workabroadhub.tech.\n`;
-  const text = `Hi ${name},\n\n${openingLine.replace(/<[^>]+>/g, "")}${codeBlock}\nVerify here: ${verifyUrl}\n\nSigned up by mistake? No action needed — the account will be automatically deleted within ${hoursLeftLabel}.\n\n— Tony & the WorkAbroadHub team, Nairobi`;
+  const text = `Hi ${name},\n\n${openingLine.replace(/<[^>]+>/g, "")}${codeBlock}\nVerify here: ${verifyUrl}\n\nSigned up by mistake? Just ignore this email.\n\n— Tony & the WorkAbroadHub team, Nairobi`;
 
   return { html, text };
 }
@@ -170,7 +183,7 @@ export async function runVerificationLifecycleSweep(): Promise<SweepResult> {
            AND (role IS NULL OR role NOT IN ('ADMIN','SUPER_ADMIN'))
            AND verification_reminder_count < $1
            AND created_at <= NOW() - INTERVAL '${tier.minAgeHours} hours'
-           AND created_at >  NOW() - INTERVAL '${DELETION_GRACE_HOURS} hours'
+           AND created_at >  NOW() - INTERVAL '${REMINDER_WINDOW_HOURS} hours'
            AND email IS NOT NULL AND email <> ''
            AND email NOT LIKE '%@deleted.workabroadhub.local'
          ORDER BY created_at ASC
@@ -228,10 +241,9 @@ export async function runVerificationLifecycleSweep(): Promise<SweepResult> {
             if (user.phone) {
               try {
                 const { sendWhatsApp } = await import("../services/whatsapp");
-                const msg =
-                  tier.urgency === "final"
-                    ? `⚠ WorkAbroadHub: Final reminder. Your unverified account will be deleted in about ${tier.hoursLeftLabel}. Verify at workabroadhub.tech/account/verify or check spam for the code.`
-                    : `WorkAbroadHub: Please verify your email — ${tier.hoursLeftLabel} left before your unverified account is deleted. Check inbox or spam for the code, or verify at workabroadhub.tech/account/verify`;
+                const msg = freshCode
+                  ? `WorkAbroadHub: your code to finish signing up is ${freshCode} (valid 10 min). Enter it at workabroadhub.tech/account/verify`
+                  : `WorkAbroadHub: one step left — confirm your email at workabroadhub.tech/account/verify (check inbox or spam for the code).`;
                 await sendWhatsApp(user.phone, msg).catch(() => {});
               } catch { /* whatsapp module optional */ }
             }
@@ -265,7 +277,7 @@ export async function runVerificationLifecycleSweep(): Promise<SweepResult> {
     // in ~40 sweeps = ~20 hours at the current 30-min cadence, without any
     // manual intervention or SMTP burst.
     const DELETE_BATCH_CAP = 500;
-    try {
+    if (AUTO_DELETE) try {
       const { rows: doomed } = await pool.query<{ id: string; email: string }>(`
         WITH targets AS (
           SELECT id FROM users
@@ -314,7 +326,7 @@ export function startVerificationReminderSweep(): void {
   if (_timer) return;
   console.log(
     `[verification-reminder] Started — running every ${SWEEP_INTERVAL_MS / 60_000} min. ` +
-    `Reminders at 6h/24h/48h/66h; auto-delete at ${DELETION_GRACE_HOURS}h (paying users protected).`
+    `Reminders at 6h/24h/3d/7d; ` + (AUTO_DELETE ? `auto-delete at ${DELETION_GRACE_HOURS}h.` : `unverified accounts are KEPT (no auto-delete).`)
   );
 
   // First run 3 min after boot so we don't hammer SMTP during startup.
