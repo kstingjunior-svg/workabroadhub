@@ -191,8 +191,10 @@ httpServer.listen(PORT, "0.0.0.0", () => {
     // paid|processing state for >90 s. Protects against silent OpenAI
     // timeouts and lost callback metadata.
     try {
-      const { startStuckOrderSweep } = await import("./service-order-routes");
+      const { startStuckOrderSweep, startDownloadReminderSweep } = await import("./service-order-routes");
       startStuckOrderSweep();
+      // 2026-10: one "your CV is waiting" reminder 24h after completion.
+      startDownloadReminderSweep();
     } catch (err: any) {
       console.error("[Server] ❌ Stuck-order sweep failed to start:", err?.message);
     }

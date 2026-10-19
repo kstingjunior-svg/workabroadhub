@@ -1385,6 +1385,17 @@ async function updateOrderStatus(orderId: string, status: string, fields: Record
 // ── AI processing — async, fired after payment confirms ─────────────────────
 async function processOrder(orderId: string): Promise<void> {
   try {
+    // 2026-10: never regenerate a delivered document (duplicate triggers
+    // used to rewrite the CV and re-email the customer).
+    const { rows: doneRows } = await pool.query<{ done: boolean }>(
+      `SELECT (status = 'completed' AND output_text IS NOT NULL AND output_text <> '') AS done
+         FROM service_orders WHERE id = $1`,
+      [orderId],
+    );
+    if (doneRows[0]?.done) {
+      console.log(`[ServiceOrder] processOrder: ${orderId} already completed — skipping`);
+      return;
+    }
     // 2026-08 deferred-extraction: if the order was created with a scanned
     // PDF (cv_extraction_status='pending'), run the slow OCR / OpenAI PDF
     // extraction NOW — after payment confirmed, before AI generation. This
@@ -1807,6 +1818,26 @@ CRITICAL LENGTH REQUIREMENT — READ CAREFULLY (do not violate):
           })
         : null;
 
+    // 2026-10: never deliver an AI refusal as the customer's document
+    // (e.g. "I'm sorry, the document you've provided is not readable…").
+    // Flag for human follow-up instead of emailing "your CV is ready".
+    const looksLikeRefusal =
+      String(output ?? "").length < 900 &&
+      /not (a )?readable|appears to be corrupted|corrupted or in an incorrect format|could you (please )?provide (the|your) cv|please provide (the|your) (cv|details|text)|(unable|not able) to (read|process|access|interpret|extract)\b|can(no|')t (read|access|interpret|extract)\b|interpret images|no cv (was )?provided/i.test(String(output ?? ""));
+    if (looksLikeRefusal) {
+      await pool.query(
+        `UPDATE service_orders
+            SET status = 'failed', needs_human_review = true, updated_at = NOW(),
+                error_message = COALESCE(error_message,'') ||
+                  E'\n[processOrder ' || to_char(NOW(),'YYYY-MM-DD HH24:MI:SS') || '] AI could not read the uploaded CV — needs customer re-upload.'
+          WHERE id = $1`,
+        [orderId],
+      );
+      console.warn(`[ServiceOrder] ${orderId}: AI returned a refusal (unreadable CV) — flagged for human review, not delivered`);
+      notifyOrderFailed(orderId, "unreadable CV upload — please reply with your CV as a Word document or PDF").catch(() => {});
+      return;
+    }
+
     await pool.query(
       `UPDATE service_orders
        SET output_text = $2,
@@ -1951,8 +1982,22 @@ CRITICAL LENGTH REQUIREMENT — READ CAREFULLY (do not violate):
  * Never throws. Every branch swallows its own errors so a broken notification
  * cannot roll back a completed order.
  */
-async function notifyOrderCompleted(orderId: string): Promise<void> {
+async function notifyOrderCompleted(orderId: string, opts: { force?: boolean; reminder?: boolean } = {}): Promise<void> {
   try {
+    // 2026-10: send the "ready" email ONCE per order. Atomically claim
+    // user_notified_at; a second trigger finds it set and bails. `force`
+    // is for deliberate resends (download reminders, admin resend).
+    if (!opts.force) {
+      const { rowCount } = await pool.query(
+        `UPDATE service_orders SET user_notified_at = NOW()
+          WHERE id = $1 AND status = 'completed' AND user_notified_at IS NULL`,
+        [orderId],
+      );
+      if (!rowCount) {
+        console.log(`[ServiceOrder] notifyOrderCompleted: ${orderId} already notified — skipping duplicate`);
+        return;
+      }
+    }
     // 2026-08 (guest orders): pull guest fields alongside user_id so we can
     // route delivery correctly. Guest = user_id NULL + guest_email present.
     const { rows } = await pool.query<{
@@ -1963,9 +2008,11 @@ async function notifyOrderCompleted(orderId: string): Promise<void> {
       guest_email: string | null;
       guest_phone: string | null;
       download_token: string | null;
+      delayed: boolean;
     }>(
       `SELECT user_id, service_name, service_slug,
-              guest_name, guest_email, guest_phone, download_token
+              guest_name, guest_email, guest_phone, download_token,
+              (COALESCE(completed_at, NOW()) - COALESCE(paid_at, created_at)) > INTERVAL '3 hours' AS delayed
          FROM service_orders WHERE id = $1 AND status = 'completed'`,
       [orderId],
     );
@@ -2049,10 +2096,11 @@ async function notifyOrderCompleted(orderId: string): Promise<void> {
         const guestExpiryNote = `<p style="font-size:12px;line-height:1.5;color:#94a3b8;margin:16px 0 0">This download link works for 30 days from any device — no sign-in needed. Save it so you can come back later.</p>`;
         const html = `
           <div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1e293b">
-            <h1 style="font-size:22px;font-weight:700;color:#0f766e;margin:0 0 8px">Your ${serviceName} is ready 🎉</h1>
+            <h1 style="font-size:22px;font-weight:700;color:#0f766e;margin:0 0 8px">${opts.reminder ? `Reminder: your ${serviceName} is waiting for you` : `Your ${serviceName} is ready 🎉`}</h1>
             <p style="font-size:15px;line-height:1.55;margin:0 0 20px">
               Hi ${escapeHtml(firstName)}, we've just finished your ${serviceName.toLowerCase()}. It's optimized, warm, and ready for recruiters.
             </p>
+            ${order.delayed ? `<p style="font-size:14px;line-height:1.55;margin:0 0 20px;color:#475569">We're sorry this took longer than promised — a technical problem on our side delayed your order. Thank you for your patience.</p>` : ""}
             <a href="${primaryDownloadUrl}" style="display:inline-block;background:linear-gradient(90deg,#14b8a6,#06b6d4);color:#fff;font-weight:600;text-decoration:none;padding:14px 24px;border-radius:8px;font-size:15px">
               ${primaryCtaLabel}
             </a>
@@ -2064,10 +2112,13 @@ async function notifyOrderCompleted(orderId: string): Promise<void> {
           </div>
         `;
         // 2026-10: unified plain-text — same magic link for everyone.
-        const text = `Your ${serviceName} is ready.\n\nHi ${firstName}, we've just finished your ${serviceName.toLowerCase()}. Download it here (works for 30 days, no sign-in needed):\n\n${primaryDownloadUrl}\n\n— WorkAbroad Hub`;
+        const sorry = order.delayed ? `We're sorry this took longer than promised — a technical problem on our side delayed your order.\n\n` : "";
+        const text = `Your ${serviceName} is ready.\n\nHi ${firstName}, we've just finished your ${serviceName.toLowerCase()}. ${sorry}Download it here (works for 30 days, no sign-in needed):\n\n${primaryDownloadUrl}\n\n— WorkAbroad Hub`;
         await sendWithFailover({
           to: recipientEmail,
-          subject: `Your ${serviceName} is ready — download it here`,
+          subject: opts.reminder
+            ? `Reminder: your ${serviceName} is ready — you haven't downloaded it yet`
+            : `Your ${serviceName} is ready — download it here`,
           html,
           text,
         });
@@ -2087,7 +2138,7 @@ async function notifyOrderCompleted(orderId: string): Promise<void> {
     // We skip WhatsApp for guests. Their phone was collected for the M-Pesa
     // STK push only; they didn't opt in to marketing messages, and email
     // delivery is what we committed to at checkout ("we'll email your CV").
-    if (recipientPhone && !isGuestDelivery) {
+    if (recipientPhone && !isGuestDelivery && !opts.reminder) {
       try {
         const { sendWhatsApp } = await import("./services/whatsapp");
         const waMessage =
@@ -2104,7 +2155,7 @@ async function notifyOrderCompleted(orderId: string): Promise<void> {
 
     // ── In-app notification (tertiary) ────────────────────────────────────
     // Only for logged-in users — guests have no account, so no bell icon.
-    if (order.user_id) {
+    if (order.user_id && !opts.reminder) {
       try {
         const { storage } = await import("./storage");
         await storage.createUserNotification({
@@ -2138,27 +2189,41 @@ async function notifyOrderCompleted(orderId: string): Promise<void> {
 async function notifyOrderFailed(orderId: string, technicalReason: string): Promise<void> {
   try {
     const { rows } = await pool.query<{
-      user_id: string;
+      user_id: string | null;
       service_name: string;
       service_slug: string;
       amount: number | null;
+      guest_name: string | null;
+      guest_email: string | null;
     }>(
-      `SELECT user_id, service_name, service_slug, amount FROM service_orders WHERE id = $1`,
+      `SELECT user_id, service_name, service_slug, amount, guest_name, guest_email FROM service_orders WHERE id = $1`,
       [orderId],
     );
     const order = rows[0];
     if (!order) return;
 
-    const { rows: userRows } = await pool.query<{
-      email: string | null;
-      phone: string | null;
-      first_name: string | null;
-    }>(
-      `SELECT email, phone, first_name FROM users WHERE id = $1`,
-      [order.user_id],
-    );
-    const user = userRows[0];
+    // 2026-10: guests (no account) used to get NOTHING here — all 14 stuck
+    // paid orders found on 19 Oct were guest checkouts left in silence.
+    let user: { email: string | null; phone: string | null; first_name: string | null } | undefined;
+    if (order.user_id) {
+      const { rows: userRows } = await pool.query<{
+        email: string | null;
+        phone: string | null;
+        first_name: string | null;
+      }>(
+        `SELECT email, phone, first_name FROM users WHERE id = $1`,
+        [order.user_id],
+      );
+      user = userRows[0];
+    } else if (order.guest_email) {
+      // Email only for guests (phone was collected for M-Pesa, not messaging).
+      user = { email: order.guest_email, phone: null, first_name: order.guest_name };
+    }
     if (!user) return;
+
+    // Upstream-outage failures are retried automatically for up to 3 days,
+    // so tell the customer it's DELAYED (not dead) and that we'll email them.
+    const isOutage = /outage|transient|credit/i.test(technicalReason);
 
     const firstName    = (user.first_name || "").split(/\s+/)[0] || "there";
     const serviceName  = order.service_name || "your order";
@@ -2175,7 +2240,8 @@ async function notifyOrderFailed(orderId: string, technicalReason: string): Prom
         const { sendWithFailover } = await import("./lib/email-providers");
         const html = `
           <div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1e293b">
-            <h1 style="font-size:20px;font-weight:700;color:#b91c1c;margin:0 0 8px">We couldn't finish your ${serviceName} — sorry.</h1>
+            <h1 style="font-size:20px;font-weight:700;color:#b91c1c;margin:0 0 8px">${isOutage ? `Your ${serviceName} is delayed — sorry.` : `We couldn't finish your ${serviceName} — sorry.`}</h1>
+            ${isOutage ? `<p style="font-size:15px;line-height:1.55;margin:0 0 16px">We're retrying automatically and will email you the download link the moment it's ready — you don't need to do anything.</p>` : ""}
             <p style="font-size:15px;line-height:1.55;margin:0 0 16px">
               Hi ${escapeHtml(firstName)}, something went wrong on our side while generating your ${serviceName.toLowerCase()}. Your KES ${order.amount ?? "?"} payment is safe.
             </p>
@@ -2197,7 +2263,9 @@ async function notifyOrderFailed(orderId: string, technicalReason: string): Prom
         const text = `We couldn't finish your ${serviceName}.\n\nHi ${firstName}, something went wrong on our side. Your KES ${order.amount ?? "?"} payment is safe.\n\nOptions:\n1) Retry: ${orderUrl}\n2) Reply to this email for a refund within 24 hours.\n\nReference: ${technicalReason.slice(0, 200)}`;
         await sendWithFailover({
           to: user.email,
-          subject: `We couldn't finish your ${serviceName} — full refund available`,
+          subject: isOutage
+            ? `Your ${serviceName} is delayed — we'll email you as soon as it's ready`
+            : `We couldn't finish your ${serviceName} — full refund available`,
           html,
           text,
         });
@@ -2253,7 +2321,23 @@ function escapeHtml(s: string): string {
 
 // ── Public: trigger from payment callback after success ─────────────────────
 export async function onPaymentSuccessForServiceOrder(orderId: string): Promise<void> {
-  await pool.query(`UPDATE service_orders SET status = 'paid', paid_at = NOW(), updated_at = NOW() WHERE id = $1`, [orderId]);
+  // 2026-10 (Tony: "CVs never delivered / duplicate emails"): this used to
+  // flip ANY order back to 'paid' — including completed ones — so every
+  // repeat payment confirmation re-generated the CV (burning AI credits)
+  // and re-sent the "ready" email. Only advance orders that still need work.
+  const { rows } = await pool.query<{ id: string }>(
+    `UPDATE service_orders
+        SET status = 'paid', paid_at = COALESCE(paid_at, NOW()), updated_at = NOW()
+      WHERE id = $1
+        AND status IN ('pending_payment', 'expired', 'failed', 'paid')
+        AND (output_text IS NULL OR output_text = '')
+      RETURNING id`,
+    [orderId],
+  );
+  if (rows.length === 0) {
+    console.log(`[ServiceOrder] onPaymentSuccess: order ${orderId} already processing/completed — no-op`);
+    return;
+  }
   // Fire-and-forget — don't block the payment callback response
   processOrder(orderId).catch((e) => console.error("[ServiceOrder] async process failed:", e?.message));
 }
@@ -2313,6 +2397,38 @@ export function startStuckOrderSweep(): void {
         );
       }
 
+      // 2026-10 (Tony: "CVs never delivered since Saturday"): the AI credit
+      // outage lasted hours, but the 3 quick retries above are spent in ~3
+      // minutes, so paid orders were marked 'failed' and never delivered.
+      // Give TRANSIENT-failed paid orders a slow second life: re-queue every
+      // 30 min for up to 3 days / 12 attempts. Permanent errors and refund
+      // requests are left alone.
+      const { rows: revived } = await pool.query<{ id: string }>(
+        `UPDATE service_orders
+            SET status = 'paid', updated_at = NOW() - INTERVAL '5 minutes',
+                error_message = COALESCE(error_message,'') ||
+                  E'\n[auto-retry ' || to_char(NOW(),'YYYY-MM-DD HH24:MI') || '] transient failure — retrying'
+          WHERE id IN (
+            SELECT id FROM service_orders
+             WHERE status = 'failed'
+               AND paid_at IS NOT NULL
+               AND (output_text IS NULL OR output_text = '')
+               AND cv_extraction_status IS DISTINCT FROM 'failed'
+               AND error_message LIKE '%TRANSIENT%'
+               AND refund_requested IS NOT TRUE
+               AND refund_processed_at IS NULL
+               AND updated_at < NOW() - INTERVAL '30 minutes'
+               AND paid_at > NOW() - INTERVAL '3 days'
+               AND (length(error_message) - length(replace(error_message, '[auto-retry', ''))) / 11 < 12
+             ORDER BY paid_at ASC
+             LIMIT 10)
+        RETURNING id`,
+      );
+      for (const r of revived) retries.delete(r.id);
+      if (revived.length > 0) {
+        console.warn(`[ServiceOrder] Auto-retry: re-queued ${revived.length} transient-failed paid order(s): ${revived.map(r => r.id).join(", ")}`);
+      }
+
       const { rows } = await pool.query<{ id: string; status: string; service_slug: string }>(
         `SELECT id, status, service_slug
            FROM service_orders
@@ -2343,10 +2459,20 @@ export function startStuckOrderSweep(): void {
           // 2026-08 (post-outage audit): tell the user their order gave up.
           // Otherwise they stare at "processing" forever until manually
           // emailing support. Fire and forget.
-          notifyOrderFailed(
-            row.id,
-            `Exhausted ${MAX_RETRIES_PER_ORDER} recovery retries — likely upstream AI outage`,
-          ).catch(() => {});
+          // 2026-10: auto-retry re-queues transient failures for 3 days, so
+          // this branch can run many times per order. Tell the customer once.
+          const { rowCount: firstNotice } = await pool.query(
+            `UPDATE service_orders
+                SET error_message = COALESCE(error_message,'') || E'\n[failure-notified]'
+              WHERE id = $1 AND COALESCE(error_message,'') NOT LIKE '%[failure-notified]%'`,
+            [row.id],
+          ).catch(() => ({ rowCount: 0 } as any));
+          if (firstNotice) {
+            notifyOrderFailed(
+              row.id,
+              `Exhausted ${MAX_RETRIES_PER_ORDER} recovery retries — likely upstream AI outage`,
+            ).catch(() => {});
+          }
           continue;
         }
         retries.set(row.id, attempts + 1);
@@ -2361,6 +2487,50 @@ export function startStuckOrderSweep(): void {
   }, SWEEP_INTERVAL_MS).unref?.();
 
   console.log(`[ServiceOrder] Stuck-order recovery sweep started — every ${SWEEP_INTERVAL_MS / 1000}s, retries orders stuck >${STUCK_AFTER_SECONDS}s`);
+}
+
+// ── Download reminder sweep ─────────────────────────────────────────────────
+// 2026-10 (Tony: "send them an email asking them to download their CV"):
+// once per order, 24h after completion, if the customer still hasn't
+// downloaded, resend the magic download link with a "Reminder" subject.
+// Logged-in users' downloads were only tracked from 19 Oct 2026, so for
+// them we only remind on orders completed after that date.
+let downloadReminderStarted = false;
+export function startDownloadReminderSweep(): void {
+  if (downloadReminderStarted) return;
+  downloadReminderStarted = true;
+  const INTERVAL_MS = 60 * 60 * 1000; // hourly
+  const tick = async () => {
+    try {
+      const { rows } = await pool.query<{ id: string }>(
+        `UPDATE service_orders
+            SET download_reminder_sent_at = NOW()
+          WHERE id IN (
+            SELECT id FROM service_orders
+             WHERE status = 'completed'
+               AND output_text IS NOT NULL AND output_text <> ''
+               AND first_downloaded_at IS NULL
+               AND COALESCE(download_count, 0) = 0
+               AND download_reminder_sent_at IS NULL
+               AND completed_at < NOW() - INTERVAL '24 hours'
+               AND completed_at > NOW() - INTERVAL '14 days'
+               AND (user_id IS NULL OR completed_at > '2026-10-19')
+             ORDER BY completed_at ASC
+             LIMIT 25)
+        RETURNING id`,
+      );
+      for (const r of rows) {
+        await notifyOrderCompleted(r.id, { force: true, reminder: true }).catch(() => {});
+        await new Promise((res) => setTimeout(res, 300));
+      }
+      if (rows.length) console.log(`[ServiceOrder] Download reminders sent: ${rows.length}`);
+    } catch (e: any) {
+      console.warn("[ServiceOrder] download reminder sweep error:", e?.message);
+    }
+  };
+  setTimeout(tick, 10 * 60 * 1000);
+  setInterval(tick, INTERVAL_MS).unref?.();
+  console.log("[ServiceOrder] Download reminder sweep started — hourly, once per order, 24h after completion");
 }
 
 // ── Route registration ─────────────────────────────────────────────────────
@@ -2950,6 +3120,14 @@ export function registerServiceOrderRoutes(app: Express, isAuthenticated: Reques
           return res.status(409).json({ message: "Order is not ready yet." });
         }
 
+        // 2026-10: record the first successful download for EVERY customer
+        // (owner or magic link) so download reminders only go to people who
+        // genuinely haven't got their document yet.
+        pool.query(
+          `UPDATE service_orders SET first_downloaded_at = NOW() WHERE id = $1 AND first_downloaded_at IS NULL`,
+          [req.params.orderId],
+        ).catch(() => {});
+
         // Bump the counter for guest downloads only (session users are unlimited).
         if (tokenValid && !isOwner) {
           pool.query(
@@ -3246,7 +3424,7 @@ export function registerServiceOrderRoutes(app: Express, isAuthenticated: Reques
         }
 
         // ── Notify user their CV is ready ────────────────────────────────
-        notifyOrderCompleted(id).catch((notifyErr: any) => {
+        notifyOrderCompleted(id, { force: true }).catch((notifyErr: any) => {
           console.warn(`[admin/complete-rewrite] notify failed for ${id}:`, notifyErr?.message);
         });
 

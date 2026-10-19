@@ -285,6 +285,30 @@ async function tryOCR(buf: Buffer, filename?: string): Promise<string> {
   }
 }
 
+/** 2026-10: photo uploads (WhatsApp JPEGs etc.). */
+function isImageFile(mime: string, name: string): boolean {
+  return mime.startsWith("image/") || /\.(jpe?g|png|webp|heic|heif|bmp|gif|tiff?)$/.test(name);
+}
+
+/** Magic-number check: JPEG, PNG, GIF, WEBP, ZIP, PDF, TIFF. */
+function looksLikeBinaryBuffer(buf: Buffer): boolean {
+  if (!buf || buf.length < 4) return false;
+  const b = buf;
+  return (b[0] === 0xff && b[1] === 0xd8) ||                                    // JPEG
+         (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) ||  // PNG
+         (b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46) ||                   // GIF
+         (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46) ||  // RIFF/WEBP
+         (b[0] === 0x50 && b[1] === 0x4b) ||                                    // ZIP
+         (b[0] === 0x49 && b[1] === 0x49 && b[2] === 0x2a) ||                   // TIFF
+         (b[0] === 0x4d && b[1] === 0x4d && b[2] === 0x00);                     // TIFF
+}
+
+/** Text that is really image/file metadata (e.g. "JFIF", "Exif", "%PDF"). */
+export function looksLikeBinary(text: string): boolean {
+  const head = text.slice(0, 400);
+  return /\bJFIF\b|\bExif\b|%PDF-|IHDR|\bWEBPVP8/.test(head);
+}
+
 /**
  * FAST-ONLY extraction — pdfjs + BT/ET + mammoth + plain-text only.
  * Never runs Tesseract OCR or OpenAI PDF file-upload (both can take 30-90 s).
@@ -434,6 +458,19 @@ export async function extractTextFromBuffer(
     return { text: buffer.toString("utf-8"), method: "utf8" };
   }
 
+  // ── Photo of a CV (WhatsApp JPEG etc.) ────────────────────────────────────
+  // 2026-10: images used to fall into the "unknown format" cascade, where the
+  // raw-UTF-8 fallback turned JPEG bytes into "readable" gibberish and the AI
+  // replied "this document is not readable". OCR the photo instead; if that
+  // yields nothing usable, return empty so the order is flagged honestly.
+  if (isImageFile(mime, name)) {
+    const ocrText = await tryOCR(buffer, filename);
+    if (ocrText.length >= MIN_CV_LENGTH && isReadableText(ocrText) && !looksLikeBinary(ocrText)) {
+      return { text: ocrText, method: "image-ocr" };
+    }
+    return { text: "", method: "image-ocr-failed" };
+  }
+
   // ── Unknown format: cascade ───────────────────────────────────────────────
   // 1. pdfjs-dist (was pdf-parse before the v2-API breakage)
   try {
@@ -449,9 +486,11 @@ export async function extractTextFromBuffer(
     if (text.trim().length >= MIN_CV_LENGTH) return { text, method: "mammoth-guess" };
   } catch { /* try next */ }
 
-  // 3. raw UTF-8 — only return if it looks readable
+  // 3. raw UTF-8 — only return if it looks readable AND isn't binary data
+  //    (image/PDF/zip headers survive the strip and fooled isReadableText).
+  if (looksLikeBinaryBuffer(buffer)) return { text: "", method: "binary-rejected" };
   const utf8text = buffer.toString("utf-8").replace(/[^\x20-\x7E\n]/g, " ");
-  if (isReadableText(utf8text)) return { text: utf8text, method: "utf8-strip-guess" };
+  if (isReadableText(utf8text) && !looksLikeBinary(utf8text)) return { text: utf8text, method: "utf8-strip-guess" };
 
   return { text: "", method: "unknown-failed" };
 }
