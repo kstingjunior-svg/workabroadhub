@@ -1193,3 +1193,21 @@ html.text-size-larger {
   font-size: 16px; /* also stops iOS zooming into the field */
 }
 .auth-form label { font-weight: 500; }
+
+/* 2026-10: animated dot ring around the sign-in logo (auth-brand-mark.tsx). */
+.abm-ring { transform-box: view-box; transform-origin: 50px 50px; }
+.abm-ring-0 { animation: abm-spin 38s linear infinite reverse; }
+.abm-ring-1 { animation: abm-spin 28s linear infinite; }
+.abm-ring-2 { animation: abm-spin 46s linear infinite reverse; }
+.abm-dot {
+  transform-box: fill-box; transform-origin: center;
+  animation: abm-twinkle 2.8s ease-in-out infinite;
+}
+@keyframes abm-spin { to { transform: rotate(360deg); } }
+@keyframes abm-twinkle {
+  0%, 100% { opacity: calc(var(--abm-o, 1) * 0.35); transform: scale(0.7); }
+  50%      { opacity: var(--abm-o, 1);              transform: scale(1.15); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .abm-ring, .abm-dot { animation: none !important; }
+}

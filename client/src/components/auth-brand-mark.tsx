@@ -25,36 +25,50 @@ function colourAt(t: number): string {
   return `rgb(${mix(0)},${mix(1)},${mix(2)})`;
 }
 
+// 2026-10 (Tony: "animate like Apple's"): each ring slowly rotates
+// (alternating direction) and a shimmer wave travels around the dots.
+// Keyframes live in index.css (.abm-*); prefers-reduced-motion = static.
+const TWINKLE_S = 2.8;
+
 export function AuthBrandMark({ size = 132 }: { size?: number }) {
-  const dots = useMemo(() => {
-    const out: { x: number; y: number; r: number; fill: string; o: number }[] = [];
-    // Three rings: inner = small & faint, outer = larger & solid.
-    const rings = [
+  const rings = useMemo(() => {
+    const defs = [
       { radius: 34, count: 26, dot: 1.5, opacity: 0.55 },
       { radius: 41, count: 30, dot: 2.0, opacity: 0.8 },
       { radius: 48, count: 34, dot: 2.9, opacity: 1 },
     ];
-    rings.forEach((ring, ri) => {
-      for (let i = 0; i < ring.count; i++) {
+    return defs.map((ring, ri) => ({
+      ri,
+      dots: Array.from({ length: ring.count }, (_, i) => {
         const t = i / ring.count;
         const angle = t * Math.PI * 2 - Math.PI / 2 + ri * 0.09; // stagger rings
-        out.push({
+        return {
           x: 50 + Math.cos(angle) * ring.radius,
           y: 50 + Math.sin(angle) * ring.radius,
           r: ring.dot,
           fill: colourAt(t),
           o: ring.opacity,
-        });
-      }
-    });
-    return out;
+          // negative delay = wave already in motion on first paint
+          delay: -(t * TWINKLE_S + ri * 0.35),
+        };
+      }),
+    }));
   }, []);
 
   return (
     <div className="relative mx-auto" style={{ width: size, height: size }} aria-hidden="true">
-      <svg viewBox="0 0 100 100" className="absolute inset-0 h-full w-full">
-        {dots.map((d, i) => (
-          <circle key={i} cx={d.x} cy={d.y} r={d.r} fill={d.fill} opacity={d.o} />
+      <svg viewBox="0 0 100 100" className="absolute inset-0 h-full w-full overflow-visible">
+        {rings.map((ring) => (
+          <g key={ring.ri} className={`abm-ring abm-ring-${ring.ri}`}>
+            {ring.dots.map((d, i) => (
+              <circle
+                key={i}
+                className="abm-dot"
+                cx={d.x} cy={d.y} r={d.r} fill={d.fill}
+                style={{ ["--abm-o" as any]: d.o, opacity: d.o, animationDelay: `${d.delay}s` }}
+              />
+            ))}
+          </g>
         ))}
       </svg>
       <img
@@ -62,7 +76,7 @@ export function AuthBrandMark({ size = 132 }: { size?: number }) {
         alt=""
         width={size * 0.46}
         height={size * 0.46}
-        className="absolute rounded-full shadow-sm"
+        className="abm-core absolute rounded-full shadow-sm"
         style={{ left: "50%", top: "50%", width: size * 0.46, height: size * 0.46, transform: "translate(-50%,-50%)" }}
         draggable={false}
       />
