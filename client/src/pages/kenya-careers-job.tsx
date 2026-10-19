@@ -21,6 +21,7 @@ import { useToast } from "@/hooks/use-toast";
 import { KenyaCareersApplySheet } from "@/components/kenya-careers-apply-sheet";
 import { KenyaCareersClaimSheet } from "@/components/kenya-careers-claim-sheet";
 import { KenyaCareersNotifySheet } from "@/components/kenya-careers-notify-sheet";
+import { schoolLevelLabel, ownershipLabel } from "@/lib/school-constants";
 
 interface JobDetail {
   id: string;
@@ -40,6 +41,10 @@ interface JobDetail {
   status: string;
   createdAt: string;
   isSeed: boolean;   // 2026-06 SAFETY: true = sample listing, no real applications
+  // 2026-10: teacher vacancy fields (schools)
+  subjects?: string[] | null; teachingLevel?: string | null; tscRequired?: boolean | null;
+  startDate?: string | null; accommodation?: boolean | null;
+  institutionType?: string; schoolOwnership?: string | null;
   company: {
     id: string;
     name: string;
@@ -150,6 +155,13 @@ export default function KenyaCareersJob() {
           salaryMax:       data?.salaryMax ?? null,
           requirements:    data?.requirements ?? null,
           responsibilities: data?.responsibilities ?? null,
+          subjects:        Array.isArray(data?.subjects) ? data.subjects.map(String) : null,
+          teachingLevel:   data?.teachingLevel ?? null,
+          tscRequired:     data?.tscRequired ?? null,
+          startDate:       data?.startDate ?? null,
+          accommodation:   data?.accommodation ?? null,
+          institutionType: data?.company?.institutionType ?? "company",
+          schoolOwnership: data?.company?.schoolOwnership ?? null,
           deadline:        data?.deadline ?? null,
           county:          data?.county ?? null,
           town:            data?.town ?? null,
@@ -373,6 +385,26 @@ export default function KenyaCareersJob() {
             </div>
           </CardContent>
         </Card>
+
+        {/* 2026-10: teaching details for school vacancies */}
+        {job.institutionType === "school" && (job.subjects?.length || job.teachingLevel || job.tscRequired != null || job.startDate || job.accommodation != null) && (
+          <Card className="mt-4 border-emerald-200">
+            <CardContent className="p-5">
+              <h2 className="font-semibold mb-3">Teaching details</h2>
+              <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                {job.subjects && job.subjects.length > 0 && (
+                  <div className="sm:col-span-2"><dt className="text-muted-foreground text-xs">Subjects</dt>
+                    <dd className="flex flex-wrap gap-1.5 mt-1">{job.subjects.map((s) => <Badge key={s} variant="outline" className="text-[11px]">{s}</Badge>)}</dd></div>
+                )}
+                {job.teachingLevel && (<div><dt className="text-muted-foreground text-xs">Level</dt><dd>{schoolLevelLabel(job.teachingLevel)}</dd></div>)}
+                {job.schoolOwnership && (<div><dt className="text-muted-foreground text-xs">School type</dt><dd>{ownershipLabel(job.schoolOwnership)}</dd></div>)}
+                {job.tscRequired != null && (<div><dt className="text-muted-foreground text-xs">TSC registration</dt><dd>{job.tscRequired ? "Required" : "Not required"}</dd></div>)}
+                {job.startDate && (<div><dt className="text-muted-foreground text-xs">Start date</dt><dd>{new Date(job.startDate).toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric" })}</dd></div>)}
+                {job.accommodation != null && (<div><dt className="text-muted-foreground text-xs">Housing</dt><dd>{job.accommodation ? "Provided" : "Not provided"}</dd></div>)}
+              </dl>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Responsibilities */}
         {job.responsibilities && (

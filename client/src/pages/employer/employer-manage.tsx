@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { CompanyLogo } from "@/components/kenya-careers-company-logo";
+import { SCHOOL_LEVELS, TEACHING_SUBJECTS } from "@/lib/school-constants";
 
 interface Company {
   id: string; name: string; slug: string | null; logoUrl: string | null;
@@ -29,6 +30,7 @@ interface Company {
   contactName: string | null; phone: string | null; email: string | null;
   description: string | null; website: string | null;
   verified: boolean; status: string;
+  institutionType?: string; schoolLevels?: string[] | null; town?: string | null;
 }
 interface Branch {
   id: string; name: string; county: string | null; town: string | null;
@@ -420,6 +422,10 @@ export default function EmployerManage() {
         companyId={company.id}
         companyName={company.name}
         branches={branches}
+        isSchool={company.institutionType === "school"}
+        schoolLevels={company.schoolLevels ?? []}
+        defaultCounty={company.county ?? ""}
+        defaultTown={company.town ?? ""}
         onPosted={() => { setPostJobOpen(false); load(); setTab("jobs"); }}
       />
       <EditProfileModal
@@ -440,19 +446,31 @@ interface PostJobModalProps {
   companyId: string; companyName: string;
   branches: Branch[];
   onPosted: () => void;
+  // 2026-10: schools get teacher-specific fields.
+  isSchool?: boolean;
+  schoolLevels?: string[];
+  defaultCounty?: string;
+  defaultTown?: string;
 }
-function PostJobModal({ open, onClose, companyId, companyName, branches, onPosted }: PostJobModalProps) {
+function PostJobModal({ open, onClose, companyId, companyName, branches, onPosted, isSchool = false, schoolLevels = [], defaultCounty = "", defaultTown = "" }: PostJobModalProps) {
+  const [subjects, setSubjects] = useState<string[]>([]);
+  const [teachingLevel, setTeachingLevel] = useState<string>(schoolLevels[0] ?? "");
+  const [tscRequired, setTscRequired] = useState(true);
+  const [startDate, setStartDate] = useState("");
+  const [accommodation, setAccommodation] = useState(false);
+  const toggleSubject = (v: string) =>
+    setSubjects((cur) => (cur.includes(v) ? cur.filter((x) => x !== v) : cur.length >= 8 ? cur : [...cur, v]));
   const [title, setTitle] = useState("");
   const [department, setDepartment] = useState("");
-  const [category, setCategory] = useState("other");
+  const [category, setCategory] = useState(isSchool ? "education" : "other");
   const [vacancies, setVacancies] = useState("1");
   const [employmentType, setEmploymentType] = useState("full_time");
   const [experienceLevel, setExperienceLevel] = useState("any");
   const [salaryMin, setSalaryMin] = useState("");
   const [salaryMax, setSalaryMax] = useState("");
   const [branchId, setBranchId] = useState("");
-  const [county, setCounty] = useState("");
-  const [town, setTown] = useState("");
+  const [county, setCounty] = useState(isSchool ? defaultCounty : "");
+  const [town, setTown] = useState(isSchool ? defaultTown : "");
   const [deadline, setDeadline] = useState("");
   const [responsibilities, setResponsibilities] = useState("");
   const [requirements, setRequirements] = useState("");
@@ -461,7 +479,8 @@ function PostJobModal({ open, onClose, companyId, companyName, branches, onPoste
   const { toast } = useToast();
 
   function reset() {
-    setTitle(""); setDepartment(""); setCategory("other"); setVacancies("1");
+    setTitle(""); setDepartment(""); setCategory(isSchool ? "education" : "other"); setVacancies("1");
+    setSubjects([]); setTscRequired(true); setStartDate(""); setAccommodation(false);
     setEmploymentType("full_time"); setExperienceLevel("any");
     setSalaryMin(""); setSalaryMax(""); setBranchId(""); setCounty(""); setTown("");
     setDeadline(""); setResponsibilities(""); setRequirements("");
@@ -492,6 +511,7 @@ function PostJobModal({ open, onClose, companyId, companyName, branches, onPoste
           salaryMax: salaryMax ? Number(salaryMax) : null,
           branchId: branchId || null,
           county, town, deadline, responsibilities, requirements,
+          ...(isSchool ? { subjects, teachingLevel: teachingLevel || null, tscRequired, startDate: startDate || null, accommodation } : {}),
         }),
       });
       const body = await res.json().catch(() => ({}));
@@ -512,17 +532,54 @@ function PostJobModal({ open, onClose, companyId, companyName, branches, onPoste
         </button>
         <div className="p-5 sm:p-6">
           <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1"><Plus className="h-3 w-3" /> New job posting</p>
-          <h2 className="font-bold text-lg leading-tight mb-1">Post a job at {companyName}</h2>
+          <h2 className="font-bold text-lg leading-tight mb-1">{isSchool ? `Post a vacancy at ${companyName}` : `Post a job at ${companyName}`}</h2>
           <p className="text-xs text-muted-foreground mb-4">Applications go directly to you. Jobseekers pay KES 99+ to apply — high-intent only.</p>
 
           <div className="space-y-3">
             <div>
               <label htmlFor="pj-title" className="text-sm font-medium block mb-1">Job title *</label>
-              <Input id="pj-title" value={title} onChange={(e) => setTitle(e.target.value.slice(0, 200))} placeholder="e.g. Cashier" />
+              <Input id="pj-title" value={title} onChange={(e) => setTitle(e.target.value.slice(0, 200))} placeholder={isSchool ? "e.g. Mathematics & Physics Teacher" : "e.g. Cashier"} />
             </div>
 
+            {isSchool && (
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 dark:bg-emerald-950/20 p-3 space-y-3" data-testid="block-teacher-fields">
+                <div>
+                  <p className="text-sm font-medium mb-1.5">Subjects to teach <span className="text-xs text-muted-foreground font-normal">(up to 8 — skip for non-teaching roles)</span></p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {TEACHING_SUBJECTS.map((sub) => (
+                      <button key={sub} type="button" onClick={() => toggleSubject(sub)}
+                        className={`text-[11px] px-2.5 py-1 rounded-full border transition ${subjects.includes(sub) ? "bg-emerald-600 text-white border-emerald-600" : "bg-background hover:bg-muted"}`}>
+                        {sub}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label htmlFor="pj-tlevel" className="text-sm font-medium block mb-1">Level</label>
+                    <select id="pj-tlevel" value={teachingLevel} onChange={(e) => setTeachingLevel(e.target.value)} className="w-full text-sm border rounded-md px-3 py-2 bg-background">
+                      <option value="">—</option>
+                      {SCHOOL_LEVELS.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="pj-start" className="text-sm font-medium block mb-1">Start date</label>
+                    <Input id="pj-start" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                  </div>
+                </div>
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={tscRequired} onChange={(e) => setTscRequired(e.target.checked)} />
+                  TSC registration required
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={accommodation} onChange={(e) => setAccommodation(e.target.checked)} />
+                  Housing / accommodation provided
+                </label>
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-3">
-              <div>
+              <div className={isSchool ? "hidden" : ""}>
                 <label htmlFor="pj-cat" className="text-sm font-medium block mb-1">Category *</label>
                 <select id="pj-cat" value={category} onChange={(e) => setCategory(e.target.value)} className="w-full text-sm border rounded-md px-3 py-2 bg-background">
                   {JOB_CATEGORIES.map((c) => <option key={c} value={c}>{c[0].toUpperCase() + c.slice(1)}</option>)}

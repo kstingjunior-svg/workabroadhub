@@ -39,7 +39,9 @@ interface Job {
   deadline: string | null;
   createdAt: string;
   isSeed: boolean;   // 2026-06 SAFETY: true = sample listing, applications disabled
-  company: { id: string; name: string; slug: string | null; industry: string | null; verified: boolean };
+  subjects?: string[] | null;     // 2026-10: teacher vacancies
+  tscRequired?: boolean | null;
+  company: { id: string; name: string; slug: string | null; industry: string | null; verified: boolean; institutionType?: string };
   branch: { id: string; name: string } | null;
 }
 
@@ -157,6 +159,10 @@ export default function KenyaCareers() {
   const [county,      setCounty]      = useState<string>("all");
   const [category,    setCategory]    = useState<string>("all");
   const [companyId,   setCompanyId]   = useState<string>("all");
+  // 2026-10: "Teaching jobs at schools" filter (also via ?institution=school).
+  const [schoolsOnly, setSchoolsOnly] = useState<boolean>(() => {
+    try { return new URLSearchParams(window.location.search).get("institution") === "school"; } catch { return false; }
+  });
   // Phase 3a: empty-state suggestions when 0 results
   const [emptySuggestions, setEmptySuggestions] = useState<EmptySuggestions | null>(null);
 
@@ -208,6 +214,7 @@ export default function KenyaCareers() {
     if (category   !== "all") params.set("category",  category);
     if (companyId  !== "all") params.set("companyId", companyId);
     if (search)               params.set("search",    search);
+    if (schoolsOnly)          params.set("institution", "school");
     const url = `/api/local-jobs?${params.toString()}`;
     (async () => {
       const data = await safeJson<{ jobs?: unknown[]; total?: number }>(url, ac.signal);
@@ -238,12 +245,15 @@ export default function KenyaCareers() {
           // (old shell, missing column). Safer to flag an unknown job as
           // sample than to misrepresent it as a real opening.
           isSeed:          raw?.isSeed !== false,
+          subjects:        Array.isArray(raw?.subjects) ? raw.subjects.map(String) : null,
+          tscRequired:     raw?.tscRequired ?? null,
           company: {
             id:       String(raw?.company?.id ?? ""),
             name:     String(raw?.company?.name ?? "Employer"),
             slug:     raw?.company?.slug ?? null,
             industry: raw?.company?.industry ?? null,
             verified: !!raw?.company?.verified,
+            institutionType: raw?.company?.institutionType ?? "company",
           },
           branch: raw?.branch && raw?.branch?.id
             ? { id: String(raw.branch.id), name: String(raw.branch.name ?? "") }
@@ -264,16 +274,16 @@ export default function KenyaCareers() {
       setLoading(false);
     })();
     return () => { cancelled = true; ac.abort(); };
-  }, [county, category, companyId, search]);
+  }, [county, category, companyId, search, schoolsOnly]);
 
   const hasAnyFilter = useMemo(
-    () => county !== "all" || category !== "all" || companyId !== "all" || !!search,
-    [county, category, companyId, search],
+    () => county !== "all" || category !== "all" || companyId !== "all" || !!search || schoolsOnly,
+    [county, category, companyId, search, schoolsOnly],
   );
 
   function clearFilters() {
     setCounty("all"); setCategory("all"); setCompanyId("all");
-    setSearchInput(""); setSearch("");
+    setSearchInput(""); setSearch(""); setSchoolsOnly(false);
   }
 
   return (
@@ -338,6 +348,11 @@ export default function KenyaCareers() {
           <Link href="/employers">
             <Button variant="ghost" size="sm" className="text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-900/20" data-testid="link-employers-page">
               <Building2 className="h-4 w-4 mr-1.5" /> For employers
+            </Button>
+          </Link>
+          <Link href="/schools">
+            <Button variant="ghost" size="sm" className="text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-900/20" data-testid="link-schools-page">
+              🎓 Schools: hire teachers free
             </Button>
           </Link>
           <Link href="/kenya-careers/my-applications">
@@ -415,6 +430,14 @@ export default function KenyaCareers() {
           </div>
 
           <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setSchoolsOnly((v) => !v)}
+              className={`text-sm border rounded-md px-3 py-1.5 transition ${schoolsOnly ? "bg-emerald-600 text-white border-emerald-600" : "bg-background hover:bg-muted"}`}
+              data-testid="filter-schools"
+            >
+              🎓 Teaching jobs at schools
+            </button>
             <select
               value={county}
               onChange={(e) => setCounty(e.target.value)}
@@ -608,7 +631,18 @@ export default function KenyaCareers() {
                             {CATEGORY_LABEL[j.category] ?? j.category}
                           </Badge>
                         )}
+                        {j.company.institutionType === "school" && (
+                          <Badge variant="outline" className="text-[10px] border-emerald-300 text-emerald-700 dark:text-emerald-300">School</Badge>
+                        )}
+                        {j.tscRequired && (
+                          <Badge variant="outline" className="text-[10px]">TSC required</Badge>
+                        )}
                       </div>
+                      {j.subjects && j.subjects.length > 0 && (
+                        <p className="text-[11px] text-muted-foreground mt-1.5 line-clamp-1">
+                          Subjects: {j.subjects.join(" · ")}
+                        </p>
+                      )}
                     </div>
 
                     <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0 mt-1" />

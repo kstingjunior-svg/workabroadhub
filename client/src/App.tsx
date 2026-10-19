@@ -201,6 +201,9 @@ const KaziKaribuMyInterests = lazyWithRetry(() => import("@/pages/kazi-karibu-my
 const EmployerDashboard = lazyWithRetry(() => import("@/pages/employer/employer-dashboard"));
 const EmployerManage = lazyWithRetry(() => import("@/pages/employer/employer-manage"));
 const EmployerRegisterCompany = lazyWithRetry(() => import("@/pages/employer/employer-register-company"));
+// 2026-10: schools hiring teachers via Kenya Careers
+const EmployerRegisterSchool = lazyWithRetry(() => import("@/pages/employer/employer-register-school"));
+const SchoolsHireTeachers = lazyWithRetry(() => import("@/pages/schools-hire-teachers"));
 const ServiceOrderFlow = lazyWithRetry(() => import("@/pages/service-order-flow"));
 // 2026-08 (Tony's anonymous-checkout): magic-link download page for guest orders.
 const DownloadMagic = lazyWithRetry(() => import("@/pages/download-magic"));
@@ -471,6 +474,8 @@ const LazyKaziKaribuMyInterests = withSuspense(KaziKaribuMyInterests);
 const LazyEmployerDashboard = withSuspense(EmployerDashboard);
 const LazyEmployerManage = withSuspense(EmployerManage);
 const LazyEmployerRegisterCompany = withSuspense(EmployerRegisterCompany);
+const LazyEmployerRegisterSchool = withSuspense(EmployerRegisterSchool);
+const LazySchoolsHireTeachers = withSuspense(SchoolsHireTeachers);
 // 2026-07 (audit FIND-3): ServiceOrderFlow wraps the paying user's entire
 // journey (upload → payment → generating → download). If ANY child throws
 // (share modal, delivery banner, photo card, verdict card), the whole page
@@ -704,6 +709,7 @@ function AuthenticatedRoutes() {
       <Route path="/kazi-karibu/my-interests" component={LazyKaziKaribuMyInterests} />
 
       {/* Kenya Careers — Phase 1 public browse + Phase 2 applications */}
+      <Route path="/schools" component={LazySchoolsHireTeachers} />
       <Route path="/kenya-careers" component={LazyKenyaCareers} />
       <Route path="/kenya-careers/job/:id" component={LazyKenyaCareersJob} />
       <Route path="/kenya-careers/my-applications" component={LazyKenyaCareersMyApplications} />
@@ -717,6 +723,7 @@ function AuthenticatedRoutes() {
       {/* Phase 4: employer self-service portal */}
       <Route path="/employer/dashboard" component={LazyEmployerDashboard} />
       <Route path="/employer/register-company" component={LazyEmployerRegisterCompany} />
+      <Route path="/employer/register-school" component={LazyEmployerRegisterSchool} />
       <Route path="/employer/companies/:id/manage" component={LazyEmployerManage} />
       <Route path="/services/order/:slug" component={LazyServiceOrderFlow} />
       {/* 2026-08 (guest orders): public magic-link download page — no auth. */}
@@ -1045,6 +1052,7 @@ function Router() {
         <Route path="/verify" component={LazyVerify} />
         <Route path="/verify-us" component={LazyVerifyUs} />
         <Route path="/portals/community" component={LazyCommunityPortals} />
+        <Route path="/schools" component={LazySchoolsHireTeachers} />
         <Route path="/kenya-careers" component={LazyKenyaCareers} />
         <Route path="/kenya-careers/job/:id" component={LazyKenyaCareersJob} />
         <Route path="/kenya-careers/company/:slug" component={LazyKenyaCareersCompany} />

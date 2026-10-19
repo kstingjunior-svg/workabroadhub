@@ -123,6 +123,9 @@ export default function EmployerDashboard() {
                     <Plus className="h-4 w-4 mr-1.5" /> Register a new company
                   </Button>
                 </Link>
+                <Link href="/employer/register-school">
+                  <Button variant="outline">🎓 Register a school</Button>
+                </Link>
               </div>
             </CardContent>
           </Card>
@@ -199,9 +202,14 @@ export default function EmployerDashboard() {
                 <p className="font-medium text-sm">Manage another company?</p>
                 <p className="text-xs text-muted-foreground">Register a new business or claim another existing profile.</p>
               </div>
-              <Link href="/employer/register-company">
-                <Button size="sm" variant="outline"><Plus className="h-3.5 w-3.5 mr-1.5" /> Register new</Button>
-              </Link>
+              <div className="flex gap-2">
+                <Link href="/employer/register-company">
+                  <Button size="sm" variant="outline"><Plus className="h-3.5 w-3.5 mr-1.5" /> Register new</Button>
+                </Link>
+                <Link href="/employer/register-school">
+                  <Button size="sm" variant="outline">🎓 School</Button>
+                </Link>
+              </div>
             </CardContent>
           </Card>
         )}
