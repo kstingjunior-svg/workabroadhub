@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import { useLocation, Link } from "wouter";
 import { queryClient } from "@/lib/queryClient";
 import OtpInput from "@/components/otp-input";
+import { AuthBrandMark } from "@/components/auth-brand-mark";
 
 type Tab = "login" | "signup";
 // 2026-07 (Tony's inline-verify request): "verify" is a stage the modal
@@ -879,7 +880,8 @@ export function AuthModal({
       />
 
       <div
-        className="relative w-full max-w-md bg-background border border-border rounded-2xl shadow-2xl z-10"
+        // 2026-10 (Tony's reference): clean rounded card, centred brand mark.
+        className="auth-card relative w-full max-w-md bg-white dark:bg-background rounded-[28px] shadow-2xl z-10 max-h-[94vh] overflow-y-auto"
         data-testid="auth-modal"
       >
         <button
@@ -889,28 +891,18 @@ export function AuthModal({
           <X className="h-4 w-4" />
         </button>
 
-        <div className="p-6 pb-0">
-          <div className="flex items-center gap-2 mb-1">
-            <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
-              <span className="text-base">
-                🌍
-              </span>
-            </div>
+        <div className="px-6 pt-8 pb-0 text-center">
+          <AuthBrandMark size={tab === "signup" && stage !== "verify" ? 96 : 120} />
 
-            <span className="text-sm font-semibold text-primary">
-              WorkAbroad Hub
-            </span>
-          </div>
-
-          <h2 className="text-xl font-bold text-foreground mt-2">
+          <h2 className="text-[26px] sm:text-[30px] leading-tight font-semibold tracking-tight text-foreground mt-5">
             {stage === "verify"
               ? (codeLogin ? "Enter your sign-in code" : "Verify your email")
               : tab === "login"
-              ? "Welcome back"
+              ? "Sign in to WorkAbroad Hub"
               : "Create your free account"}
           </h2>
 
-          <p className="text-sm text-muted-foreground mt-0.5">
+          <p className="text-[15px] text-muted-foreground mt-2 max-w-sm mx-auto">
             {stage === "verify"
               ? `We sent a 6-digit code to ${codeLogin ? (codeMasked || "your email") : email}. Check your inbox and spam folder.`
               : tab === "login"
@@ -978,7 +970,7 @@ export function AuthModal({
                 verifying ||
                 verifyCode.replace(/\D/g, "").length !== 6
               }
-              className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
+              className="w-full h-12 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground text-base font-semibold"
               size="lg"
               data-testid="button-verify-code"
             >
@@ -1077,7 +1069,7 @@ export function AuthModal({
 
         <form
           onSubmit={handleSubmit}
-          className="p-6 space-y-4"
+          className="auth-form px-6 pt-6 pb-8 space-y-4"
         >
           {successMsg && (
             <div className="flex items-center gap-2 p-3 rounded-lg bg-green-50 border border-green-200 text-green-700 text-sm">
@@ -1098,7 +1090,7 @@ export function AuthModal({
                     type="button"
                     onClick={() => requestLoginCode()}
                     disabled={sendingCode}
-                    className="mt-3 w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
+                    className="mt-3 w-full h-11 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
                     data-testid="button-email-me-code"
                   >
                     {sendingCode ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Sending code…</> : "Email me a sign-in code"}
@@ -1158,7 +1150,7 @@ export function AuthModal({
                   setTab("signup");
                   setStage("signup");
                 }}
-                className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
+                className="w-full h-11 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
                 data-testid="button-create-from-no-account"
               >
                 {email.includes("@") ? "Create my free account with this email" : "Create my free account"}
@@ -1413,7 +1405,7 @@ export function AuthModal({
 
           <Button
             type="submit"
-            className="w-full h-11"
+            className="w-full h-12 rounded-full text-base font-semibold"
             disabled={
               loading || !!successMsg
             }
