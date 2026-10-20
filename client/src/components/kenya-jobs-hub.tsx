@@ -171,6 +171,14 @@ export function KenyaSectionNav({ onFindJobs }: { onFindJobs: () => void }) {
             <Briefcase className="h-5 w-5" aria-hidden="true" /> Post a Job
           </Link>
         </div>
+        {/* Mobile: Post a Job as a full-width touch target under the 4 items */}
+        <div className="md:hidden px-4 pb-3">
+          <Link href="/employer/dashboard"
+            className="flex items-center justify-center gap-2 h-11 rounded-xl bg-gradient-to-r from-blue-600 to-emerald-500 text-[15px] font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
+            data-testid="kjh-post-job-mobile">
+            <Briefcase className="h-5 w-5" aria-hidden="true" /> Post a Job
+          </Link>
+        </div>
       </nav>
   );
 }
@@ -426,12 +434,6 @@ export function KenyaJobsHub() {
           <TrustItem icon={<Users className="h-8 w-8 text-emerald-400" aria-hidden="true" />} title="Safe job-seeking tips" text="Practical guidance for job seekers" href="/guides" />
         </ul>
 
-        {/* Mobile-only Post a Job (desktop has it in the nav) */}
-        <Link href="/employer/dashboard"
-          className="md:hidden mt-6 flex items-center justify-center gap-2 h-12 rounded-xl bg-gradient-to-r from-blue-600 to-emerald-500 font-semibold"
-          data-testid="kjh-post-job-mobile">
-          <Briefcase className="h-5 w-5" aria-hidden="true" /> Post a Job
-        </Link>
       </div>
     </section>
     </div>

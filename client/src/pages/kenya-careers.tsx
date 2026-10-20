@@ -160,7 +160,6 @@ async function safeJson<T = any>(url: string, signal?: AbortSignal): Promise<T |
 export default function KenyaCareers() {
   const [stats,      setStats]      = useState<Stats | null>(null);
   const [filters,    setFilters]    = useState<Filters | null>(null);
-  const [employers,  setEmployers]  = useState<Employer[]>([]);
   const [jobs,       setJobs]       = useState<Job[]>([]);
   const [total,      setTotal]      = useState(0);
   const [loading,    setLoading]    = useState(true);
@@ -198,10 +197,9 @@ export default function KenyaCareers() {
     let cancelled = false;
     const ac = new AbortController();
     (async () => {
-      const [s, f, e] = await Promise.all([
+      const [s, f] = await Promise.all([
         safeJson<Stats>("/api/local-jobs/stats", ac.signal),
         safeJson<Filters>("/api/local-jobs/filters", ac.signal),
-        safeJson<{ companies?: Employer[] }>("/api/local-jobs/companies", ac.signal),
       ]);
       if (cancelled) return;
       if (s) setStats(s);
@@ -214,7 +212,6 @@ export default function KenyaCareers() {
           companies:  Array.isArray(f.companies)  ? f.companies  : [],
         });
       }
-      if (e && Array.isArray(e.companies)) setEmployers(e.companies);
     })();
     return () => { cancelled = true; ac.abort(); };
   }, []);
@@ -332,31 +329,79 @@ export default function KenyaCareers() {
   }, [dirInput]);
   useEffect(() => { setDirPage(1); }, [dirSearch, dirCounty, dirIndustry, dirChip]);
 
-  const industryOptions = useMemo(() => {
-    const set = new Set<string>(filters?.industries ?? []);
-    employers.forEach((e) => e.industry && set.add(e.industry));
-    return Array.from(set).sort();
-  }, [filters, employers]);
+  // Server-side directory: filtered + paginated by /api/local-jobs/companies.
+  const [reloadKey, setReloadKey] = useState(0);
+  const [invited, setInvited] = useState<DirPage | null>(null);
+  const [hiring, setHiring]   = useState<DirPage | null>(null);
+  const [dirLoading, setDirLoading] = useState(true);
+  const [dirError, setDirError]     = useState(false);
+  useEffect(() => {
+    const ac = new AbortController();
+    const base = new URLSearchParams();
+    if (dirSearch) base.set("search", dirSearch);
+    if (dirCounty !== "all") base.set("county", dirCounty);
+    if (dirIndustry !== "all") base.set("industry", dirIndustry);
+    if (dirChip !== "all") base.set("category", dirChip);
+    const inv = new URLSearchParams(base); inv.set("status", "invited"); inv.set("page", String(dirPage)); inv.set("pageSize", String(pageSize));
+    const hir = new URLSearchParams(base); hir.set("status", "hiring"); hir.set("page", "1"); hir.set("pageSize", "48");
+    setDirLoading(true); setDirError(false);
+    (async () => {
+      const [i, h] = await Promise.all([
+        safeJson<DirPage>(`/api/local-jobs/companies?${inv}`, ac.signal),
+        safeJson<DirPage>(`/api/local-jobs/companies?${hir}`, ac.signal),
+      ]);
+      if (ac.signal.aborted) return;
+      if (!i || !Array.isArray(i.companies)) { setDirError(true); setDirLoading(false); return; }
+      setInvited(i);
+      setHiring(h && Array.isArray(h.companies) ? h : { companies: [], total: 0, page: 1, pageSize: 48, pageCount: 1 });
+      // Out-of-range page after a filter change → snap back.
+      if (i.pageCount && dirPage > i.pageCount) setDirPage(i.pageCount);
+      setDirLoading(false);
+    })();
+    return () => ac.abort();
+  }, [dirSearch, dirCounty, dirIndustry, dirChip, dirPage, pageSize, reloadKey]);
 
-  const filteredEmployers = useMemo(() => {
-    const chip = DIRECTORY_CHIPS.find((c) => c.key === dirChip);
-    return employers.filter((e) => {
-      const ind = (e.industry ?? "").toLowerCase();
-      if (dirSearch && !e.name.toLowerCase().includes(dirSearch) && !ind.includes(dirSearch)) return false;
-      if (dirCounty !== "all" && !(e.counties ?? []).includes(dirCounty) && e.county !== dirCounty) return false;
-      if (dirIndustry !== "all" && e.industry !== dirIndustry) return false;
-      if (chip && chip.match && !chip.match(ind, e.institutionType)) return false;
-      return true;
-    });
-  }, [employers, dirSearch, dirCounty, dirIndustry, dirChip]);
+  // Follow state — signed-in users' follows come from the server.
+  const [signedIn, setSignedIn] = useState(false);
+  const [followBusy, setFollowBusy] = useState<string | null>(null);
+  const [followMsg, setFollowMsg]   = useState<{ ok: boolean; text: string } | null>(null);
+  useEffect(() => {
+    fetch("/api/local-jobs/me/following", { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d) return;
+        setSignedIn(!!d.signedIn);
+        if (Array.isArray(d.companyIds)) setFollowed(new Set(d.companyIds.map(String)));
+      })
+      .catch(() => {});
+  }, []);
+  useEffect(() => { if (!followMsg) return; const t = setTimeout(() => setFollowMsg(null), 4000); return () => clearTimeout(t); }, [followMsg]);
 
-  const hiringEmployers  = filteredEmployers.filter((e) => e.listingType !== "invited");
-  const invitedEmployers = filteredEmployers.filter((e) => e.listingType === "invited");
-  const invitedTotal     = employers.filter((e) => e.listingType === "invited").length;
-  const pageCount        = Math.max(1, Math.ceil(invitedEmployers.length / pageSize));
+  async function toggleFollow(e: Employer) {
+    if (!signedIn) { setFollow({ id: e.id, name: e.name, invited: e.listingType === "invited" }); return; }
+    const isFollowing = followed.has(e.id);
+    setFollowBusy(e.id);
+    try {
+      const res = await fetch(`/api/local-jobs/companies/${e.id}/follow`, { method: isFollowing ? "DELETE" : "POST", credentials: "include" });
+      const body = await res.json().catch(() => ({}));
+      if (res.status === 401) { setSignedIn(false); setFollow({ id: e.id, name: e.name, invited: e.listingType === "invited" }); return; }
+      if (!res.ok) throw new Error(body?.message || "Something went wrong.");
+      setFollowed((cur) => { const n = new Set(cur); isFollowing ? n.delete(e.id) : n.add(e.id); return n; });
+      setFollowMsg({ ok: true, text: body?.message || (isFollowing ? "Unfollowed." : `Following ${e.name}.`) });
+    } catch (err: any) {
+      setFollowMsg({ ok: false, text: err?.message || "Could not update. Please try again." });
+    } finally { setFollowBusy(null); }
+  }
+
+  const industryOptions = filters?.industries ?? [];
+  const hiringEmployers  = hiring?.companies ?? [];
+  const invitedEmployers = invited?.companies ?? [];
+  const invitedTotal     = invited?.total ?? 0;
+  const pageCount        = invited?.pageCount ?? 1;
   const pageSafe         = Math.min(dirPage, pageCount);
-  const invitedPage      = invitedEmployers.slice((pageSafe - 1) * pageSize, pageSafe * pageSize);
   const dirFiltered      = !!dirSearch || dirCounty !== "all" || dirIndustry !== "all" || dirChip !== "all";
+  const noEmployersAtAll = !dirLoading && !dirError && !dirFiltered && invitedTotal === 0 && hiringEmployers.length === 0;
+  const clearDirFilters  = () => { setDirInput(""); setDirSearch(""); setDirCounty("all"); setDirIndustry("all"); setDirChip("all"); };
 
   function focusJobs() {
     jobsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -402,7 +447,7 @@ export default function KenyaCareers() {
               Discover employers, follow companies, and get notified when real vacancies go live.
             </p>
 
-            {invitedTotal > 0 && (
+            {(invitedTotal > 0 || (nEmployers ?? 0) > hiringEmployers.length) && (
               <div className="mt-5 flex items-start gap-4 max-w-[640px] rounded-2xl bg-[#0b1d3d]/85 ring-1 ring-cyan-400/20 px-5 py-4 backdrop-blur" data-testid="kc-invite-notice">
                 <Bell className="h-7 w-7 shrink-0 text-sky-400" aria-hidden="true" />
                 <p className="text-[14px] sm:text-[16px] leading-snug text-slate-100">
@@ -425,10 +470,10 @@ export default function KenyaCareers() {
         <form
           role="search"
           onSubmit={(e) => { e.preventDefault(); setDirSearch(dirInput.trim().toLowerCase()); scrollToDirectory(); }}
-          className="mt-5 grid grid-cols-1 md:grid-cols-[1.9fr_1fr_1fr_auto] gap-3 rounded-2xl bg-[#0a1430]/80 ring-1 ring-white/[0.07] p-2.5 sm:p-3"
+          className="mt-5 grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] lg:grid-cols-[1.9fr_1fr_1fr_auto] gap-3 rounded-2xl bg-[#0a1430]/80 ring-1 ring-white/[0.07] p-2.5 sm:p-3"
           data-testid="kc-employer-search"
         >
-          <label className="flex items-center gap-4 rounded-xl bg-[#0b1736] ring-1 ring-white/[0.07] px-5 h-[60px] focus-within:ring-blue-500/60">
+          <label className="flex items-center gap-4 rounded-xl bg-[#0b1736] ring-1 ring-white/[0.07] px-5 h-[60px] focus-within:ring-blue-500/60 md:col-span-3 lg:col-span-1">
             <Search className="h-5 w-5 shrink-0 text-slate-300" aria-hidden="true" />
             <span className="flex-1 min-w-0">
               <span className="sr-only">Search employers by name or industry</span>
@@ -470,44 +515,54 @@ export default function KenyaCareers() {
         </div>
 
         {/* ── EMPLOYERS HIRING (registered / verified) ─────────────────── */}
-        <section ref={directoryRef} className="mt-7 scroll-mt-4" aria-labelledby="kc-dir-heading">
+        <section ref={directoryRef} className="mt-7 scroll-mt-4" aria-labelledby="kc-dir-heading" aria-busy={dirLoading}>
+          {followMsg && (
+            <div role="status" className={`mb-4 rounded-xl px-4 py-3 text-sm ring-1 ${followMsg.ok ? "bg-emerald-950/50 ring-emerald-700 text-emerald-100" : "bg-rose-950/50 ring-rose-800 text-rose-100"}`} data-testid="kc-follow-msg">
+              {followMsg.text}
+            </div>
+          )}
+
           {hiringEmployers.length > 0 && (
-            <div className="mb-8">
-              <SectionHeading id="kc-dir-heading" title="Employers on Kenya Careers" sub="Organisations that have joined and post their vacancies here."
-                right={`${hiringEmployers.length} ${hiringEmployers.length === 1 ? "employer" : "employers"}`} />
-              <div className="mt-4 grid grid-cols-1 min-[420px]:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6 gap-3">
+            <div className="mb-9">
+              <SectionHeading id="kc-hiring-heading" title="Employers on Kenya Careers" sub="Organisations that have joined and post their vacancies here."
+                right={`${hiring?.total ?? hiringEmployers.length} ${(hiring?.total ?? hiringEmployers.length) === 1 ? "employer" : "employers"}`} />
+              <div className={GRID}>
                 {hiringEmployers.map((e) => (
-                  <EmployerCard key={e.id} e={e} followed={followed.has(e.id)} onFollow={() => setFollow({ id: e.id, name: e.name, invited: e.listingType === "invited" })} />
+                  <EmployerCard key={e.id} e={e} followed={followed.has(e.id)} busy={followBusy === e.id} onFollow={() => toggleFollow(e)} />
                 ))}
               </div>
             </div>
           )}
 
           {/* ── EMPLOYERS WE'RE INVITING ─────────────────────────────── */}
-          {(invitedEmployers.length > 0 || (hiringEmployers.length === 0 && employers.length > 0)) && (
-            <div>
-              <SectionHeading id={hiringEmployers.length ? undefined : "kc-dir-heading"} title="Employers we're inviting" sub="These organisations have not yet partnered with the platform."
-                right={`Not yet partners · ${invitedEmployers.length} invited`} />
-              {invitedEmployers.length === 0 ? (
-                <p className="mt-4 rounded-2xl bg-[#0a1430] ring-1 ring-white/10 p-6 text-center text-sm text-slate-300">
-                  No employers match those filters.{" "}
-                  {dirFiltered && <button type="button" className="text-sky-400 underline" onClick={() => { setDirInput(""); setDirSearch(""); setDirCounty("all"); setDirIndustry("all"); setDirChip("all"); }}>Clear filters</button>}
-                </p>
-              ) : (
-                <div className="mt-4 grid grid-cols-1 min-[420px]:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6 gap-3" data-testid="kc-invited-grid">
-                  {invitedPage.map((e) => (
-                    <EmployerCard key={e.id} e={e} followed={followed.has(e.id)} onFollow={() => setFollow({ id: e.id, name: e.name, invited: e.listingType === "invited" })} />
-                  ))}
-                </div>
-              )}
-              {pageCount > 1 && <Pager page={pageSafe} count={pageCount} onPage={(n) => { setDirPage(n); scrollToDirectory(); }} />}
+          <SectionHeading id="kc-dir-heading" title="Employers We're Inviting" sub="These organisations have not yet partnered with the platform."
+            right={invited ? `Not yet partners · ${invitedTotal.toLocaleString()} invited` : ""} />
+
+          {dirError ? (
+            <div className="mt-4 rounded-2xl bg-[#0a1430] ring-1 ring-rose-900/60 p-6 text-center text-sm text-slate-200" data-testid="kc-dir-error">
+              We couldn't load employers right now.{" "}
+              <button type="button" className="text-sky-400 underline" onClick={() => setReloadKey((k) => k + 1)}>Try again</button>
+            </div>
+          ) : dirLoading && !invited ? (
+            <div className={GRID} aria-label="Loading employers">
+              {Array.from({ length: pageSize }).map((_, i) => <div key={i} className="h-[178px] rounded-2xl bg-[#0a1430] ring-1 ring-white/[0.06] animate-pulse" />)}
+            </div>
+          ) : noEmployersAtAll ? (
+            <p className="mt-4 rounded-2xl bg-[#0a1430] ring-1 ring-white/10 p-6 text-center text-sm text-slate-300">No employers listed yet.</p>
+          ) : invitedEmployers.length === 0 ? (
+            <p className="mt-4 rounded-2xl bg-[#0a1430] ring-1 ring-white/10 p-6 text-center text-sm text-slate-300" data-testid="kc-dir-empty">
+              {dirFiltered ? "No invited employers match those filters." : "Every listed employer has joined — see above."}{" "}
+              {dirFiltered && <button type="button" className="text-sky-400 underline" onClick={clearDirFilters}>Clear filters</button>}
+            </p>
+          ) : (
+            <div className={`${GRID} transition-opacity ${dirLoading ? "opacity-60" : ""}`} data-testid="kc-invited-grid">
+              {invitedEmployers.map((e) => (
+                <EmployerCard key={e.id} e={e} followed={followed.has(e.id)} busy={followBusy === e.id} onFollow={() => toggleFollow(e)} />
+              ))}
             </div>
           )}
-
-          {employers.length === 0 && (
-            <p className="rounded-2xl bg-[#0a1430] ring-1 ring-white/10 p-6 text-center text-sm text-slate-300">
-              No employers listed yet.
-            </p>
+          {!dirError && pageCount > 1 && (
+            <Pager page={pageSafe} count={pageCount} onPage={(n) => { setDirPage(n); scrollToDirectory(); }} />
           )}
         </section>
 
@@ -722,6 +777,9 @@ export default function KenyaCareers() {
 /* ── Directory helpers ─────────────────────────────────────────────────── */
 
 const DIR_PAGE_SIZE = 12;
+// 1 col <420px · 2 · 3 (md) · 4 (lg) · 6 (≥1536px, where cards stay readable).
+const GRID = "mt-4 grid grid-cols-1 min-[420px]:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6 gap-3";
+interface DirPage { companies: Employer[]; total: number; page: number; pageSize: number; pageCount: number }
 const JOB_SELECT = "text-sm rounded-lg h-9 px-3 bg-[#0a1430] ring-1 ring-white/10 text-slate-200 outline-none focus:ring-blue-500/60";
 
 const DIRECTORY_CHIPS: { key: string; label: string; match?: (industry: string, institutionType?: string) => boolean }[] = [
@@ -804,7 +862,7 @@ function SectionHeading({ id, title, sub, right }: { id?: string; title: string;
   );
 }
 
-function EmployerCard({ e, followed, onFollow }: { e: Employer; followed: boolean; onFollow: () => void }) {
+function EmployerCard({ e, followed, busy, onFollow }: { e: Employer; followed: boolean; busy?: boolean; onFollow: () => void }) {
   const invited = e.listingType === "invited";
   const profile = `/kenya-careers/company/${e.slug ?? e.id}`;
   return (
@@ -818,7 +876,7 @@ function EmployerCard({ e, followed, onFollow }: { e: Employer; followed: boolea
           </span>
         )}
         <div className="min-w-0">
-          <h3 className="text-[14px] font-semibold leading-tight line-clamp-2">{e.name}</h3>
+          <h3 className="text-[14px] font-semibold leading-tight break-words [hyphens:auto]">{e.name}</h3>
           {e.industry && <p className="text-[12px] text-slate-400 leading-tight mt-0.5">{e.industry}</p>}
           <span className={`mt-1.5 inline-flex items-center gap-1 whitespace-nowrap rounded-md px-1.5 py-0.5 text-[10.5px] font-medium ring-1 ${
             e.listingType === "verified" ? "bg-emerald-500/10 text-emerald-300 ring-emerald-500/40"
@@ -839,14 +897,15 @@ function EmployerCard({ e, followed, onFollow }: { e: Employer; followed: boolea
         <button
           type="button"
           onClick={onFollow}
-          disabled={followed}
-          className="h-9 px-4 rounded-lg bg-emerald-700/90 hover:bg-emerald-600 disabled:bg-emerald-900/60 disabled:text-emerald-200 ring-1 ring-emerald-500/50 text-[13px] font-semibold transition"
-          aria-label={followed ? `Following ${e.name}` : `Follow ${e.name}`}
+          disabled={busy}
+          aria-pressed={followed}
+          className={`h-10 px-4 rounded-lg ring-1 text-[13px] font-semibold transition disabled:opacity-60 ${followed ? "bg-transparent ring-emerald-500/60 text-emerald-300 hover:bg-emerald-500/10" : "bg-emerald-700/90 hover:bg-emerald-600 ring-emerald-500/50"}`}
+          aria-label={followed ? `Unfollow ${e.name}` : `Follow ${e.name}`}
           data-testid={`follow-employer-${e.slug ?? e.id}`}
         >
-          {followed ? "Following" : "Follow"}
+          {busy ? <Loader2 className="h-4 w-4 animate-spin mx-auto" aria-hidden="true" /> : followed ? "Following" : "Follow"}
         </button>
-        <Link href={profile} className="h-9 grid place-items-center rounded-lg bg-[#0f2150] hover:bg-[#15296a] ring-1 ring-blue-400/30 text-[13px] font-semibold transition whitespace-nowrap" data-testid={`view-employer-${e.slug ?? e.id}`}>
+        <Link href={profile} className="h-10 grid place-items-center rounded-lg bg-[#0f2150] hover:bg-[#15296a] ring-1 ring-blue-400/30 text-[13px] font-semibold transition whitespace-nowrap" data-testid={`view-employer-${e.slug ?? e.id}`}>
           View profile
         </Link>
       </div>

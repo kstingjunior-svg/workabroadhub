@@ -188,6 +188,13 @@ export function registerLocalJobsRoutes(app: Express): void {
   const LIVE_COMPANY = `(EXISTS (SELECT 1 FROM company_admins ca WHERE ca.company_id = c.id)
       OR EXISTS (SELECT 1 FROM local_jobs lj WHERE lj.company_id = c.id AND COALESCE(lj.is_seed, false) = false))`;
 
+  // 2026-10: email followers when a vacancy goes live (fire-and-forget).
+  const alertFollowers = (jobId: string) => {
+    import("./lib/follower-notifications")
+      .then((m) => m.notifyFollowersOfLiveJobs(jobId))
+      .catch((e) => console.warn("[follow-alerts] trigger failed:", e?.message));
+  };
+
   app.get("/api/local-jobs/_ping", (_req: Request, res: Response) => {
     res.json({
       ok: true,
@@ -470,52 +477,159 @@ export function registerLocalJobsRoutes(app: Express): void {
   // ─── GET /api/local-jobs/companies ────────────────────────────────────────
   // Public list of approved employers + their open-job counts. Powers the
   // "Featured Employers" strip on the landing page.
-  app.get("/api/local-jobs/companies", async (_req: Request, res: Response) => {
+  app.get("/api/local-jobs/companies", async (req: Request, res: Response) => {
     try {
-      const { rows } = await pool.query<{
-        id: string; name: string; slug: string | null;
-        industry: string | null; county: string | null;
-        verified_at: Date | null; logo_url: string | null;
-        job_count: string;
-      }>(`
-        SELECT
-            c.id, c.name, c.slug, c.industry, c.county,
-            c.verified_at, c.logo_url, c.institution_type, c.town,
-            COUNT(j.id) FILTER (WHERE j.status = 'open' AND COALESCE(j.is_seed, false) = false
-              AND (j.deadline IS NULL OR j.deadline >= (NOW() AT TIME ZONE 'Africa/Nairobi')::date))::text AS job_count,
-            ${LIVE_COMPANY} AS is_live,
-            ARRAY(SELECT DISTINCT x FROM unnest(array_append(ARRAY(SELECT b.county FROM branches b WHERE b.company_id = c.id), c.county)) x
-                   WHERE x IS NOT NULL ORDER BY x) AS counties
-          FROM companies c
-     LEFT JOIN local_jobs j ON j.company_id = c.id
-         WHERE c.status = 'approved'
-      GROUP BY c.id
-      ORDER BY ${LIVE_COMPANY} DESC, c.name
-      `);
+      const {
+        normaliseDirectoryQuery, buildDirectoryWhere, listingTypeOf, LIVE_COMPANY_SQL,
+      } = await import("./lib/employer-directory");
+      // 2026-10 directory redesign: ?page= switches to server-side filtered,
+      // paginated mode. Without it the legacy "all employers" shape is kept.
+      const paged = req.query.page !== undefined;
+      const q = normaliseDirectoryQuery(req.query as Record<string, unknown>);
+      const { where, params } = buildDirectoryWhere(paged ? q : { ...q, search: null, county: null, industry: null, category: null, status: "all" });
 
-      res.setHeader("Cache-Control", "public, max-age=300");
+      const limitSql = paged ? `LIMIT ${q.pageSize} OFFSET ${(q.page - 1) * q.pageSize}` : "LIMIT 500";
+      const [listRes, countRes] = await Promise.all([
+        pool.query(`
+          SELECT c.id, c.name, c.slug, c.industry, c.county, c.verified_at, c.logo_url, c.institution_type, c.town,
+                 (SELECT COUNT(*) FROM local_jobs j
+                   WHERE j.company_id = c.id AND j.status = 'open' AND COALESCE(j.is_seed, false) = false
+                     AND (j.deadline IS NULL OR j.deadline >= (NOW() AT TIME ZONE 'Africa/Nairobi')::date))::int AS job_count,
+                 ${LIVE_COMPANY_SQL} AS is_live,
+                 ARRAY(SELECT DISTINCT x FROM unnest(array_append(ARRAY(SELECT b.county FROM branches b WHERE b.company_id = c.id), c.county)) x
+                        WHERE x IS NOT NULL ORDER BY x) AS counties
+            FROM companies c
+           WHERE ${where}
+           ORDER BY (c.verified_at IS NOT NULL) DESC, ${LIVE_COMPANY_SQL} DESC, c.name ASC
+           ${limitSql}`, params),
+        paged
+          ? pool.query<{ total: number }>(`SELECT COUNT(*)::int AS total FROM companies c WHERE ${where}`, params)
+          : Promise.resolve({ rows: [{ total: -1 }] } as any),
+      ]);
+
+      const companies = listRes.rows.map((r: any) => ({
+        id: r.id, name: r.name, slug: r.slug, industry: r.industry, county: r.county,
+        logoUrl: r.logo_url,
+        verified: !!r.verified_at,
+        jobCount: Number(r.job_count ?? 0),
+        listingType: listingTypeOf(r),
+        counties: Array.isArray(r.counties) ? r.counties : [],
+        institutionType: r.institution_type ?? "company",
+        town: r.town ?? null,
+      }));
+
+      res.setHeader("Cache-Control", "public, max-age=120");
+      if (!paged) return res.json({ companies });
+      const total = Number(countRes.rows[0]?.total ?? 0);
       res.json({
-        companies: rows.map((r) => ({
-          id:       r.id,
-          name:     r.name,
-          slug:     r.slug,
-          industry: r.industry,
-          county:   r.county,
-          logoUrl:  r.logo_url,
-          verified: !!r.verified_at,
-          jobCount: Number(r.job_count),
-          // 2026-10: "invited" = listed in our directory but hasn't joined
-          // (no admin, no live postings). Shown as an Invitation listing.
-          listingType: r.verified_at ? "verified" : (r as any).is_live ? "registered" : "invited",
-          counties: Array.isArray((r as any).counties) ? (r as any).counties : [],
-          institutionType: (r as any).institution_type ?? "company",
-          town:     (r as any).town ?? null,
-        })),
+        companies, total, page: q.page, pageSize: q.pageSize,
+        pageCount: Math.max(1, Math.ceil(total / q.pageSize)),
       });
     } catch (err: any) {
-      if (err?.code === "42P01") return res.json({ companies: [] });
+      if (err?.code === "42P01") return res.json({ companies: [], total: 0, page: 1, pageSize: 12, pageCount: 1 });
       console.error("[GET /api/local-jobs/companies]", err?.message);
-      res.status(500).json({ message: "Could not load companies." });
+      res.status(500).json({ message: "Could not load employers." });
+    }
+  });
+
+  // ─── Follow employers (2026-10) ────────────────────────────────────────────
+  // Signed-in users follow/unfollow with one tap; rows are tied to their
+  // user id + account email so they can only see/manage their own follows.
+  // Guests use POST /companies/:id/notify (email). Every alert email carries
+  // a signed one-click unfollow link.
+  const sessionEmail = async (userId: string) => {
+    const { rows: [u] } = await pool.query<{ email: string | null }>(`SELECT email FROM users WHERE id = $1`, [userId]);
+    return u?.email ? String(u.email).trim().toLowerCase() : null;
+  };
+
+  app.get("/api/local-jobs/me/following", async (req: any, res: Response) => {
+    const userId = readSessionUserId(req);
+    res.setHeader("Cache-Control", "private, no-store");
+    if (!userId) return res.json({ signedIn: false, companyIds: [] });
+    try {
+      const { ensureFollowTables } = await import("./lib/follower-notifications");
+      await ensureFollowTables();
+      const email = await sessionEmail(userId);
+      const { rows } = await pool.query<{ company_id: string }>(
+        `SELECT DISTINCT company_id FROM employer_notify_signups
+          WHERE unsubscribed_at IS NULL AND (signed_up_user_id = $1 OR ($2::text IS NOT NULL AND email = $2))`,
+        [userId, email],
+      );
+      res.json({ signedIn: true, companyIds: rows.map((r) => r.company_id) });
+    } catch (err: any) {
+      console.error("[GET /api/local-jobs/me/following]", err?.message);
+      res.status(500).json({ message: "Could not load the employers you follow." });
+    }
+  });
+
+  app.post("/api/local-jobs/companies/:id/follow", async (req: any, res: Response) => {
+    const userId = readSessionUserId(req);
+    if (!userId) return res.status(401).json({ message: "Please sign in to follow employers." });
+    const { id } = req.params;
+    if (!/^[0-9a-f-]{36}$/i.test(id)) return res.status(400).json({ message: "Invalid employer." });
+    try {
+      const { ensureFollowTables } = await import("./lib/follower-notifications");
+      await ensureFollowTables();
+      const { rows: [co] } = await pool.query<{ name: string }>(`SELECT name FROM companies WHERE id = $1 AND status = 'approved'`, [id]);
+      if (!co) return res.status(404).json({ message: "Employer not found." });
+      const email = await sessionEmail(userId);
+      if (!email) return res.status(400).json({ message: "Add an email address to your account to follow employers." });
+      await pool.query(`
+        INSERT INTO employer_notify_signups (company_id, email, signed_up_user_id)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (company_id, email) DO UPDATE
+          SET unsubscribed_at = NULL,
+              signed_up_user_id = COALESCE(employer_notify_signups.signed_up_user_id, EXCLUDED.signed_up_user_id)
+      `, [id, email, userId]);
+      res.json({ following: true, message: `You're following ${co.name}. We'll email you when they post a vacancy.` });
+    } catch (err: any) {
+      console.error("[POST /api/local-jobs/companies/:id/follow]", err?.message);
+      res.status(500).json({ message: "Could not follow this employer. Please try again." });
+    }
+  });
+
+  app.delete("/api/local-jobs/companies/:id/follow", async (req: any, res: Response) => {
+    const userId = readSessionUserId(req);
+    if (!userId) return res.status(401).json({ message: "Please sign in." });
+    const { id } = req.params;
+    if (!/^[0-9a-f-]{36}$/i.test(id)) return res.status(400).json({ message: "Invalid employer." });
+    try {
+      const { ensureFollowTables } = await import("./lib/follower-notifications");
+      await ensureFollowTables();
+      const email = await sessionEmail(userId);
+      await pool.query(
+        `UPDATE employer_notify_signups SET unsubscribed_at = NOW()
+          WHERE company_id = $1 AND unsubscribed_at IS NULL
+            AND (signed_up_user_id = $2 OR ($3::text IS NOT NULL AND email = $3))`,
+        [id, userId, email],
+      );
+      res.json({ following: false, message: "Unfollowed." });
+    } catch (err: any) {
+      console.error("[DELETE /api/local-jobs/companies/:id/follow]", err?.message);
+      res.status(500).json({ message: "Could not unfollow. Please try again." });
+    }
+  });
+
+  // One-click unfollow from an alert email (signed token, no login needed).
+  app.get("/api/local-jobs/follow/unsubscribe", async (req: Request, res: Response) => {
+    try {
+      const { verifyFollowToken } = await import("./lib/employer-directory");
+      const { ensureFollowTables } = await import("./lib/follower-notifications");
+      await ensureFollowTables();
+      const signupId = verifyFollowToken(String(req.query.token ?? ""));
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      if (!signupId) return res.status(400).send(`<p style="font-family:sans-serif;padding:24px">This unfollow link is invalid or incomplete.</p>`);
+      const { rows: [r] } = await pool.query<{ name: string }>(
+        `UPDATE employer_notify_signups s SET unsubscribed_at = COALESCE(s.unsubscribed_at, NOW())
+           FROM companies c WHERE s.id = $1 AND c.id = s.company_id RETURNING c.name`, [signupId],
+      );
+      const name = String(r?.name ?? "this employer").replace(/[&<>"']/g, "");
+      res.send(`<div style="font-family:-apple-system,Segoe UI,sans-serif;max-width:480px;margin:48px auto;padding:24px;text-align:center">
+        <h2>You've unfollowed ${name}</h2><p style="color:#475569">You won't get any more vacancy alerts from them.</p>
+        <p><a href="/kenya-careers" style="color:#1d4ed8">Back to Kenya Careers</a></p></div>`);
+    } catch (err: any) {
+      console.error("[GET /api/local-jobs/follow/unsubscribe]", err?.message);
+      res.status(500).send("Could not process the unfollow link. Please try again later.");
     }
   });
 
@@ -1203,11 +1317,13 @@ export function registerLocalJobsRoutes(app: Express): void {
       if (!company) return res.status(404).json({ message: "Company not found." });
 
       const userId = readSessionUserId(req); // optional — present if signed in
+      await import("./lib/follower-notifications").then((m) => m.ensureFollowTables()).catch(() => {});
 
       await pool.query(`
         INSERT INTO employer_notify_signups (company_id, email, phone, signed_up_user_id, source_job_id)
         VALUES ($1, $2, $3, $4, $5)
-        ON CONFLICT (company_id, email) DO UPDATE SET phone = COALESCE(EXCLUDED.phone, employer_notify_signups.phone)
+        ON CONFLICT (company_id, email) DO UPDATE SET phone = COALESCE(EXCLUDED.phone, employer_notify_signups.phone),
+          unsubscribed_at = NULL
       `, [id, email, phone, userId, sourceJobId])
         .catch(async (err: any) => {
           if (err?.code === "42P01") {
@@ -1738,6 +1854,7 @@ export function registerLocalJobsRoutes(app: Express): void {
       ]);
 
       const pendingVerification = co.status !== "approved";
+      if (j.status === "open" && !pendingVerification) alertFollowers(job.id);
       console.log(`[employer/post-job] userId=${userId} companyId=${id} jobId=${job.id} status=${j.status} pendingVerification=${pendingVerification} title="${j.title}"`);
       res.json({
         success: true, jobId: job.id, status: j.status, pendingVerification,
@@ -1891,6 +2008,7 @@ export function registerLocalJobsRoutes(app: Express): void {
                   published_at = CASE WHEN $1 = 'open' AND published_at IS NULL THEN NOW() ELSE published_at END
             WHERE id = $2`, [nextStatus, id],
         );
+        if (nextStatus === "open") alertFollowers(id);
         return res.json({ success: true, status: nextStatus, message: `Vacancy ${nextStatus === "open" ? "published" : nextStatus}.` });
       }
 
@@ -1919,6 +2037,7 @@ export function registerLocalJobsRoutes(app: Express): void {
         j.roleCategory, j.credentials, j.applicationMethod, j.applicationContact,
       ]);
       console.log(`[employer/edit-job] userId=${userId} jobId=${id} status=${j.status}`);
+      if (j.status === "open") alertFollowers(id);
       res.json({ success: true, status: j.status, message: "Vacancy updated." });
     } catch (err: any) {
       console.error("[PATCH /api/employer/jobs/:id]", err?.message);

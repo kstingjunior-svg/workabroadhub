@@ -198,6 +198,14 @@ httpServer.listen(PORT, "0.0.0.0", () => {
     } catch (err: any) {
       console.error("[Server] ❌ Stuck-order sweep failed to start:", err?.message);
     }
+    // 2026-10: Kenya Careers "Follow employer" vacancy alerts (one email per
+    // follower per live vacancy; idempotent).
+    try {
+      const { startFollowerAlertSweep } = await import("./lib/follower-notifications");
+      startFollowerAlertSweep();
+    } catch (err: any) {
+      console.error("[Server] ❌ Follower alert sweep failed to start:", err?.message);
+    }
 
     // 2026-06: M-Pesa reconciler — safety net for any STK push whose
     // /api/payments/mpesa/callback never arrived (Render cold-start,
