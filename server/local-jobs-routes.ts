@@ -367,7 +367,7 @@ export function registerLocalJobsRoutes(app: Express): void {
           `SELECT DISTINCT category FROM local_jobs WHERE status='open' AND COALESCE(is_seed,false)=false AND category IS NOT NULL ORDER BY category`,
         ).catch(() => ({ rows: [] }) as any),
         pool.query<{ industry: string }>(
-          `SELECT DISTINCT c.industry FROM companies c WHERE c.status='approved' AND c.industry IS NOT NULL AND ${LIVE_COMPANY} ORDER BY c.industry`,
+          `SELECT DISTINCT industry FROM companies WHERE status='approved' AND industry IS NOT NULL ORDER BY industry`,
         ).catch(() => ({ rows: [] }) as any),
         pool.query<{ id: string; name: string; industry: string | null; job_count: string }>(
           `SELECT c.id, c.name, c.industry,
@@ -481,12 +481,16 @@ export function registerLocalJobsRoutes(app: Express): void {
         SELECT
             c.id, c.name, c.slug, c.industry, c.county,
             c.verified_at, c.logo_url, c.institution_type, c.town,
-            COUNT(j.id) FILTER (WHERE j.status = 'open' AND COALESCE(j.is_seed, false) = false)::text AS job_count
+            COUNT(j.id) FILTER (WHERE j.status = 'open' AND COALESCE(j.is_seed, false) = false
+              AND (j.deadline IS NULL OR j.deadline >= (NOW() AT TIME ZONE 'Africa/Nairobi')::date))::text AS job_count,
+            ${LIVE_COMPANY} AS is_live,
+            ARRAY(SELECT DISTINCT x FROM unnest(array_append(ARRAY(SELECT b.county FROM branches b WHERE b.company_id = c.id), c.county)) x
+                   WHERE x IS NOT NULL ORDER BY x) AS counties
           FROM companies c
      LEFT JOIN local_jobs j ON j.company_id = c.id
-         WHERE c.status = 'approved' AND ${LIVE_COMPANY}
+         WHERE c.status = 'approved'
       GROUP BY c.id
-      ORDER BY c.name
+      ORDER BY ${LIVE_COMPANY} DESC, c.name
       `);
 
       res.setHeader("Cache-Control", "public, max-age=300");
@@ -500,6 +504,10 @@ export function registerLocalJobsRoutes(app: Express): void {
           logoUrl:  r.logo_url,
           verified: !!r.verified_at,
           jobCount: Number(r.job_count),
+          // 2026-10: "invited" = listed in our directory but hasn't joined
+          // (no admin, no live postings). Shown as an Invitation listing.
+          listingType: r.verified_at ? "verified" : (r as any).is_live ? "registered" : "invited",
+          counties: Array.isArray((r as any).counties) ? (r as any).counties : [],
           institutionType: (r as any).institution_type ?? "company",
           town:     (r as any).town ?? null,
         })),
@@ -536,7 +544,7 @@ export function registerLocalJobsRoutes(app: Express): void {
                verified_at, status, created_at,
                institution_type, school_levels, school_ownership, town
           FROM companies
-         WHERE ${lookupClause} AND status = 'approved' AND ${LIVE_COMPANY.replace(/c\.id/g, "companies.id")}
+         WHERE ${lookupClause} AND status = 'approved'
          LIMIT 1
       `, [slug]);
 
@@ -584,6 +592,10 @@ export function registerLocalJobsRoutes(app: Express): void {
 
       // All-seed-flag — if every job is a seed, the entire company is
       // unclaimed/sample. UI shows a more prominent disclosure in that case.
+      const { rows: [liveRow] } = await pool.query<{ is_live: boolean }>(
+        `SELECT ${LIVE_COMPANY} AS is_live FROM companies c WHERE c.id = $1`, [company.id],
+      ).catch(() => ({ rows: [{ is_live: false }] }) as any);
+      const isLive = !!liveRow?.is_live;
       const allJobsAreSeed = jobsRes.rows.length > 0 && jobsRes.rows.every((j) => j.is_seed);
       const realJobCount   = jobsRes.rows.filter((j) => !j.is_seed).length;
 
@@ -605,6 +617,7 @@ export function registerLocalJobsRoutes(app: Express): void {
         verified:    !!company.verified_at && !allJobsAreSeed,
         allJobsAreSeed,
         realJobCount,
+        listingType: company.verified_at ? "verified" : isLive ? "registered" : "invited",
         countiesServed,
         branches: branchesRes.rows.map((b) => ({
           id: b.id, name: b.name, county: b.county, town: b.town, location: b.location_detail,
@@ -642,7 +655,7 @@ export function registerLocalJobsRoutes(app: Express): void {
       // 2026-10 (Tony): live postings only — sample/seed rows are never counted. Expired vacancies and
       // unapproved employers are excluded everywhere.
       const { rows: [stats] } = await pool.query<{
-        total_jobs: string; live_jobs: string;
+        total_jobs: string; live_jobs: string; listed_employers: string; listed_counties: string;
         total_employers: string; verified_employers: string;
         total_counties: string; total_vacancies: string; school_jobs: string;
       }>(`
@@ -658,6 +671,11 @@ export function registerLocalJobsRoutes(app: Express): void {
           COUNT(*) FILTER (WHERE NOT COALESCE(is_seed, false))::text        AS live_jobs,
           COUNT(DISTINCT company_id)::text                                  AS total_employers,
           (SELECT COUNT(DISTINCT company_id) FROM open_jobs WHERE verified_at IS NOT NULL)::text AS verified_employers,
+          (SELECT COUNT(*) FROM companies WHERE status = 'approved')::text AS listed_employers,
+          (SELECT COUNT(DISTINCT x) FROM (
+             SELECT b.county AS x FROM branches b JOIN companies c2 ON c2.id = b.company_id WHERE c2.status = 'approved'
+             UNION SELECT county FROM companies WHERE status = 'approved'
+             UNION SELECT county FROM open_jobs) u WHERE x IS NOT NULL)::text AS listed_counties,
           COUNT(DISTINCT county) FILTER (WHERE county IS NOT NULL)::text    AS total_counties,
           COALESCE(SUM(vacancies), 0)::text                                 AS total_vacancies,
           COUNT(*) FILTER (WHERE institution_type = 'school' AND NOT COALESCE(is_seed, false))::text AS school_jobs
@@ -669,13 +687,17 @@ export function registerLocalJobsRoutes(app: Express): void {
         liveJobs:          Number(stats?.live_jobs ?? "0"),
         totalEmployers:    Number(stats?.total_employers ?? "0"),
         verifiedEmployers: Number(stats?.verified_employers ?? "0"),
+        // Directory figures: employers listed (incl. invitation listings) and
+        // the counties they cover. Jobs are ALWAYS live postings only.
+        listedEmployers:   Number(stats?.listed_employers ?? "0"),
+        listedCounties:    Number(stats?.listed_counties ?? "0"),
         totalCounties:     Number(stats?.total_counties ?? "0"),
         totalVacancies:    Number(stats?.total_vacancies ?? "0"),
         schoolJobs:        Number(stats?.school_jobs ?? "0"),
       });
     } catch (err: any) {
       if (err?.code === "42P01") {
-        return res.json({ totalJobs: 0, liveJobs: 0, totalEmployers: 0, verifiedEmployers: 0, totalCounties: 0, totalVacancies: 0, schoolJobs: 0 });
+        return res.json({ totalJobs: 0, liveJobs: 0, listedEmployers: 0, listedCounties: 0, totalEmployers: 0, verifiedEmployers: 0, totalCounties: 0, totalVacancies: 0, schoolJobs: 0 });
       }
       console.error("[GET /api/local-jobs/stats]", err?.message);
       res.status(500).json({ message: "Could not load stats." });

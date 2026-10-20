@@ -11,7 +11,8 @@
  *
  * Submits to POST /api/local-jobs/companies/:companyId/notify.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useAuth } from "@/hooks/use-auth";
 import { Bell, X, Loader2, CheckCircle2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,10 +23,16 @@ interface NotifySheetProps {
   companyId: string;
   companyName: string;
   jobId?: string;
+  /** false for employers that have joined — hides the invitation note. */
+  invited?: boolean;
+  onSubscribed?: () => void;
 }
 
-export function KenyaCareersNotifySheet({ open, onClose, companyId, companyName, jobId }: NotifySheetProps) {
+export function KenyaCareersNotifySheet({ open, onClose, companyId, companyName, jobId, invited = true, onSubscribed }: NotifySheetProps) {
+  const { user } = useAuth() as any;
   const [email, setEmail] = useState("");
+  // Prefill the signed-in user's email so "Follow" is one tap.
+  useEffect(() => { if (open && !email && user?.email) setEmail(String(user.email)); }, [open, user?.email]);
   const [phone, setPhone] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -52,6 +59,7 @@ export function KenyaCareersNotifySheet({ open, onClose, companyId, companyName,
         return;
       }
       setSubmitted(body?.message ?? "Got it! We'll let you know.");
+      onSubscribed?.();
     } catch (err: any) {
       setError(err?.message || "Could not save your signup. Try again.");
     } finally {
@@ -85,7 +93,7 @@ export function KenyaCareersNotifySheet({ open, onClose, companyId, companyName,
         <div className="p-5 sm:p-6">
           <div className="mb-4">
             <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1">
-              <Bell className="h-3 w-3" /> Notify me
+              <Bell className="h-3 w-3" /> Follow employer
             </p>
             <h2 id="notify-sheet-title" className="font-bold text-lg leading-tight">
               When {companyName} starts hiring
@@ -102,12 +110,12 @@ export function KenyaCareersNotifySheet({ open, onClose, companyId, companyName,
           ) : (
             <div className="space-y-3">
               {/* Honest disclosure — this is the critical legal piece */}
-              <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 ring-1 ring-amber-200 dark:ring-amber-800 p-3 text-sm">
-                <p className="font-medium text-amber-900 dark:text-amber-200 mb-1">This is a sample listing</p>
+              {invited && <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 ring-1 ring-amber-200 dark:ring-amber-800 p-3 text-sm">
+                <p className="font-medium text-amber-900 dark:text-amber-200 mb-1">Invitation listing</p>
                 <p className="text-xs text-amber-800 dark:text-amber-300/90">
-                  We're showing what jobs at <strong>{companyName}</strong> typically look like — but they haven't started posting real openings here yet. Leave your email and we'll notify you the moment they do.
+                  <strong>{companyName}</strong> has been invited to Kenya Careers but hasn't posted any vacancies here yet. Follow them and we'll email you as soon as they post a real job.
                 </p>
-              </div>
+              </div>}
 
               <div>
                 <label htmlFor="notify-email" className="text-sm font-medium block mb-1">Your email</label>
@@ -146,10 +154,10 @@ export function KenyaCareersNotifySheet({ open, onClose, companyId, companyName,
               >
                 {submitting
                   ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> Saving…</>
-                  : <><Sparkles className="h-4 w-4 mr-1.5" /> Notify me when they post</>}
+                  : <><Sparkles className="h-4 w-4 mr-1.5" /> Follow {companyName}</>}
               </Button>
               <p className="text-[11px] text-center text-muted-foreground">
-                We don't take payment for sample listings. One email when {companyName} is live — no spam.
+                Free. One email when {companyName} posts a job — no spam.
               </p>
             </div>
           )}

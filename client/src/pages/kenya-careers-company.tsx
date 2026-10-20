@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CompanyLogo } from "@/components/kenya-careers-company-logo";
 import { KenyaCareersClaimSheet } from "@/components/kenya-careers-claim-sheet";
+import { KenyaCareersNotifySheet } from "@/components/kenya-careers-notify-sheet";
 import { KenyaFlag, KenyaFlagStripe } from "@/components/kenya-flag";
 
 interface CompanyDetail {
@@ -33,6 +34,7 @@ interface CompanyDetail {
   headquarters: { county: string | null; address: string | null };
   verified: boolean;
   allJobsAreSeed: boolean;
+  listingType: "verified" | "registered" | "invited";
   realJobCount: number;
   countiesServed: string[];
   branches: { id: string; name: string; county: string | null; town: string | null; location: string | null }[];
@@ -64,6 +66,7 @@ export default function KenyaCareersCompany() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [claimOpen, setClaimOpen] = useState(false);
+  const [followOpen, setFollowOpen] = useState(false);
 
   useEffect(() => {
     if (!params?.slug) return;
@@ -100,6 +103,7 @@ export default function KenyaCareersCompany() {
           },
           verified:       !!data?.verified,
           allJobsAreSeed: data?.allJobsAreSeed !== false,   // default to true for safety
+          listingType:    data?.listingType === "verified" || data?.listingType === "registered" ? data.listingType : "invited",
           realJobCount:   Number(data?.realJobCount ?? 0),
           countiesServed: Array.isArray(data?.countiesServed) ? data.countiesServed : [],
           branches:       Array.isArray(data?.branches) ? data.branches : [],
@@ -184,6 +188,11 @@ export default function KenyaCareersCompany() {
                   <p className="text-sm text-muted-foreground mt-1">{company.industry}</p>
                 )}
                 {/* 2026-10: honest status for employers who haven't joined. */}
+                {company.listingType === "invited" && (
+                  <p className="text-xs mt-2 inline-block rounded-md bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 px-2 py-1" data-testid="invitation-listing-note">
+                    Invitation listing — {company.name} hasn't joined Kenya Careers or posted any vacancies here yet.
+                  </p>
+                )}
                 {company.headquarters.county && (
                   <p className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1">
                     <MapPin className="h-3 w-3" /> Headquarters: {company.headquarters.county}
@@ -198,12 +207,7 @@ export default function KenyaCareersCompany() {
               <span className="flex items-center gap-1">
                 <Briefcase className="h-3.5 w-3.5" />
                 <strong className="text-foreground">{company.jobs.length}</strong>
-                {" "}listing{company.jobs.length === 1 ? "" : "s"}
-                {company.realJobCount > 0 && (
-                  <span className="text-emerald-700 dark:text-emerald-300">
-                    {" "}({company.realJobCount} real)
-                  </span>
-                )}
+                {" "}open job{company.jobs.length === 1 ? "" : "s"}
               </span>
               <span className="flex items-center gap-1">
                 <Building2 className="h-3.5 w-3.5" />
@@ -226,6 +230,9 @@ export default function KenyaCareersCompany() {
                   </a>
                 </Button>
               )}
+              <Button size="sm" variant="outline" onClick={() => setFollowOpen(true)} data-testid="btn-follow-company">
+                Follow {company.name}
+              </Button>
               <Button
                 size="sm"
                 onClick={() => setClaimOpen(true)}
@@ -301,7 +308,7 @@ export default function KenyaCareersCompany() {
               <div className="text-center py-6 text-muted-foreground text-sm">
                 <Briefcase className="h-8 w-8 mx-auto mb-2 opacity-30" />
                 <p>No open positions right now.</p>
-                <p className="text-xs mt-1">Be the first to know when {company.name} posts — tap "Claim this profile" above.</p>
+                <p className="text-xs mt-1">Tap "Follow {company.name}" above and we'll email you when they post a job.</p>
               </div>
             ) : (
               <ul className="space-y-2">
@@ -366,7 +373,7 @@ export default function KenyaCareersCompany() {
             <Building2 className="h-8 w-8 text-emerald-700 dark:text-emerald-300 mx-auto mb-2" />
             <h3 className="font-semibold">Work at {company.name}?</h3>
             <p className="text-sm text-muted-foreground mt-1 mb-3">
-              Claim this profile to take over the listings and post real openings directly.
+              Claim this profile to manage it and post your vacancies directly — free.
             </p>
             <Button
               onClick={() => setClaimOpen(true)}
@@ -378,6 +385,7 @@ export default function KenyaCareersCompany() {
         </Card>
       </div>
 
+      <KenyaCareersNotifySheet open={followOpen} onClose={() => setFollowOpen(false)} companyId={company.id} companyName={company.name} invited={company.listingType === "invited"} />
       <KenyaCareersClaimSheet
         open={claimOpen}
         onClose={() => setClaimOpen(false)}

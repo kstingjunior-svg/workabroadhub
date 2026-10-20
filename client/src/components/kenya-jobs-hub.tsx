@@ -24,6 +24,7 @@ import { KENYA_COUNTIES } from "@/lib/school-constants";
 interface HubStats {
   totalJobs: number; liveJobs: number;
   totalEmployers: number; verifiedEmployers: number; totalCounties: number;
+  listedEmployers: number; listedCounties: number;
 }
 
 async function safeJson<T>(url: string, signal: AbortSignal): Promise<{ status: number; data: T | null }> {
@@ -37,7 +38,7 @@ async function safeJson<T>(url: string, signal: AbortSignal): Promise<{ status: 
 
 /* ── Illustrations ─────────────────────────────────────────────────────── */
 
-function NairobiSkyline() {
+export function NairobiSkyline() {
   // Stylised Nairobi CBD at dusk — KICC (cylinder + saucer), towers, acacias.
   return (
     <svg viewBox="0 0 520 300" preserveAspectRatio="xMidYMax slice" className="absolute inset-0 h-full w-full" aria-hidden="true">
@@ -115,7 +116,7 @@ function NearbyMap() {
   );
 }
 
-function BackgroundCurves() {
+export function BackgroundCurves() {
   return (
     <svg viewBox="0 0 1200 800" preserveAspectRatio="none" className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden="true">
       <g fill="none" stroke="#3b82f6" strokeOpacity="0.09" strokeWidth="2">
@@ -128,88 +129,18 @@ function BackgroundCurves() {
   );
 }
 
-/* ── Component ─────────────────────────────────────────────────────────── */
 
-export function KenyaJobsHub() {
-  const [, navigate] = useLocation();
-  const [stats, setStats] = useState<HubStats | null>(null);
-  const [statsError, setStatsError] = useState(false);
-  const [kaziAvailable, setKaziAvailable] = useState<boolean | null>(null);
-  const [counties, setCounties] = useState<string[]>(KENYA_COUNTIES);
-  const [keyword, setKeyword] = useState("");
-  const [county, setCounty] = useState("");
-  const [searching, setSearching] = useState(false);
-  const keywordRef = useRef<HTMLInputElement>(null);
-  const searchRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const ac = new AbortController();
-    (async () => {
-      const [s, f, k] = await Promise.all([
-        safeJson<any>("/api/local-jobs/stats", ac.signal),
-        safeJson<any>("/api/local-jobs/filters", ac.signal),
-        safeJson<any>("/api/kazi-karibu/posts?limit=1", ac.signal),
-      ]);
-      if (ac.signal.aborted) return;
-      if (s.data) {
-        setStats({
-          totalJobs: Number(s.data.totalJobs ?? 0), liveJobs: Number(s.data.liveJobs ?? 0),
-          totalEmployers: Number(s.data.totalEmployers ?? 0),
-          verifiedEmployers: Number(s.data.verifiedEmployers ?? 0), totalCounties: Number(s.data.totalCounties ?? 0),
-        });
-      } else setStatsError(true);
-      if (Array.isArray(f.data?.counties) && f.data.counties.length) setCounties(f.data.counties.map(String));
-      // Kazi Karibu is feature-flagged: 404 = off (keep the old card's behaviour).
-      setKaziAvailable(k.status === 404 ? false : true);
-    })();
-    return () => ac.abort();
-  }, []);
-
-  function runSearch(e?: React.FormEvent) {
-    e?.preventDefault();
-    if (searching) return;
-    const q = keyword.replace(/\s+/g, " ").trim().slice(0, 80);
-    const params = new URLSearchParams();
-    if (q) params.set("search", q);
-    if (county && counties.includes(county)) params.set("county", county);
-    setSearching(true);
-    navigate(`/kenya-careers${params.toString() ? `?${params}` : ""}`);
-  }
-
-  function focusSearch() {
-    searchRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-    setTimeout(() => keywordRef.current?.focus({ preventScroll: true }), 300);
-  }
-
-  const jobsStat = useMemo(() => {
-    if (!stats) return null;
-    // Live employer postings only — shows 0 until employers post.
-    return { n: stats.liveJobs, label: stats.liveJobs === 1 ? "job" : "jobs" };
-  }, [stats]);
-
+/* ── Shared section nav (dashboard hub + /kenya-careers) ─────────────────
+ * Per Tony's spec: ONLY Find Jobs · Kenyan Jobs Section · Kazi Karibu ·
+ * For Schools · Post a Job. No brand name, logo or Login button. */
+export function KenyaSectionNav({ onFindJobs }: { onFindJobs: () => void }) {
   const navItems = [
-    { key: "find",    label: "Find Jobs",           icon: Search,  onClick: focusSearch },
+    { key: "find",    label: "Find Jobs",           icon: Search,  onClick: onFindJobs },
     { key: "kenya",   label: "Kenyan Jobs Section", icon: null,    href: "/kenya-careers", active: true },
     { key: "kazi",    label: "Kazi Karibu",         icon: Home,    href: "/kazi-karibu" },
     { key: "schools", label: "For Schools",         icon: School,  href: "/kenya-careers/schools" },
   ] as const;
-
-  const showKazi = kaziAvailable !== false;
-
   return (
-    // 2026-10: the dashboard column is max-w-2xl (672px). Let this section
-    // break out to the reference's desktop width (≤1240px, always 1.5rem
-    // clear of each viewport edge → no horizontal scroll).
-    <div className="w-full md:relative md:left-1/2 md:-translate-x-1/2 md:w-[min(1240px,calc(100vw-3rem))] md:max-w-none">
-    <section
-      aria-label="Kenyan jobs marketplace"
-      className="kjh relative overflow-hidden rounded-[28px] border border-blue-950/60 bg-[#050b1f] text-white shadow-[0_20px_60px_-20px_rgba(2,6,23,0.8)]"
-      style={{ backgroundImage: "radial-gradient(1200px 500px at 85% -10%, rgba(37,99,235,0.18), transparent 60%), radial-gradient(900px 500px at -10% 110%, rgba(16,185,129,0.10), transparent 60%), linear-gradient(180deg,#060d24 0%,#050b1f 100%)" }}
-      data-testid="kenya-jobs-hub"
-    >
-      <BackgroundCurves />
-
-      {/* ── Section navigation (no brand, no login — per spec) ── */}
       <nav aria-label="Kenyan jobs" className="relative border-b border-white/[0.06]">
         <div className="flex items-center justify-between gap-3 px-4 sm:px-8 h-auto md:h-[76px] py-3 md:py-0">
           <ul className="grid grid-cols-4 md:flex md:flex-1 md:justify-center md:gap-5 lg:gap-10 w-full md:w-auto gap-1">
@@ -241,6 +172,86 @@ export function KenyaJobsHub() {
           </Link>
         </div>
       </nav>
+  );
+}
+
+/* ── Component ─────────────────────────────────────────────────────────── */
+
+export function KenyaJobsHub() {
+  const [, navigate] = useLocation();
+  const [stats, setStats] = useState<HubStats | null>(null);
+  const [statsError, setStatsError] = useState(false);
+  const [kaziAvailable, setKaziAvailable] = useState<boolean | null>(null);
+  const [counties, setCounties] = useState<string[]>(KENYA_COUNTIES);
+  const [keyword, setKeyword] = useState("");
+  const [county, setCounty] = useState("");
+  const [searching, setSearching] = useState(false);
+  const keywordRef = useRef<HTMLInputElement>(null);
+  const searchRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const ac = new AbortController();
+    (async () => {
+      const [s, f, k] = await Promise.all([
+        safeJson<any>("/api/local-jobs/stats", ac.signal),
+        safeJson<any>("/api/local-jobs/filters", ac.signal),
+        safeJson<any>("/api/kazi-karibu/posts?limit=1", ac.signal),
+      ]);
+      if (ac.signal.aborted) return;
+      if (s.data) {
+        setStats({
+          totalJobs: Number(s.data.totalJobs ?? 0), liveJobs: Number(s.data.liveJobs ?? 0),
+          totalEmployers: Number(s.data.totalEmployers ?? 0),
+          verifiedEmployers: Number(s.data.verifiedEmployers ?? 0), totalCounties: Number(s.data.totalCounties ?? 0),
+          listedEmployers: Number(s.data.listedEmployers ?? s.data.totalEmployers ?? 0), listedCounties: Number(s.data.listedCounties ?? s.data.totalCounties ?? 0),
+        });
+      } else setStatsError(true);
+      if (Array.isArray(f.data?.counties) && f.data.counties.length) setCounties(f.data.counties.map(String));
+      // Kazi Karibu is feature-flagged: 404 = off (keep the old card's behaviour).
+      setKaziAvailable(k.status === 404 ? false : true);
+    })();
+    return () => ac.abort();
+  }, []);
+
+  function runSearch(e?: React.FormEvent) {
+    e?.preventDefault();
+    if (searching) return;
+    const q = keyword.replace(/\s+/g, " ").trim().slice(0, 80);
+    const params = new URLSearchParams();
+    if (q) params.set("search", q);
+    if (county && counties.includes(county)) params.set("county", county);
+    setSearching(true);
+    navigate(`/kenya-careers${params.toString() ? `?${params}` : ""}`);
+  }
+
+  function focusSearch() {
+    searchRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    setTimeout(() => keywordRef.current?.focus({ preventScroll: true }), 300);
+  }
+
+  const jobsStat = useMemo(() => {
+    if (!stats) return null;
+    // Live employer postings only — shows 0 until employers post.
+    return { n: stats.liveJobs, label: stats.liveJobs === 1 ? "job" : "jobs" };
+  }, [stats]);
+
+
+  const showKazi = kaziAvailable !== false;
+
+  return (
+    // 2026-10: the dashboard column is max-w-2xl (672px). Let this section
+    // break out to the reference's desktop width (≤1240px, always 1.5rem
+    // clear of each viewport edge → no horizontal scroll).
+    <div className="w-full md:relative md:left-1/2 md:-translate-x-1/2 md:w-[min(1240px,calc(100vw-3rem))] md:max-w-none">
+    <section
+      aria-label="Kenyan jobs marketplace"
+      className="kjh relative overflow-hidden rounded-[28px] border border-blue-950/60 bg-[#050b1f] text-white shadow-[0_20px_60px_-20px_rgba(2,6,23,0.8)]"
+      style={{ backgroundImage: "radial-gradient(1200px 500px at 85% -10%, rgba(37,99,235,0.18), transparent 60%), radial-gradient(900px 500px at -10% 110%, rgba(16,185,129,0.10), transparent 60%), linear-gradient(180deg,#060d24 0%,#050b1f 100%)" }}
+      data-testid="kenya-jobs-hub"
+    >
+      <BackgroundCurves />
+
+      <KenyaSectionNav onFindJobs={focusSearch} />
 
       <div className="relative px-4 sm:px-8 pt-7 sm:pt-9 pb-6 sm:pb-8">
         {/* ── Hero ── */}
@@ -326,9 +337,9 @@ export function KenyaJobsHub() {
               <div className="mt-5 grid grid-cols-3 gap-2 max-w-[460px]" aria-live="polite">
                 {stats ? (
                   <>
-                    <StatChip icon={<Building2 className="h-7 w-7 text-blue-500" aria-hidden="true" />} n={stats.totalEmployers} label="employers" />
+                    <StatChip icon={<Building2 className="h-7 w-7 text-blue-500" aria-hidden="true" />} n={stats.listedEmployers} label="employers" />
                     <StatChip icon={<Briefcase className="h-7 w-7 text-emerald-400" aria-hidden="true" />} n={jobsStat!.n} label={jobsStat!.label} />
-                    <StatChip icon={<MapPin className="h-7 w-7 text-blue-400" aria-hidden="true" />} n={stats.totalCounties} label="counties" />
+                    <StatChip icon={<MapPin className="h-7 w-7 text-blue-400" aria-hidden="true" />} n={stats.listedCounties} label="counties" />
                   </>
                 ) : statsError ? (
                   <p className="text-sm text-slate-400">Live numbers are unavailable right now.</p>
