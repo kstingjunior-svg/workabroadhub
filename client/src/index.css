@@ -1211,3 +1211,13 @@ html.text-size-larger {
 @media (prefers-reduced-motion: reduce) {
   .abm-ring, .abm-dot { animation: none !important; }
 }
+
+
+/* 2026-10: Kenyan Jobs sections (dashboard hub + /kenya-careers) follow the
+   reference's modern sans-serif — opt out of the global Fraunces headings. */
+.kc-page :is(h1, h2, h3, h4),
+.kjh :is(h1, h2, h3, h4) {
+  font-family: 'Plus Jakarta Sans', Manrope, system-ui, sans-serif;
+  font-variation-settings: normal;
+  color: inherit;
+}

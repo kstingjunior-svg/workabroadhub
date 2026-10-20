@@ -133,7 +133,7 @@ export function BackgroundCurves() {
 /* ── Shared section nav (dashboard hub + /kenya-careers) ─────────────────
  * Per Tony's spec: ONLY Find Jobs · Kenyan Jobs Section · Kazi Karibu ·
  * For Schools · Post a Job. No brand name, logo or Login button. */
-export function KenyaSectionNav({ onFindJobs }: { onFindJobs: () => void }) {
+export function KenyaSectionNav({ onFindJobs, clearBackButton = false }: { onFindJobs: () => void; clearBackButton?: boolean }) {
   const navItems = [
     { key: "find",    label: "Find Jobs",           icon: Search,  onClick: onFindJobs },
     { key: "kenya",   label: "Kenyan Jobs Section", icon: null,    href: "/kenya-careers", active: true },
@@ -142,7 +142,7 @@ export function KenyaSectionNav({ onFindJobs }: { onFindJobs: () => void }) {
   ] as const;
   return (
       <nav aria-label="Kenyan jobs" className="relative border-b border-white/[0.06]">
-        <div className="flex items-center justify-between gap-3 px-4 sm:px-8 h-auto md:h-[76px] py-3 md:py-0">
+        <div className={`flex items-center justify-between gap-3 ${clearBackButton ? "pl-[60px] pr-3 sm:pl-[64px] md:px-8" : "px-4 sm:px-8"} h-auto md:h-[76px] py-3 md:py-0`}>
           <ul className="grid grid-cols-4 md:flex md:flex-1 md:justify-center md:gap-5 lg:gap-10 w-full md:w-auto gap-1">
             {navItems.map((n) => {
               const inner = (

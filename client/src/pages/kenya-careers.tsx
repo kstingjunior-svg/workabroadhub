@@ -417,12 +417,12 @@ export default function KenyaCareers() {
 
   return (
     <div
-      className="dark min-h-screen bg-[#050b1f] text-white pb-16"
+      className="kc-page dark min-h-screen bg-[#050b1f] text-white pb-16"
       style={{ backgroundImage: "radial-gradient(1200px 520px at 85% -5%, rgba(37,99,235,0.16), transparent 60%), radial-gradient(900px 600px at -10% 40%, rgba(16,185,129,0.07), transparent 60%)" }}
     >
       <div className="relative">
         <BackgroundCurves />
-        <KenyaSectionNav onFindJobs={focusJobs} />
+        <KenyaSectionNav onFindJobs={focusJobs} clearBackButton />
 
         {/* ── HERO ─────────────────────────────────────────────────────── */}
         <section className="relative overflow-hidden border-b border-white/[0.06]" data-testid="kc-hero">
