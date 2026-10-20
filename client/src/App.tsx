@@ -710,6 +710,8 @@ function AuthenticatedRoutes() {
 
       {/* Kenya Careers — Phase 1 public browse + Phase 2 applications */}
       <Route path="/kenya-careers/schools" component={LazySchoolsHireTeachers} />
+      {/* 2026-10: /employers is taken by the overseas EmployersDirectory (registered first), so the Kenya employer landing page never rendered. Give it its own path. */}
+      <Route path="/kenya-careers/employers" component={LazyKenyaCareersEmployers} />
       <Route path="/schools" component={LazySchoolsHireTeachers} />
       <Route path="/kenya-careers" component={LazyKenyaCareers} />
       <Route path="/kenya-careers/job/:id" component={LazyKenyaCareersJob} />
@@ -1054,6 +1056,8 @@ function Router() {
         <Route path="/verify-us" component={LazyVerifyUs} />
         <Route path="/portals/community" component={LazyCommunityPortals} />
         <Route path="/kenya-careers/schools" component={LazySchoolsHireTeachers} />
+        {/* 2026-10: /employers is taken by the overseas EmployersDirectory (registered first), so the Kenya employer landing page never rendered. Give it its own path. */}
+        <Route path="/kenya-careers/employers" component={LazyKenyaCareersEmployers} />
         <Route path="/schools" component={LazySchoolsHireTeachers} />
         <Route path="/kenya-careers" component={LazyKenyaCareers} />
         <Route path="/kenya-careers/job/:id" component={LazyKenyaCareersJob} />

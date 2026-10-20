@@ -66,7 +66,7 @@ export default function EmployerDashboard() {
     <div className="min-h-screen bg-background pb-16">
       <div className="bg-gradient-to-br from-slate-900 to-slate-700 text-white px-4 pt-4 pb-8">
         <div className="max-w-3xl mx-auto">
-          <Link href="/employers">
+          <Link href="/kenya-careers/employers">
             <Button variant="ghost" size="sm" className="text-white hover:bg-white/10 -ml-2 mb-2">
               <ArrowLeft className="h-4 w-4 mr-1.5" /> Back to employers
             </Button>

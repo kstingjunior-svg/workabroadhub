@@ -156,9 +156,12 @@ export default function KenyaCareers() {
   const [error,      setError]      = useState<string | null>(null);
 
   // Filter state
-  const [searchInput, setSearchInput] = useState("");
-  const [search,      setSearch]      = useState("");
-  const [county,      setCounty]      = useState<string>("all");
+  // 2026-10: accept ?search= and ?county= from the dashboard Kenyan Jobs hub search bar.
+  const initialParams = (() => { try { return new URLSearchParams(window.location.search); } catch { return new URLSearchParams(); } })();
+  const initialSearch = (initialParams.get("search") ?? "").trim().slice(0, 80);
+  const [searchInput, setSearchInput] = useState(initialSearch);
+  const [search,      setSearch]      = useState(initialSearch);
+  const [county,      setCounty]      = useState<string>((initialParams.get("county") ?? "").trim().slice(0, 40) || "all");
   const [category,    setCategory]    = useState<string>("all");
   const [companyId,   setCompanyId]   = useState<string>("all");
   // 2026-10: "Teaching jobs at schools" filter (also via ?institution=school).
@@ -351,7 +354,7 @@ export default function KenyaCareers() {
             audience (jobseekers can ignore employer link; employer link to
             /login if needed). */}
         <div className="mt-4 flex justify-end gap-2 flex-wrap">
-          <Link href="/employers">
+          <Link href="/kenya-careers/employers">
             <Button variant="ghost" size="sm" className="text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-900/20" data-testid="link-employers-page">
               <Building2 className="h-4 w-4 mr-1.5" /> For employers
             </Button>

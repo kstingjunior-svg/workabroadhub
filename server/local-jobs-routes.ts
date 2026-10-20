@@ -633,25 +633,45 @@ export function registerLocalJobsRoutes(app: Express): void {
   // Headline numbers for the landing hero: "X jobs · Y employers · Z counties".
   app.get("/api/local-jobs/stats", async (_req: Request, res: Response) => {
     try {
+      // 2026-10: split live (real employer postings) from sample listings so
+      // the UI never presents samples as real jobs. Expired vacancies and
+      // unapproved employers are excluded everywhere.
       const { rows: [stats] } = await pool.query<{
-        total_jobs: string; total_employers: string; total_counties: string; total_vacancies: string;
+        total_jobs: string; live_jobs: string; sample_jobs: string;
+        total_employers: string; verified_employers: string;
+        total_counties: string; total_vacancies: string; school_jobs: string;
       }>(`
+        WITH open_jobs AS (
+          SELECT j.*, c.verified_at, c.institution_type
+            FROM local_jobs j JOIN companies c ON c.id = j.company_id
+           WHERE j.status = 'open' AND c.status = 'approved'
+             AND (j.deadline IS NULL OR j.deadline >= (NOW() AT TIME ZONE 'Africa/Nairobi')::date)
+        )
         SELECT
-          (SELECT COUNT(*)::text                                FROM local_jobs WHERE status='open' AND (deadline IS NULL OR deadline >= (NOW() AT TIME ZONE 'Africa/Nairobi')::date))      AS total_jobs,
-          (SELECT COUNT(DISTINCT company_id)::text              FROM local_jobs WHERE status='open')      AS total_employers,
-          (SELECT COUNT(DISTINCT county)::text                  FROM local_jobs WHERE status='open' AND county IS NOT NULL) AS total_counties,
-          (SELECT COALESCE(SUM(vacancies), 0)::text             FROM local_jobs WHERE status='open')      AS total_vacancies
+          COUNT(*)::text                                                    AS total_jobs,
+          COUNT(*) FILTER (WHERE NOT COALESCE(is_seed, false))::text        AS live_jobs,
+          COUNT(*) FILTER (WHERE COALESCE(is_seed, false))::text            AS sample_jobs,
+          COUNT(DISTINCT company_id)::text                                  AS total_employers,
+          (SELECT COUNT(*) FROM companies WHERE status = 'approved' AND verified_at IS NOT NULL)::text AS verified_employers,
+          COUNT(DISTINCT county) FILTER (WHERE county IS NOT NULL)::text    AS total_counties,
+          COALESCE(SUM(vacancies), 0)::text                                 AS total_vacancies,
+          COUNT(*) FILTER (WHERE institution_type = 'school' AND NOT COALESCE(is_seed, false))::text AS school_jobs
+        FROM open_jobs
       `);
       res.setHeader("Cache-Control", "public, max-age=300");
       res.json({
-        totalJobs:      Number(stats?.total_jobs      ?? "0"),
-        totalEmployers: Number(stats?.total_employers ?? "0"),
-        totalCounties:  Number(stats?.total_counties  ?? "0"),
-        totalVacancies: Number(stats?.total_vacancies ?? "0"),
+        totalJobs:         Number(stats?.total_jobs ?? "0"),
+        liveJobs:          Number(stats?.live_jobs ?? "0"),
+        sampleJobs:        Number(stats?.sample_jobs ?? "0"),
+        totalEmployers:    Number(stats?.total_employers ?? "0"),
+        verifiedEmployers: Number(stats?.verified_employers ?? "0"),
+        totalCounties:     Number(stats?.total_counties ?? "0"),
+        totalVacancies:    Number(stats?.total_vacancies ?? "0"),
+        schoolJobs:        Number(stats?.school_jobs ?? "0"),
       });
     } catch (err: any) {
       if (err?.code === "42P01") {
-        return res.json({ totalJobs: 0, totalEmployers: 0, totalCounties: 0, totalVacancies: 0 });
+        return res.json({ totalJobs: 0, liveJobs: 0, sampleJobs: 0, totalEmployers: 0, verifiedEmployers: 0, totalCounties: 0, totalVacancies: 0, schoolJobs: 0 });
       }
       console.error("[GET /api/local-jobs/stats]", err?.message);
       res.status(500).json({ message: "Could not load stats." });

@@ -43,8 +43,7 @@ import { DashboardBestMatch } from "@/components/dashboard-best-match";
 // 2026-09 REMOVED — DashboardVisaJobsLocked killed trust ("we're selling
 // jobs, not helping you get them"). See comment at the former render site.
 // import { DashboardVisaJobsLocked } from "@/components/dashboard-visa-jobs-locked";
-import { DashboardKenyaCareersCard } from "@/components/dashboard-kenya-careers-card";
-import { DashboardKaziKaribuCard } from "@/components/dashboard-kazi-karibu-card";
+import { KenyaJobsHub } from "@/components/kenya-jobs-hub";
 import { DashboardIeltsPrepCard } from "@/components/dashboard-ielts-prep-card";
 import { LiveActivityStrip } from "@/components/live-activity-strip";
 import { AgencyAlertBanner } from "@/components/agency-alert-banner";
@@ -1453,13 +1452,16 @@ export default function Dashboard() {
             2026-06: pairs with the visa-sponsored card above so users see
             both paths — overseas and in-country. Free public browse, no
             Pro gate. Shows live stats from /api/local-jobs/stats. */}
-        <DashboardKenyaCareersCard />
+        {/* 2026-10: rebuilt as one "Kenyan jobs marketplace" section (Tony's
+            reference design) — replaces the separate Kenya Careers + Kazi
+            Karibu cards; same live data, same routes. */}
+        <KenyaJobsHub />
 
         {/* ── KAZI KARIBU — individual employer postings (Phase 1) ─────────
             2026-07: the "jobs you can start tomorrow" surface — house helps,
             fundis, cooks, drivers, tutors. Card hides itself if the backend
             feature flag is off (silent fallback via 404 detection). */}
-        <DashboardKaziKaribuCard />
+
 
         {/* ── IELTS PREP — demand validation (Phase 0) ─────────────────────
             2026-06: founder is exploring a KES 10,000 IELTS prep product.
