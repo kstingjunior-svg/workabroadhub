@@ -183,6 +183,11 @@ export function registerLocalJobsRoutes(app: Express): void {
   // Use this to validate the deploy:
   //   curl -i https://workabroadhub.tech/api/local-jobs/_ping
   // Expected: HTTP 200 + Content-Type: application/json + {"ok":true,...}
+  // 2026-10 (Tony): no sample jobs anywhere public. A company is shown only
+  // once it is real — it has an admin (registered/claimed) or a live posting.
+  const LIVE_COMPANY = `(EXISTS (SELECT 1 FROM company_admins ca WHERE ca.company_id = c.id)
+      OR EXISTS (SELECT 1 FROM local_jobs lj WHERE lj.company_id = c.id AND COALESCE(lj.is_seed, false) = false))`;
+
   app.get("/api/local-jobs/_ping", (_req: Request, res: Response) => {
     res.json({
       ok: true,
@@ -214,7 +219,7 @@ export function registerLocalJobsRoutes(app: Express): void {
 
       // 2026-10: expired vacancies (deadline passed, Kenya time) are never listed.
       const conditions: string[] = [
-        "j.status = 'open'", "c.status = 'approved'",
+        "j.status = 'open'", "c.status = 'approved'", "COALESCE(j.is_seed, false) = false",
         "(j.deadline IS NULL OR j.deadline >= (NOW() AT TIME ZONE 'Africa/Nairobi')::date)",
       ];
       const params: any[] = [];
@@ -359,16 +364,16 @@ export function registerLocalJobsRoutes(app: Express): void {
       const { KENYA_47_COUNTIES } = await import("./lib/local-jobs-seed-data");
       const [categoriesRes, industriesRes, companiesRes] = await Promise.all([
         pool.query<{ category: string }>(
-          `SELECT DISTINCT category FROM local_jobs WHERE status='open' AND category IS NOT NULL ORDER BY category`,
+          `SELECT DISTINCT category FROM local_jobs WHERE status='open' AND COALESCE(is_seed,false)=false AND category IS NOT NULL ORDER BY category`,
         ).catch(() => ({ rows: [] }) as any),
         pool.query<{ industry: string }>(
-          `SELECT DISTINCT industry FROM companies WHERE status='approved' AND industry IS NOT NULL ORDER BY industry`,
+          `SELECT DISTINCT c.industry FROM companies c WHERE c.status='approved' AND c.industry IS NOT NULL AND ${LIVE_COMPANY} ORDER BY c.industry`,
         ).catch(() => ({ rows: [] }) as any),
         pool.query<{ id: string; name: string; industry: string | null; job_count: string }>(
           `SELECT c.id, c.name, c.industry,
-                  (SELECT COUNT(*) FROM local_jobs WHERE company_id = c.id AND status = 'open')::text AS job_count
+                  (SELECT COUNT(*) FROM local_jobs WHERE company_id = c.id AND status = 'open' AND COALESCE(is_seed,false)=false)::text AS job_count
              FROM companies c
-            WHERE c.status = 'approved'
+            WHERE c.status = 'approved' AND ${LIVE_COMPANY}
             ORDER BY c.name`,
         ).catch(() => ({ rows: [] }) as any),
       ]);
@@ -418,6 +423,7 @@ export function registerLocalJobsRoutes(app: Express): void {
           FROM local_jobs j
           JOIN companies c ON c.id = j.company_id
          WHERE j.status = 'open' AND c.status = 'approved' AND j.county IS NOT NULL
+           AND COALESCE(j.is_seed, false) = false
          GROUP BY j.county
          ORDER BY COUNT(*) DESC
          LIMIT 6
@@ -429,9 +435,9 @@ export function registerLocalJobsRoutes(app: Express): void {
         id: string; name: string; industry: string | null; job_count: string;
       }>(`
         SELECT c.id, c.name, c.industry,
-               (SELECT COUNT(*) FROM local_jobs WHERE company_id = c.id AND status = 'open')::text AS job_count
+               (SELECT COUNT(*) FROM local_jobs WHERE company_id = c.id AND status = 'open' AND COALESCE(is_seed,false)=false)::text AS job_count
           FROM companies c
-         WHERE c.status = 'approved'
+         WHERE c.status = 'approved' AND ${LIVE_COMPANY}
          ORDER BY c.created_at DESC
          LIMIT 6
       `).catch(() => ({ rows: [] }) as any);
@@ -475,10 +481,10 @@ export function registerLocalJobsRoutes(app: Express): void {
         SELECT
             c.id, c.name, c.slug, c.industry, c.county,
             c.verified_at, c.logo_url, c.institution_type, c.town,
-            COUNT(j.id) FILTER (WHERE j.status = 'open')::text AS job_count
+            COUNT(j.id) FILTER (WHERE j.status = 'open' AND COALESCE(j.is_seed, false) = false)::text AS job_count
           FROM companies c
      LEFT JOIN local_jobs j ON j.company_id = c.id
-         WHERE c.status = 'approved'
+         WHERE c.status = 'approved' AND ${LIVE_COMPANY}
       GROUP BY c.id
       ORDER BY c.name
       `);
@@ -530,7 +536,7 @@ export function registerLocalJobsRoutes(app: Express): void {
                verified_at, status, created_at,
                institution_type, school_levels, school_ownership, town
           FROM companies
-         WHERE ${lookupClause} AND status = 'approved'
+         WHERE ${lookupClause} AND status = 'approved' AND ${LIVE_COMPANY.replace(/c\.id/g, "companies.id")}
          LIMIT 1
       `, [slug]);
 
@@ -563,7 +569,7 @@ export function registerLocalJobsRoutes(app: Express): void {
                  b.id AS branch_id, b.name AS branch_name
             FROM local_jobs j
        LEFT JOIN branches b ON b.id = j.branch_id
-           WHERE j.company_id = $1 AND j.status = 'open'
+           WHERE j.company_id = $1 AND j.status = 'open' AND COALESCE(j.is_seed, false) = false
              AND (j.deadline IS NULL OR j.deadline >= (NOW() AT TIME ZONE 'Africa/Nairobi')::date)
            ORDER BY j.is_seed ASC, j.created_at DESC
         `, [company.id]),
@@ -633,11 +639,10 @@ export function registerLocalJobsRoutes(app: Express): void {
   // Headline numbers for the landing hero: "X jobs · Y employers · Z counties".
   app.get("/api/local-jobs/stats", async (_req: Request, res: Response) => {
     try {
-      // 2026-10: split live (real employer postings) from sample listings so
-      // the UI never presents samples as real jobs. Expired vacancies and
+      // 2026-10 (Tony): live postings only — sample/seed rows are never counted. Expired vacancies and
       // unapproved employers are excluded everywhere.
       const { rows: [stats] } = await pool.query<{
-        total_jobs: string; live_jobs: string; sample_jobs: string;
+        total_jobs: string; live_jobs: string;
         total_employers: string; verified_employers: string;
         total_counties: string; total_vacancies: string; school_jobs: string;
       }>(`
@@ -645,14 +650,14 @@ export function registerLocalJobsRoutes(app: Express): void {
           SELECT j.*, c.verified_at, c.institution_type
             FROM local_jobs j JOIN companies c ON c.id = j.company_id
            WHERE j.status = 'open' AND c.status = 'approved'
+             AND COALESCE(j.is_seed, false) = false
              AND (j.deadline IS NULL OR j.deadline >= (NOW() AT TIME ZONE 'Africa/Nairobi')::date)
         )
         SELECT
           COUNT(*)::text                                                    AS total_jobs,
           COUNT(*) FILTER (WHERE NOT COALESCE(is_seed, false))::text        AS live_jobs,
-          COUNT(*) FILTER (WHERE COALESCE(is_seed, false))::text            AS sample_jobs,
           COUNT(DISTINCT company_id)::text                                  AS total_employers,
-          (SELECT COUNT(*) FROM companies WHERE status = 'approved' AND verified_at IS NOT NULL)::text AS verified_employers,
+          (SELECT COUNT(DISTINCT company_id) FROM open_jobs WHERE verified_at IS NOT NULL)::text AS verified_employers,
           COUNT(DISTINCT county) FILTER (WHERE county IS NOT NULL)::text    AS total_counties,
           COALESCE(SUM(vacancies), 0)::text                                 AS total_vacancies,
           COUNT(*) FILTER (WHERE institution_type = 'school' AND NOT COALESCE(is_seed, false))::text AS school_jobs
@@ -662,7 +667,6 @@ export function registerLocalJobsRoutes(app: Express): void {
       res.json({
         totalJobs:         Number(stats?.total_jobs ?? "0"),
         liveJobs:          Number(stats?.live_jobs ?? "0"),
-        sampleJobs:        Number(stats?.sample_jobs ?? "0"),
         totalEmployers:    Number(stats?.total_employers ?? "0"),
         verifiedEmployers: Number(stats?.verified_employers ?? "0"),
         totalCounties:     Number(stats?.total_counties ?? "0"),
@@ -671,7 +675,7 @@ export function registerLocalJobsRoutes(app: Express): void {
       });
     } catch (err: any) {
       if (err?.code === "42P01") {
-        return res.json({ totalJobs: 0, liveJobs: 0, sampleJobs: 0, totalEmployers: 0, verifiedEmployers: 0, totalCounties: 0, totalVacancies: 0, schoolJobs: 0 });
+        return res.json({ totalJobs: 0, liveJobs: 0, totalEmployers: 0, verifiedEmployers: 0, totalCounties: 0, totalVacancies: 0, schoolJobs: 0 });
       }
       console.error("[GET /api/local-jobs/stats]", err?.message);
       res.status(500).json({ message: "Could not load stats." });
@@ -732,7 +736,7 @@ export function registerLocalJobsRoutes(app: Express): void {
 
       if (!job) return res.status(404).json({ message: "Job not found or no longer available." });
       // 2026-10: drafts are private to the employer.
-      if ((job as any).status === "draft") return res.status(404).json({ message: "Job not found or no longer available." });
+      if ((job as any).status === "draft" || job.is_seed) return res.status(404).json({ message: "Job not found or no longer available." });
       const { isExpired } = await import("./lib/vacancy-validation");
       const expired = isExpired(job.deadline as any);
       // Count a view (best-effort, non-blocking).

@@ -184,11 +184,6 @@ export default function KenyaCareersCompany() {
                   <p className="text-sm text-muted-foreground mt-1">{company.industry}</p>
                 )}
                 {/* 2026-10: honest status for employers who haven't joined. */}
-                {!company.verified && (
-                  <p className="text-xs mt-2 inline-block rounded-md bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 px-2 py-1">
-                    {company.name} is not yet a WorkAbroad Hub partner. Roles below are samples, not live vacancies.
-                  </p>
-                )}
                 {company.headquarters.county && (
                   <p className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1">
                     <MapPin className="h-3 w-3" /> Headquarters: {company.headquarters.county}
@@ -197,22 +192,6 @@ export default function KenyaCareersCompany() {
               </div>
             </div>
 
-            {/* Honest sample-listings disclosure for unclaimed companies */}
-            {company.allJobsAreSeed && (
-              <div className="mt-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 ring-1 ring-amber-300 dark:ring-amber-800 p-4">
-                <div className="flex items-start gap-2">
-                  <AlertCircle className="h-4 w-4 text-amber-700 dark:text-amber-300 shrink-0 mt-0.5" />
-                  <div className="text-sm">
-                    <p className="font-semibold text-amber-900 dark:text-amber-200 mb-1">
-                      Sample profile — {company.name} hasn't claimed this page yet
-                    </p>
-                    <p className="text-xs text-amber-800 dark:text-amber-300/90 leading-relaxed">
-                      These are illustrative listings showing what roles at {company.name} typically look like. Real openings will appear here once {company.name} claims this profile and starts posting.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
 
             {/* Headline counts */}
             <div className="flex flex-wrap gap-x-4 gap-y-1 mt-4 text-sm text-muted-foreground">
@@ -316,7 +295,7 @@ export default function KenyaCareersCompany() {
         <Card className="mt-4">
           <CardContent className="p-5">
             <h2 className="font-semibold mb-3 flex items-center gap-1.5">
-              <Briefcase className="h-4 w-4" /> {company.verified ? "Open positions" : "Sample roles"} ({company.jobs.length})
+              <Briefcase className="h-4 w-4" /> Open positions ({company.jobs.length})
             </h2>
             {company.jobs.length === 0 ? (
               <div className="text-center py-6 text-muted-foreground text-sm">

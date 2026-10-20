@@ -7,7 +7,7 @@
  * school hiring banner · trust strip.
  *
  * All numbers are live (/api/local-jobs/stats, /api/kazi-karibu/posts).
- * Sample listings are never presented as live jobs, and "verified" is only
+ * Only live employer postings are counted (no sample jobs), and "verified" is only
  * claimed when the verification process has actually verified someone.
  * Illustrations are inline SVG (no network cost, crisp on every screen).
  */
@@ -22,7 +22,7 @@ import { SchoolIllustration } from "@/components/school-recruitment-banner";
 import { KENYA_COUNTIES } from "@/lib/school-constants";
 
 interface HubStats {
-  totalJobs: number; liveJobs: number; sampleJobs: number;
+  totalJobs: number; liveJobs: number;
   totalEmployers: number; verifiedEmployers: number; totalCounties: number;
 }
 
@@ -154,7 +154,7 @@ export function KenyaJobsHub() {
       if (s.data) {
         setStats({
           totalJobs: Number(s.data.totalJobs ?? 0), liveJobs: Number(s.data.liveJobs ?? 0),
-          sampleJobs: Number(s.data.sampleJobs ?? 0), totalEmployers: Number(s.data.totalEmployers ?? 0),
+          totalEmployers: Number(s.data.totalEmployers ?? 0),
           verifiedEmployers: Number(s.data.verifiedEmployers ?? 0), totalCounties: Number(s.data.totalCounties ?? 0),
         });
       } else setStatsError(true);
@@ -183,10 +183,8 @@ export function KenyaJobsHub() {
 
   const jobsStat = useMemo(() => {
     if (!stats) return null;
-    // Honest labelling: live postings if any exist, otherwise call samples samples.
-    return stats.liveJobs > 0
-      ? { n: stats.liveJobs, label: "live jobs" }
-      : { n: stats.sampleJobs, label: "sample roles" };
+    // Live employer postings only — shows 0 until employers post.
+    return { n: stats.liveJobs, label: stats.liveJobs === 1 ? "job" : "jobs" };
   }, [stats]);
 
   const navItems = [

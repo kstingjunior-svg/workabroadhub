@@ -369,16 +369,13 @@ export default function KenyaCareersEmployers() {
                   </a>
                 </Button>
               </div>
-              <p className="text-xs text-muted-foreground mt-4">
-                Or find your company directly and tap "Claim this profile" on any of our <Link href="/kenya-careers" className="underline">{stats?.totalEmployers ?? "36"}+ pre-loaded employer pages</Link>.
-              </p>
             </CardContent>
           </Card>
         </section>
 
         {/* Honest footnote about current platform state */}
         <p className="text-xs text-muted-foreground text-center max-w-md mx-auto">
-          Note: current listings are samples while we onboard employers. Real openings will appear here from confirmed verified employers — yours could be the first.
+          Every vacancy on Kenya Careers is posted by the employer itself — yours could be the first.
         </p>
       </div>
     </div>

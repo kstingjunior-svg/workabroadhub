@@ -217,9 +217,9 @@ export async function bootstrapLocalJobs(): Promise<void> {
     // legal safety net. When Phase 4 (employer self-service) ships, real
     // employer postings will have is_seed=false and accept applications.
     await pool.query(`ALTER TABLE local_jobs ADD COLUMN IF NOT EXISTS is_seed BOOLEAN NOT NULL DEFAULT false`);
-    // Backfill: every row currently in local_jobs was inserted from the
-    // catalogue, so mark them all as seed. Safe to re-run.
-    await pool.query(`UPDATE local_jobs SET is_seed = true WHERE is_seed = false`).catch(() => {});
+    // 2026-10: REMOVED the old "UPDATE local_jobs SET is_seed = true WHERE
+    // is_seed = false" backfill. It ran on every boot and would have flagged
+    // real employer postings as samples. Seed rows are already flagged.
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_local_jobs_is_seed ON local_jobs(is_seed) WHERE is_seed = true`);
 
     // 2026-06 SAFETY: when a visitor tries to apply for a sample listing,
@@ -294,7 +294,7 @@ export async function bootstrapLocalJobs(): Promise<void> {
     for (const c of SEED_COMPANIES) {
       const { rows } = await pool.query<{ id: string; was_inserted: boolean }>(
         `INSERT INTO companies (name, slug, industry, county, description, website, status, verified_at, known_domains)
-         VALUES ($1, $2, $3, $4, $5, $6, 'approved', NOW(), $7)
+         VALUES ($1, $2, $3, $4, $5, $6, 'approved', NULL, $7)
          ON CONFLICT (slug) DO UPDATE
             SET known_domains = EXCLUDED.known_domains
          RETURNING id, (xmax = 0) AS was_inserted`,
@@ -331,7 +331,11 @@ export async function bootstrapLocalJobs(): Promise<void> {
     deadline.setMonth(deadline.getMonth() + 1);
     const deadlineStr = deadline.toISOString().slice(0, 10);
 
-    for (const c of SEED_COMPANIES) {
+    // 2026-10 (Tony): no sample jobs. The catalogue still syncs companies
+    // (known_domains powers the claim domain-match) but jobs are only seeded
+    // when explicitly enabled for local dev.
+    const seedJobs = process.env.LOCAL_JOBS_SEED_JOBS === "true";
+    for (const c of seedJobs ? SEED_COMPANIES : []) {
       const companyId = companyIds[c.slug];
       if (!companyId) continue;
       // For each role × each branch the company has, create one job. That

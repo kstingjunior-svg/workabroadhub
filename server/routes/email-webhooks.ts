@@ -142,7 +142,7 @@ export function registerEmailWebhooks(app: Express): void {
             bounceType,
             source: "resend_webhook",
             reason: "hard_bounce",
-            details: event.data?.bounce?.message || event.data?.subject || null,
+            details: event.data?.bounce?.message || event.data?.subject || undefined,
           });
         }
         return res.json({ received: true, action: "suppressed", count: toList.length });

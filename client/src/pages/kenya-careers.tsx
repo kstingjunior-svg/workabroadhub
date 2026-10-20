@@ -315,25 +315,20 @@ export default function KenyaCareers() {
             Kenya Careers
           </h1>
           <p className="text-emerald-50 text-base md:text-lg max-w-xl mx-auto">
-            See what jobs at Kenya's top employers — Naivas, Quickmart, Carrefour, Java House,
-            hospitals and more — typically look like. Be the first to know when they post real openings.
+            Real vacancies posted directly by Kenyan employers and schools. New jobs appear here
+            the moment an employer publishes them.
           </p>
           {/* 2026-06 SAFETY: honest disclosure in the hero. Every listing is
               labelled "Sample" until the employer onboards. No misrepresentation. */}
           {/* 2026-10 (Tony, pre-outreach): disclosure promoted from small print
               to a clear banner, and hero stats reworded so nothing implies
               these employers are hiring through us yet. */}
-          <div className="mt-4 mx-auto max-w-xl rounded-xl bg-white/15 border border-white/30 px-4 py-3 text-sm text-white">
-            <strong>Heads up:</strong> the employers below are <strong>not yet WorkAbroad Hub partners</strong>.
-            The roles shown are sample listings based on typical openings. Tap "Notify me" and we'll alert you
-            when an employer joins and posts real vacancies.
-          </div>
 
           {stats && (
             <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm pt-3 text-emerald-50">
-              <span><strong className="text-white">{stats.totalJobs}</strong> sample roles</span>
+              <span><strong className="text-white">{stats.totalJobs}</strong> {stats.totalJobs === 1 ? "job" : "jobs"}</span>
               <span className="opacity-50">·</span>
-              <span><strong className="text-white">{stats.totalEmployers}</strong> employers we're inviting</span>
+              <span><strong className="text-white">{stats.totalEmployers}</strong> {stats.totalEmployers === 1 ? "employer" : "employers"}</span>
               <span className="opacity-50">·</span>
               <span><strong className="text-white">{stats.totalCounties}</strong> counties</span>
             </div>
@@ -376,9 +371,9 @@ export default function KenyaCareers() {
           <section className="mt-6">
             <div className="flex items-baseline justify-between mb-3">
               <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-                Employers we're inviting
+                Employers on Kenya Careers
               </h2>
-              <span className="text-xs text-muted-foreground">Not yet partners · {employers.length} invited</span>
+              <span className="text-xs text-muted-foreground">{employers.length} {employers.length === 1 ? "employer" : "employers"}</span>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
               {employers.map((e) => (
@@ -401,7 +396,7 @@ export default function KenyaCareers() {
                       and implied real vacancies. Verified tick only shows
                       once an employer actually claims their page. */}
                   <div className="text-[10px] text-muted-foreground mb-2">
-                    {e.verified ? `${e.jobCount} open` : "Notify me when they hire"} · {e.industry ?? "—"}
+                    {`${e.jobCount} open`} · {e.industry ?? "—"}
                   </div>
                   <div className="flex items-center gap-1">
                     <button
