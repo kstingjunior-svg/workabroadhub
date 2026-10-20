@@ -22,7 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { CompanyLogo } from "@/components/kenya-careers-company-logo";
-import { SCHOOL_LEVELS, TEACHING_SUBJECTS } from "@/lib/school-constants";
+import { VacancyFormModal, ROLE_CATEGORY_LABEL } from "@/components/vacancy-form-modal";
 
 interface Company {
   id: string; name: string; slug: string | null; logoUrl: string | null;
@@ -31,6 +31,7 @@ interface Company {
   description: string | null; website: string | null;
   verified: boolean; status: string;
   institutionType?: string; schoolLevels?: string[] | null; town?: string | null;
+  registrationNumber?: string | null; verificationStatus?: "verified" | "pending" | "suspended";
 }
 interface Branch {
   id: string; name: string; county: string | null; town: string | null;
@@ -45,7 +46,22 @@ interface Job {
   deadline: string | null; status: string; createdAt: string;
   isSeed: boolean; applicationCount: number;
   branch: { id: string; name: string } | null;
+  // 2026-10 School Recruitment Portal
+  viewCount?: number; expired?: boolean; publishedAt?: string | null;
+  responsibilities?: string | null; requirements?: string | null; credentials?: string | null;
+  roleCategory?: string | null; subjects?: string[] | null; teachingLevel?: string | null;
+  tscRequired?: boolean | null; startDate?: string | null; accommodation?: boolean | null;
+  applicationMethod?: string | null; applicationContact?: string | null;
 }
+type JobFilter = "all" | "open" | "draft" | "paused" | "expired" | "closed";
+const JOB_STATUS_META: Record<string, { label: string; cls: string }> = {
+  open:    { label: "Published", cls: "border-emerald-300 text-emerald-700 bg-emerald-50" },
+  draft:   { label: "Draft",     cls: "border-slate-300 text-slate-700 bg-slate-50" },
+  paused:  { label: "Paused",    cls: "border-amber-300 text-amber-800 bg-amber-50" },
+  expired: { label: "Expired",   cls: "border-orange-300 text-orange-800 bg-orange-50" },
+  closed:  { label: "Closed",    cls: "border-rose-300 text-rose-700 bg-rose-50" },
+};
+const effectiveStatus = (j: { status: string; expired?: boolean }) => (j.status === "open" && j.expired ? "expired" : j.status);
 interface Application {
   id: string; status: string; appliedAt: string;
   applicantName: string; email: string; phone: string;
@@ -91,6 +107,10 @@ export default function EmployerManage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [postJobOpen, setPostJobOpen] = useState(false);
+  const [editingJob, setEditingJob] = useState<Job | null>(null);
+  const [jobFilter, setJobFilter] = useState<JobFilter>("all");
+  const [appJobFilter, setAppJobFilter] = useState<string>("all");
+  const [uploadingLogo, setUploadingLogo] = useState(false);
   const [editProfileOpen, setEditProfileOpen] = useState(false);
   const [savingAppId, setSavingAppId] = useState<string | null>(null);
   const { toast } = useToast();
@@ -135,20 +155,39 @@ export default function EmployerManage() {
     }
   }
 
-  async function closeJob(jobId: string) {
-    if (!confirm("Close this job to new applications?")) return;
+  async function setJobStatus(jobId: string, status: "open" | "paused" | "closed" | "draft") {
+    const prompts: Record<string, string> = {
+      closed: "Close this vacancy? It will stop accepting applications (you can reopen it later).",
+      paused: "Pause this vacancy? It will be hidden from candidates until you resume it.",
+    };
+    if (prompts[status] && !confirm(prompts[status])) return;
     const res = await fetch(`/api/employer/jobs/${jobId}`, {
       method: "PATCH", credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: "closed" }),
+      body: JSON.stringify({ status }),
     });
+    const body = await res.json().catch(() => ({}));
     if (res.ok) {
-      toast({ title: "Job closed" });
+      toast({ title: body?.message ?? "Updated" });
       await load();
     } else {
-      const body = await res.json().catch(() => ({}));
-      toast({ variant: "destructive", title: "Close failed", description: body?.message });
+      toast({ variant: "destructive", title: "Couldn't update", description: body?.message });
     }
+  }
+
+  async function uploadLogo(file: File) {
+    if (!data) return;
+    if (file.size > 1024 * 1024) { toast({ variant: "destructive", title: "Logo too large", description: "Use an image under 1 MB." }); return; }
+    setUploadingLogo(true);
+    try {
+      const fd = new FormData();
+      fd.append("logo", file);
+      const res = await fetch(`/api/employer/companies/${data.company.id}/logo`, { method: "POST", credentials: "include", body: fd });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) { toast({ variant: "destructive", title: "Upload failed", description: body?.message }); return; }
+      toast({ title: "Logo updated" });
+      await load();
+    } finally { setUploadingLogo(false); }
   }
 
   if (loading) {
@@ -208,6 +247,17 @@ export default function EmployerManage() {
       </div>
 
       <div className="max-w-4xl mx-auto px-4 mt-4">
+        {company.verificationStatus === "pending" && (
+          <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 text-amber-900 p-4 text-sm" role="status">
+            <p className="font-semibold">Pending verification</p>
+            <p className="mt-0.5">We're checking that {company.name} is genuine (usually within 1 business day). You can complete your profile and prepare vacancies now — they'll go live automatically once you're verified.</p>
+          </div>
+        )}
+        {company.verificationStatus === "suspended" && (
+          <div className="mb-4 rounded-xl border border-rose-300 bg-rose-50 text-rose-900 p-4 text-sm" role="alert">
+            This account is suspended. Please contact support@workabroadhub.tech.
+          </div>
+        )}
         {/* Tabs */}
         <div className="flex flex-wrap gap-2 mb-4">
           <Button variant={tab === "jobs" ? "default" : "outline"} size="sm" onClick={() => setTab("jobs")}>
@@ -227,67 +277,105 @@ export default function EmployerManage() {
         </div>
 
         {/* ── JOBS TAB ─────────────────────────────────── */}
-        {tab === "jobs" && (
+        {tab === "jobs" && (() => {
+          const counts: Record<string, number> = { all: jobs.length };
+          jobs.forEach((j) => { const st = effectiveStatus(j); counts[st] = (counts[st] ?? 0) + 1; });
+          const shown = jobs.filter((j) => jobFilter === "all" || effectiveStatus(j) === jobFilter);
+          const isSchoolCo = company.institutionType === "school";
+          return (
           <div className="space-y-3">
-            <div className="flex justify-end">
-              <Button onClick={() => setPostJobOpen(true)} className="bg-emerald-600 hover:bg-emerald-700 text-white">
-                <Plus className="h-4 w-4 mr-1.5" /> Post a job
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Filter vacancies">
+                {(["all", "open", "draft", "paused", "expired", "closed"] as JobFilter[]).map((k) => (
+                  <button key={k} role="tab" aria-selected={jobFilter === k} onClick={() => setJobFilter(k)}
+                    className={`text-xs px-3 py-2 rounded-full border transition ${jobFilter === k ? "bg-slate-900 text-white border-slate-900" : "bg-background hover:bg-muted"}`}>
+                    {k === "all" ? "All" : JOB_STATUS_META[k].label} ({counts[k] ?? 0})
+                  </button>
+                ))}
+              </div>
+              <Button onClick={() => { setEditingJob(null); setPostJobOpen(true); }} className="h-11 bg-emerald-600 hover:bg-emerald-700 text-white" data-testid="btn-new-vacancy">
+                <Plus className="h-4 w-4 mr-1.5" /> {isSchoolCo ? "Post a vacancy" : "Post a job"}
               </Button>
             </div>
-            {jobs.length === 0 && (
+            {shown.length === 0 && (
               <Card><CardContent className="p-8 text-center text-muted-foreground">
                 <Briefcase className="h-10 w-10 mx-auto mb-3 opacity-30" />
-                <p>No jobs posted yet. Click "Post a job" to add your first opening.</p>
+                <p>{jobs.length === 0 ? `No vacancies yet. Tap "${isSchoolCo ? "Post a vacancy" : "Post a job"}" to add your first one.` : "No vacancies in this view."}</p>
               </CardContent></Card>
             )}
-            {jobs.map((j) => (
-              <Card key={j.id} className={j.status === "closed" ? "opacity-60" : ""}>
-                <CardContent className="p-4 flex items-start justify-between gap-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <h3 className="font-semibold text-sm">{j.title}</h3>
-                      {j.isSeed && (
-                        <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-700 bg-amber-50">Sample (pre-loaded)</Badge>
-                      )}
-                      <Badge variant="outline" className={`text-[10px] ${j.status === "open" ? "border-emerald-300 text-emerald-700 bg-emerald-50" : "border-rose-300 text-rose-700 bg-rose-50"}`}>
-                        {j.status}
-                      </Badge>
-                    </div>
-                    <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-xs text-muted-foreground">
-                      {j.branch && <span>{j.branch.name}</span>}
-                      {(j.county || j.town) && (
-                        <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{[j.town, j.county].filter(Boolean).join(", ")}</span>
-                      )}
-                      {j.vacancies > 1 && <span>{j.vacancies} positions</span>}
-                      {formatSalary(j.salaryMin, j.salaryMax) && (
-                        <span className="font-semibold text-emerald-700">{formatSalary(j.salaryMin, j.salaryMax)}</span>
-                      )}
-                      <span><strong>{j.applicationCount}</strong> applicant{j.applicationCount === 1 ? "" : "s"}</span>
+            {shown.map((j) => {
+              const st = effectiveStatus(j);
+              const meta = JOB_STATUS_META[st] ?? JOB_STATUS_META.open;
+              return (
+              <Card key={j.id} className={st === "closed" ? "opacity-70" : ""}>
+                <CardContent className="p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <h3 className="font-semibold text-sm">{j.title}</h3>
+                        {j.isSeed && <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-700 bg-amber-50">Sample (pre-loaded)</Badge>}
+                        <Badge variant="outline" className={`text-[10px] ${meta.cls}`}>{meta.label}</Badge>
+                        {st === "open" && company.verificationStatus !== "verified" && (
+                          <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-800 bg-amber-50">Goes live after verification</Badge>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-xs text-muted-foreground">
+                        {j.roleCategory && <span>{ROLE_CATEGORY_LABEL[j.roleCategory] ?? j.roleCategory}</span>}
+                        {j.subjects && j.subjects.length > 0 && <span>{j.subjects.join(", ")}</span>}
+                        {(j.county || j.town) && <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{[j.town, j.county].filter(Boolean).join(", ")}</span>}
+                        {j.deadline && <span>Deadline {new Date(j.deadline).toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric" })}</span>}
+                        {formatSalary(j.salaryMin, j.salaryMax) && <span className="font-semibold text-emerald-700">{formatSalary(j.salaryMin, j.salaryMax)}</span>}
+                      </div>
+                      <div className="flex gap-4 mt-2 text-xs">
+                        <span><strong>{j.viewCount ?? 0}</strong> view{(j.viewCount ?? 0) === 1 ? "" : "s"}</span>
+                        <span><strong>{j.applicationCount}</strong> applicant{j.applicationCount === 1 ? "" : "s"}</span>
+                        {j.applicationMethod && j.applicationMethod !== "platform" && <span className="text-muted-foreground">Applies by {j.applicationMethod === "email" ? "email" : "your website"}</span>}
+                      </div>
                     </div>
                   </div>
-                  <div className="shrink-0 flex flex-col gap-1.5 items-end">
-                    {j.status === "open" && !j.isSeed && (
-                      <Button size="sm" variant="outline" className="text-rose-700 border-rose-300 hover:bg-rose-50" onClick={() => closeJob(j.id)}>
-                        Close
+                  {!j.isSeed && (
+                    <div className="flex flex-wrap gap-1.5 mt-3">
+                      <Button size="sm" variant="outline" className="h-9" onClick={() => { setEditingJob(j); setPostJobOpen(true); }}>
+                        <Edit3 className="h-3.5 w-3.5 mr-1" /> Edit
                       </Button>
-                    )}
-                  </div>
+                      {j.status === "draft" && <Button size="sm" className="h-9 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => setJobStatus(j.id, "open")}>Publish</Button>}
+                      {j.status === "open" && !j.expired && <Button size="sm" variant="outline" className="h-9" onClick={() => setJobStatus(j.id, "paused")}>Pause</Button>}
+                      {j.status === "paused" && <Button size="sm" variant="outline" className="h-9" onClick={() => setJobStatus(j.id, "open")}>Resume</Button>}
+                      {(j.status === "open" || j.status === "paused" || j.status === "draft") && (
+                        <Button size="sm" variant="outline" className="h-9 text-rose-700 border-rose-300 hover:bg-rose-50" onClick={() => setJobStatus(j.id, "closed")}>Close (filled)</Button>
+                      )}
+                      {j.status === "closed" && <Button size="sm" variant="outline" className="h-9" onClick={() => { setEditingJob(j); setPostJobOpen(true); }}>Re-advertise</Button>}
+                      {j.applicationCount > 0 && <Button size="sm" variant="ghost" className="h-9" onClick={() => { setAppJobFilter(j.id); setTab("applications"); }}>View applicants</Button>}
+                    </div>
+                  )}
+                  {j.expired && j.status === "open" && <p className="text-xs text-orange-700 mt-2">The deadline has passed — candidates can no longer apply. Edit the deadline to re-open it, or close it.</p>}
                 </CardContent>
               </Card>
-            ))}
+              );
+            })}
           </div>
-        )}
+          );
+        })()}
 
         {/* ── APPLICATIONS TAB ─────────────────────────── */}
         {tab === "applications" && (
           <div className="space-y-3">
+            {applications.length > 0 && (
+              <div className="flex items-center gap-2">
+                <label htmlFor="app-filter" className="text-sm text-muted-foreground">Vacancy</label>
+                <select id="app-filter" value={appJobFilter} onChange={(e) => setAppJobFilter(e.target.value)} className="h-10 text-sm border rounded-md px-3 bg-background max-w-full">
+                  <option value="all">All vacancies ({applications.length})</option>
+                  {jobs.filter((j) => j.applicationCount > 0).map((j) => <option key={j.id} value={j.id}>{j.title} ({j.applicationCount})</option>)}
+                </select>
+              </div>
+            )}
             {applications.length === 0 && (
               <Card><CardContent className="p-8 text-center text-muted-foreground">
                 <Users className="h-10 w-10 mx-auto mb-3 opacity-30" />
                 <p>No applications yet. Post real jobs to start receiving applicants.</p>
               </CardContent></Card>
             )}
-            {applications.map((a) => {
+            {applications.filter((a) => appJobFilter === "all" || a.jobId === appJobFilter).map((a) => {
               const meta = STATUS_META[a.status] ?? STATUS_META.submitted;
               const Icon = meta.icon;
               return (
@@ -316,12 +404,12 @@ export default function EmployerManage() {
                     <div className="flex flex-wrap gap-1.5">
                       {a.cvUrl && (
                         <Button asChild size="sm" variant="outline">
-                          <a href={a.cvUrl} target="_blank" rel="noopener noreferrer">CV <ExternalLink className="h-3 w-3 ml-1" /></a>
+                          <a href={a.cvUrl} target="_blank" rel="noopener noreferrer">Open CV <ExternalLink className="h-3 w-3 ml-1" /></a>
                         </Button>
                       )}
                       {a.certificatesUrl && (
                         <Button asChild size="sm" variant="outline">
-                          <a href={a.certificatesUrl} target="_blank" rel="noopener noreferrer">Certs <ExternalLink className="h-3 w-3 ml-1" /></a>
+                          <a href={a.certificatesUrl} target="_blank" rel="noopener noreferrer">Certificates <ExternalLink className="h-3 w-3 ml-1" /></a>
                         </Button>
                       )}
                       <select
@@ -354,7 +442,33 @@ export default function EmployerManage() {
                 </Button>
               </div>
 
+              <div className="flex items-center gap-3 mb-4">
+                <CompanyLogo name={company.name} logoUrl={company.logoUrl} size="lg" />
+                <div>
+                  <label className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-700 cursor-pointer min-h-[44px]">
+                    <input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only"
+                      onChange={(e) => { const file = e.target.files?.[0]; if (file) uploadLogo(file); e.target.value = ""; }} disabled={uploadingLogo} />
+                    {uploadingLogo ? <><Loader2 className="h-4 w-4 animate-spin" /> Uploading…</> : (company.logoUrl ? "Change logo" : "Upload logo")}
+                  </label>
+                  <p className="text-xs text-muted-foreground">JPG, PNG or WebP, under 1 MB.</p>
+                </div>
+              </div>
               <dl className="space-y-3 text-sm">
+                <div>
+                  <dt className="text-xs text-muted-foreground">Verification</dt>
+                  <dd className="mt-0.5">
+                    {company.verificationStatus === "verified"
+                      ? <span className="inline-flex items-center gap-1 text-emerald-700"><BadgeCheck className="h-4 w-4" /> Verified by WorkAbroad Hub</span>
+                      : company.verificationStatus === "suspended" ? <span className="text-rose-700">Suspended</span>
+                      : <span className="text-amber-700">Registered — pending verification</span>}
+                  </dd>
+                </div>
+                {company.registrationNumber && (
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Registration number</dt>
+                    <dd className="mt-0.5">{company.registrationNumber}</dd>
+                  </div>
+                )}
                 <div>
                   <dt className="text-xs text-muted-foreground">Description</dt>
                   <dd className="mt-0.5">{company.description || <em className="text-muted-foreground">Not set</em>}</dd>
@@ -416,17 +530,19 @@ export default function EmployerManage() {
       </div>
 
       {/* ── MODALS ───────────────────────────────────── */}
-      <PostJobModal
+      <VacancyFormModal
         open={postJobOpen}
-        onClose={() => setPostJobOpen(false)}
+        onClose={() => { setPostJobOpen(false); setEditingJob(null); }}
+        onSaved={() => { load(); setTab("jobs"); }}
         companyId={company.id}
         companyName={company.name}
-        branches={branches}
         isSchool={company.institutionType === "school"}
+        pendingVerification={company.verificationStatus !== "verified"}
         schoolLevels={company.schoolLevels ?? []}
+        branches={branches}
         defaultCounty={company.county ?? ""}
         defaultTown={company.town ?? ""}
-        onPosted={() => { setPostJobOpen(false); load(); setTab("jobs"); }}
+        initial={editingJob}
       />
       <EditProfileModal
         open={editProfileOpen}
@@ -434,251 +550,6 @@ export default function EmployerManage() {
         company={company}
         onSaved={() => { setEditProfileOpen(false); load(); }}
       />
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Post Job modal — employer-scoped (uses POST /api/employer/companies/:id/jobs)
-// ─────────────────────────────────────────────────────────────────────────────
-interface PostJobModalProps {
-  open: boolean; onClose: () => void;
-  companyId: string; companyName: string;
-  branches: Branch[];
-  onPosted: () => void;
-  // 2026-10: schools get teacher-specific fields.
-  isSchool?: boolean;
-  schoolLevels?: string[];
-  defaultCounty?: string;
-  defaultTown?: string;
-}
-function PostJobModal({ open, onClose, companyId, companyName, branches, onPosted, isSchool = false, schoolLevels = [], defaultCounty = "", defaultTown = "" }: PostJobModalProps) {
-  const [subjects, setSubjects] = useState<string[]>([]);
-  const [teachingLevel, setTeachingLevel] = useState<string>(schoolLevels[0] ?? "");
-  const [tscRequired, setTscRequired] = useState(true);
-  const [startDate, setStartDate] = useState("");
-  const [accommodation, setAccommodation] = useState(false);
-  const toggleSubject = (v: string) =>
-    setSubjects((cur) => (cur.includes(v) ? cur.filter((x) => x !== v) : cur.length >= 8 ? cur : [...cur, v]));
-  const [title, setTitle] = useState("");
-  const [department, setDepartment] = useState("");
-  const [category, setCategory] = useState(isSchool ? "education" : "other");
-  const [vacancies, setVacancies] = useState("1");
-  const [employmentType, setEmploymentType] = useState("full_time");
-  const [experienceLevel, setExperienceLevel] = useState("any");
-  const [salaryMin, setSalaryMin] = useState("");
-  const [salaryMax, setSalaryMax] = useState("");
-  const [branchId, setBranchId] = useState("");
-  const [county, setCounty] = useState(isSchool ? defaultCounty : "");
-  const [town, setTown] = useState(isSchool ? defaultTown : "");
-  const [deadline, setDeadline] = useState("");
-  const [responsibilities, setResponsibilities] = useState("");
-  const [requirements, setRequirements] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const { toast } = useToast();
-
-  function reset() {
-    setTitle(""); setDepartment(""); setCategory(isSchool ? "education" : "other"); setVacancies("1");
-    setSubjects([]); setTscRequired(true); setStartDate(""); setAccommodation(false);
-    setEmploymentType("full_time"); setExperienceLevel("any");
-    setSalaryMin(""); setSalaryMax(""); setBranchId(""); setCounty(""); setTown("");
-    setDeadline(""); setResponsibilities(""); setRequirements("");
-    setSubmitting(false); setError(null);
-  }
-
-  // Auto-fill county/town when a branch is picked
-  function pickBranch(id: string) {
-    setBranchId(id);
-    const b = branches.find((x) => x.id === id);
-    if (b) {
-      if (b.county) setCounty(b.county);
-      if (b.town)   setTown(b.town);
-    }
-  }
-
-  async function submit() {
-    setSubmitting(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/employer/companies/${companyId}/jobs`, {
-        method: "POST", credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title, department, category, vacancies: Number(vacancies),
-          employmentType, experienceLevel,
-          salaryMin: salaryMin ? Number(salaryMin) : null,
-          salaryMax: salaryMax ? Number(salaryMax) : null,
-          branchId: branchId || null,
-          county, town, deadline, responsibilities, requirements,
-          ...(isSchool ? { subjects, teachingLevel: teachingLevel || null, tscRequired, startDate: startDate || null, accommodation } : {}),
-        }),
-      });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) { setError(body?.message || `Failed (${res.status}).`); return; }
-      toast({ title: "Job posted", description: body?.message });
-      reset(); onPosted();
-    } catch (err: any) {
-      setError(err?.message || "Could not post job.");
-    } finally { setSubmitting(false); }
-  }
-
-  if (!open) return null;
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => { reset(); onClose(); }}>
-      <div className="relative bg-background w-full sm:max-w-lg max-h-[92vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <button className="absolute top-3 right-3 p-1 rounded-full hover:bg-muted text-muted-foreground" onClick={() => { reset(); onClose(); }}>
-          <X className="h-4 w-4" />
-        </button>
-        <div className="p-5 sm:p-6">
-          <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1"><Plus className="h-3 w-3" /> New job posting</p>
-          <h2 className="font-bold text-lg leading-tight mb-1">{isSchool ? `Post a vacancy at ${companyName}` : `Post a job at ${companyName}`}</h2>
-          <p className="text-xs text-muted-foreground mb-4">Applications go directly to you. Jobseekers pay KES 99+ to apply — high-intent only.</p>
-
-          <div className="space-y-3">
-            <div>
-              <label htmlFor="pj-title" className="text-sm font-medium block mb-1">Job title *</label>
-              <Input id="pj-title" value={title} onChange={(e) => setTitle(e.target.value.slice(0, 200))} placeholder={isSchool ? "e.g. Mathematics & Physics Teacher" : "e.g. Cashier"} />
-            </div>
-
-            {isSchool && (
-              <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 dark:bg-emerald-950/20 p-3 space-y-3" data-testid="block-teacher-fields">
-                <div>
-                  <p className="text-sm font-medium mb-1.5">Subjects to teach <span className="text-xs text-muted-foreground font-normal">(up to 8 — skip for non-teaching roles)</span></p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {TEACHING_SUBJECTS.map((sub) => (
-                      <button key={sub} type="button" onClick={() => toggleSubject(sub)}
-                        className={`text-[11px] px-2.5 py-1 rounded-full border transition ${subjects.includes(sub) ? "bg-emerald-600 text-white border-emerald-600" : "bg-background hover:bg-muted"}`}>
-                        {sub}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label htmlFor="pj-tlevel" className="text-sm font-medium block mb-1">Level</label>
-                    <select id="pj-tlevel" value={teachingLevel} onChange={(e) => setTeachingLevel(e.target.value)} className="w-full text-sm border rounded-md px-3 py-2 bg-background">
-                      <option value="">—</option>
-                      {SCHOOL_LEVELS.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label htmlFor="pj-start" className="text-sm font-medium block mb-1">Start date</label>
-                    <Input id="pj-start" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-                  </div>
-                </div>
-                <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={tscRequired} onChange={(e) => setTscRequired(e.target.checked)} />
-                  TSC registration required
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={accommodation} onChange={(e) => setAccommodation(e.target.checked)} />
-                  Housing / accommodation provided
-                </label>
-              </div>
-            )}
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className={isSchool ? "hidden" : ""}>
-                <label htmlFor="pj-cat" className="text-sm font-medium block mb-1">Category *</label>
-                <select id="pj-cat" value={category} onChange={(e) => setCategory(e.target.value)} className="w-full text-sm border rounded-md px-3 py-2 bg-background">
-                  {JOB_CATEGORIES.map((c) => <option key={c} value={c}>{c[0].toUpperCase() + c.slice(1)}</option>)}
-                </select>
-              </div>
-              <div>
-                <label htmlFor="pj-dept" className="text-sm font-medium block mb-1">Department</label>
-                <Input id="pj-dept" value={department} onChange={(e) => setDepartment(e.target.value.slice(0, 120))} placeholder="e.g. Front End" />
-              </div>
-            </div>
-
-            <div>
-              <label htmlFor="pj-branch" className="text-sm font-medium block mb-1">Branch</label>
-              <select id="pj-branch" value={branchId} onChange={(e) => pickBranch(e.target.value)} className="w-full text-sm border rounded-md px-3 py-2 bg-background">
-                <option value="">No branch / HQ</option>
-                {branches.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name} {b.county ? `— ${b.county}` : ""}
-                  </option>
-                ))}
-              </select>
-              <p className="text-[10px] text-muted-foreground mt-0.5">Selecting a branch auto-fills county and town below.</p>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label htmlFor="pj-county" className="text-sm font-medium block mb-1">County</label>
-                <select id="pj-county" value={county} onChange={(e) => setCounty(e.target.value)} className="w-full text-sm border rounded-md px-3 py-2 bg-background">
-                  <option value="">—</option>
-                  {KENYA_COUNTIES.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
-              <div>
-                <label htmlFor="pj-town" className="text-sm font-medium block mb-1">Town / area</label>
-                <Input id="pj-town" value={town} onChange={(e) => setTown(e.target.value.slice(0, 80))} placeholder="Westlands" />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-3">
-              <div>
-                <label htmlFor="pj-vacs" className="text-sm font-medium block mb-1">Vacancies</label>
-                <Input id="pj-vacs" type="number" min={1} max={999} value={vacancies} onChange={(e) => setVacancies(e.target.value.replace(/\D/g, "").slice(0, 3) || "1")} />
-              </div>
-              <div>
-                <label htmlFor="pj-type" className="text-sm font-medium block mb-1">Type</label>
-                <select id="pj-type" value={employmentType} onChange={(e) => setEmploymentType(e.target.value)} className="w-full text-sm border rounded-md px-3 py-2 bg-background">
-                  <option value="full_time">Full-time</option>
-                  <option value="part_time">Part-time</option>
-                  <option value="contract">Contract</option>
-                  <option value="internship">Internship</option>
-                  <option value="casual">Casual</option>
-                </select>
-              </div>
-              <div>
-                <label htmlFor="pj-exp" className="text-sm font-medium block mb-1">Experience</label>
-                <select id="pj-exp" value={experienceLevel} onChange={(e) => setExperienceLevel(e.target.value)} className="w-full text-sm border rounded-md px-3 py-2 bg-background">
-                  <option value="any">Any</option>
-                  <option value="entry">Entry</option>
-                  <option value="mid">Mid</option>
-                  <option value="senior">Senior</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label htmlFor="pj-min" className="text-sm font-medium block mb-1">Salary min (KES)</label>
-                <Input id="pj-min" type="number" min={0} value={salaryMin} onChange={(e) => setSalaryMin(e.target.value.replace(/\D/g, ""))} placeholder="20000" />
-              </div>
-              <div>
-                <label htmlFor="pj-max" className="text-sm font-medium block mb-1">Salary max (KES)</label>
-                <Input id="pj-max" type="number" min={0} value={salaryMax} onChange={(e) => setSalaryMax(e.target.value.replace(/\D/g, ""))} placeholder="30000" />
-              </div>
-            </div>
-
-            <div>
-              <label htmlFor="pj-deadline" className="text-sm font-medium block mb-1">Application deadline</label>
-              <Input id="pj-deadline" type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
-            </div>
-
-            <div>
-              <label htmlFor="pj-resp" className="text-sm font-medium block mb-1">Responsibilities</label>
-              <Textarea id="pj-resp" rows={3} value={responsibilities} onChange={(e) => setResponsibilities(e.target.value)} placeholder="What this person will do day-to-day" />
-            </div>
-
-            <div>
-              <label htmlFor="pj-req" className="text-sm font-medium block mb-1">Requirements</label>
-              <Textarea id="pj-req" rows={3} value={requirements} onChange={(e) => setRequirements(e.target.value)} placeholder="Qualifications, certifications, experience needed" />
-            </div>
-
-            {error && <div className="text-sm text-rose-700 bg-rose-50 rounded-md p-2">{error}</div>}
-
-            <Button className="w-full bg-emerald-600 hover:bg-emerald-700 text-white" onClick={submit} disabled={submitting || !title.trim()}>
-              {submitting ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> Posting…</> : <><Sparkles className="h-4 w-4 mr-1.5" /> Post job</>}
-            </Button>
-            <p className="text-[11px] text-center text-muted-foreground">This job goes live immediately and starts receiving applications.</p>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

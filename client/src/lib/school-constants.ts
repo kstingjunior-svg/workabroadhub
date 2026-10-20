@@ -19,6 +19,7 @@ export const SCHOOL_OWNERSHIP: { value: string; label: string }[] = [
   { value: "faith_based",   label: "Faith-based / Mission" },
   { value: "international", label: "International" },
   { value: "community",     label: "Community" },
+  { value: "other",         label: "Other" },
 ];
 
 // Kenyan subjects across CBC (ECDE → Senior School) and 8-4-4.

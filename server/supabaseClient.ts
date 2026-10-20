@@ -56,6 +56,11 @@ function getClient(): SupabaseClient | null {
   return _client;
 }
 
+/** 2026-10: server-only admin client (service role) for Storage helpers. */
+export function getSupabaseAdmin(): SupabaseClient | null {
+  return process.env.SUPABASE_SERVICE_ROLE_KEY ? getClient() : null;
+}
+
 // Log connection status at startup
 if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
   console.log("[Supabase] Client initialised ✓ (service role) — project: pvsxecrqfexgwspuqvlp.supabase.co");

@@ -709,6 +709,7 @@ function AuthenticatedRoutes() {
       <Route path="/kazi-karibu/my-interests" component={LazyKaziKaribuMyInterests} />
 
       {/* Kenya Careers — Phase 1 public browse + Phase 2 applications */}
+      <Route path="/kenya-careers/schools" component={LazySchoolsHireTeachers} />
       <Route path="/schools" component={LazySchoolsHireTeachers} />
       <Route path="/kenya-careers" component={LazyKenyaCareers} />
       <Route path="/kenya-careers/job/:id" component={LazyKenyaCareersJob} />
@@ -1052,6 +1053,7 @@ function Router() {
         <Route path="/verify" component={LazyVerify} />
         <Route path="/verify-us" component={LazyVerifyUs} />
         <Route path="/portals/community" component={LazyCommunityPortals} />
+        <Route path="/kenya-careers/schools" component={LazySchoolsHireTeachers} />
         <Route path="/schools" component={LazySchoolsHireTeachers} />
         <Route path="/kenya-careers" component={LazyKenyaCareers} />
         <Route path="/kenya-careers/job/:id" component={LazyKenyaCareersJob} />

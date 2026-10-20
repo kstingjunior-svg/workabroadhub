@@ -59,14 +59,14 @@ function readSessionUserId(req: any): string | null {
   return null;
 }
 
-const VALID_EMPLOYMENT_TYPES = new Set(["full_time", "part_time", "contract", "internship", "casual"]);
+const VALID_EMPLOYMENT_TYPES = new Set(["full_time", "part_time", "contract", "temporary", "internship", "casual"]);
 const VALID_EXPERIENCE       = new Set(["entry", "mid", "senior", "any"]);
 
 // 2026-10 (Tony: "schools sourcing teachers via Kenya Careers"):
 // schools are employers with institution_type='school'. Teacher vacancies
 // carry subjects / level / TSC requirement / start date / housing.
 const VALID_SCHOOL_LEVELS = new Set(["ecde", "primary", "junior_secondary", "senior_secondary", "tvet", "college", "university", "special_needs"]);
-const VALID_SCHOOL_OWNERSHIP = new Set(["public", "private", "faith_based", "international", "community"]);
+const VALID_SCHOOL_OWNERSHIP = new Set(["public", "private", "faith_based", "international", "community", "other"]);
 function cleanStringArray(v: any, maxItems: number, maxLen: number): string[] {
   const arr = Array.isArray(v) ? v : typeof v === "string" ? v.split(",") : [];
   return Array.from(new Set(arr.map((x: any) => String(x ?? "").trim().slice(0, maxLen)).filter(Boolean))).slice(0, maxItems);
@@ -166,6 +166,13 @@ const applicationUpload = multer({
   },
 });
 
+// 2026-10: school/employer logo upload (≤1 MB, images only).
+const logoUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 1024 * 1024, files: 1 },
+  fileFilter: (_req, file, cb) => cb(null, ["image/jpeg", "image/png", "image/webp"].includes(file.mimetype)),
+});
+
 export function registerLocalJobsRoutes(app: Express): void {
   // ─── GET /api/local-jobs/_ping ────────────────────────────────────────────
   // 2026-06: Pure diagnostic — no DB, no logic. If this returns JSON {ok:true,
@@ -200,11 +207,16 @@ export function registerLocalJobsRoutes(app: Express): void {
     try {
       const {
         county, category, companyId, experienceLevel, employmentType, search, institution,
+        subject, schoolType,
       } = req.query as Record<string, string | undefined>;
       const limit  = Math.min(Number(req.query.limit  ?? 24), 100);
       const offset = Math.max(Number(req.query.offset ?? 0),  0);
 
-      const conditions: string[] = ["j.status = 'open'", "c.status = 'approved'"];
+      // 2026-10: expired vacancies (deadline passed, Kenya time) are never listed.
+      const conditions: string[] = [
+        "j.status = 'open'", "c.status = 'approved'",
+        "(j.deadline IS NULL OR j.deadline >= (NOW() AT TIME ZONE 'Africa/Nairobi')::date)",
+      ];
       const params: any[] = [];
       const push = (clause: string, value: any) => {
         params.push(value);
@@ -213,6 +225,12 @@ export function registerLocalJobsRoutes(app: Express): void {
 
       if (county)       push("j.county = $$",                county);
       if (institution === "school" || institution === "company") push("c.institution_type = $$", institution);
+      if (subject && subject.trim()) push("$$ = ANY(j.subjects)", subject.trim().slice(0, 60));
+      if (schoolType && schoolType.trim()) {
+        // ownership (public/private/…) OR level (primary/senior_secondary/…)
+        params.push(schoolType.trim().slice(0, 30));
+        conditions.push(`(c.school_ownership = $${params.length} OR $${params.length} = ANY(c.school_levels))`);
+      }
       if (category)     push("j.category = $$",              category);
       if (companyId)    push("j.company_id = $$",            companyId);
       if (experienceLevel && VALID_EXPERIENCE.has(experienceLevel)) {
@@ -226,7 +244,8 @@ export function registerLocalJobsRoutes(app: Express): void {
         params.push(term, term, term);
         const i = params.length;
         conditions.push(
-          `(j.title ILIKE $${i - 2} OR j.department ILIKE $${i - 1} OR c.name ILIKE $${i})`,
+          `(j.title ILIKE $${i - 2} OR j.department ILIKE $${i - 1} OR c.name ILIKE $${i}
+            OR EXISTS (SELECT 1 FROM unnest(COALESCE(j.subjects, '{}')) sub WHERE sub ILIKE $${i}))`,
         );
       }
 
@@ -260,9 +279,11 @@ export function registerLocalJobsRoutes(app: Express): void {
               j.experience_level, j.category, j.deadline, j.created_at,
               COALESCE(j.is_seed, false) AS is_seed,
               j.subjects, j.teaching_level, j.tsc_required, j.start_date, j.accommodation,
+              j.role_category, j.application_method, j.published_at,
               c.id AS company_id, c.name AS company_name, c.slug AS company_slug,
               c.industry AS company_industry, c.verified_at AS company_verified_at,
-              c.institution_type AS company_institution_type,
+              c.institution_type AS company_institution_type, c.logo_url AS company_logo_url,
+              c.school_ownership AS company_school_ownership, c.town AS company_town,
               b.id AS branch_id, b.name AS branch_name
              FROM local_jobs j
              JOIN companies c ON c.id = j.company_id
@@ -292,12 +313,17 @@ export function registerLocalJobsRoutes(app: Express): void {
         createdAt:       r.created_at,
         isSeed:          !!r.is_seed,
         ...teacherFields(r),
+        roleCategory:      (r as any).role_category ?? null,
+        applicationMethod: (r as any).application_method ?? "platform",
+        publishedAt:       (r as any).published_at ?? null,
         company: {
           id:        r.company_id,
           name:      r.company_name,
           slug:      r.company_slug,
           industry:  r.company_industry,
           institutionType: (r as any).company_institution_type ?? "company",
+          logoUrl:   (r as any).company_logo_url ?? null,
+          schoolOwnership: (r as any).company_school_ownership ?? null,
           // 2026-06 SAFETY: while every job in the catalogue is a seed, the
           // company hasn't actually verified themselves with us. Hide the
           // "Verified" tick until the company is genuinely verified — i.e.
@@ -538,6 +564,7 @@ export function registerLocalJobsRoutes(app: Express): void {
             FROM local_jobs j
        LEFT JOIN branches b ON b.id = j.branch_id
            WHERE j.company_id = $1 AND j.status = 'open'
+             AND (j.deadline IS NULL OR j.deadline >= (NOW() AT TIME ZONE 'Africa/Nairobi')::date)
            ORDER BY j.is_seed ASC, j.created_at DESC
         `, [company.id]),
       ]);
@@ -610,7 +637,7 @@ export function registerLocalJobsRoutes(app: Express): void {
         total_jobs: string; total_employers: string; total_counties: string; total_vacancies: string;
       }>(`
         SELECT
-          (SELECT COUNT(*)::text                                FROM local_jobs WHERE status='open')      AS total_jobs,
+          (SELECT COUNT(*)::text                                FROM local_jobs WHERE status='open' AND (deadline IS NULL OR deadline >= (NOW() AT TIME ZONE 'Africa/Nairobi')::date))      AS total_jobs,
           (SELECT COUNT(DISTINCT company_id)::text              FROM local_jobs WHERE status='open')      AS total_employers,
           (SELECT COUNT(DISTINCT county)::text                  FROM local_jobs WHERE status='open' AND county IS NOT NULL) AS total_counties,
           (SELECT COALESCE(SUM(vacancies), 0)::text             FROM local_jobs WHERE status='open')      AS total_vacancies
@@ -664,6 +691,8 @@ export function registerLocalJobsRoutes(app: Express): void {
             j.deadline, j.county, j.town, j.experience_level, j.category,
             j.status, j.created_at, COALESCE(j.is_seed, false) AS is_seed,
             j.subjects, j.teaching_level, j.tsc_required, j.start_date, j.accommodation,
+            j.role_category, j.credentials, j.application_method, j.application_contact, j.published_at,
+            c.logo_url AS company_logo_url, c.status AS company_status, c.town AS company_town,
             c.institution_type AS company_institution_type,
             c.school_levels AS company_school_levels, c.school_ownership AS company_school_ownership,
             c.id AS company_id, c.name AS company_name, c.slug AS company_slug,
@@ -682,6 +711,12 @@ export function registerLocalJobsRoutes(app: Express): void {
       `, [id]);
 
       if (!job) return res.status(404).json({ message: "Job not found or no longer available." });
+      // 2026-10: drafts are private to the employer.
+      if ((job as any).status === "draft") return res.status(404).json({ message: "Job not found or no longer available." });
+      const { isExpired } = await import("./lib/vacancy-validation");
+      const expired = isExpired(job.deadline as any);
+      // Count a view (best-effort, non-blocking).
+      pool.query(`UPDATE local_jobs SET view_count = view_count + 1 WHERE id = $1`, [id]).catch(() => {});
 
       res.setHeader("Cache-Control", "public, max-age=60");
       res.json({
@@ -703,7 +738,18 @@ export function registerLocalJobsRoutes(app: Express): void {
         createdAt:       job.created_at,
         isSeed:          !!job.is_seed,
         ...teacherFields(job),
+        expired,
+        // open + not expired = accepting applications
+        acceptingApplications: job.status === "open" && !expired && !job.is_seed,
+        roleCategory:      (job as any).role_category ?? null,
+        credentials:       (job as any).credentials ?? null,
+        applicationMethod: (job as any).application_method ?? "platform",
+        // External contact is only revealed while the vacancy is accepting applications.
+        applicationContact: job.status === "open" && !expired ? ((job as any).application_contact ?? null) : null,
+        publishedAt:       (job as any).published_at ?? null,
         company: {
+          logoUrl:     (job as any).company_logo_url ?? null,
+          town:        (job as any).company_town ?? null,
           institutionType: (job as any).company_institution_type ?? "company",
           schoolLevels:    (job as any).company_school_levels ?? null,
           schoolOwnership: (job as any).company_school_ownership ?? null,
@@ -910,6 +956,19 @@ export function registerLocalJobsRoutes(app: Express): void {
         if (job.status !== "open") {
           return res.status(410).json({ message: "Applications for this job have closed." });
         }
+        // 2026-10: expired deadline / external application route.
+        {
+          const { rows: [extra] } = await pool.query<{ deadline: Date | null; application_method: string | null }>(
+            `SELECT deadline, application_method FROM local_jobs WHERE id = $1`, [jobId],
+          );
+          const { isExpired } = await import("./lib/vacancy-validation");
+          if (isExpired(extra?.deadline as any)) {
+            return res.status(410).json({ message: "The application deadline for this vacancy has passed.", reason: "expired" });
+          }
+          if (extra?.application_method && extra.application_method !== "platform") {
+            return res.status(400).json({ message: "This employer takes applications directly — use the contact shown on the vacancy page.", reason: "external_application" });
+          }
+        }
 
         // ── 4. Pull applicant identity from their user record ──────────────
         const user = await storage.getUserById(userId);
@@ -946,50 +1005,18 @@ export function registerLocalJobsRoutes(app: Express): void {
         let cvUrl: string | null = null;
         let certificatesUrl: string | null = null;
 
+        // 2026-10: private storage. The old path wrote to a non-existent
+        // bucket via public URLs, so no CV ever reached an employer (and
+        // would have been publicly readable). Now: private bucket +
+        // employer-only signed links (see /api/employer/applications/:id/file).
         if (cvFile && cvFile.buffer && cvFile.buffer.length > 0) {
-          try {
-            const { logCvUpload } = await import("./supabaseClient");
-            await logCvUpload({
-              userId,
-              fileName:   cvFile.originalname,
-              buffer:     cvFile.buffer,
-              mimeType:   cvFile.mimetype,
-              parsedText: "",
-            });
-            const { rows: [row] } = await pool.query<{ file_url: string | null }>(`
-              SELECT file_url FROM cv_uploads
-               WHERE user_id = $1 AND file_url IS NOT NULL
-               ORDER BY uploaded_at DESC NULLS LAST, id DESC
-               LIMIT 1
-            `, [userId]).catch(() => ({ rows: [{ file_url: null }] }) as any);
-            cvUrl = row?.file_url ?? null;
-          } catch (uploadErr: any) {
-            console.warn(`[apply] CV upload failed for user=${userId}:`, uploadErr?.message);
-          }
+          const { uploadApplicationFile } = await import("./lib/kc-files");
+          cvUrl = await uploadApplicationFile({ userId, jobId, kind: "cv", buffer: cvFile.buffer, mimeType: cvFile.mimetype }).catch(() => null);
+          if (!cvUrl) console.warn(`[apply] CV upload failed for user=${userId} job=${jobId}`);
         }
-
-        // Certificates upload — same pipeline but tagged in the filename so
-        // it doesn't collide with the user's main CV in cv_uploads.
         if (certFile && certFile.buffer && certFile.buffer.length > 0) {
-          try {
-            const { logCvUpload } = await import("./supabaseClient");
-            await logCvUpload({
-              userId,
-              fileName:   `cert-${certFile.originalname}`,
-              buffer:     certFile.buffer,
-              mimeType:   certFile.mimetype,
-              parsedText: "",
-            });
-            const { rows: [row] } = await pool.query<{ file_url: string | null }>(`
-              SELECT file_url FROM cv_uploads
-               WHERE user_id = $1 AND file_url IS NOT NULL AND file_name LIKE 'cert-%'
-               ORDER BY uploaded_at DESC NULLS LAST, id DESC
-               LIMIT 1
-            `, [userId]).catch(() => ({ rows: [{ file_url: null }] }) as any);
-            certificatesUrl = row?.file_url ?? null;
-          } catch (uploadErr: any) {
-            console.warn(`[apply] Certificates upload failed for user=${userId}:`, uploadErr?.message);
-          }
+          const { uploadApplicationFile } = await import("./lib/kc-files");
+          certificatesUrl = await uploadApplicationFile({ userId, jobId, kind: "certificates", buffer: certFile.buffer, mimeType: certFile.mimetype }).catch(() => null);
         }
 
         // ── 6. Upsert application — re-applying updates instead of duplicating ──
@@ -1244,6 +1271,56 @@ export function registerLocalJobsRoutes(app: Express): void {
   //   3. Trust score computation — high/medium/low based on the above
   //   4. Rate limit + duplicate block — max 1 active claim per (company, email)
   //   5. Honest error messages for free email providers
+  // ─── POST /api/local-jobs/:id/report ───────────────────────────────────────
+  // 2026-10: anyone can flag a suspicious / misleading vacancy. Signed-in
+  // users are recorded; anonymous reports need an email. 1 report per
+  // job per user/IP per day. Founder is emailed.
+  app.post("/api/local-jobs/:id/report", async (req: any, res: Response) => {
+    try {
+      const { id } = req.params;
+      if (!/^[0-9a-f-]{36}$/i.test(id)) return res.status(400).json({ message: "Invalid vacancy." });
+      const REASONS = ["fake", "asks_for_money", "wrong_info", "discriminatory", "other"];
+      const reason = String(req.body?.reason ?? "");
+      if (!REASONS.includes(reason)) return res.status(400).json({ message: "Choose a reason." });
+      const details = String(req.body?.details ?? "").trim().slice(0, 1500) || null;
+      const userId = readSessionUserId(req);
+      const email = String(req.body?.email ?? "").trim().toLowerCase().slice(0, 160) || null;
+      if (!userId && (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) {
+        return res.status(400).json({ message: "Add your email so we can follow up." });
+      }
+      const ip = String(req.headers["x-forwarded-for"] || req.ip || "").split(",")[0].trim().slice(0, 60);
+      const { rows: [job] } = await pool.query<{ title: string; company_name: string }>(
+        `SELECT j.title, c.name AS company_name FROM local_jobs j JOIN companies c ON c.id = j.company_id WHERE j.id = $1`, [id],
+      );
+      if (!job) return res.status(404).json({ message: "Vacancy not found." });
+      const { rowCount: recent } = await pool.query(
+        `SELECT 1 FROM vacancy_reports WHERE job_id = $1 AND created_at > NOW() - INTERVAL '1 day'
+           AND ((reporter_user_id IS NOT NULL AND reporter_user_id = $2) OR ip = $3) LIMIT 1`,
+        [id, userId, ip],
+      );
+      if (recent) return res.json({ success: true, message: "Thanks — we already have your report and will review it." });
+      await pool.query(
+        `INSERT INTO vacancy_reports (job_id, reporter_user_id, reporter_email, reason, details, ip) VALUES ($1,$2,$3,$4,$5,$6)`,
+        [id, userId, email, reason, details, ip],
+      );
+      (async () => {
+        try {
+          const { sendEmail } = await import("./email");
+          await sendEmail({
+            to: "hello@workabroadhub.tech",
+            subject: `[Kenya Careers] Vacancy reported (${reason}): ${job.title} — ${job.company_name}`,
+            html: `<p>A vacancy was reported.</p><p><b>${job.title}</b> at <b>${job.company_name}</b><br>Reason: ${reason}<br>${details ? `Details: ${details.replace(/</g, "&lt;")}` : ""}</p><p><a href="https://workabroadhub.tech/kenya-careers/job/${id}">Open vacancy</a></p>`,
+            text: `Vacancy reported (${reason}): ${job.title} — ${job.company_name}\n${details ?? ""}\nhttps://workabroadhub.tech/kenya-careers/job/${id}`,
+          });
+        } catch { /* non-fatal */ }
+      })();
+      res.json({ success: true, message: "Thank you. Our team will review this vacancy." });
+    } catch (err: any) {
+      console.error("[POST /api/local-jobs/:id/report]", err?.message);
+      res.status(500).json({ message: "Could not send your report. Please try again." });
+    }
+  });
+
   app.post("/api/local-jobs/companies/:id/claim", async (req: any, res: Response) => {
     try {
       const { id } = req.params;
@@ -1464,7 +1541,7 @@ export function registerLocalJobsRoutes(app: Express): void {
         pool.query(`
           SELECT id, name, slug, logo_url, industry, address, county,
                  contact_name, phone, email, description, website,
-                 verified_at, status, institution_type, school_levels, school_ownership, town
+                 verified_at, status, institution_type, school_levels, school_ownership, town, registration_number
             FROM companies WHERE id = $1 LIMIT 1
         `, [id]),
         pool.query(`
@@ -1477,6 +1554,8 @@ export function registerLocalJobsRoutes(app: Express): void {
                  j.experience_level, j.category, j.deadline, j.status, j.created_at,
                  COALESCE(j.is_seed, false) AS is_seed,
                  j.subjects, j.teaching_level, j.tsc_required, j.start_date, j.accommodation,
+                 j.role_category, j.credentials, j.application_method, j.application_contact,
+                 j.requirements, j.responsibilities, j.view_count, j.published_at,
                  b.id AS branch_id, b.name AS branch_name,
                  (SELECT COUNT(*) FROM local_job_applications WHERE job_id = j.id)::int AS app_count
             FROM local_jobs j
@@ -1509,7 +1588,9 @@ export function registerLocalJobsRoutes(app: Express): void {
           verified: !!c.verified_at, status: c.status,
           institutionType: c.institution_type ?? "company",
           schoolLevels: c.school_levels ?? null, schoolOwnership: c.school_ownership ?? null,
-          town: c.town ?? null,
+          town: c.town ?? null, registrationNumber: c.registration_number ?? null,
+          // 2026-10: registered ≠ verified. verified only after admin approval.
+          verificationStatus: c.status === "suspended" ? "suspended" : (c.status === "approved" && c.verified_at) ? "verified" : "pending",
         },
         branches: branchesRes.rows.map((b: any) => ({
           id: b.id, name: b.name, county: b.county, town: b.town,
@@ -1522,14 +1603,24 @@ export function registerLocalJobsRoutes(app: Express): void {
           category: j.category, deadline: j.deadline, status: j.status,
           createdAt: j.created_at, isSeed: j.is_seed, applicationCount: j.app_count,
           ...teacherFields(j),
+          roleCategory: j.role_category, credentials: j.credentials,
+          applicationMethod: j.application_method, applicationContact: j.application_contact,
+          requirements: j.requirements, responsibilities: j.responsibilities,
+          viewCount: j.view_count ?? 0, publishedAt: j.published_at,
+          expired: !!j.deadline && new Date(j.deadline).toISOString().slice(0, 10) < new Date(Date.now() + 3 * 3600_000).toISOString().slice(0, 10),
           branch: j.branch_id ? { id: j.branch_id, name: j.branch_name } : null,
         })),
         applications: appsRes.rows.map((a: any) => ({
           id: a.id, status: a.status, appliedAt: a.applied_at,
           applicantName: a.applicant_name, email: a.email, phone: a.phone,
           county: a.applicant_county, education: a.highest_education,
-          yearsExperience: a.years_experience, cvUrl: a.cv_url,
-          certificatesUrl: a.certificates_url, coverNote: a.cover_note,
+          yearsExperience: a.years_experience,
+          // 2026-10: files are private — the client opens them via the
+          // employer-only endpoint, which issues a 2-minute signed link.
+          hasCv: !!a.cv_url, hasCertificates: !!a.certificates_url,
+          cvUrl: a.cv_url ? `/api/employer/applications/${a.id}/file/cv` : null,
+          certificatesUrl: a.certificates_url ? `/api/employer/applications/${a.id}/file/certificates` : null,
+          coverNote: a.cover_note,
           jobId: a.job_id, jobTitle: a.job_title,
         })),
       });
@@ -1540,8 +1631,11 @@ export function registerLocalJobsRoutes(app: Express): void {
   });
 
   // ─── POST /api/employer/companies/:id/jobs ────────────────────────────────
-  // Employer posts a real job. Auto-marks is_seed=false because real
-  // employer postings ARE real openings. Validates admin.
+  // Create a vacancy (published or draft). 2026-10 School Recruitment Portal:
+  // shared validation (server/lib/vacancy-validation.ts), drafts, school
+  // fields, how-to-apply method, branch ownership check, duplicate guard.
+  // Vacancies of a school still pending verification are saved but stay
+  // invisible to the public (public queries require companies.status='approved').
   app.post("/api/employer/companies/:id/jobs", async (req: any, res: Response) => {
     const userId = readSessionUserId(req);
     if (!userId) return res.status(401).json({ message: "Please sign in." });
@@ -1550,40 +1644,33 @@ export function registerLocalJobsRoutes(app: Express): void {
       if (!await isCompanyAdmin(userId, id)) {
         return res.status(403).json({ message: "You don't have access to this company." });
       }
-
-      const b = req.body ?? {};
-      const branchId       = String(b.branchId       ?? "").trim() || null;
-      const title          = String(b.title          ?? "").trim().slice(0, 200);
-      const department     = String(b.department     ?? "").trim().slice(0, 120) || null;
-      const vacancies      = Math.max(1, Math.min(999, Number(b.vacancies ?? 1)));
-      const employmentType = String(b.employmentType ?? "full_time").trim();
-      const salaryMin      = b.salaryMin != null && b.salaryMin !== "" ? Number(b.salaryMin) : null;
-      const salaryMax      = b.salaryMax != null && b.salaryMax !== "" ? Number(b.salaryMax) : null;
-      const requirements   = String(b.requirements   ?? "").trim() || null;
-      const responsibilities = String(b.responsibilities ?? "").trim() || null;
-      const deadline       = String(b.deadline       ?? "").trim().slice(0, 10) || null;
-      const county         = String(b.county         ?? "").trim().slice(0, 60) || null;
-      const town           = String(b.town           ?? "").trim().slice(0, 80) || null;
-      const experience     = String(b.experienceLevel ?? "any").trim();
-      let   category       = String(b.category       ?? "other").trim();
-
-      // 2026-10: teacher vacancy fields (schools only).
-      const { rows: [inst] } = await pool.query<{ institution_type: string }>(
-        `SELECT institution_type FROM companies WHERE id = $1`, [id],
+      const { rows: [co] } = await pool.query<{ institution_type: string | null; status: string }>(
+        `SELECT institution_type, status FROM companies WHERE id = $1`, [id],
       );
-      const isSchool = inst?.institution_type === "school";
-      const subjects      = isSchool ? cleanStringArray(b.subjects, 8, 60) : [];
-      const teachingLevel = isSchool && VALID_SCHOOL_LEVELS.has(String(b.teachingLevel ?? "")) ? String(b.teachingLevel) : null;
-      const tscRequired   = isSchool && b.tscRequired != null ? !!b.tscRequired : null;
-      const startDate     = isSchool ? (String(b.startDate ?? "").trim().slice(0, 10) || null) : null;
-      const accommodation = isSchool && b.accommodation != null ? !!b.accommodation : null;
-      if (isSchool) category = "education";
+      if (!co) return res.status(404).json({ message: "Company not found." });
+      if (co.status === "suspended") return res.status(403).json({ message: "This account is suspended. Contact support." });
 
-      if (!title || title.length < 3) return res.status(400).json({ message: "Job title is required (min 3 chars)." });
-      if (!VALID_EMPLOYMENT_TYPES.has(employmentType)) return res.status(400).json({ message: "Invalid employment type." });
-      if (!VALID_EXPERIENCE.has(experience)) return res.status(400).json({ message: "Invalid experience level." });
-      if (salaryMin != null && salaryMax != null && salaryMax < salaryMin) {
-        return res.status(400).json({ message: "Max salary must be greater than or equal to min salary." });
+      const { validateVacancy } = await import("./lib/vacancy-validation");
+      const v = validateVacancy(req.body ?? {}, { isSchool: co.institution_type === "school" });
+      if (!v.ok) return res.status(400).json({ message: "Please fix the highlighted fields.", errors: (v as any).errors });
+      const j = v.value;
+
+      if (j.branchId) {
+        const { rowCount } = await pool.query(`SELECT 1 FROM branches WHERE id = $1 AND company_id = $2`, [j.branchId, id]);
+        if (!rowCount) return res.status(400).json({ message: "That branch doesn't belong to this employer.", errors: { branchId: "Invalid branch." } });
+      }
+
+      // Duplicate guard: same title for the same employer in the last 10 min
+      // (double-taps, slow connections re-submitting).
+      const { rows: [dupe] } = await pool.query<{ id: string }>(
+        `SELECT id FROM local_jobs
+          WHERE company_id = $1 AND LOWER(title) = LOWER($2)
+            AND status IN ('open','draft') AND created_at > NOW() - INTERVAL '10 minutes'
+          LIMIT 1`,
+        [id, j.title],
+      );
+      if (dupe) {
+        return res.status(409).json({ message: "You just posted a vacancy with this title. Check your dashboard before posting it again.", jobId: dupe.id, duplicate: true });
       }
 
       const { rows: [job] } = await pool.query<{ id: string }>(`
@@ -1591,22 +1678,32 @@ export function registerLocalJobsRoutes(app: Express): void {
           company_id, branch_id, title, department, vacancies, employment_type,
           salary_min, salary_max, requirements, responsibilities, deadline,
           county, town, experience_level, category, status, is_seed,
-          subjects, teaching_level, tsc_required, start_date, accommodation
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 'open', false,
-                  $16, $17, $18, $19, $20)
+          subjects, teaching_level, tsc_required, start_date, accommodation,
+          role_category, credentials, application_method, application_contact, published_at
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,false,
+                  $17,$18,$19,$20,$21,$22,$23,$24,$25, CASE WHEN $16 = 'open' THEN NOW() ELSE NULL END)
         RETURNING id
       `, [
-        id, branchId, title, department, vacancies, employmentType,
-        salaryMin, salaryMax, requirements, responsibilities, deadline,
-        county, town, experience, category,
-        subjects.length ? subjects : null, teachingLevel, tscRequired, startDate, accommodation,
+        id, j.branchId, j.title, j.department, j.vacancies, j.employmentType,
+        j.salaryMin, j.salaryMax, j.requirements, j.responsibilities, j.deadline,
+        j.county, j.town, j.experienceLevel, j.category, j.status,
+        j.subjects, j.teachingLevel, j.tscRequired, j.startDate, j.accommodation,
+        j.roleCategory, j.credentials, j.applicationMethod, j.applicationContact,
       ]);
 
-      console.log(`[employer/post-job] userId=${userId} companyId=${id} jobId=${job.id} title="${title}"`);
-      res.json({ success: true, jobId: job.id, message: `Job "${title}" published.` });
+      const pendingVerification = co.status !== "approved";
+      console.log(`[employer/post-job] userId=${userId} companyId=${id} jobId=${job.id} status=${j.status} pendingVerification=${pendingVerification} title="${j.title}"`);
+      res.json({
+        success: true, jobId: job.id, status: j.status, pendingVerification,
+        message: j.status === "draft"
+          ? `Draft "${j.title}" saved.`
+          : pendingVerification
+            ? `"${j.title}" is saved and will go live as soon as your school is verified.`
+            : `"${j.title}" is now live.`,
+      });
     } catch (err: any) {
       console.error("[POST /api/employer/companies/:id/jobs]", err?.message);
-      res.status(500).json({ message: "Could not publish job." });
+      res.status(500).json({ message: "Could not save the vacancy. Please try again." });
     }
   });
 
@@ -1695,34 +1792,139 @@ export function registerLocalJobsRoutes(app: Express): void {
   });
 
   // ─── PATCH /api/employer/jobs/:id ─────────────────────────────────────────
-  // Edit a job they posted. Validates admin via the job's company_id.
-  // Quick win: close a job by sending {status: "closed"}.
+  // Edit a vacancy and/or change its status (draft → open → paused → closed).
+  // 2026-10: full edit support. Only admins of the vacancy's employer.
+  // Body: { status } for a quick status change, or full fields for an edit.
   app.patch("/api/employer/jobs/:id", async (req: any, res: Response) => {
     const userId = readSessionUserId(req);
     if (!userId) return res.status(401).json({ message: "Please sign in." });
     try {
       const { id } = req.params;
-      const { rows: [job] } = await pool.query<{ company_id: string }>(
-        `SELECT company_id FROM local_jobs WHERE id = $1 LIMIT 1`, [id],
+      if (!/^[0-9a-f-]{36}$/i.test(id)) return res.status(400).json({ message: "Invalid vacancy id." });
+      const { rows: [job] } = await pool.query<any>(
+        `SELECT j.*, c.institution_type AS company_institution_type
+           FROM local_jobs j JOIN companies c ON c.id = j.company_id
+          WHERE j.id = $1 LIMIT 1`, [id],
       );
-      if (!job) return res.status(404).json({ message: "Job not found." });
+      if (!job) return res.status(404).json({ message: "Vacancy not found." });
       if (!await isCompanyAdmin(userId, job.company_id)) {
-        return res.status(403).json({ message: "You don't manage this job's company." });
+        return res.status(403).json({ message: "You don't manage this vacancy." });
       }
+      if (job.is_seed) return res.status(403).json({ message: "Sample listings can't be edited." });
 
+      const { validateVacancy, canTransition, VACANCY_STATUSES } = await import("./lib/vacancy-validation");
       const b = req.body ?? {};
-      const status = b.status != null ? String(b.status).trim() : undefined;
-      if (status && !["open", "closed", "draft"].includes(status)) {
+      const statusOnly = Object.keys(b).length === 1 && b.status != null;
+      const nextStatus = b.status != null ? String(b.status) : job.status;
+      if (!(VACANCY_STATUSES as readonly string[]).includes(nextStatus)) {
         return res.status(400).json({ message: "Invalid status." });
       }
-
-      if (status) {
-        await pool.query(`UPDATE local_jobs SET status = $1, updated_at = NOW() WHERE id = $2`, [status, id]);
+      if (!canTransition(job.status, nextStatus)) {
+        return res.status(400).json({ message: `A ${job.status} vacancy can't be changed to ${nextStatus}.` });
       }
-      res.json({ success: true, message: status ? `Job status set to ${status}.` : "Updated." });
+
+      if (statusOnly) {
+        if (nextStatus === "open") {
+          // Re-validate before (re)publishing so a draft can't go live half-empty.
+          const v = validateVacancy({
+            title: job.title, department: job.department, vacancies: job.vacancies,
+            employmentType: job.employment_type, experienceLevel: job.experience_level, category: job.category,
+            salaryMin: job.salary_min, salaryMax: job.salary_max, requirements: job.requirements,
+            responsibilities: job.responsibilities, credentials: job.credentials,
+            deadline: job.deadline ? new Date(job.deadline).toISOString().slice(0, 10) : null,
+            county: job.county, town: job.town, roleCategory: job.role_category, subjects: job.subjects,
+            teachingLevel: job.teaching_level, tscRequired: job.tsc_required,
+            startDate: job.start_date ? new Date(job.start_date).toISOString().slice(0, 10) : null,
+            accommodation: job.accommodation, applicationMethod: job.application_method,
+            applicationContact: job.application_contact, status: "open",
+          }, { isSchool: job.company_institution_type === "school" });
+          if (!v.ok) return res.status(400).json({ message: "Complete the vacancy before publishing — edit it to fix the highlighted fields.", errors: (v as any).errors });
+        }
+        await pool.query(
+          `UPDATE local_jobs SET status = $1, updated_at = NOW(),
+                  published_at = CASE WHEN $1 = 'open' AND published_at IS NULL THEN NOW() ELSE published_at END
+            WHERE id = $2`, [nextStatus, id],
+        );
+        return res.json({ success: true, status: nextStatus, message: `Vacancy ${nextStatus === "open" ? "published" : nextStatus}.` });
+      }
+
+      const v = validateVacancy({ ...b, status: nextStatus }, { isSchool: job.company_institution_type === "school" });
+      if (!v.ok) return res.status(400).json({ message: "Please fix the highlighted fields.", errors: (v as any).errors });
+      const j = v.value;
+      if (j.branchId) {
+        const { rowCount } = await pool.query(`SELECT 1 FROM branches WHERE id = $1 AND company_id = $2`, [j.branchId, job.company_id]);
+        if (!rowCount) return res.status(400).json({ message: "That branch doesn't belong to this employer.", errors: { branchId: "Invalid branch." } });
+      }
+      await pool.query(`
+        UPDATE local_jobs SET
+          branch_id = $2, title = $3, department = $4, vacancies = $5, employment_type = $6,
+          salary_min = $7, salary_max = $8, requirements = $9, responsibilities = $10, deadline = $11,
+          county = $12, town = $13, experience_level = $14, category = $15, status = $16,
+          subjects = $17, teaching_level = $18, tsc_required = $19, start_date = $20, accommodation = $21,
+          role_category = $22, credentials = $23, application_method = $24, application_contact = $25,
+          published_at = CASE WHEN $16 = 'open' AND published_at IS NULL THEN NOW() ELSE published_at END,
+          updated_at = NOW()
+        WHERE id = $1
+      `, [
+        id, j.branchId, j.title, j.department, j.vacancies, j.employmentType,
+        j.salaryMin, j.salaryMax, j.requirements, j.responsibilities, j.deadline,
+        j.county, j.town, j.experienceLevel, j.category, j.status,
+        j.subjects, j.teachingLevel, j.tscRequired, j.startDate, j.accommodation,
+        j.roleCategory, j.credentials, j.applicationMethod, j.applicationContact,
+      ]);
+      console.log(`[employer/edit-job] userId=${userId} jobId=${id} status=${j.status}`);
+      res.json({ success: true, status: j.status, message: "Vacancy updated." });
     } catch (err: any) {
       console.error("[PATCH /api/employer/jobs/:id]", err?.message);
-      res.status(500).json({ message: "Could not update job." });
+      res.status(500).json({ message: "Could not update the vacancy." });
+    }
+  });
+
+  // ─── GET /api/employer/applications/:id/file/:kind ─────────────────────────
+  // 2026-10: employer-only access to an applicant's CV / certificates.
+  // Checks the caller administers the application's employer, then
+  // redirects to a 2-minute signed URL on the private bucket.
+  app.get("/api/employer/applications/:id/file/:kind", async (req: any, res: Response) => {
+    const userId = readSessionUserId(req);
+    if (!userId) return res.status(401).json({ message: "Please sign in." });
+    try {
+      const { id, kind } = req.params;
+      if (!/^[0-9a-f-]{36}$/i.test(id) || !["cv", "certificates"].includes(kind)) {
+        return res.status(400).json({ message: "Invalid request." });
+      }
+      const { rows: [a] } = await pool.query<{ company_id: string; cv_url: string | null; certificates_url: string | null }>(
+        `SELECT company_id, cv_url, certificates_url FROM local_job_applications WHERE id = $1`, [id],
+      );
+      if (!a) return res.status(404).json({ message: "Application not found." });
+      if (!await isCompanyAdmin(userId, a.company_id)) return res.status(403).json({ message: "You can't view this file." });
+      const { signedApplicationFileUrl } = await import("./lib/kc-files");
+      const url = await signedApplicationFileUrl(kind === "cv" ? a.cv_url : a.certificates_url);
+      if (!url) return res.status(404).json({ message: "No file was attached, or it's no longer available." });
+      res.setHeader("Cache-Control", "no-store");
+      res.redirect(302, url);
+    } catch (err: any) {
+      console.error("[GET /api/employer/applications/:id/file]", err?.message);
+      res.status(500).json({ message: "Could not open the file." });
+    }
+  });
+
+  // ─── POST /api/employer/companies/:id/logo ─────────────────────────────────
+  app.post("/api/employer/companies/:id/logo", logoUpload.single("logo"), async (req: any, res: Response) => {
+    const userId = readSessionUserId(req);
+    if (!userId) return res.status(401).json({ message: "Please sign in." });
+    try {
+      const { id } = req.params;
+      if (!await isCompanyAdmin(userId, id)) return res.status(403).json({ message: "You don't manage this profile." });
+      const file = req.file as Express.Multer.File | undefined;
+      if (!file?.buffer?.length) return res.status(400).json({ message: "Choose a JPG, PNG or WebP image under 1 MB." });
+      const { uploadSchoolLogo } = await import("./lib/kc-files");
+      const url = await uploadSchoolLogo(id, file.buffer, file.mimetype);
+      if (!url) return res.status(502).json({ message: "Upload failed — please try again." });
+      await pool.query(`UPDATE companies SET logo_url = $1, updated_at = NOW() WHERE id = $2`, [url, id]);
+      res.json({ success: true, logoUrl: url });
+    } catch (err: any) {
+      console.error("[POST /api/employer/companies/:id/logo]", err?.message);
+      res.status(500).json({ message: "Could not upload the logo." });
     }
   });
 
@@ -1785,6 +1987,21 @@ export function registerLocalJobsRoutes(app: Express): void {
       if (isSchool && !county) {
         return res.status(400).json({ message: "Please choose the school's county." });
       }
+      const registrationNumber = String(b.registrationNumber ?? "").trim().slice(0, 80) || null;
+      if (isSchool && (!phone || phone.replace(/\D/g, "").length < 9)) {
+        return res.status(400).json({ message: "Please enter the school's official phone number." });
+      }
+      // 2026-10: duplicate guard — same user registering the same name twice.
+      {
+        const { rows: [existing] } = await pool.query<{ id: string }>(
+          `SELECT c.id FROM companies c JOIN company_admins ca ON ca.company_id = c.id
+            WHERE ca.user_id = $1 AND LOWER(c.name) = LOWER($2) LIMIT 1`,
+          [userId, name],
+        );
+        if (existing) {
+          return res.status(409).json({ message: "You've already registered this school/company — open it from your dashboard.", companyId: existing.id, duplicate: true });
+        }
+      }
 
       if (!name || name.length < 2) return res.status(400).json({ message: isSchool ? "School name is required." : "Company name is required." });
       if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -1796,12 +2013,24 @@ export function registerLocalJobsRoutes(app: Express): void {
 
       const { rows: [company] } = await pool.query<{ id: string; name: string }>(`
         INSERT INTO companies (name, slug, industry, county, description, website, contact_name, phone, email, status,
-                               institution_type, school_levels, school_ownership, town)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending', $10, $11, $12, $13)
+                               institution_type, school_levels, school_ownership, town, registration_number)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending', $10, $11, $12, $13, $14)
         ON CONFLICT (slug) DO UPDATE SET slug = $2 || '-' || (extract(epoch from now())::bigint)
         RETURNING id, name
       `, [name, baseSlug, isSchool ? "Education" : industry, county, description, website, contactName, phone, email,
-          isSchool ? "school" : "company", schoolLevels.length ? schoolLevels : null, ownership, town]);
+          isSchool ? "school" : "company", schoolLevels.length ? schoolLevels : null, ownership, town, registrationNumber]);
+
+      // 2026-10 (School Recruitment Portal): a school's registrant can set up
+      // the profile and prepare vacancies straight away. Nothing is public
+      // until an admin verifies the school (public queries require
+      // companies.status = 'approved'), and "verified" is only shown after that.
+      if (isSchool) {
+        await pool.query(
+          `INSERT INTO company_admins (company_id, user_id, role) VALUES ($1, $2, 'admin')
+           ON CONFLICT (company_id, user_id) DO NOTHING`,
+          [company.id, userId],
+        ).catch((e: any) => console.warn("[register-school] admin grant failed:", e?.message));
+      }
 
       // Submit a claim so admin reviews the registrant too
       await pool.query(`
@@ -1841,6 +2070,7 @@ export function registerLocalJobsRoutes(app: Express): void {
                 ${industry ? `<p><strong>Industry:</strong> ${industry}</p>` : ""}
                 ${county   ? `<p><strong>County:</strong> ${county}</p>`     : ""}
                 ${role     ? `<p><strong>Their role:</strong> ${role}</p>`   : ""}
+                ${registrationNumber ? `<p><strong>Registration no.:</strong> ${registrationNumber}</p>` : ""}
                 ${evidenceUrl ? `<p><strong>License/cert URL:</strong> <a href="${evidenceUrl}">${evidenceUrl}</a></p>` : ""}
                 <p><strong>Status:</strong> pending verification</p>
                 <p><a href="https://workabroadhub.tech/admin/kenya-careers">Review in admin panel →</a></p>
@@ -1857,7 +2087,7 @@ export function registerLocalJobsRoutes(app: Express): void {
         success: true,
         companyId: company.id,
         message: isSchool
-          ? `Thank you! We've received ${company.name}'s registration. We'll verify the school (usually within 1 business day) and email you as soon as you can post teacher vacancies.`
+          ? `Thank you! ${company.name} is registered and pending verification. You can set up your profile and prepare vacancies now — they'll go live as soon as we've verified the school (usually within 1 business day).`
           : `Got it! We've received your registration for ${company.name} and emailed our team. We'll review and verify within 1-2 business days.`,
       });
     } catch (err: any) {

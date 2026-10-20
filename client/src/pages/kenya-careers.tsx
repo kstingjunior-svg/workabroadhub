@@ -23,6 +23,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { KenyaFlag, KenyaFlagStripe } from "@/components/kenya-flag";
+import { SchoolRecruitmentBanner } from "@/components/school-recruitment-banner";
+import { SCHOOL_LEVELS, SCHOOL_OWNERSHIP, TEACHING_SUBJECTS } from "@/lib/school-constants";
 
 interface Job {
   id: string;
@@ -160,6 +162,8 @@ export default function KenyaCareers() {
   const [category,    setCategory]    = useState<string>("all");
   const [companyId,   setCompanyId]   = useState<string>("all");
   // 2026-10: "Teaching jobs at schools" filter (also via ?institution=school).
+  const [schoolType, setSchoolType] = useState<string>("all");
+  const [subject, setSubject] = useState<string>("all");
   const [schoolsOnly, setSchoolsOnly] = useState<boolean>(() => {
     try { return new URLSearchParams(window.location.search).get("institution") === "school"; } catch { return false; }
   });
@@ -215,6 +219,8 @@ export default function KenyaCareers() {
     if (companyId  !== "all") params.set("companyId", companyId);
     if (search)               params.set("search",    search);
     if (schoolsOnly)          params.set("institution", "school");
+    if (schoolsOnly && schoolType !== "all") params.set("schoolType", schoolType);
+    if (schoolsOnly && subject !== "all")    params.set("subject", subject);
     const url = `/api/local-jobs?${params.toString()}`;
     (async () => {
       const data = await safeJson<{ jobs?: unknown[]; total?: number }>(url, ac.signal);
@@ -274,7 +280,7 @@ export default function KenyaCareers() {
       setLoading(false);
     })();
     return () => { cancelled = true; ac.abort(); };
-  }, [county, category, companyId, search, schoolsOnly]);
+  }, [county, category, companyId, search, schoolsOnly, schoolType, subject]);
 
   const hasAnyFilter = useMemo(
     () => county !== "all" || category !== "all" || companyId !== "all" || !!search || schoolsOnly,
@@ -283,7 +289,7 @@ export default function KenyaCareers() {
 
   function clearFilters() {
     setCounty("all"); setCategory("all"); setCompanyId("all");
-    setSearchInput(""); setSearch(""); setSchoolsOnly(false);
+    setSearchInput(""); setSearch(""); setSchoolsOnly(false); setSchoolType("all"); setSubject("all");
   }
 
   return (
@@ -350,9 +356,9 @@ export default function KenyaCareers() {
               <Building2 className="h-4 w-4 mr-1.5" /> For employers
             </Button>
           </Link>
-          <Link href="/schools">
+          <Link href="/kenya-careers/schools">
             <Button variant="ghost" size="sm" className="text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-900/20" data-testid="link-schools-page">
-              🎓 Schools: hire teachers free
+              🎓 For Schools
             </Button>
           </Link>
           <Link href="/kenya-careers/my-applications">
@@ -416,7 +422,17 @@ export default function KenyaCareers() {
         )}
 
         {/* ── FILTERS ──────────────────────────────────────────────────── */}
-        <section className="mt-6 space-y-3">
+        {/* 2026-10: School Recruitment banner */}
+        <div className="mt-6">
+          <SchoolRecruitmentBanner
+            onBrowse={() => {
+              setSchoolsOnly(true);
+              setTimeout(() => document.getElementById("kc-filters")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+            }}
+          />
+        </div>
+
+        <section id="kc-filters" className="mt-6 space-y-3 scroll-mt-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -438,6 +454,25 @@ export default function KenyaCareers() {
             >
               🎓 Teaching jobs at schools
             </button>
+            {schoolsOnly && (
+              <>
+                <select value={schoolType} onChange={(e) => setSchoolType(e.target.value)} aria-label="School type"
+                  className="text-sm border rounded-md px-3 py-1.5 bg-background" data-testid="filter-school-type">
+                  <option value="all">All school types</option>
+                  <optgroup label="Level">
+                    {SCHOOL_LEVELS.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
+                  </optgroup>
+                  <optgroup label="Ownership">
+                    {SCHOOL_OWNERSHIP.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </optgroup>
+                </select>
+                <select value={subject} onChange={(e) => setSubject(e.target.value)} aria-label="Subject"
+                  className="text-sm border rounded-md px-3 py-1.5 bg-background" data-testid="filter-subject">
+                  <option value="all">All subjects</option>
+                  {TEACHING_SUBJECTS.map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </>
+            )}
             <select
               value={county}
               onChange={(e) => setCounty(e.target.value)}

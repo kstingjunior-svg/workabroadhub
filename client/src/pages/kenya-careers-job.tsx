@@ -12,7 +12,7 @@ import { useEffect, useState } from "react";
 import { useRoute, Link } from "wouter";
 import {
   Briefcase, MapPin, Building2, ArrowLeft, BadgeCheck, Calendar, Users,
-  Loader2, ExternalLink, ChevronRight, GraduationCap, Sparkles, AlertCircle,
+  Loader2, ExternalLink, ChevronRight, GraduationCap, Sparkles, AlertCircle, Flag, Mail,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -22,6 +22,7 @@ import { KenyaCareersApplySheet } from "@/components/kenya-careers-apply-sheet";
 import { KenyaCareersClaimSheet } from "@/components/kenya-careers-claim-sheet";
 import { KenyaCareersNotifySheet } from "@/components/kenya-careers-notify-sheet";
 import { schoolLevelLabel, ownershipLabel } from "@/lib/school-constants";
+import { ReportVacancy } from "@/components/report-vacancy";
 
 interface JobDetail {
   id: string;
@@ -45,6 +46,8 @@ interface JobDetail {
   subjects?: string[] | null; teachingLevel?: string | null; tscRequired?: boolean | null;
   startDate?: string | null; accommodation?: boolean | null;
   institutionType?: string; schoolOwnership?: string | null;
+  expired?: boolean; acceptingApplications?: boolean;
+  applicationMethod?: string; applicationContact?: string | null; credentials?: string | null;
   company: {
     id: string;
     name: string;
@@ -162,6 +165,11 @@ export default function KenyaCareersJob() {
           accommodation:   data?.accommodation ?? null,
           institutionType: data?.company?.institutionType ?? "company",
           schoolOwnership: data?.company?.schoolOwnership ?? null,
+          expired:         !!data?.expired,
+          acceptingApplications: data?.acceptingApplications,
+          applicationMethod: data?.applicationMethod ?? "platform",
+          applicationContact: data?.applicationContact ?? null,
+          credentials:     data?.credentials ?? null,
           deadline:        data?.deadline ?? null,
           county:          data?.county ?? null,
           town:            data?.town ?? null,
@@ -242,7 +250,12 @@ export default function KenyaCareersJob() {
 
   const salary    = formatSalary(job.salaryMin, job.salaryMax);
   const deadline  = formatDeadline(job.deadline);
-  const closed    = job.status !== "open" || (job.deadline && new Date(job.deadline) < new Date());
+  // 2026-10: the server decides (deadline is end-of-day Kenya time).
+  const closed    = job.acceptingApplications === undefined
+    ? (job.status !== "open" || (job.deadline && new Date(job.deadline) < new Date()))
+    : !job.acceptingApplications && !job.isSeed;
+  const closedLabel = job.expired ? "Deadline passed" : job.status === "paused" ? "Paused" : "Closed";
+  const isSchoolJob = job.institutionType === "school";
 
   return (
     <div className="min-h-screen bg-background pb-20">
@@ -267,15 +280,17 @@ export default function KenyaCareersJob() {
                 <div className="flex items-center gap-1.5 mt-1.5 text-sm">
                   <Building2 className="h-4 w-4 text-muted-foreground" />
                   <span className="font-medium">{job.company.name}</span>
-                  {job.company.verified && (
+                  {job.company.verified ? (
                     <span className="inline-flex items-center gap-0.5 text-emerald-700 dark:text-emerald-300 text-xs font-semibold ml-1">
                       <BadgeCheck className="h-3.5 w-3.5" />
-                      Verified
+                      {isSchoolJob ? "Verified school" : "Verified"}
                     </span>
-                  )}
+                  ) : isSchoolJob ? (
+                    <span className="text-xs text-muted-foreground ml-1">Registered school · not yet verified</span>
+                  ) : null}
                 </div>
               </div>
-              {closed && <Badge variant="outline" className="border-rose-300 text-rose-700 shrink-0">Closed</Badge>}
+              {closed && <Badge variant="outline" className="border-rose-300 text-rose-700 shrink-0">{closedLabel}</Badge>}
             </div>
 
             {/* Meta strip */}
@@ -363,6 +378,18 @@ export default function KenyaCareersJob() {
                   <Sparkles className="h-4 w-4 mr-1.5" />
                   Notify me when {job.company.name} starts hiring
                 </Button>
+              ) : !closed && job.applicationMethod === "email" && job.applicationContact ? (
+                <Button asChild size="lg" className="bg-emerald-600 hover:bg-emerald-700 text-white" data-testid="btn-apply-email">
+                  <a href={`mailto:${job.applicationContact}?subject=${encodeURIComponent(`Application: ${job.title}`)}`}>
+                    <Mail className="h-4 w-4 mr-1.5" /> Apply by email
+                  </a>
+                </Button>
+              ) : !closed && job.applicationMethod === "url" && job.applicationContact ? (
+                <Button asChild size="lg" className="bg-emerald-600 hover:bg-emerald-700 text-white" data-testid="btn-apply-url">
+                  <a href={job.applicationContact} target="_blank" rel="noopener noreferrer nofollow">
+                    Apply on the {isSchoolJob ? "school's" : "employer's"} website <ExternalLink className="h-3.5 w-3.5 ml-1.5" />
+                  </a>
+                </Button>
               ) : (
                 <Button
                   size="lg"
@@ -372,7 +399,7 @@ export default function KenyaCareersJob() {
                   data-testid="btn-apply-local-job"
                 >
                   <Sparkles className="h-4 w-4 mr-1.5" />
-                  {closed ? "Applications closed" : "Apply for this job"}
+                  {closed ? (job.expired ? "Deadline has passed" : "Applications closed") : "Apply for this job"}
                 </Button>
               )}
               {job.company.website && (
@@ -383,11 +410,16 @@ export default function KenyaCareersJob() {
                 </Button>
               )}
             </div>
+            {!closed && job.applicationMethod && job.applicationMethod !== "platform" && (
+              <p className="mt-3 text-xs text-muted-foreground">
+                {job.company.name} takes applications directly{job.applicationMethod === "email" && job.applicationContact ? ` at ${job.applicationContact}` : ""}. WorkAbroad Hub never asks you to pay an employer to apply — report it if anyone does.
+              </p>
+            )}
           </CardContent>
         </Card>
 
         {/* 2026-10: teaching details for school vacancies */}
-        {job.institutionType === "school" && (job.subjects?.length || job.teachingLevel || job.tscRequired != null || job.startDate || job.accommodation != null) && (
+        {job.institutionType === "school" && (job.subjects?.length || job.teachingLevel || job.tscRequired != null || job.startDate || job.accommodation != null || job.credentials) && (
           <Card className="mt-4 border-emerald-200">
             <CardContent className="p-5">
               <h2 className="font-semibold mb-3">Teaching details</h2>
@@ -401,6 +433,7 @@ export default function KenyaCareersJob() {
                 {job.tscRequired != null && (<div><dt className="text-muted-foreground text-xs">TSC registration</dt><dd>{job.tscRequired ? "Required" : "Not required"}</dd></div>)}
                 {job.startDate && (<div><dt className="text-muted-foreground text-xs">Start date</dt><dd>{new Date(job.startDate).toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric" })}</dd></div>)}
                 {job.accommodation != null && (<div><dt className="text-muted-foreground text-xs">Housing</dt><dd>{job.accommodation ? "Provided" : "Not provided"}</dd></div>)}
+                {job.credentials && (<div className="sm:col-span-2"><dt className="text-muted-foreground text-xs">Credentials required</dt><dd>{job.credentials}</dd></div>)}
               </dl>
             </CardContent>
           </Card>
@@ -483,6 +516,7 @@ export default function KenyaCareersJob() {
             </Button>
           </CardContent>
         </Card>
+        {!job.isSeed && <ReportVacancy jobId={job.id} />}
       </div>
 
       {/* Phase 3a: Claim sheet */}

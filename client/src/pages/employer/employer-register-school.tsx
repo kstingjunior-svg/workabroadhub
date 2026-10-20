@@ -30,6 +30,8 @@ export default function EmployerRegisterSchool() {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [evidenceUrl, setEvidenceUrl] = useState("");
+  const [registrationNumber, setRegistrationNumber] = useState("");
+  const [companyId, setCompanyId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState<string | null>(null);
@@ -47,7 +49,7 @@ export default function EmployerRegisterSchool() {
         body: JSON.stringify({
           institutionType: "school",
           name, schoolLevels: levels, schoolOwnership: ownership, county, town,
-          description, website, contactName, role, email, phone, evidenceUrl,
+          description, website, contactName, role, email, phone, evidenceUrl, registrationNumber,
         }),
       });
       if (res.status === 401) {
@@ -55,20 +57,22 @@ export default function EmployerRegisterSchool() {
         return;
       }
       const body = await res.json().catch(() => ({}));
+      if (res.status === 409 && body?.companyId) { navigate(`/employer/companies/${body.companyId}/manage`); return; }
       if (!res.ok) { setError(body?.message || `Submission failed (${res.status}).`); return; }
+      setCompanyId(body?.companyId ?? null);
       setSubmitted(body?.message ?? "Registered.");
     } catch (err: any) {
       setError(err?.message || "Could not register the school.");
     } finally { setSubmitting(false); }
   }
 
-  const canSubmit = name.trim().length >= 2 && levels.length > 0 && !!county && contactName.trim() && email.trim();
+  const canSubmit = name.trim().length >= 2 && levels.length > 0 && !!county && contactName.trim() && email.trim() && phone.replace(/\D/g, "").length >= 9;
 
   return (
     <div className="min-h-screen bg-background pb-16">
       <div className="bg-gradient-to-br from-emerald-700 to-teal-600 text-white px-4 pt-4 pb-8">
         <div className="max-w-2xl mx-auto">
-          <Link href="/schools">
+          <Link href="/kenya-careers/schools">
             <Button variant="ghost" size="sm" className="text-white hover:bg-white/10 -ml-2 mb-2">
               <ArrowLeft className="h-4 w-4 mr-1.5" /> Back
             </Button>
@@ -85,10 +89,10 @@ export default function EmployerRegisterSchool() {
           <Card>
             <CardContent className="p-8 text-center">
               <CheckCircle2 className="h-10 w-10 text-emerald-600 mx-auto mb-3" />
-              <h2 className="font-semibold mb-1">Registration received</h2>
+              <h2 className="font-semibold mb-1">School registered — pending verification</h2>
               <p className="text-sm text-muted-foreground mb-4 max-w-md mx-auto">{submitted}</p>
               <div className="flex flex-wrap gap-2 justify-center">
-                <Link href="/employer/dashboard"><Button>Go to my dashboard</Button></Link>
+                <Link href={companyId ? `/employer/companies/${companyId}/manage` : "/employer/dashboard"}><Button>Open my school dashboard</Button></Link>
                 <Link href="/kenya-careers?institution=school"><Button variant="outline">See school vacancies</Button></Link>
               </div>
             </CardContent>
@@ -170,13 +174,19 @@ export default function EmployerRegisterSchool() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label htmlFor="rs-email" className="text-sm font-medium block mb-1">Email *</label>
+                  <label htmlFor="rs-email" className="text-sm font-medium block mb-1">School email *</label>
                   <Input id="rs-email" type="email" value={email} onChange={(e) => setEmail(e.target.value.slice(0, 160))} placeholder="school@gmail.com" />
                 </div>
                 <div>
-                  <label htmlFor="rs-phone" className="text-sm font-medium block mb-1">Phone</label>
-                  <Input id="rs-phone" value={phone} onChange={(e) => setPhone(e.target.value.slice(0, 40))} placeholder="07XX XXX XXX" />
+                  <label htmlFor="rs-phone" className="text-sm font-medium block mb-1">Official school phone *</label>
+                  <Input id="rs-phone" type="tel" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value.slice(0, 40))} placeholder="07XX XXX XXX" />
                 </div>
+              </div>
+
+              <div>
+                <label htmlFor="rs-regno" className="text-sm font-medium block mb-1">School registration number (optional)</label>
+                <Input id="rs-regno" value={registrationNumber} onChange={(e) => setRegistrationNumber(e.target.value.slice(0, 80))} placeholder="Ministry of Education registration / KNEC centre code" />
+                <p className="text-[10px] text-muted-foreground mt-0.5">Helps us verify your school faster. Never shown publicly.</p>
               </div>
 
               <div>
