@@ -24102,9 +24102,14 @@ If your instinct says "3,500", STOP and re-read the SERVICES block above.`;
   // bug pattern that killed AutoApply. The catch-all now runs at the end
   // of registerRoutes so every real handler gets first shot.
   // ── Unmatched-payment retry engine ──────────────────────────────────────────
-  // Every 5 minutes: re-run smartMatchUser on payments that haven't matched yet
-  // and have been retried fewer than 5 times.
-  setInterval(async () => {
+  // 2026-10 (Tony, finance audit): SWITCHED OFF. It guessed a user for every
+  // unmatched payment and called upgradeUserToPro() regardless of amount or
+  // service (a KES 99 payment could have granted Pro), re-alerted on rows
+  // already labelled duplicate, and spammed a dead Twilio WhatsApp account.
+  // Unmatched money is now handled in /admin/finance → Unmatched (evidence-
+  // based matching, never by amount). Set LEGACY_PAYMENT_RETRY_ENGINE=true
+  // only for an emergency rollback.
+  if (process.env.LEGACY_PAYMENT_RETRY_ENGINE === "true") setInterval(async () => {
     console.log("🔁 Running retry engine...");
 
     const { data: payments } = await supabase
