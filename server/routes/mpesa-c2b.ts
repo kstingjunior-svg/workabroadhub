@@ -33,6 +33,63 @@ import { pool } from "../db";
 import { storage } from "../storage";
 import { safaricomIpGuard } from "../middleware/safaricomIpGuard";
 
+// 2026-10: exact plan prices that a direct Paybill payment can activate once
+// we know who paid. Keep in sync with the live plans (Monthly KES 1,000,
+// Yearly KES 4,500). The withdrawn KES 99 trial is deliberately NOT here.
+const PLAN_BY_PRICE: Record<number, { planId: string; name: string }> = {
+  1000: { planId: "monthly", name: "Monthly Access" },
+  4500: { planId: "pro",     name: "Yearly Access" },
+};
+
+/**
+ * Identify who made a direct Paybill (C2B) payment.
+ *   1. Account number = their email (Safaricom truncates BillRefNumber to
+ *      ~20 chars, so a unique prefix match is accepted for long emails).
+ *   2. Hashed MSISDN = SHA-256("2547XXXXXXXX") of a user's phone.
+ * Returns null unless exactly one active account matches.
+ */
+export async function resolveC2BPayer(acctRef: string, msisdn: string): Promise<{ userId: string; email: string | null; via: string } | null> {
+  const ref = String(acctRef || "").trim().toLowerCase();
+  try {
+    if (ref.includes("@") && ref.length >= 6) {
+      const exact = await pool.query<{ id: string; email: string }>(
+        `SELECT id, email FROM users WHERE LOWER(email) = $1 AND deleted_at IS NULL LIMIT 2`, [ref],
+      );
+      if (exact.rows.length === 1) return { userId: String(exact.rows[0].id), email: exact.rows[0].email, via: "email" };
+      if (!exact.rows.length && ref.length >= 18) {
+        const pre = await pool.query<{ id: string; email: string }>(
+          `SELECT id, email FROM users WHERE LOWER(email) LIKE $1 AND deleted_at IS NULL LIMIT 2`,
+          [ref.replace(/[\\%_]/g, (m) => `\\${m}`) + "%"],
+        );
+        if (pre.rows.length === 1) return { userId: String(pre.rows[0].id), email: pre.rows[0].email, via: "email_prefix" };
+      }
+    }
+    const raw = String(msisdn || "").trim();
+    if (/^[0-9a-f]{64}$/i.test(raw)) {
+      const { rows } = await pool.query<{ id: string; email: string }>(
+        `SELECT id, email FROM users
+          WHERE deleted_at IS NULL AND COALESCE(phone, phone_number_e164, '') <> ''
+            AND encode(extensions.digest('254' || right(regexp_replace(COALESCE(phone, phone_number_e164), '\\D', '', 'g'), 9), 'sha256'), 'hex') = LOWER($1)
+          LIMIT 2`,
+        [raw],
+      );
+      if (rows.length === 1) return { userId: String(rows[0].id), email: rows[0].email, via: "msisdn_hash" };
+    } else if (/^\+?\d{9,13}$/.test(raw)) {
+      const { rows } = await pool.query<{ id: string; email: string }>(
+        `SELECT id, email FROM users
+          WHERE deleted_at IS NULL
+            AND right(regexp_replace(COALESCE(phone, phone_number_e164, ''), '\\D', '', 'g'), 9) = right($1, 9)
+          LIMIT 2`,
+        [raw.replace(/\D/g, "")],
+      );
+      if (rows.length === 1) return { userId: String(rows[0].id), email: rows[0].email, via: "msisdn" };
+    }
+  } catch (err: any) {
+    console.warn("[c2b] payer resolution failed:", err?.message);
+  }
+  return null;
+}
+
 // Safaricom's C2B payload — well-documented but fields arrive in mixed
 // case depending on channel. We accept either the canonical PascalCase
 // (documented) or lowercased variants that appear in some sandbox tests.
@@ -132,6 +189,7 @@ async function tryMatchAndActivate(payload: SafaricomC2BPayload): Promise<void> 
   //        or more same-amount pending rows in the window we bail rather
   //        than guessing wrong and paying the wrong customer's plan.
   let matchedPaymentId: string | null = null;
+  let unresolvedPayer: { userId: string; email: string | null; via: string } | null = null;
   try {
     if (/^[0-9a-f-]{16,}$/i.test(acctRef)) {
       const { rows } = await pool.query(
@@ -140,7 +198,66 @@ async function tryMatchAndActivate(payload: SafaricomC2BPayload): Promise<void> 
       );
       if (rows.length > 0) matchedPaymentId = String(rows[0].id);
     }
+    // (a2) 2026-10: the payment page shows the first 8 characters of the
+    //      payment id (upper-cased) as the Paybill account number. Match a
+    //      recent unpaid attempt whose id starts with it.
+    if (!matchedPaymentId && /^[0-9a-f]{8}$/i.test(acctRef)) {
+      const { rows } = await pool.query(
+        `SELECT id FROM payments
+          WHERE LOWER(LEFT(id::text, 8)) = LOWER($1)
+            AND status NOT IN ('success', 'completed')
+            AND created_at > NOW() - INTERVAL '72 hours'
+          ORDER BY created_at DESC LIMIT 2`,
+        [acctRef],
+      );
+      if (rows.length === 1) matchedPaymentId = String(rows[0].id);
+    }
+
+    // (a3) 2026-10 (Tony: "users are subscribing but some are not allowed
+    //      access"). Customers following our Paybill card type their EMAIL
+    //      as the account number (Safaricom truncates it to ~20 chars), or
+    //      a generic word like "CONSULT". Identify the account by email, or
+    //      by the hashed MSISDN (Safaricom sends SHA-256 of 2547XXXXXXXX),
+    //      then link the payment to that person's own recent attempt — or,
+    //      for an exact plan price, activate that plan for them.
     if (!matchedPaymentId) {
+      const resolved = await resolveC2BPayer(acctRef, phone);
+      if (resolved) {
+        const { rows: attempt } = await pool.query(
+          `SELECT id FROM payments
+            WHERE user_id = $1 AND amount = $2
+              AND status NOT IN ('success', 'completed')
+              AND created_at > NOW() - INTERVAL '72 hours'
+            ORDER BY created_at DESC LIMIT 1`,
+          [resolved.userId, amountKes],
+        );
+        if (attempt.length) {
+          matchedPaymentId = String(attempt[0].id);
+          console.log(`[c2b] payer resolved by ${resolved.via} → own attempt paymentId=${matchedPaymentId}`);
+        } else {
+          const plan = PLAN_BY_PRICE[amountKes];
+          if (plan) {
+            const created = await storage.createPayment({
+              userId: resolved.userId, amount: amountKes, currency: "KES", method: "mpesa",
+              status: "pending", planId: plan.planId, serviceId: `plan_${plan.planId}`,
+              metadata: JSON.stringify({ source: "c2b_resolved", via: resolved.via, billRefNumber: acctRef, planId: plan.planId, planName: plan.name }),
+            } as any);
+            matchedPaymentId = String((created as any).id);
+            await pool.query(
+              `UPDATE payments SET plan_id = $2, service_id = $3, service_name = $4, email = $5 WHERE id = $1`,
+              [matchedPaymentId, plan.planId, `plan_${plan.planId}`, `${plan.name} Plan`, resolved.email],
+            ).catch(() => {});
+            console.log(`[c2b] payer resolved by ${resolved.via}, no open attempt → new ${plan.planId} payment ${matchedPaymentId}`);
+          } else {
+            // Not a plan price (e.g. a service) — keep as orphan but record who paid.
+            unresolvedPayer = resolved;
+          }
+        }
+      }
+    }
+
+    // Never guess by amount when we already know who paid.
+    if (!matchedPaymentId && !unresolvedPayer) {
       // Amount-window fallback. Only match when EXACTLY ONE candidate
       // exists — ambiguity means we leave it as orphan for admin.
       const { rows } = await pool.query(
@@ -225,6 +342,9 @@ async function tryMatchAndActivate(payload: SafaricomC2BPayload): Promise<void> 
       metadata: JSON.stringify({
         source:     "c2b_orphan",
         billRefNumber: acctRef,
+        // 2026-10: who paid, when we could tell (service purchases etc.).
+        resolvedUserId: unresolvedPayer?.userId ?? null,
+        resolvedVia:    unresolvedPayer?.via ?? null,
         firstName:  payload.FirstName ?? null,
         lastName:   payload.LastName  ?? null,
         transTime:  payload.TransTime ?? null,

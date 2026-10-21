@@ -1092,7 +1092,10 @@ export default function Payment() {
     toast({ title: `${label} copied`, description: text });
   };
 
-  const accountRef = paymentId ? paymentId.substring(0, 8).toUpperCase() : "CONSULT";
+  // 2026-10: the C2B matcher recognises the 8-char payment code and the
+  // customer's own email. Never show a generic word ("CONSULT" used to be the
+  // fallback and those payments could not be linked to anyone automatically).
+  const accountRef = paymentId ? paymentId.substring(0, 8).toUpperCase() : ((user as any)?.email || "your email address");
 
   const renderManualPaybillBox = () => {
     if (!showManualPaybill) return null;
