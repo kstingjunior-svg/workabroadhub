@@ -198,6 +198,13 @@ httpServer.listen(PORT, "0.0.0.0", () => {
     } catch (err: any) {
       console.error("[Server] ❌ Stuck-order sweep failed to start:", err?.message);
     }
+    // 2026-10: admin payment alerts for every verified payment (finance dashboard).
+    try {
+      const { startFinanceAlertSweep } = await import("./lib/finance-notify");
+      startFinanceAlertSweep();
+    } catch (err: any) {
+      console.error("[Server] ❌ Finance alert sweep failed to start:", err?.message);
+    }
     // 2026-10: Kenya Careers "Follow employer" vacancy alerts (one email per
     // follower per live vacancy; idempotent).
     try {
@@ -874,6 +881,11 @@ app.use((req, res, next) => {
       // 2026-09 (Tony's production-reliability audit): diagnostic +
       // one-click repair endpoints. GET reports every stuck-customer
       // category in one JSON; POST runs the existing reconcilers.
+      // 2026-10: service-level payment tracking, reconciliation & refunds.
+      import("./routes/finance-admin")
+        .then(({ registerFinanceAdminRoutes }) => registerFinanceAdminRoutes(app))
+        .catch((err) => console.error("[Server] finance-admin registration failed:", err?.message));
+
       import("./routes/payment-audit")
         .then(({ registerPaymentAuditRoutes }) => registerPaymentAuditRoutes(app))
         .catch((err) => console.error("[Server] payment-audit registration failed:", err?.message));

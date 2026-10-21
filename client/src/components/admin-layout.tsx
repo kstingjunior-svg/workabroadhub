@@ -66,6 +66,7 @@ const navItems = [
   { href: "/admin/revenue", label: "Revenue", icon: DollarSign },
   { href: "/admin/revenue-live", label: "Revenue Live 🔥", icon: DollarSign },
   { href: "/admin/users", label: "Users", icon: Users },
+  { href: "/admin/finance", label: "Finance & Reconciliation 💰", icon: CreditCard },
   { href: "/admin/payments", label: "Payments", icon: CreditCard },
   { href: "/admin/unmatched-payments", label: "Unmatched Payments", icon: Unlink },
   { href: "/admin/manual-upgrade", label: "Manual Upgrade 🛠️", icon: ShieldCheck },

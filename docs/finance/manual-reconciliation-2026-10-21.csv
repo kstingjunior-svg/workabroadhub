@@ -1,0 +1,58 @@
+category,payment_ref,date,amount_kes,purpose_claimed,customer,receipt_or_code,why_flagged,current_access,suggested_action
+unverified_receipt,eda9759c,2026-09-26,99,trial,evalyneton650@gmail.com,"712482722",not a receipt (phone number),expired 2026-09-27,write off (expired trial; no money proven)
+unverified_receipt,3d0886da,2026-09-11,99,trial,nyamburasarah626@gmail.com,UIBC66CGGK,before C2B feed (27 Sep) - check M-Pesa statement,expired 2026-09-12,check statement
+unverified_receipt,4fee02f1,2026-08-31,99,trial,rashkashukri40@gmail.com,UHVLA4L6ZH,before C2B feed - check statement,expired 2026-09-01,check statement
+unverified_receipt,73297812,2026-08-29,99,trial,rsmuriithi@gmail.com,UHTOR4UO6X,before C2B feed - check statement,expired 2026-08-31,check statement
+unverified_receipt,5a8a8f9d,2026-08-26,99,trial,suleimangalena2001@gmail.com,UHQO543WFA,before C2B feed - check statement,expired 2026-08-27,check statement
+unverified_receipt,9d6dd131,2026-08-14,4500,yearly (pro),jkanyingi572@gmail.com,UH6RO25V4C,before C2B feed - check statement,ACTIVE to 2027-08-14,PRIORITY: verify on M-Pesa statement
+unverified_receipt,dc113658,2026-08-13,99,trial,jkanyingi572@gmail.com,UHCRO2VHW2,before C2B feed - check statement,expired 2026-08-14,check statement
+unverified_receipt,179cbc59,2026-08-13,99,trial,phybitaxh8@gmail.com,UHDRN34MNQ,before C2B feed - check statement,expired 2026-08-15,check statement
+unverified_receipt,6d8c3d3e,2026-08-06,99,trial,michaelomondi328@gmail.com,UH7701SFR4,before C2B feed - check statement,expired 2026-08-08,check statement
+unverified_receipt,4abd0186,2026-08-04,99,trial,dkariukindegwa@gmail.com,DH44GSI1GU,before C2B feed - starts with D (unusual),expired 2026-08-06,check statement
+unverified_receipt,ed8df77e,2026-08-02,99,trial,eliaswafula1992@gmail.com,UH24022TDQ,before C2B feed - check statement,expired 2026-08-04,check statement
+unverified_receipt,f3137b85,2026-07-22,1000,monthly,mercycherono781@gmail.com,UGMERON49P,before C2B feed - check statement,expired 2026-09-20,check statement
+unverified_receipt,0503fd42,2026-07-18,99,trial,ghaloian17@gmail.com,UGIQPBMOQG,before C2B feed - check statement,expired 2026-07-20,check statement
+unverified_receipt,e60d4e98,2026-07-17,99,trial,otienoraila17@gmail.com,UGHKJB9YX8,before C2B feed - check statement,expired 2026-07-19,check statement
+unverified_receipt,5f1e7f93,2026-07-17,99,trial,ytrizer@gmail.com,UGHGUOOAQE,before C2B feed - check statement,expired 2026-07-19,check statement
+unverified_receipt,6392fb39,2026-07-16,99,trial,bryansomba07@gmail.com,UGGK3BDLX7,before C2B feed - check statement,expired 2026-07-18,check statement
+unverified_receipt,faba169e,2026-07-13,99,trial,(deleted account),UGDMYAW81K,before C2B feed - check statement,expired 2026-07-15,check statement
+unverified_receipt,48f94db3,2026-07-10,99,trial,badiasusan@gmail.com,"1783684978386",not a receipt (timestamp),expired 2026-07-12,write off
+unverified_receipt,03dea888,2026-07-09,99,trial,marionnduta58@gmail.com,UG9JYAUVRA,before C2B feed - check statement,expired 2026-07-11,check statement
+unverified_receipt,a61c5a16,2026-07-04,1000,monthly,karimijacobs11@gmail.com,UG48QAOG5Y,before C2B feed - check statement,expired 2026-09-02,check statement
+unverified_receipt,7b026b04,2026-07-04,4500,yearly (pro),roykarongo51@gmail.com,UG4KYADJX0,before C2B feed - check statement,ACTIVE to 2027-07-04,PRIORITY: verify on M-Pesa statement
+unverified_receipt,e71d1bfc,2026-07-02,99,trial,sue.ndiritu.sn@gmail.com,"1782987666275",not a receipt (timestamp),expired 2026-07-04,write off
+unverified_receipt,91b72580,2026-07-02,99,trial,francis951mburu@gmail.com,UG2MR9V8WQ,before C2B feed - check statement,expired 2026-07-03,check statement
+unverified_receipt,ea3aa91f,2026-07-01,99,trial,steve.nyambariga@gmail.com,"1782884902838",not a receipt (timestamp),expired 2026-07-03,write off
+unverified_receipt,3a71f233,2026-06-28,1000,monthly,evelynewafula81@gmail.com,UFSAC9GAYR,before C2B feed - check statement,expired 2026-07-28,check statement
+unverified_receipt,0b22d588,2026-06-22,99,trial,femikawiram@gmail.com,UFJD58G6TY,before C2B feed - check statement,expired 2026-06-24,check statement
+unverified_receipt,cd898beb,2026-06-21,99,trial,erickochieng451@gmail.com,UFLD793MCY,before C2B feed - check statement,expired 2026-06-22,check statement
+unverified_receipt,e1fdeea7,2026-06-21,99,trial,mutindasamuel123@gmail.com,UFLPG8DB19,before C2B feed - check statement,expired 2026-06-23,check statement
+unverified_receipt,ee9b3191,2026-06-21,99,trial,iddyusuf32@gmail.com,UFL2D8TL8A,before C2B feed - check statement,expired 2026-06-22,check statement
+unverified_receipt,33acb6a2,2026-06-21,99,trial,kulobamark@gmail.com,"UF9J8EMGN",not a receipt (9 chars),expired 2026-06-23,write off
+unverified_receipt,7b7d3db4,2026-06-19,99,trial,raelatieno1995@gmail.com,UFJR78D4YM,before C2B feed - check statement,expired 2026-06-21,check statement
+unverified_receipt,7e3e9326,2026-06-18,99,trial,wahugrace64@gmail.com,UF16T8DWGB,before C2B feed - check statement,expired 2026-06-20,check statement
+unverified_receipt,1c3a0073,2026-06-18,99,trial,amitainps@gmail.com,"UFII83FNX",not a receipt (9 chars),expired 2026-06-20,write off
+unverified_receipt,3dbffaaf,2026-06-18,99,trial,salimaisha095@gmail.com,"1781775687673",not a receipt (timestamp),expired 2026-06-20,write off
+unverified_receipt,2e998289,2026-06-17,99,trial,ebrabolicks@gmail.com,UFH3K8Q1P4,before C2B feed - check statement,expired 2026-06-19,check statement
+unverified_receipt,039d56fe,2026-06-17,99,trial,henryopis2@gmail.com,UFH608EA5C,before C2B feed - check statement,expired 2026-06-18,check statement
+unverified_receipt,36fe5d6e,2026-06-16,99,trial,elishamanyasa372@gmail.com,UFGOP82TAH,before C2B feed - check statement,expired 2026-06-18,check statement
+unverified_receipt,d9c7e311,2026-06-15,99,trial,edithwanjiku049@gmail.com,UFGH171MK8,before C2B feed - check statement,expired 2026-06-17,check statement
+unverified_receipt,07d4f8af,2026-06-15,99,trial,jeremmykimm@gmail.com,UFF967YDUX,before C2B feed - check statement,expired 2026-06-16,check statement
+unverified_receipt,6aa5857a,2026-06-15,99,trial,lewiswaithaka068@gmail.com,"UFFP57GMT8T",not a receipt (11 chars),expired 2026-06-16,write off
+unverified_receipt,23a4acc6,2026-06-15,1000,monthly,njorogegrace.gmn@gmail.com,UFF907NLOG,before C2B feed - check statement,expired 2026-08-14,check statement
+unverified_receipt,d3241ea5,2026-06-14,99,trial,gkevinmaina13@gmail.com,UFE2X7PTMF,before C2B feed - check statement,expired 2026-06-15,check statement
+unmatched_paybill,56e3c473,2026-10-19,99,,kevinindunga@gmail.com (by account ref),UJJDYAPUOD,KES 99 direct Paybill - emailed 21 Oct (CV Fix offer / refund),none,link when he replies
+unmatched_paybill,0a52f7e2,2026-10-14,99,,otienopholphine@gmail.com (by account ref),UJEC6AGEIU,emailed 21 Oct,none,link when she replies
+unmatched_paybill,fa5ce02b,2026-10-13,99,,natwoliphoebe@gmail.com (by account ref),UJDMB9JMYW,emailed 21 Oct,none,link when she replies
+unmatched_paybill,01a72d2a,2026-10-11,99,,lodricknganga3@gmail.com (by account ref),UJB6F9NSJH,emailed 21 Oct,none,link when he replies
+unmatched_paybill,d19ab758,2026-10-05,20,,mulaanthonyke@gmail.com (Tony test),UJ6D08TQZ8,GariHire test payment,none,mark test
+unmatched_paybill,3a55df72,2026-10-05,100,,kipngetich2022@gmail.com (by account ref),UJ5D48YCG5,stray KES 100 (customer has Monthly),active monthly,ask customer / refund
+unmatched_paybill,8baf3cbd,2026-10-03,99,,BRIAN (unidentified),UJ3PU8FB90,account ref "consult",none,wait for customer contact
+unmatched_paybill,a4304962,2026-10-03,10,,rashkashukri40@gmail.com,UJ3LA8IM0W,partial payment before full Monthly,active monthly,refund KES 760 total (with next row)
+unmatched_paybill,0378fbf8,2026-10-03,750,,rashkashukri40@gmail.com,UJ3LA8IEUS,partial payment before full Monthly,active monthly,refund KES 760 total
+unmatched_paybill,09fa71e2,2026-10-03,99,,salrazak71.si@gmail.com (by phone hash),UJ30K9EBXR,emailed 21 Oct,none,link when he replies
+unmatched_paybill,2b22f1bf,2026-09-29,99,,pwanyoike1234@gmail.com (by phone hash),UITFP85LEC,emailed 21 Oct,none,link when he replies
+unmatched_paybill,9b9b30f6,2026-09-28,99,,jarubohero001@gmail.com (by account ref),UISMO7L5ZV,emailed 21 Oct,none,link when he replies
+unmatched_paybill,2a6fd40c,2026-09-27,3,,Doughlas (test),UIRQS8BD21,"Test3" test payment,none,mark test
+unmatched_paybill,5994a478,2026-09-15,99,,(no payer data),UIGQS6XIBI,no account ref / name,none,check M-Pesa statement
+unmatched_paybill,c6943596,2026-08-02,99,,(no payer data),UH2OI1WI1A,no account ref / name,none,check M-Pesa statement

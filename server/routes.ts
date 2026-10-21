@@ -8365,60 +8365,32 @@ Crawl-delay: 1`);
 
       const { receipt, planId, phone } = parsed.data;
 
-      // Check if receipt already used
-      const existing = await storage.getMpesaTransactionByReceipt(receipt);
-      if (existing) {
-        return res.status(409).json({ message: "This M-Pesa receipt has already been used." });
-      }
-
-      // Check if user already has an active subscription
+      // 2026-10 SECURITY: a typed receipt only unlocks access if Safaricom
+      // itself recorded that transaction (see server/lib/receipt-claims.ts).
       const currentSub = await storage.getUserSubscription(userId);
       if (currentSub?.status === "active" && (currentSub.plan === "pro" || currentSub.plan === planId)) {
         return res.status(409).json({ message: "You already have an active subscription." });
       }
-
-      // Fetch real price from DB — reject if plan not configured
       const resolvedManual = await resolveCanonicalPlanPrice(planId);
       if (!resolvedManual) return res.status(400).json({ message: `Plan "${planId}" is not configured.` });
       const planAmount = resolvedManual.finalPrice;
 
-      // Record the M-Pesa transaction as "manual_verified"
-      await storage.createMpesaTransaction({
-        phone: normalizePhone(phone, "KE") ?? phone,
-        amount: planAmount,
-        mpesaReceipt: receipt,
-        transactionDate: new Date(),
-        status: "manual_verified",
-      });
-
-      // Create a payment record so admin can audit it
-      const newPayment = await storage.createPayment({
-        userId,
-        amount: planAmount,
-        baseAmount: resolvedManual.basePrice,
-        discountType: resolvedManual.discountType,
-        currency: "KES",
-        method: "mpesa",
-        status: "success",
-        transactionRef: receipt,
-        serviceId: `plan_${planId}`,
-        metadata: JSON.stringify({ source: "manual_receipt_verification", phone, receipt, planId }),
-      });
-
-      // Activate the plan via storage directly (no circular import)
-      const oneYear = planExpiry(planId);
-      await storage.activateUserPlan(userId, planId, newPayment.id, oneYear);
-
-      // Notify user
-      storage.createUserNotification({
-        userId,
-        type: "success",
-        title: `${planId === "pro" ? "Pro" : "Basic"} Plan Activated!`,
-        message: `Your ${planId === "pro" ? "Pro" : "Basic"} plan is now active. M-Pesa Receipt: ${receipt}.`,
-      }).catch((err) => reportRejection(err, 'routes'));
-
-      console.log(`[M-Pesa][ManualVerify] Plan ${planId} activated for user ${userId} via receipt ${receipt}`);
-      res.json({ success: true, plan: planId, message: `Your ${planId === "pro" ? "Pro" : "Basic"} plan has been activated!` });
+      const { claimReceipt } = await import("./lib/receipt-claims");
+      const claim = await claimReceipt({ userId, receipt, planId, amount: planAmount, phone });
+      if (claim.status === "rejected") return res.status(claim.httpStatus).json({ message: claim.message });
+      if (claim.status === "pending_review") {
+        return res.status(202).json({ success: false, pendingReview: true, message: claim.message, paymentId: claim.paymentId });
+      }
+      if (claim.status === "activated") {
+        await storage.activateUserPlan(userId, planId, claim.paymentId, planExpiry(planId));
+        storage.createUserNotification({
+          userId, type: "success", title: "Plan activated",
+          message: `Your payment was confirmed with Safaricom (M-Pesa ${String(receipt).toUpperCase()}). Your plan is now active.`,
+        }).catch((err) => reportRejection(err, 'routes'));
+        import("./lib/finance-notify").then((m) => m.alertVerifiedPayment(claim.paymentId)).catch(() => {});
+      }
+      console.log(`[M-Pesa][ReceiptClaim] user=${userId} plan=${planId} result=${claim.status} payment=${claim.paymentId}`);
+      res.json({ success: true, plan: planId, message: claim.status === "already_active" ? "This payment is already applied to your account." : "Payment confirmed with Safaricom — your plan is active!" });
     } catch (error: any) {
       console.error("Receipt verification error:", error);
       res.status(500).json({ message: "Verification failed. Please contact support." });
@@ -8456,6 +8428,27 @@ Crawl-delay: 1`);
 
       // Resolve target user
       const callerUser = await storage.getUserById(callerId);
+
+      // 2026-10 SECURITY: customers can no longer self-activate with a typed
+      // receipt. Non-admins go through the Safaricom-verified claim flow.
+      if (!callerUser?.isAdmin) {
+        const resolvedSelf = await resolveCanonicalPlanPrice(planId);
+        if (!resolvedSelf) return res.status(400).json({ message: `Plan "${planId}" is not configured.` });
+        const { claimReceipt } = await import("./lib/receipt-claims");
+        const claim = await claimReceipt({ userId: callerId, receipt, planId, amount: resolvedSelf.finalPrice, phone: phone ?? null });
+        if (claim.status === "rejected") return res.status(claim.httpStatus).json({ message: claim.message });
+        if (claim.status === "pending_review") return res.status(202).json({ success: false, pendingReview: true, message: claim.message });
+        if (claim.status === "activated") {
+          await storage.activateUserPlan(callerId, planId, claim.paymentId, planExpiry(planId));
+          import("./lib/finance-notify").then((m) => m.alertVerifiedPayment(claim.paymentId)).catch(() => {});
+        }
+        return res.json({ success: true, plan: planId, message: claim.status === "already_active" ? "Plan already active." : "Payment confirmed with Safaricom — your plan is active!" });
+      }
+      // Admin path below: audited override.
+      pool.query(
+        `INSERT INTO finance_audit_log (entity, entity_id, action, actor_id, note, after) VALUES ('payment', $1, 'admin_payment_success_override', $2, 'Admin activated plan via /api/payment-success', $3)`,
+        [String(receipt), callerId, JSON.stringify({ planId, targetUserId: targetUserId ?? null })],
+      ).catch(() => {});
       let userId = callerId;
       if (targetUserId && targetUserId !== callerId) {
         if (!callerUser?.isAdmin) return res.status(403).json({ message: "Only admins can activate other users' plans" });

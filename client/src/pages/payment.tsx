@@ -755,6 +755,12 @@ export default function Payment() {
       return res.json();
     },
     onSuccess: (data: any) => {
+      // 2026-10: receipts are now checked against Safaricom's own record.
+      // If it hasn't arrived yet the server queues it (202) — no access yet.
+      if (data?.pendingReview) {
+        toast({ title: "Payment code received", description: data?.message || "We'll activate your plan as soon as Safaricom confirms it." });
+        return;
+      }
       const plan = data?.plan || urlPlanId || null;
       if (plan) setActivatedPlanId(plan);
       setReceiptVerified(true);

@@ -33,13 +33,6 @@ import { pool } from "../db";
 import { storage } from "../storage";
 import { safaricomIpGuard } from "../middleware/safaricomIpGuard";
 
-// 2026-10: exact plan prices that a direct Paybill payment can activate once
-// we know who paid. Keep in sync with the live plans (Monthly KES 1,000,
-// Yearly KES 4,500). The withdrawn KES 99 trial is deliberately NOT here.
-const PLAN_BY_PRICE: Record<number, { planId: string; name: string }> = {
-  1000: { planId: "monthly", name: "Monthly Access" },
-  4500: { planId: "pro",     name: "Yearly Access" },
-};
 
 /**
  * Identify who made a direct Paybill (C2B) payment.
@@ -198,13 +191,32 @@ async function tryMatchAndActivate(payload: SafaricomC2BPayload): Promise<void> 
       );
       if (rows.length > 0) matchedPaymentId = String(rows[0].id);
     }
+    // (a1) 2026-10: a customer already submitted this exact receipt and it
+    //      was queued for verification — Safaricom's confirmation now proves it.
+    if (!matchedPaymentId) {
+      const { rows } = await pool.query(
+        `SELECT id FROM payments
+          WHERE status = 'pending_manual_verification'
+            AND fin_norm_receipt(transaction_ref) = fin_norm_receipt($1)
+            AND amount = $2
+          ORDER BY created_at DESC LIMIT 1`,
+        [receipt, amountKes],
+      );
+      if (rows.length) {
+        matchedPaymentId = String(rows[0].id);
+        console.log(`[c2b] confirmed a queued receipt claim → paymentId=${matchedPaymentId}`);
+      }
+    }
+
     // (a2) 2026-10: the payment page shows the first 8 characters of the
     //      payment id (upper-cased) as the Paybill account number. Match a
     //      recent unpaid attempt whose id starts with it.
-    if (!matchedPaymentId && /^[0-9a-f]{8}$/i.test(acctRef)) {
+    //      Safaricom also truncates our STK AccountReference (the payment id)
+    //      to 12 chars, e.g. "9d63f035-d9d" — accept that form too.
+    if (!matchedPaymentId && /^[0-9a-f]{8}(-[0-9a-f]{1,3})?$/i.test(acctRef)) {
       const { rows } = await pool.query(
         `SELECT id FROM payments
-          WHERE LOWER(LEFT(id::text, 8)) = LOWER($1)
+          WHERE LOWER(LEFT(id::text, length($1))) = LOWER($1)
             AND status NOT IN ('success', 'completed')
             AND created_at > NOW() - INTERVAL '72 hours'
           ORDER BY created_at DESC LIMIT 2`,
@@ -235,23 +247,10 @@ async function tryMatchAndActivate(payload: SafaricomC2BPayload): Promise<void> 
           matchedPaymentId = String(attempt[0].id);
           console.log(`[c2b] payer resolved by ${resolved.via} → own attempt paymentId=${matchedPaymentId}`);
         } else {
-          const plan = PLAN_BY_PRICE[amountKes];
-          if (plan) {
-            const created = await storage.createPayment({
-              userId: resolved.userId, amount: amountKes, currency: "KES", method: "mpesa",
-              status: "pending", planId: plan.planId, serviceId: `plan_${plan.planId}`,
-              metadata: JSON.stringify({ source: "c2b_resolved", via: resolved.via, billRefNumber: acctRef, planId: plan.planId, planName: plan.name }),
-            } as any);
-            matchedPaymentId = String((created as any).id);
-            await pool.query(
-              `UPDATE payments SET plan_id = $2, service_id = $3, service_name = $4, email = $5 WHERE id = $1`,
-              [matchedPaymentId, plan.planId, `plan_${plan.planId}`, `${plan.name} Plan`, resolved.email],
-            ).catch(() => {});
-            console.log(`[c2b] payer resolved by ${resolved.via}, no open attempt → new ${plan.planId} payment ${matchedPaymentId}`);
-          } else {
-            // Not a plan price (e.g. a service) — keep as orphan but record who paid.
-            unresolvedPayer = resolved;
-          }
+          // 2026-10 (finance rule): never decide WHAT was bought from the
+          // amount. We know who paid but not for what → unmatched queue with
+          // the payer attached so an admin can link it in one click.
+          unresolvedPayer = resolved;
         }
       }
     }
@@ -260,15 +259,24 @@ async function tryMatchAndActivate(payload: SafaricomC2BPayload): Promise<void> 
     if (!matchedPaymentId && !unresolvedPayer) {
       // Amount-window fallback. Only match when EXACTLY ONE candidate
       // exists — ambiguity means we leave it as orphan for admin.
+      // 2026-10 (finance rule: never rely on the amount alone): the pending
+      // order must ALSO have been started from the same phone Safaricom
+      // reports (hashed MSISDN, or plain digits on older payloads).
       const { rows } = await pool.query(
         `SELECT id, created_at, checkout_request_id
            FROM payments
           WHERE amount = $1
             AND status IN ('pending', 'pending_manual_verification')
             AND created_at > NOW() - INTERVAL '5 minutes'
+            AND coalesce(phone, fin_meta(metadata)->>'phone', '') <> ''
+            AND (
+              encode(extensions.digest('254' || right(regexp_replace(coalesce(phone, fin_meta(metadata)->>'phone'), '\\D', '', 'g'), 9), 'sha256'), 'hex') = lower($2)
+              OR ($2 !~ '^[0-9a-fA-F]{64}$' AND right(regexp_replace(coalesce(phone, fin_meta(metadata)->>'phone'), '\\D', '', 'g'), 9) = right(regexp_replace($2, '\\D', '', 'g'), 9))
+              OR lower(coalesce(phone, '')) = lower($2)
+            )
           ORDER BY created_at DESC
           LIMIT 2`,
-        [amountKes],
+        [amountKes, phone],
       );
       if (rows.length === 1) {
         matchedPaymentId = String(rows[0].id);

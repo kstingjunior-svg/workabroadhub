@@ -227,6 +227,7 @@ const AdminMpesaHealth = lazyWithRetry(() => import("@/pages/admin/mpesa-health"
 // 2026-06: one-click cleanup for users wrongly cross-granted access by a
 // service payment (CV Fix Lite etc.). See server route comment for backstory.
 const AdminPlanRecovery = lazyWithRetry(() => import("@/pages/admin/plan-recovery"));
+const AdminFinance = lazyWithRetry(() => import("@/pages/admin/finance"));
 const JourneyPage = lazyWithRetry(() => import("@/pages/journey"));
 const SalaryPage = lazyWithRetry(() => import("@/pages/salary"));
 const InterviewPage = lazyWithRetry(() => import("@/pages/interview"));
@@ -551,6 +552,7 @@ const LazyAdminManualUpgrade = withSuspense(AdminManualUpgrade);
 const LazyAdminEmailHealth = withSuspense(AdminEmailHealth);
 const LazyAdminMpesaHealth = withSuspense(AdminMpesaHealth);
 const LazyAdminPlanRecovery = withSuspense(AdminPlanRecovery);
+const LazyAdminFinance = withSuspense(AdminFinance);
 const LazyJourneyPage = withSuspense(JourneyPage);
 const LazySalaryPage = withSuspense(SalaryPage);
 const LazyInterviewPage = withSuspense(InterviewPage);
@@ -746,6 +748,7 @@ function AuthenticatedRoutes() {
       <Route path="/admin/email-health" component={LazyAdminEmailHealth} />
       <Route path="/admin/mpesa-health" component={LazyAdminMpesaHealth} />
       <Route path="/admin/plan-recovery" component={LazyAdminPlanRecovery} />
+      <Route path="/admin/finance" component={LazyAdminFinance} />
       <Route path="/journey/:country" component={LazyJourneyPage} />
       <Route path="/journey" component={LazyJourneyPage} />
       <Route path="/salary" component={LazySalaryPage} />
