@@ -189,7 +189,10 @@ export async function sendEmailVerificationCode(
     // and removed the numeric code from the subject line (Gmail flags subjects
     // that look like OTPs from new senders). Personal name in subject +
     // simple ask reads as a real conversation.
-    subject: `Your sign-in code from Tony`,
+    // 2026-10: "from Tony" confused users who don't know Tony (looked like
+    // phishing at the sign-in step). Brand name instead — still no digits
+    // and no "verification", which were the actual spam triggers.
+    subject: `Your WorkAbroad Hub sign-in code`,
     html,
     text,
     replyTo: "support@workabroadhub.tech",
