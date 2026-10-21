@@ -185,62 +185,65 @@ export async function syncSubscriptionToSupabase(opts: {
   }
 }
 
+/**
+ * 2026-10 FIX (Pro-for-a-year leak): this used to write plan "pro" with a
+ * hard-coded 360-day expiry for EVERY plan purchase — so KES 1,000 Monthly
+ * buyers got Pro-gated features until next year, and the row outlived
+ * expired subscriptions. It now mirrors the customer's REAL active
+ * subscription (plan + end date) from user_subscriptions. If there is no
+ * active local subscription, nothing is granted.
+ *
+ * Callers fire this right after activating a plan; if the local row isn't
+ * committed yet we retry once shortly after.
+ */
 export async function upgradeUserToPro(user_id: string): Promise<void> {
-  try {
-    console.log("🚀 Upgrading user to PRO:", user_id);
-
+  const attempt = async (): Promise<boolean> => {
     const client = getClient();
-    if (!client) {
-      console.warn("[Supabase] No key configured — skipping PRO upgrade sync.");
-      return;
-    }
-
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 360);
-
+    if (!client) return true;
+    const { pool } = await import("./db");
+    const { rows: [sub] } = await pool.query(
+      `SELECT plan, end_date FROM user_subscriptions
+        WHERE user_id::text = $1 AND status = 'active' AND (end_date IS NULL OR end_date > now())
+        ORDER BY end_date DESC NULLS FIRST LIMIT 1`,
+      [String(user_id)],
+    );
+    if (!sub) return false;
+    const expires = sub.end_date ? new Date(sub.end_date) : (() => { const d = new Date(); d.setDate(d.getDate() + 30); return d; })();
     await syncSubscriptionToSupabase({
-      user_id,
-      plan_id:    "pro",
-      provider:   "direct",
-      status:     "active",
-      auto_renew: false,
-      expires_at: expiresAt,
+      user_id: String(user_id), plan_id: String(sub.plan), provider: "direct",
+      status: "active", auto_renew: false, expires_at: expires,
     });
-
-    await client.from("user_events").insert([
-      {
-        user_id: String(user_id),
-        event: "payment_success",
-        page: "payment",
-      },
-    ]);
+    await client.from("user_events").insert([{ user_id: String(user_id), event: "payment_success", page: "payment" }]);
+    return true;
+  };
+  try {
+    if (!(await attempt())) {
+      setTimeout(() => { attempt().catch((e) => console.error("[Supabase] mirror retry failed:", e?.message)); }, 20_000);
+    }
   } catch (err) {
-    console.error("🔥 Upgrade crash:", err);
+    console.error("🔥 Upgrade mirror crash:", err);
   }
 }
 
-/** Check whether a user currently has an active, non-expired PRO subscription in Supabase. */
+/**
+ * Is this user entitled to paid ("Pro") features right now?
+ * 2026-10 FIX: decided from the AUTHORITATIVE local subscription record
+ * (storage.getUserPlan — checks end dates and auto-expires), not from the
+ * Supabase mirror, which had 360-day rows for Monthly buyers and rows that
+ * outlived expired plans. Any active paid plan counts (same set as
+ * requireAnyPaidPlan); admins always pass.
+ */
 export async function isUserPro(user_id: string | number): Promise<boolean> {
   try {
-    const client = getClient();
-    if (!client) return false;
-
-    const { data, error } = await client
-      .from("subscriptions")
-      .select("*")
-      .eq("user_id", String(user_id))
-      .single();
-
-    if (error || !data) return false;
-
-    const now = new Date();
-    const expiry = new Date(data.expires_at);
-
-    if (data.status === "active" && expiry > now) return true;
-
-    return false;
+    const { pool } = await import("./db");
+    const { rows: [u] } = await pool.query(`SELECT is_admin, role FROM users WHERE id::text = $1`, [String(user_id)]);
+    if (!u) return false;
+    if (u.is_admin === true || ["ADMIN", "SUPER_ADMIN", "admin"].includes(String(u.role ?? ""))) return true;
+    const { storage } = await import("./storage");
+    const plan = await storage.getUserPlan(String(user_id));
+    return ["trial", "basic", "monthly", "yearly", "pro", "pro_referral"].includes(plan);
   } catch (err) {
-    console.error("[Supabase] PRO check error:", err);
+    console.error("[isUserPro] check error:", err);
     return false;
   }
 }
