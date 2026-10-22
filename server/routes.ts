@@ -277,14 +277,9 @@ const createJobLinkSchema = z.object({
 });
 
 const updateProfileSchema = z.object({
-  // Must be Kenya E.164 without "+": 254 followed by exactly 9 digits (12 total).
-  // Empty string treated as null (remove phone). All other formats rejected.
-  phone: z.string()
-    .refine(
-      (v) => !v || /^254\d{9}$/.test(v),
-      { message: "Phone must be a Kenya number: 254 followed by 9 digits (e.g. 254712345678)" }
-    )
-    .optional(),
+  // 2026-10 (Tony): any valid international number (customers relocate and
+  // get local numbers). Parsed/validated in the handler by parseIntlPhone().
+  phone: z.string().max(32).optional(),
   country: z.string().optional(),
   consentAccepted: z.boolean().optional(),
 });
@@ -1944,15 +1939,52 @@ Crawl-delay: 1`);
         return res.status(400).json({ message: "Invalid request data", errors: parsed.error.errors });
       }
 
-      // Normalize phone and auto-detect country if the caller didn't supply one
-      const profileData = { ...parsed.data };
+      // 2026-10 (Tony: relocated customers must be able to switch to their new
+      // country's number). Accept any valid international number; Kenya stays
+      // the default for local formats (07…). Phone is also a sign-in
+      // identifier, so a number already on another account is refused.
+      const profileData: any = { ...parsed.data };
       if (profileData.phone) {
-        const { phone: normPhone, country: detectedCountry } = normalizePhoneAuto(profileData.phone);
-        profileData.phone    = normPhone ?? profileData.phone;
-        profileData.country  = profileData.country ?? detectedCountry ?? "KE";
+        const { parseIntlPhone } = await import("@shared/intl-phone");
+        const pp = parseIntlPhone(profileData.phone, "KE");
+        if (!pp.ok) return res.status(400).json({ message: pp.error, field: "phone" });
+        const ph = pp.value;
+        const { rows: clash } = await pool.query(
+          `SELECT 1 FROM users
+            WHERE id::text <> $1 AND deleted_at IS NULL AND coalesce(phone,'') <> ''
+              AND (regexp_replace(phone, '[^0-9]', '', 'g') = $2
+                   OR right(regexp_replace(phone, '[^0-9]', '', 'g'), 9) = right($2, 9))
+            LIMIT 1`,
+          [String(userId), ph.digits],
+        );
+        if (clash.length) {
+          return res.status(409).json({ message: "That number is already linked to another WorkAbroad Hub account. If it's yours, contact support@workabroadhub.tech.", field: "phone" });
+        }
+        const { rows: [cur] } = await pool.query(`SELECT phone FROM users WHERE id::text = $1`, [String(userId)]);
+        const changed = String(cur?.phone ?? "").replace(/\D/g, "") !== ph.digits;
+        await pool.query(
+          `UPDATE users SET phone = $2, phone_number_e164 = $3, country_iso = coalesce($4, country_iso),
+                  dial_code = nullif($5, ''), national_number = $6,
+                  phone_verified = CASE WHEN $7 THEN false ELSE phone_verified END,
+                  phone_verified_at = CASE WHEN $7 THEN NULL ELSE phone_verified_at END,
+                  updated_at = NOW()
+            WHERE id::text = $1`,
+          [String(userId), ph.digits, ph.e164, ph.iso, ph.dialCode, ph.national, changed],
+        );
+        if (changed) {
+          console.log(`[profile] phone changed user=${userId} country=${ph.iso ?? "?"} (was ${String(cur?.phone ?? "").slice(0, 4)}…)`);
+          pool.query(
+            `INSERT INTO auth_login_events (event, user_id, identifier_kind, ip) VALUES ('phone_changed', $1, $2, $3)`,
+            [String(userId), `phone:${ph.iso ?? "intl"}`, String(req.ip ?? "")],
+          ).catch(() => {});
+        }
+        delete profileData.phone;
+        if (!profileData.country && ph.iso) profileData.country = ph.iso;
       }
 
-      const updatedUser = await storage.updateUserProfile(userId, profileData);
+      const updatedUser = Object.keys(profileData).length
+        ? await storage.updateUserProfile(userId, profileData)
+        : await storage.getUserById(userId);
       if (!updatedUser) {
         return res.status(404).json({ message: "User not found" });
       }

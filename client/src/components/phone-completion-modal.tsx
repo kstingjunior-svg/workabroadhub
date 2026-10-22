@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Phone, ShieldCheck, AlertCircle, LogOut } from "lucide-react";
+import { DIAL_COUNTRIES, parseIntlPhone } from "@shared/intl-phone";
 
 // E.164 without "+", per country
 const KENYA_RE = /^254\d{9}$/;
@@ -18,8 +19,9 @@ const SA_RE    = /^27\d{9}$/;
 // 2026-07: South Africa (+27) added alongside Kenya so SA users can complete
 // signup. Each country carries the flag, prefix, subscriber-length and the
 // regex the submit handler validates against.
-type CountryKey = "KE" | "ZA";
-const COUNTRIES: Record<CountryKey, {
+// 2026-10: "INTL" = any other country (customers who have relocated).
+type CountryKey = "KE" | "ZA" | "INTL";
+const COUNTRIES: Record<"KE" | "ZA", {
   flag: string;
   prefix: string;
   name: string;
@@ -49,9 +51,13 @@ export function PhoneCompletionModal() {
   const { user, isLoading: authLoading, logout } = useAuth();
   const [location] = useLocation();
   const [country, setCountry] = useState<CountryKey>("KE");
+  const [intlIso, setIntlIso] = useState("AE");
   const [subscriber, setSubscriber] = useState(""); // digits after the country prefix
   const [error, setError] = useState("");
-  const c = COUNTRIES[country];
+  const intl = DIAL_COUNTRIES.find((d) => d.iso === intlIso) ?? DIAL_COUNTRIES[1];
+  const c = country === "INTL"
+    ? { flag: intl.flag, prefix: intl.code, name: intl.name, subscriberLength: intl.max, regex: /^\d+$/, placeholder: "number" }
+    : COUNTRIES[country];
 
   const { data: profile, isLoading: profileLoading } = useQuery<{ phone?: string | null }>({
     queryKey: ["/api/profile"],
@@ -107,7 +113,7 @@ export function PhoneCompletionModal() {
   /** digits after stripping the country prefix / leading 0 */
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     setError("");
-    const raw = e.target.value.replace(/[^\d]/g, "").slice(0, c.subscriberLength);
+    const raw = e.target.value.replace(/[^\d]/g, "").replace(country === "INTL" ? /^0+/ : /$^/, "").slice(0, c.subscriberLength);
     setSubscriber(raw);
   }
 
@@ -121,6 +127,12 @@ export function PhoneCompletionModal() {
     e.preventDefault();
     setError("");
 
+    if (country === "INTL") {
+      const r = parseIntlPhone(`+${intl.code}${subscriber}`);
+      if (!r.ok) { setError(r.error); return; }
+      saveMutation.mutate(r.value.e164);
+      return;
+    }
     const stored = c.prefix + subscriber;
     if (!c.regex.test(stored)) {
       setError(
@@ -132,7 +144,7 @@ export function PhoneCompletionModal() {
     saveMutation.mutate(stored);
   }
 
-  const isFull = subscriber.length === c.subscriberLength;
+  const isFull = country === "INTL" ? subscriber.length >= intl.min : subscriber.length === c.subscriberLength;
 
   return (
     <Dialog open={true} onOpenChange={() => {}}>
@@ -158,9 +170,9 @@ export function PhoneCompletionModal() {
           {/* Country picker — Kenya default, South Africa also supported */}
           <div className="space-y-1.5">
             <Label className="font-semibold">Country</Label>
-            <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Country">
-              {(Object.keys(COUNTRIES) as CountryKey[]).map((k) => {
-                const opt = COUNTRIES[k];
+            <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Country">
+              {(["KE", "ZA", "INTL"] as CountryKey[]).map((k) => {
+                const opt = k === "INTL" ? { flag: "🌍", name: "Other", prefix: "" } : COUNTRIES[k];
                 const active = country === k;
                 return (
                   <button
@@ -178,12 +190,24 @@ export function PhoneCompletionModal() {
                   >
                     <span aria-hidden="true">{opt.flag}</span>
                     <span>{opt.name}</span>
-                    <span className="font-mono text-xs text-muted-foreground">+{opt.prefix}</span>
+                    {opt.prefix && <span className="font-mono text-xs text-muted-foreground">+{opt.prefix}</span>}
                   </button>
                 );
               })}
             </div>
           </div>
+
+          {country === "INTL" && (
+            <div className="space-y-1.5">
+              <Label htmlFor="intl-country" className="font-semibold">Which country is your number from?</Label>
+              <select id="intl-country" value={intlIso} onChange={(e) => { setIntlIso(e.target.value); setSubscriber(""); setError(""); }}
+                className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm" data-testid="select-intl-country">
+                {DIAL_COUNTRIES.filter((d) => d.iso !== "KE" && d.iso !== "ZA").map((d) => (
+                  <option key={d.iso} value={d.iso}>{d.flag} {d.name} (+{d.code})</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div className="space-y-1.5">
             <Label htmlFor="phone-input" className="font-semibold">
@@ -234,7 +258,7 @@ export function PhoneCompletionModal() {
 
             <p className="text-xs text-muted-foreground">
               e.g. <span className="font-mono">+{c.prefix} {c.placeholder}</span>
-              {country === "ZA" && (
+              {country !== "KE" && (
                 <> — payments go through Kenyan M-Pesa; a family or friend's number works.</>
               )}
             </p>

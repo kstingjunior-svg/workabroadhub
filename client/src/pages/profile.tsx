@@ -1,5 +1,16 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { formatPhone } from "@/lib/phone";
+import { parseIntlPhone, DIAL_COUNTRIES } from "@shared/intl-phone";
+
+/** Keep a leading "+" (international); otherwise digits only. */
+function formatAnyPhone(v: string): string {
+  const plus = v.trim().startsWith("+") || v.trim().startsWith("00");
+  const d = v.replace(/[^\d]/g, "").replace(/^00/, "").slice(0, 15);
+  return plus ? `+${d}` : d.slice(0, 12);
+}
+async function csrfHeader(): Promise<Record<string, string>> {
+  const t = await fetchCsrfToken().catch(() => null);
+  return t ? { "X-CSRF-Token": t } : {};
+}
 import { useAuth } from "@/hooks/use-auth";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -33,7 +44,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { Link } from "wouter";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { apiRequest, fetchCsrfToken, getQueryFn } from "@/lib/queryClient";
 import type { User as UserType } from "@shared/models/auth";
 import type { UserSubscription } from "@shared/schema";
@@ -429,6 +440,13 @@ export default function Profile() {
   const { data: profile, isLoading } = useQuery<UserType>({
     queryKey: ["/api/profile"],
   });
+  const phonePreview = useMemo(() => {
+    if (!phone || phone === (profile as any)?.phone) return null;
+    const r = parseIntlPhone(phone, "KE");
+    if (!r.ok) return { ok: false, label: r.error };
+    const c = DIAL_COUNTRIES.find((x) => x.iso === r.value.iso);
+    return { ok: true, label: `${c ? `${c.flag} ${c.name} · ` : ""}${r.value.e164}` };
+  }, [phone, profile]);
 
   const { data: subscription, isLoading: isLoadingSub } = useQuery<UserSubscription | null>({
     queryKey: ["/api/subscription"],
@@ -440,15 +458,21 @@ export default function Profile() {
 
   useEffect(() => {
     if (profile) {
-      setPhone(profile.phone || "");
+      setPhone(profile.phone ? (String(profile.phone).startsWith("254") ? profile.phone : `+${profile.phone}`) : "");
       setCountry(profile.country || "");
     }
   }, [profile]);
 
   const updateMutation = useMutation({
     mutationFn: async (data: { phone?: string; country?: string }) => {
-      const response = await apiRequest("PATCH", "/api/profile", data);
-      return response.json();
+      const response = await fetch("/api/profile", {
+        method: "PATCH", credentials: "include",
+        headers: { "Content-Type": "application/json", ...(await csrfHeader()) },
+        body: JSON.stringify(data),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body?.message || "Failed to update profile.");
+      return body;
     },
     onSuccess: () => {
       toast({ title: "Profile Updated", description: "Your profile has been updated successfully." });
@@ -544,13 +568,20 @@ export default function Profile() {
                     <Input
                       id="phone"
                       type="tel"
-                      placeholder="07XXXXXXXX or 254XXXXXXXXX"
+                      inputMode="tel"
+                      placeholder="07XX XXX XXX or +965 6566 2953"
                       value={phone}
-                      onChange={(e) => setPhone(formatPhone(e.target.value))}
+                      onChange={(e) => setPhone(formatAnyPhone(e.target.value))}
                       data-testid="input-phone"
                     />
+                    {phonePreview && (
+                      <p className={`text-xs ${phonePreview.ok ? "text-emerald-700" : "text-rose-600"}`} data-testid="text-phone-preview">
+                        {phonePreview.ok ? `✓ ${phonePreview.label}` : phonePreview.label}
+                      </p>
+                    )}
                     <p className="text-xs text-muted-foreground">
-                      Type 07XXXXXXXX — auto-formats to 254XXXXXXXXX.
+                      Moved abroad? Enter your new number with + and the country code (e.g. +971, +974, +965, +44).
+                      Kenyan numbers can be typed as 07XX XXX XXX. You can sign in with your new number after saving.
                     </p>
                   </div>
 
@@ -574,7 +605,10 @@ export default function Profile() {
                   </div>
 
                   <Button
-                    onClick={() => updateMutation.mutate({ phone, country })}
+                    onClick={() => {
+                      const r = phone ? parseIntlPhone(phone, "KE") : null;
+                      updateMutation.mutate({ phone: r && r.ok ? r.value.e164 : phone, country: r && r.ok && r.value.iso && (!country || country === profile?.country) ? r.value.iso : country });
+                    }}
                     disabled={updateMutation.isPending}
                     className="w-full sm:w-auto touch-target-min"
                     data-testid="button-save"
