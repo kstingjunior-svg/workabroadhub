@@ -19881,14 +19881,38 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
         return res.json([]);
       }
 
-      const agencies = await storage.getNeaAgencies(query);
+      // 2026-11 PERF FIX: this ran 3 sequential DB lookups PER matching
+      // agency (blacklist, score, fraud flags). A 2-letter query matched
+      // hundreds of agencies → thousands of queries per keystroke → 3–60 s
+      // responses and 502 timeouts. Now: cap to the 40 best matches (exact /
+      // prefix first) and fetch the extras in 3 batched queries.
+      const qLower = query.toLowerCase();
+      const agencies = (await storage.getNeaAgencies(query))
+        .map((a: any) => {
+          const name = String(a.agencyName ?? "").toLowerCase();
+          const lic = String(a.licenseNumber ?? "").toLowerCase();
+          const rank = (lic === qLower || name === qLower) ? 0 : (name.startsWith(qLower) || lic.startsWith(qLower)) ? 1
+            : name.split(/\s+/).some((w: string) => w.startsWith(qLower)) ? 2 : 3;
+          return { a, rank };
+        })
+        .sort((x: any, y: any) => x.rank - y.rank)
+        .slice(0, 40)
+        .map((x: any) => x.a);
+      const ids = agencies.map((a: any) => String(a.id));
+      const [blk, scoreRows, flagRows] = ids.length ? await Promise.all([
+        pool.query(`SELECT entity_id FROM blacklisted_entities WHERE status = 'active' AND entity_id = ANY($1)`, [ids]),
+        pool.query(`SELECT agency_id, overall_score, tier FROM agency_legitimacy_scores WHERE agency_id = ANY($1)`, [ids]),
+        pool.query(`SELECT entity_id, count(*)::int AS n FROM fraud_flags WHERE entity_id = ANY($1) AND status IN ('open','investigating') GROUP BY entity_id`, [ids]),
+      ]) : [{ rows: [] }, { rows: [] }, { rows: [] }] as any[];
+      const blacklistedSet = new Set(blk.rows.map((r: any) => String(r.entity_id)));
+      const scoreMap = new Map(scoreRows.rows.map((r: any) => [String(r.agency_id), { overallScore: r.overall_score, tier: r.tier }]));
+      const flagMap = new Map<string, number>(flagRows.rows.map((r: any) => [String(r.entity_id), Number(r.n)]));
       const results = [];
 
       for (const agency of agencies) {
-        const isBlacklisted = await storage.isEntityBlacklisted(agency.id);
-        const score = await storage.getAgencyScore(agency.id);
-        const fraudFlags = await storage.getFraudFlagsByEntityId(agency.id);
-        const activeFlags = fraudFlags.filter((f: any) => f.status === "open" || f.status === "investigating");
+        const isBlacklisted = blacklistedSet.has(String(agency.id));
+        const score: any = scoreMap.get(String(agency.id));
+        const activeFlags = { length: flagMap.get(String(agency.id)) ?? 0 };
 
         const now = new Date();
         const expiryDate = agency.expiryDate ? new Date(agency.expiryDate) : null;

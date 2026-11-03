@@ -30,12 +30,33 @@ function authParam() {
   return DB_SECRET ? `?auth=${DB_SECRET}` : "";
 }
 
+/**
+ * 2026-11 (error sweep): circuit breaker. When Firebase rejects our
+ * credentials (401/403 — e.g. FIREBASE_DATABASE_SECRET rotated or the
+ * project's rules changed), every payment fired 4–6 failing writes and
+ * flooded the logs with "Permission denied". Payments and Postgres are the
+ * source of truth, so this mirror can pause: after one auth rejection we
+ * skip RTDB calls for 6 hours and log a single clear warning.
+ */
+let rtdbPausedUntil = 0;
+async function rtdbFetch(url: string, init?: RequestInit): Promise<Response> {
+  if (Date.now() < rtdbPausedUntil) {
+    return new Response("null", { status: 200, headers: { "Content-Type": "application/json" } });
+  }
+  const res = await fetch(url, init);
+  if (res.status === 401 || res.status === 403) {
+    rtdbPausedUntil = Date.now() + 6 * 60 * 60 * 1000;
+    console.warn(`[RTDB] Firebase rejected our credentials (${res.status}). Pausing RTDB mirror writes for 6h. Fix FIREBASE_DATABASE_SECRET / database rules to restore the live revenue mirror.`);
+  }
+  return res;
+}
+
 /** Generic REST helpers ─────────────────────────────────────────────────── */
 
 export async function fbPut(path: string, data: unknown) {
   if (!DB_URL) return;
   try {
-    const res = await fetch(`${DB_URL}/${path}.json${authParam()}`, {
+    const res = await rtdbFetch(`${DB_URL}/${path}.json${authParam()}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
@@ -49,7 +70,7 @@ export async function fbPut(path: string, data: unknown) {
 export async function fbPost(path: string, data: unknown) {
   if (!DB_URL) return;
   try {
-    const res = await fetch(`${DB_URL}/${path}.json${authParam()}`, {
+    const res = await rtdbFetch(`${DB_URL}/${path}.json${authParam()}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
@@ -127,7 +148,7 @@ export async function trackCvFunnelEvent(
 async function fbGet<T = unknown>(path: string): Promise<T | null> {
   if (!DB_URL) return null;
   try {
-    const res = await fetch(`${DB_URL}/${path}.json${authParam()}`);
+    const res = await rtdbFetch(`${DB_URL}/${path}.json${authParam()}`);
     if (!res.ok) return null;
     return res.json() as Promise<T>;
   } catch {
@@ -138,7 +159,7 @@ async function fbGet<T = unknown>(path: string): Promise<T | null> {
 async function fbPatch(path: string, data: unknown) {
   if (!DB_URL) return;
   try {
-    const res = await fetch(`${DB_URL}/${path}.json${authParam()}`, {
+    const res = await rtdbFetch(`${DB_URL}/${path}.json${authParam()}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
@@ -160,7 +181,7 @@ async function fbPatch(path: string, data: unknown) {
 async function fbMultiPathUpdate(updates: Record<string, unknown>): Promise<void> {
   if (!DB_URL) return;
   try {
-    const res = await fetch(`${DB_URL}/.json`, {
+    const res = await rtdbFetch(`${DB_URL}/.json`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(updates),
@@ -193,7 +214,7 @@ async function fbTransaction<T>(
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
       // 1. GET with ETag header
-      const getRes = await fetch(`${DB_URL}/${path}.json`, {
+      const getRes = await rtdbFetch(`${DB_URL}/${path}.json`, {
         headers: { "X-Firebase-ETag": "true" },
       });
       const etag = getRes.headers.get("ETag") ?? "*";
@@ -203,7 +224,7 @@ async function fbTransaction<T>(
       const next = updateFn(current);
 
       // 3. Conditional PUT — Firebase rejects with 412 if data changed since our GET
-      const putRes = await fetch(`${DB_URL}/${path}.json`, {
+      const putRes = await rtdbFetch(`${DB_URL}/${path}.json`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",

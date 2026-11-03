@@ -28,7 +28,7 @@ export async function submitAgencyRating(
   agencyName?: string,
 ): Promise<void> {
   if (!rtdb) throw new Error("Realtime features are not configured for this deployment.");
-  const safeKey = licenseNumber.replace(/\//g, "_");
+  const safeKey = fbKey(licenseNumber);
   await set(ref(rtdb, `agencyRatings/${safeKey}/${userId}`), {
     rating,
     comment: comment.trim(),
@@ -46,7 +46,7 @@ export async function getUserRating(
   userId: string,
 ): Promise<AgencyRating | null> {
   if (!rtdb) return null;
-  const safeKey = licenseNumber.replace(/\//g, "_");
+  const safeKey = fbKey(licenseNumber);
   const snap = await get(ref(rtdb, `agencyRatings/${safeKey}/${userId}`));
   if (!snap.exists()) return null;
   return snap.val() as AgencyRating;
@@ -58,7 +58,7 @@ export async function deleteAgencyRating(
   userId: string,
 ): Promise<void> {
   if (!rtdb) throw new Error("Realtime features are not configured for this deployment.");
-  const safeKey = licenseNumber.replace(/\//g, "_");
+  const safeKey = fbKey(licenseNumber);
   await remove(ref(rtdb, `agencyRatings/${safeKey}/${userId}`));
 }
 
@@ -71,7 +71,7 @@ export function useAgencyRatingSummary(licenseNumber: string | null | undefined)
     // crash any page that renders an agency card whenever Firebase isn't
     // configured. See lib/firebase.ts for the null contract.
     if (!rtdb || !licenseNumber) return;
-    const safeKey = licenseNumber.replace(/\//g, "_");
+    const safeKey = fbKey(licenseNumber);
     const unsub = onValue(ref(rtdb, `agencyRatings/${safeKey}`), (snap) => {
       if (!snap.exists()) {
         setSummary({ average: 0, count: 0 });
@@ -97,7 +97,7 @@ export function useUserAgencyRating(
 
   useEffect(() => {
     if (!rtdb || !licenseNumber || !userId) return;
-    const safeKey = licenseNumber.replace(/\//g, "_");
+    const safeKey = fbKey(licenseNumber);
     const unsub = onValue(ref(rtdb, `agencyRatings/${safeKey}/${userId}`), (snap) => {
       setRating(snap.exists() ? (snap.val() as AgencyRating) : null);
     });
@@ -120,4 +120,13 @@ export async function getAllAgencyRatings(): Promise<Array<AgencyRating & { id: 
     }
   }
   return results.sort((a, b) => b.timestamp - a.timestamp);
+}
+
+/**
+ * 2026-11 (error sweep): Firebase keys can't contain . # $ [ ] / or be empty.
+ * Licence numbers like "No. PVT-5JUEE9DY" crashed ratings ("invalid path").
+ */
+function fbKey(raw: string): string {
+  const k = String(raw ?? "").trim().replace(/[.#$\[\]\/]/g, "_").replace(/\s+/g, " ");
+  return k || "_unknown";
 }

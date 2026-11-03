@@ -2429,6 +2429,24 @@ export function startStuckOrderSweep(): void {
         console.warn(`[ServiceOrder] Auto-retry: re-queued ${revived.length} transient-failed paid order(s): ${revived.map(r => r.id).join(", ")}`);
       }
 
+      // 2026-11 (error sweep): orders whose AI output WAS saved but whose
+      // status never flipped to 'completed' (process crash between the two
+      // writes) were invisible to this sweep forever — a customer paid on
+      // 4 Aug and never got their CV. Finish them and send the normal email.
+      const { rows: orphanedDone } = await pool.query<{ id: string }>(
+        `UPDATE service_orders
+            SET status = 'completed', completed_at = COALESCE(completed_at, NOW()), updated_at = NOW(),
+                error_message = COALESCE(error_message,'') || E'\n[recovery] Output existed but status was stuck; marked completed.'
+          WHERE status IN ('paid', 'processing')
+            AND output_text IS NOT NULL AND output_text <> ''
+            AND updated_at < NOW() - INTERVAL '30 minutes'
+          RETURNING id`,
+      ).catch(() => ({ rows: [] as { id: string }[] }));
+      for (const o of orphanedDone) {
+        console.warn(`[ServiceOrder] Recovery: order ${o.id} had output but was stuck — completed + notifying`);
+        notifyOrderCompleted(o.id).catch((e: any) => console.error(`[ServiceOrder] notify after stuck-complete failed ${o.id}:`, e?.message));
+      }
+
       const { rows } = await pool.query<{ id: string; status: string; service_slug: string }>(
         `SELECT id, status, service_slug
            FROM service_orders

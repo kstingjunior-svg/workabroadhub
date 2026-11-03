@@ -1284,6 +1284,19 @@ export function registerAuthRoutes(app: Express) {
     const u = r.rows[0];
     if (!u) return res.status(404).json({ message: "User not found." });
     if (u.email_verified) return res.json({ ok: true, message: "Email already verified." });
+    // 2026-11: if this address hard-bounced before, no code can ever arrive.
+    // Say so plainly and let the client offer "correct my email" instead of
+    // a generic 502 the customer can't act on.
+    try {
+      const { isEmailSuppressed } = await import("../../lib/email-suppressions");
+      if (u.email && await isEmailSuppressed(String(u.email).toLowerCase())) {
+        return res.status(422).json({
+          code: "email_undeliverable",
+          email: u.email,
+          message: `Emails to ${u.email} are being rejected by the email provider — the address may be misspelled or no longer active. Please correct your email address below.`,
+        });
+      }
+    } catch { /* fall through to a normal send attempt */ }
     const result = await sendEmailVerificationCode(userId, u.email);
     if (!result.ok) {
       // 2026-06: previously all failures returned 429 ("Too many requests"),

@@ -503,6 +503,13 @@ app.use(
           "wss://*.onrender.com",
           "ws://localhost:*",
           "https://o4506995718553600.ingest.sentry.io",
+          // 2026-11 (error sweep): the live Sentry DSN is in the EU region
+          // (o4512072996749312.ingest.de.sentry.io). It was blocked by this
+          // CSP, so NO browser errors ever reached Sentry. Allow any Sentry
+          // ingest host so a future DSN/region change can't silently break it.
+          "https://*.ingest.sentry.io",
+          "https://*.ingest.de.sentry.io",
+          "https://*.ingest.us.sentry.io",
         ],
         frameSrc: [
           "'self'",

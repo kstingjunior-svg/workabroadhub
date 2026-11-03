@@ -43,7 +43,7 @@ async function jsonPost(path: string, body: any): Promise<any> {
     body: JSON.stringify(body),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data?.message || `Request failed (${res.status})`);
+  if (!res.ok) { const e: any = new Error(data?.message || `Request failed (${res.status})`); e.body = data; e.status = res.status; throw e; }
   return data;
 }
 
@@ -64,6 +64,26 @@ export default function AccountVerifyPage() {
   // the server says no valid code is already pending (registration
   // already fires one in the background).
   const [resendCooldown, setResendCooldown] = useState(0);
+  // 2026-11: address bounced / mistyped → let the customer fix it here.
+  const [showChangeEmail, setShowChangeEmail] = useState(false);
+  const [undeliverable, setUndeliverable] = useState(false);
+  const [newEmail, setNewEmail] = useState("");
+  const [savingEmail, setSavingEmail] = useState(false);
+  async function saveNewEmail() {
+    const v = newEmail.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) { toast({ title: "Enter a valid email address", variant: "destructive" }); return; }
+    setSavingEmail(true);
+    try {
+      const data = await jsonPost("/api/auth/change-unverified-email", { newEmail: v });
+      setUndeliverable(false); setShowChangeEmail(false); setNewEmail(""); setEmailCode("");
+      setEmailCodeSent(true); setResendCooldown(60);
+      toast({ title: "Email updated", description: data?.message || `We've sent a new code to ${v}.`, duration: 10000 });
+      await loadStatus();
+    } catch (err: any) {
+      const sug = err?.body?.suggestion ? ` Did you mean ${err.body.suggestion}?` : "";
+      toast({ title: "Couldn't update your email", description: `${err.message}${sug}`, variant: "destructive" });
+    } finally { setSavingEmail(false); }
+  }
   const autoSendFired = useRef(false);
 
   // ── Account deletion state ───────────────────────────────────────────────
@@ -182,19 +202,24 @@ export default function AccountVerifyPage() {
       toast({
         title: "Code sent — check inbox AND spam folder",
         description: hint
-          ? `Look for the email with a code ending in ${hint}. From: Tony · Subject: Your sign-in code from Tony`
-          : "Look for the email from Tony · Subject: 'Your sign-in code from Tony'. Check spam if you don't see it.",
+          ? `Look for the email with a code ending in ${hint}. From: WorkAbroad Hub · Subject: Your WorkAbroad Hub sign-in code`
+          : "Look for the email from WorkAbroad Hub · Subject: 'Your WorkAbroad Hub sign-in code'. Check spam if you don't see it.",
         duration: 15000,
       });
     } catch (err: any) {
       // 2026-06: surface delivery failure clearly and offer fallback path.
       // Previously this was a generic "Could not send code" — users had no
       // idea whether to retry, wait, or switch to phone verification.
+      if (err?.body?.code === "email_undeliverable") {
+        setUndeliverable(true); setShowChangeEmail(true);
+        toast({ title: "We can't deliver to this email", description: err.message, variant: "destructive", duration: 12000 });
+        return;
+      }
       const offerSms = err?.body?.offerSmsFallback || /deliver|send|smtp/i.test(err?.message || "");
       toast({
         title: "Email delivery problem",
         description: offerSms
-          ? `${err.message} — try the SMS option below, or contact support@workabroadhub.tech with your email and we'll verify you manually.`
+          ? `${err.message} — check the address is correct (tap "Wrong email?" below), or contact support@workabroadhub.tech and we'll verify you manually.`
           : err.message,
         variant: "destructive",
         duration: 12000,
@@ -324,6 +349,27 @@ export default function AccountVerifyPage() {
                     {resendCooldown > 0 ? `Resend (${resendCooldown}s)` : "Resend"}
                   </Button>
                 </div>
+                {undeliverable && (
+                  <div className="rounded-md border border-rose-200 bg-rose-50 dark:bg-rose-950/30 p-3 text-sm text-rose-800 dark:text-rose-200" data-testid="email-undeliverable">
+                    Emails to <strong>{status.email}</strong> are being rejected, so no code can reach you there. Please enter the correct email address.
+                  </div>
+                )}
+                {showChangeEmail ? (
+                  <div className="space-y-2" data-testid="change-email-form">
+                    <Label htmlFor="new-email">Correct email address</Label>
+                    <div className="flex gap-2">
+                      <Input id="new-email" type="email" inputMode="email" autoComplete="email" placeholder="you@gmail.com"
+                        value={newEmail} onChange={(e) => setNewEmail(e.target.value)} />
+                      <Button onClick={saveNewEmail} disabled={savingEmail}>
+                        {savingEmail ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save & send code"}
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <button type="button" className="text-xs text-primary underline" onClick={() => setShowChangeEmail(true)} data-testid="btn-wrong-email">
+                    Wrong email? Change it
+                  </button>
+                )}
               </div>
             </CardContent>
           )}

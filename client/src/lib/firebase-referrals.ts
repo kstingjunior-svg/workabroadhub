@@ -55,7 +55,9 @@ export interface ReferralCodeData {
 }
 
 export async function getReferralCodeData(code: string): Promise<ReferralCodeData | null> {
-  const snap = await get(ref(rtdb, `referralCodes/${code.toUpperCase()}`));
+  const clean = cleanReferralCode(code);
+  if (!clean) return null;
+  const snap = await get(ref(rtdb, `referralCodes/${clean}`));
   if (!snap.exists()) return null;
   return snap.val() as ReferralCodeData;
 }
@@ -78,7 +80,8 @@ export async function applyReferralCode(
   code: string,
   newUserId: string,
 ): Promise<ApplyResult> {
-  const normalizedCode = code.trim().toUpperCase();
+  const normalizedCode = cleanReferralCode(code);
+  if (!normalizedCode) return { ok: false, reason: "not_found" };
 
   // Pre-flight check — avoids unnecessary transaction on obvious errors
   const data = await getReferralCodeData(normalizedCode);
@@ -147,4 +150,12 @@ export async function getUserReferralProfile(userId: string): Promise<UserReferr
     referredBy: val.referredBy ?? null,
     referralCredits: val.referralCredits ?? 0,
   };
+}
+
+/**
+ * 2026-11 (error sweep): user-typed codes arrived with tabs/spaces
+ * ("0\t \t5\t \t5"), which are invalid Firebase paths and crashed the page.
+ */
+export function cleanReferralCode(raw: string): string {
+  return String(raw ?? "").toUpperCase().replace(/[^A-Z0-9_-]/g, "").slice(0, 40);
 }

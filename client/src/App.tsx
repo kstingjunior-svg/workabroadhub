@@ -1058,6 +1058,18 @@ function Router() {
         <Route path="/verify" component={LazyVerify} />
         <Route path="/verify-us" component={LazyVerifyUs} />
         <Route path="/portals/community" component={LazyCommunityPortals} />
+        {/* 2026-11 (error sweep): Kazi Karibu was only routed for signed-in users, so signed-out
+            visitors (and shared links) hit "Page not found". Browse pages are public; posting and
+            "my" pages send people to sign in and back. */}
+        <Route path="/kazi-karibu" component={LazyKaziKaribu} />
+        <Route path="/kazi-karibu/browse" component={LazyKaziKaribuBrowse} />
+        <Route path="/kazi-karibu/job/:id" component={LazyKaziKaribuJob} />
+        <Route path="/kazi-karibu/post">{() => { window.location.replace("/login?redirect=" + encodeURIComponent("/kazi-karibu/post")); return null; }}</Route>
+        <Route path="/kazi-karibu/my-posts">{() => { window.location.replace("/login?redirect=" + encodeURIComponent("/kazi-karibu/my-posts")); return null; }}</Route>
+        <Route path="/kazi-karibu/my-interests">{() => { window.location.replace("/login?redirect=" + encodeURIComponent("/kazi-karibu/my-interests")); return null; }}</Route>
+        {/* Employer + "my applications" pages need an account: sign in, then come straight back. */}
+        <Route path="/employer/*">{() => { window.location.replace("/login?redirect=" + encodeURIComponent(window.location.pathname + window.location.search)); return null; }}</Route>
+        <Route path="/kenya-careers/my-applications">{() => { window.location.replace("/login?redirect=" + encodeURIComponent("/kenya-careers/my-applications")); return null; }}</Route>
         <Route path="/kenya-careers/schools" component={LazySchoolsHireTeachers} />
         {/* 2026-10: /employers is taken by the overseas EmployersDirectory (registered first), so the Kenya employer landing page never rendered. Give it its own path. */}
         <Route path="/kenya-careers/employers" component={LazyKenyaCareersEmployers} />

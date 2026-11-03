@@ -107,10 +107,14 @@ export function EmailVerifyBanner() {
         toast({
           title: "Code sent — check inbox AND spam folder",
           description: hint
-            ? `Look for an email from Tony · code ending in ${hint} · Subject: 'Your sign-in code from Tony'. It works for 10 minutes — earlier codes keep working too.`
-            : "Look for an email from Tony · Subject: 'Your sign-in code from Tony'. Check spam if you don't see it.",
+            ? `Look for an email from WorkAbroad Hub · code ending in ${hint} · Subject: 'Your WorkAbroad Hub sign-in code'. It works for 10 minutes — earlier codes keep working too.`
+            : "Look for an email from WorkAbroad Hub · Subject: 'Your WorkAbroad Hub sign-in code'. Check spam if you don't see it.",
           duration: 15000,
         });
+      } else if (data?.code === "email_undeliverable") {
+        // 2026-11: address bounced — send them where they can correct it.
+        toast({ title: "We can't deliver to this email", description: "Opening the page where you can correct your email address…", variant: "destructive", duration: 8000 });
+        setTimeout(() => { window.location.href = "/account/verify"; }, 1200);
       } else {
         toast({
           title: "Couldn't send code",
