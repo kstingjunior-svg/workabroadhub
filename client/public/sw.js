@@ -10,7 +10,7 @@ const APP_NAME = "WorkAbroad Hub";
 // 2026-10 (Tony's screenshot: OTP input boxes were invisible on white
 // modal — critical signup bug). Bumping to v10 to force every PWA /
 // cached browser to pick up the new high-contrast OTP input styling.
-const CACHE_VERSION = "v13"; // 2026-10: new sign-in design + schools pages
+const CACHE_VERSION = "v14"; // 2026-11: error sweep — refresh cached pages so the new CSP (Sentry EU) + Kazi Karibu public routes reach every device
 const STATIC_CACHE = `workabroad-static-${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `workabroad-dynamic-${CACHE_VERSION}`;
 
