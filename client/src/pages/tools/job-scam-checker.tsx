@@ -64,7 +64,7 @@ const VERDICT_STYLES = {
     text: "text-emerald-700 dark:text-emerald-400",
     accent: "bg-emerald-50 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-900",
     icon: ShieldCheck,
-    label: "Looks legitimate",
+    label: "No major warning signs",
   },
   verify_first: {
     bg: "bg-amber-500",
@@ -85,7 +85,7 @@ const VERDICT_STYLES = {
     text: "text-red-700 dark:text-red-400",
     accent: "bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-900",
     icon: AlertTriangle,
-    label: "High risk — likely scam",
+    label: "High risk — serious warning signs",
   },
 } as const;
 

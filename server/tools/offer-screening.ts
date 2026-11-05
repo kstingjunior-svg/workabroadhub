@@ -104,56 +104,57 @@ const PATTERNS: Pattern[] = [
   {
     code: "wire_transfer_service", severity: "critical",
     regex: /western union|money\s*gram|moneygram/i,
-    message: "Payment via Western Union or MoneyGram requested — hallmark of advance-fee fraud.",
+    message: "Payment via Western Union or MoneyGram is mentioned. Untraceable transfers are common in advance-fee fraud — confirm who the money is for before paying.",
   },
   {
     code: "visa_fee_demand", severity: "critical",
     regex: /visa (?:processing|application)\s*fee|pay(?:ment)? for (?:the )?visa/i,
-    message: "Visa processing fee demanded from the candidate — illegal in Kenya. Real employers pay their own visa costs.",
+    message: "A visa or processing fee is requested from the candidate. Some government fees are paid by applicants, so ask exactly what the fee is, who receives it, and check it on the official visa website before paying.",
   },
   {
     code: "upfront_fee", severity: "critical",
     regex: /pay upfront|advance (?:fee|payment)|pay .* before (?:starting|arrival|deployment)/i,
-    message: "Upfront payment requested before employment — legitimate employers never charge candidates.",
+    message: "Payment is requested before employment starts — the most common pattern in overseas job fraud reported to us. Verify the employer independently before paying.",
   },
   {
     code: "recruitment_fee", severity: "critical",
     regex: /registration fee|training fee|clearance fee|processing fee.*(?:you|candidate)|placement fee/i,
-    message: "Recruitment / training / placement fee demanded — banned under Kenyan NEA regulations.",
+    message: "A recruitment, training or placement fee is mentioned. Check that the agency is licensed on the NEA register and ask for an official receipt before paying anything.",
   },
   {
     code: "money_transfer_kes", severity: "critical",
     regex: /send (?:money|kes|ksh)|(?:pay|transfer).*(?:kes|ksh)\s?[\d,]+|m-?pesa (?:to|number).*\d/i,
-    message: "KES / M-Pesa transfer requested to a personal number — real employer HR uses bank transfers, not M-Pesa.",
+    message: "A KES / M-Pesa transfer to a personal number is requested. Payments for overseas jobs sent to personal mobile-money numbers are frequently reported in job fraud.",
   },
   {
     code: "deposit_demand", severity: "critical",
     regex: /(?:security|refundable|caution)\s*deposit|deposit\s*(?:required|of\s*KES)/i,
-    message: "Security or refundable deposit demanded — a classic recruitment scam pattern.",
+    message: "A security or refundable deposit is requested — a pattern often reported in recruitment fraud.",
   },
 
   // ── Salary red flags ──────────────────────────────────────────────────────
   {
-    code: "unrealistic_salary_usd", severity: "warning",
-    regex: /\$\s?\d{1,3}[,.]?\d{3,}\s*(?:per month|monthly|\/month|a month)/i,
-    message: "Suspiciously high monthly USD salary claimed — verify against Glassdoor / PayScale for the destination country.",
+    code: "unrealistic_salary_usd", severity: "info",
+    // 2026-11 VerifyX: was /$1,000+/ which flagged most ordinary overseas salaries.
+    regex: /\$\s?(?:[2-9]\d|\d{3,})[,.]?\d{3}\s*(?:per month|monthly|\/month|a month)/i,
+    message: "A monthly USD salary of $20,000 or more is stated. Compare it with typical pay for the role in the destination country.",
   },
   {
     code: "guaranteed_income", severity: "warning",
     regex: /guaranteed (?:income|earnings|salary)|earn (?:millions|big)|easy money/i,
-    message: "Guaranteed earnings language — no legitimate employer promises specific income; base pay is contractual, bonuses conditional.",
+    message: "Guaranteed-earnings language is used. Base pay is contractual and bonuses are usually conditional, so treat promises of guaranteed income with caution.",
   },
   {
     code: "salary_no_currency", severity: "info",
     regex: /salary[:\s]+\d+(?!\s*(?:USD|KES|EUR|GBP|AED|SAR|QAR|CAD))/i,
-    message: "Salary quoted without a currency code — genuine offer letters always specify currency (USD, AED, KES, etc.).",
+    message: "Salary appears without a currency code. Ask the employer to state the currency in writing.",
   },
 
   // ── Urgency / pressure ────────────────────────────────────────────────────
   {
     code: "immediate_deployment", severity: "warning",
     regex: /immediate deployment|deploy(?:ed)? within \d+\s*days?|start (?:immediately|within \d+\s*days?)/i,
-    message: "Immediate deployment / start required — real overseas hires need visa processing time (typically weeks).",
+    message: "Immediate deployment or start is demanded. Overseas hires usually need weeks for visa processing.",
   },
   {
     code: "urgency_pressure", severity: "warning",
@@ -163,69 +164,69 @@ const PATTERNS: Pattern[] = [
 
   // ── No-barrier hiring ─────────────────────────────────────────────────────
   {
-    code: "no_interview", severity: "critical",
+    code: "no_interview", severity: "warning",
     regex: /no interview (?:required|needed)|without.*interview|skip.*interview/i,
-    message: "No interview required — every legitimate employer conducts at least a screening call.",
+    message: "The offer says no interview is required. Most employers hold at least a screening call before making an offer.",
   },
   {
     code: "no_experience", severity: "warning",
     regex: /no experience (?:required|needed|necessary)|no cv (?:required|needed)|no qualifications/i,
-    message: "No experience or CV required — legitimate skilled overseas roles always require documented qualifications.",
+    message: "No experience or CV is required. Skilled overseas roles normally require documented qualifications.",
   },
 
   // ── Corporate email red flags ─────────────────────────────────────────────
   {
     code: "free_email_domain", severity: "warning",
     regex: /@(?:gmail|yahoo|hotmail|outlook|ymail|aol|icloud|mail|zoho)\.com\b/i,
-    message: "Contact email uses a free personal domain (Gmail / Yahoo / Hotmail). Real corporate HR uses the company's own domain.",
+    message: "The contact email uses a free personal domain (Gmail / Yahoo / Hotmail). Larger employers usually use their own domain; small businesses sometimes do not, so this is a reason to double-check.",
   },
   {
     code: "whatsapp_only", severity: "warning",
     regex: /(?:whatsapp\s+only|contact\s+us\s+on\s+whatsapp|apply\s+via\s+whatsapp|whatsapp\s+for\s+details)/i,
-    message: "WhatsApp-only recruitment channel — legitimate multinationals use HR portals or corporate email.",
+    message: "Recruitment happens only over WhatsApp. Ask for contact through the company's official email or website.",
   },
 
   // ── Vague / missing corporate signals ─────────────────────────────────────
   {
     code: "no_signatory", severity: "warning",
     regex: /^(?!.*(?:sincerely|regards|yours faithfully|hr manager|director|ceo|senior director|human resources)).*$/is,
-    message: "No named signatory or job title. Real offer letters are signed by a named HR representative.",
+    message: "No named signatory or job title was found. Ask who issued the letter and confirm with the company directly.",
   },
   {
     code: "generic_greeting", severity: "info",
     regex: /^dear\s+(?:candidate|applicant|sir\/madam|hiring team)/im,
-    message: "Generic greeting ('Dear Candidate' / 'Dear Applicant'). Real offer letters address you by name.",
+    message: "Generic greeting ('Dear Candidate' / 'Dear Applicant'). Offer letters are normally addressed to you by name.",
   },
 
   // ── Contract / legal red flags ────────────────────────────────────────────
   {
     code: "vague_contract_length", severity: "info",
     regex: /(?:as needed|indefinite|to be discussed|will be shared later)/i,
-    message: "Contract length is vague — legitimate offers state a fixed duration or 'permanent'.",
+    message: "Contract length is vague. Offers normally state a fixed duration or 'permanent'.",
   },
   {
     code: "no_probation", severity: "info",
     regex: /^(?!.*probation).*$/is,
-    message: "No probation period mentioned. Most legitimate international employment contracts include one (typically 3-6 months).",
+    message: "No probation period is mentioned. Many employment contracts include one; ask if it applies.",
   },
 
   // ── Delivery / logistics scams ────────────────────────────────────────────
   {
     code: "free_ticket_bait", severity: "warning",
     regex: /free (?:ticket|flight|accommodation|housing|meals|transport)/i,
-    message: '"Free ticket + accommodation" lure — a well-known trap. Real employers ARRANGE flights, but do not use them as a bait.',
+    message: '"Free ticket + accommodation" is used as a selling point. Employers do arrange flights, but this is also a common lure — verify everything else.',
   },
   {
-    code: "guaranteed_visa", severity: "critical",
+    code: "guaranteed_visa", severity: "warning",
     regex: /guaranteed visa|100%\s*(?:visa|placement|success)|assured visa/i,
-    message: "Guaranteed visa — impossible. Visa outcome is decided by the destination country's embassy, never by the employer.",
+    message: "A visa is described as guaranteed. Visa decisions are made by the destination country's authorities, so no employer or agent can guarantee one.",
   },
 
   // ── Suspicious contact / signatory patterns ───────────────────────────────
   {
     code: "phone_only_contact", severity: "info",
     regex: /^(?!.*(?:email|@|website|www\.)).*$/is,
-    message: "No email or website — real employers include multiple official contact channels.",
+    message: "No email or website was found. Ask for official contact channels you can check independently.",
   },
 ];
 
@@ -302,17 +303,10 @@ export function screenOffer(input: ScreenOfferInput): ScreenOfferReport {
       findings.push({
         code:     "vision_flag",
         severity: sev,
-        message:  `AI vision review: ${flag}`,
+        message:  `Visual observation (not proof): ${flag}`,
       });
     }
-    if (input.aiVision.visionConfidence !== null &&
-        input.aiVision.visionConfidence < 40) {
-      findings.push({
-        code:     "vision_low_confidence",
-        severity: "warning",
-        message:  `AI vision confidence in document authenticity is low (${input.aiVision.visionConfidence}/100).`,
-      });
-    }
+    // 2026-11 VerifyX: appearance-based "authenticity confidence" removed.
   }
 
   // ── 6. Composite score + band ──────────────────────────────────────────
@@ -357,8 +351,6 @@ function computeRiskScore(findings: Finding[], input: ScreenOfferInput): number 
   if (input.employer.hasSignature === true)        score -= 6;
   if (input.employer.hasPhysicalAddress === true)  score -= 5;
   if (input.employer.domainMatchesCompany === true) score -= 8;
-  if (input.aiVision?.visionConfidence &&
-      input.aiVision.visionConfidence >= 80)       score -= 10;
 
   return Math.max(0, Math.min(100, Math.round(score)));
 }
@@ -370,7 +362,7 @@ function pickHeadline(
   const critical = findings.filter((f) => f.severity === "critical").length;
   if (band === "high") {
     return {
-      headline:       `High-risk offer${critical ? ` (${critical} critical flag${critical > 1 ? "s" : ""})` : ""}. Treat as likely fraudulent.`,
+      headline:       `High-risk offer${critical ? ` (${critical} critical flag${critical > 1 ? "s" : ""})` : ""}. Do not pay or travel until the employer is verified independently.`,
       recommendation: "Do NOT engage further. Do not send any documents, and do not pay any fee under any pretext. Verify the employer independently through their official website and registered office phone before responding.",
     };
   }
@@ -382,7 +374,7 @@ function pickHeadline(
   }
   return {
     headline:       "No major red flags found in our automated checks.",
-    recommendation: "Our screening did not raise concerns, but always verify independently: confirm the company's registration in the destination country, insist on an interview, and never pay a fee. For high-value overseas roles, ask us to schedule a paid Contract Review with our licensed advisers.",
+    recommendation: "This is not a confirmation that the offer is genuine. Always verify independently: confirm the company's registration in the destination country, insist on an interview, and never pay a fee.",
   };
 }
 
@@ -392,7 +384,7 @@ function pickHeadline(
 
 function classifyVisionSeverity(flag: string): FindingSeverity {
   const f = flag.toLowerCase();
-  if (/tamper|edit|photoshop|forged|forgery|altered|clon(e|ed)|paste|fabricat/.test(f)) return "critical";
+  if (/tamper|edit|photoshop|forged|forgery|altered|clon(e|ed)|paste|fabricat/.test(f)) return "warning"; // visual only — never critical
   if (/misalign|font|blur|artifact|artefact|watermark|inconsist(ent|ency)|mismatch/.test(f)) return "warning";
   return "info";
 }

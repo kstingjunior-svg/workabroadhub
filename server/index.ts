@@ -205,6 +205,16 @@ httpServer.listen(PORT, "0.0.0.0", () => {
     } catch (err: any) {
       console.error("[Server] ❌ Finance alert sweep failed to start:", err?.message);
     }
+    // 2026-11: VerifyX — official source sync (UK sponsor register, NEA health,
+    // guidance change detection) and retention enforcement for verification data.
+    try {
+      const { startVerifyxSourceSweep } = await import("./verifyx/source-sync");
+      startVerifyxSourceSweep();
+      const { startRetentionSweep } = await import("./verifyx/store");
+      startRetentionSweep();
+    } catch (err: any) {
+      console.error("[Server] ❌ VerifyX sweeps failed to start:", err?.message);
+    }
     // 2026-10: Kenya Careers "Follow employer" vacancy alerts (one email per
     // follower per live vacancy; idempotent).
     try {
@@ -892,6 +902,11 @@ app.use((req, res, next) => {
       import("./routes/finance-admin")
         .then(({ registerFinanceAdminRoutes }) => registerFinanceAdminRoutes(app))
         .catch((err) => console.error("[Server] finance-admin registration failed:", err?.message));
+
+      // 2026-11: VerifyX evidence-first document verification (reports, corrections, reviews, admin).
+      import("./verifyx/routes")
+        .then(({ registerVerifyxRoutes }) => registerVerifyxRoutes(app))
+        .catch((err) => console.error("[Server] verifyx routes registration failed:", err?.message));
 
       import("./routes/payment-audit")
         .then(({ registerPaymentAuditRoutes }) => registerPaymentAuditRoutes(app))

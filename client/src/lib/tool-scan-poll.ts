@@ -56,13 +56,17 @@ export async function pollToolScanResult<T = any>(res: Response): Promise<T> {
   // 202 — analysis is running in the background. Poll for the result
   // instead of holding one request open (that long hold is exactly what
   // was causing the "mystery" failures — see file header).
-  const { jobId } = await res.json();
+  const accepted = await res.json();
+  const { jobId } = accepted;
+  // 2026-11 (VerifyX security): results are only released to the holder of
+  // the one-time poll key returned with the 202 (or the signed-in owner).
+  const pollHeaders: Record<string, string> = accepted.pollKey ? { "x-poll-key": String(accepted.pollKey) } : {};
   const startedAt = Date.now();
 
   // eslint-disable-next-line no-constant-condition
   while (true) {
     await new Promise((resolve) => setTimeout(resolve, TOOL_SCAN_POLL_INTERVAL_MS));
-    const pollRes = await fetch(`/api/tools/scan-status/${jobId}`, { credentials: "include" });
+    const pollRes = await fetch(`/api/tools/scan-status/${jobId}`, { credentials: "include", headers: pollHeaders });
     const pollBody = await pollRes.json().catch(() => ({}) as any);
 
     if (pollBody?.status === "processing") {
@@ -78,6 +82,7 @@ export async function pollToolScanResult<T = any>(res: Response): Promise<T> {
     }
     // status === "done"
     const { status: _status, ...result } = pollBody;
-    return result as T;
+    // Same key also authorises VerifyX corrections / review requests.
+    return (accepted.pollKey ? { ...result, _accessKey: String(accepted.pollKey) } : result) as T;
   }
 }

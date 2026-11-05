@@ -507,8 +507,8 @@ export function registerIeltsVerifyRoute(app: Express): void {
         }
 
         const userId: string | null = req.user?.claims?.sub ?? req.user?.id ?? null;
-        const jobId = await createToolScanJob("ielts_verify", userId, req.toolPaymentId ?? null);
-        res.status(202).json({ jobId, status: "processing" });
+        const { jobId, pollKey } = await createToolScanJob("ielts_verify", userId, req.toolPaymentId ?? null);
+        res.status(202).json({ jobId, pollKey, status: "processing" });
 
         (async () => {
           const t0 = Date.now();

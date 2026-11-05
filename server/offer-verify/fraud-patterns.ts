@@ -172,8 +172,8 @@ export function detectFraudPatterns(fields: ExtractedOfferFields): FraudFinding[
       findings.push({
         id: "email_free_provider",
         label: "Recruiter uses free email service",
-        severity: "hard",
-        detail: `Recruiter's email (${maskEmail(email)}) is on a free provider like Gmail or Yahoo. Legitimate overseas employers use their corporate domain (e.g. @company.com).`,
+        severity: "soft",
+        detail: `Recruiter's email (${maskEmail(email)}) is on a free provider like Gmail or Yahoo. Larger employers usually email from their own domain (e.g. @company.com); small businesses sometimes use free email, so treat this as a reason to double-check.`,
         actionable: `Ask the recruiter to email you from the company's official domain. Cross-check that domain with the company's official website.`,
       });
     } else if (domain && fields.employerName && fields.companyWebsite) {
@@ -194,7 +194,7 @@ export function detectFraudPatterns(fields: ExtractedOfferFields): FraudFinding[
       id: "email_missing",
       label: "No recruiter email provided",
       severity: "soft",
-      detail: "The letter doesn't include a recruiter or HR email address. Legitimate offers always include a way to reach HR directly.",
+      detail: "No recruiter or HR email address could be found in the letter.",
     });
   }
 
@@ -205,8 +205,8 @@ export function detectFraudPatterns(fields: ExtractedOfferFields): FraudFinding[
       id: "upfront_fee_requested",
       label: "Upfront fee request detected",
       severity: "hard",
-      detail: `The letter mentions: ${feeMatches.slice(0, 3).map((s) => `"${s}"`).join(", ")}. Legitimate overseas employers pay ALL visa, medical, and processing fees themselves — Kenyan labour law also prohibits recruitment fees paid by the worker.`,
-      actionable: "Do NOT send any money. Report this offer to the Kenya National Employment Authority (NEA) at neaims.nea.go.ke.",
+      detail: `The letter mentions: ${feeMatches.slice(0, 3).map((s) => `"${s}"`).join(", ")}. Requests for money before you start work are the most common pattern in overseas job fraud reported to WorkAbroadHub. Some government fees are legitimately paid by applicants, so ask exactly what the fee is for and who receives it.`,
+      actionable: "Do not send money until you have confirmed what the fee is, who receives it, and that the recruiter is licensed on the NEA register (neaims.go.ke).",
     });
   }
 
@@ -217,7 +217,7 @@ export function detectFraudPatterns(fields: ExtractedOfferFields): FraudFinding[
       id: "overpromise_language",
       label: "Unrealistic promises detected",
       severity: "hard",
-      detail: `Promises like ${overMatches.slice(0, 2).map((s) => `"${s}"`).join(", ")} are classic scam indicators. Real employers can never guarantee PR / citizenship, and every serious role requires at least one interview.`,
+      detail: `Promises like ${overMatches.slice(0, 2).map((s) => `"${s}"`).join(", ")} are commonly used to pressure job seekers. Immigration outcomes such as residency are decided by governments, so an employer cannot guarantee them.`,
     });
   }
 
@@ -228,8 +228,8 @@ export function detectFraudPatterns(fields: ExtractedOfferFields): FraudFinding[
       id: "pressure_tactics",
       label: "High-pressure urgency language",
       severity: "soft",
-      detail: `Phrases like "${pressureMatches[0]}" are used to stop you thinking or verifying independently. Real employment offers give you at least 3-5 business days to review.`,
-      actionable: "Take at least 48 hours. Any employer who won't wait is not a legitimate one.",
+      detail: `Phrases like "${pressureMatches[0]}" are used to stop you thinking or verifying independently. Pressure to act quickly reduces the time you have to verify an offer.`,
+      actionable: "Take time to verify the employer independently before you pay or sign anything.",
     });
   }
 
@@ -240,8 +240,8 @@ export function detectFraudPatterns(fields: ExtractedOfferFields): FraudFinding[
       id: "personal_payment_account",
       label: "Payment to personal account requested",
       severity: "hard",
-      detail: "The letter mentions a personal M-Pesa number, till number, or private wire — legitimate overseas employers use corporate bank transfers, never M-Pesa Buy Goods or personal accounts.",
-      actionable: "Refuse the payment. This is textbook advance-fee fraud.",
+      detail: "The letter mentions a personal M-Pesa number, till/paybill number or a private account. Payments for overseas jobs routed to personal or Kenyan mobile-money accounts are frequently reported in job fraud.",
+      actionable: "Do not pay until you have confirmed, through the employer's official website or the NEA, who the money is for.",
     });
   }
 
@@ -252,7 +252,7 @@ export function detectFraudPatterns(fields: ExtractedOfferFields): FraudFinding[
       id: "vague_terms",
       label: "Contract terms are unusually vague",
       severity: "soft",
-      detail: `Multiple vague phrases like "${vagueMatches[0]}" and "${vagueMatches[1]}" appear in the offer. A real employment contract specifies duties, salary, and location precisely.`,
+      detail: `Multiple vague phrases like "${vagueMatches[0]}" and "${vagueMatches[1]}" appear in the offer. Clear contracts normally state duties, salary and location precisely.`,
       actionable: "Request a revised contract with specific duties, exact salary, work address, and hours.",
     });
   }
@@ -263,7 +263,7 @@ export function detectFraudPatterns(fields: ExtractedOfferFields): FraudFinding[
       id: "employer_name_missing",
       label: "Employer name missing",
       severity: "hard",
-      detail: "The offer letter doesn't clearly state the employing company's name. This is not possible in a legitimate offer.",
+      detail: "The employing company's name could not be found in the letter, so the employer cannot be checked.",
     });
   }
   if (!fields.companyAddress) {
@@ -271,7 +271,7 @@ export function detectFraudPatterns(fields: ExtractedOfferFields): FraudFinding[
       id: "company_address_missing",
       label: "Company address missing",
       severity: "soft",
-      detail: "No physical company address is stated. Every legitimate overseas employer has a verifiable office address.",
+      detail: "No company address could be found in the letter, so it cannot be compared with official records.",
       actionable: "Google the company name + city and confirm the address matches.",
     });
   }
@@ -280,7 +280,7 @@ export function detectFraudPatterns(fields: ExtractedOfferFields): FraudFinding[
       id: "job_title_missing",
       label: "Job title unclear",
       severity: "soft",
-      detail: "The specific job title isn't clear on the letter. Real offers always specify the exact position.",
+      detail: "The job title could not be found in the letter.",
     });
   }
   if (!fields.startDate) {
@@ -288,7 +288,7 @@ export function detectFraudPatterns(fields: ExtractedOfferFields): FraudFinding[
       id: "start_date_missing",
       label: "Start date not specified",
       severity: "soft",
-      detail: "No specific start date is on the letter. Real employers commit to a date.",
+      detail: "No start date could be found in the letter.",
     });
   }
   if (!fields.salaryText && !fields.salaryMonthly) {
@@ -296,7 +296,7 @@ export function detectFraudPatterns(fields: ExtractedOfferFields): FraudFinding[
       id: "salary_missing",
       label: "Salary not specified",
       severity: "hard",
-      detail: "The offer doesn't state a clear salary. No legitimate offer omits pay.",
+      detail: "No salary could be found in the letter. Pay should be stated in writing before you accept.",
     });
   }
 
@@ -306,15 +306,15 @@ export function detectFraudPatterns(fields: ExtractedOfferFields): FraudFinding[
     findings.push({
       id: "no_authenticity_elements",
       label: "No letterhead, signature, or stamp",
-      severity: "hard",
-      detail: "The document has none of the standard authenticity elements (company letterhead, signature, or stamp). Real offer letters carry at least two of these.",
+      severity: "soft",
+      detail: "No letterhead, signature or company stamp was detected. Their presence or absence proves nothing on its own, but most formal offers carry at least a signature.",
     });
   } else if (authCount === 1) {
     findings.push({
       id: "weak_authenticity",
       label: "Only one authenticity element present",
       severity: "soft",
-      detail: "The document has only one of letterhead/signature/stamp. Legitimate offers typically carry all three.",
+      detail: "Only one of letterhead / signature / stamp was detected.",
     });
   }
 
@@ -328,7 +328,7 @@ export function detectFraudPatterns(fields: ExtractedOfferFields): FraudFinding[
       id: "contract_detail_strong",
       label: "Contract terms are detailed",
       severity: "info",
-      detail: `The offer specifies ${contractDepth} of 6 standard contract clauses (probation, duration, leave, hours, manager, insurance) — consistent with a genuine HR-drafted offer.`,
+      detail: `The offer specifies ${contractDepth} of 6 standard contract clauses (probation, duration, leave, hours, manager, insurance) .`,
     });
   }
 

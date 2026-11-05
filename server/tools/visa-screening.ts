@@ -243,7 +243,6 @@ const VISA_NUMBER_PATTERNS: Record<string, RegExp> = {
   UAE:    /^\d{9,15}$/,           // Emirates ID / entry-permit style
   QAT:    /^\d{8,12}$/,           // Qatar visa numbers
   SAU:    /^\d{10}$/,             // Saudi visa numbers (Enjazit)
-  GBR:    /^[A-Z0-9]{9,12}$/,     // UK BRP / vignette
   CAN:    /^[A-Z]{1}\d{9}$/,      // Canadian visa numbers
   USA:    /^[A-Z0-9]{8}$/,        // US visa foil number
   DEU:    /^[A-Z0-9]{9}$/,        // Schengen national ID
@@ -265,7 +264,7 @@ export function screenVisa(input: ScreenVisaInput): ScreenVisaReport {
   if (!hasVisaSignal) {
     findings.push({
       code:     "not_visa_like",
-      severity: "critical",
+      severity: "warning",
       message:  "The uploaded document does not contain the vocabulary of a visa or work permit. It may not be a visa at all.",
     });
   }
@@ -275,8 +274,8 @@ export function screenVisa(input: ScreenVisaInput): ScreenVisaReport {
     if (input.mrz.checksumValid === false) {
       findings.push({
         code:     "mrz_checksum_failed",
-        severity: "critical",
-        message:  `Machine-readable-zone checksum failed (${input.mrz.checkDetails}). Genuine visas always have valid MRZ check digits.`,
+        severity: "warning",
+        message:  `Machine-readable-zone check digits did not match (${input.mrz.checkDetails}). This can be caused by a misread character in the photo — compare the MRZ with the original before drawing conclusions.`,
       });
     } else if (input.mrz.checksumValid === true) {
       findings.push({
@@ -304,7 +303,7 @@ export function screenVisa(input: ScreenVisaInput): ScreenVisaReport {
       findings.push({
         code:     "dates_reversed",
         severity: "critical",
-        message:  `Issue date (${input.parsed.issueDate}) is AFTER expiry date (${input.parsed.expiryDate}). Impossible on a genuine document.`,
+        message:  `Issue date (${input.parsed.issueDate}) is AFTER expiry date (${input.parsed.expiryDate}). These dates contradict each other — confirm them with the issuing authority.`,
       });
     }
     const spanDays = (expiry.getTime() - issue.getTime()) / (1000 * 60 * 60 * 24);
@@ -334,7 +333,7 @@ export function screenVisa(input: ScreenVisaInput): ScreenVisaReport {
     findings.push({
       code:     "issued_in_future",
       severity: "critical",
-      message:  `Issue date (${input.parsed.issueDate}) is in the future. Impossible on a genuine document.`,
+      message:  `Issue date (${input.parsed.issueDate}) is in the future — confirm it with the issuing authority.`,
     });
   }
 
@@ -345,8 +344,8 @@ export function screenVisa(input: ScreenVisaInput): ScreenVisaReport {
     if (rule && !rule.test(input.parsed.visaNumber.trim().toUpperCase())) {
       findings.push({
         code:     "visa_number_format_mismatch",
-        severity: "warning",
-        message:  `Visa number "${input.parsed.visaNumber}" does not match the typical format for ${iso}.`,
+        severity: "info",
+        message:  `Visa number "${input.parsed.visaNumber}" does not match the format we usually see for ${iso} (our pattern is not an official specification).`,
       });
     }
   }
@@ -357,8 +356,8 @@ export function screenVisa(input: ScreenVisaInput): ScreenVisaReport {
     if (mrzExpiry && Math.abs(mrzExpiry.getTime() - expiry.getTime()) > 24 * 60 * 60 * 1000) {
       findings.push({
         code:     "mrz_visible_expiry_mismatch",
-        severity: "critical",
-        message:  "MRZ expiry date does not match the visible expiry date. Tamper indicator.",
+        severity: "warning",
+        message:  "The expiry date in the MRZ does not match the printed expiry date as we read them. Check both on the original — if they really differ, ask the issuing authority to confirm.",
       });
     }
   }
@@ -370,17 +369,11 @@ export function screenVisa(input: ScreenVisaInput): ScreenVisaReport {
       findings.push({
         code:     "vision_flag",
         severity: sev,
-        message:  `AI vision review: ${flag}`,
+        message:  `Visual observation (not proof): ${flag}`,
       });
     }
-    if (input.aiVision.visionConfidence !== null &&
-        input.aiVision.visionConfidence < 40) {
-      findings.push({
-        code:     "vision_low_confidence",
-        severity: "warning",
-        message:  `AI vision confidence in authenticity is low (${input.aiVision.visionConfidence}/100).`,
-      });
-    }
+    // 2026-11 VerifyX: the model's "authenticity confidence" is no longer
+    // used — appearance cannot establish authenticity.
   }
 
   // ── 7. Compose risk score ──────────────────────────────────────────────
@@ -422,8 +415,6 @@ function computeRiskScore(findings: Finding[], input: ScreenVisaInput): number {
 
   // Positive-signal deductions — genuine indicators pull the score DOWN.
   if (input.mrz.present && input.mrz.checksumValid === true) score -= 15;
-  if (input.aiVision?.visionConfidence &&
-      input.aiVision.visionConfidence >= 80) score -= 10;
 
   return Math.max(0, Math.min(100, Math.round(score)));
 }
@@ -447,7 +438,7 @@ function pickHeadline(
   }
   return {
     headline:       "No red flags found in our automated checks.",
-    recommendation: "Our screening did not raise concerns. For anything high-stakes (travel, employment contract signing), still verify with the issuing authority directly — no automated tool replaces official verification.",
+    recommendation: "This is not a confirmation that the document is authentic. For anything high-stakes (travel, employment contract signing), still verify with the issuing authority directly — no automated tool replaces official verification.",
   };
 }
 
@@ -491,7 +482,7 @@ function normalizeCountryToIso3(input: string): string | null {
 
 function classifyVisionSeverity(flag: string): FindingSeverity {
   const f = flag.toLowerCase();
-  if (/tamper|edit|photoshop|forged|forgery|altered|clon(e|ed)|paste|inconsist(ent|ency)/.test(f)) return "critical";
+  if (/tamper|edit|photoshop|forged|forgery|altered|clon(e|ed)|paste|inconsist(ent|ency)/.test(f)) return "warning"; // visual only — never critical
   if (/misalign|font|blur|artifact|artefact|shadow|watermark|hologram/.test(f)) return "warning";
   return "info";
 }

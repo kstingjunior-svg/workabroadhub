@@ -113,11 +113,11 @@ export const COUNTRY_REGISTRY: CountryVisaResources[] = [
       fraudReportEmail:  null,
     },
     nextStepAdvice:
-      "For UAE work visas, verify the employer's establishment card via MOHRE's Tas'heel portal + the visa file number on the ICP smart services validity checker. A real UAE work visa is always tied to an employer's Labour Card — if the sponsor won't share their establishment number, walk away.",
+      "For UAE work visas, verify the employer's establishment card via MOHRE's Tas'heel portal + the visa file number on the ICP smart services validity checker. UAE work visas are tied to the sponsoring employer — if the sponsor won't share their establishment number so you can check it, treat that as a reason not to proceed.",
     knownScamPatterns: [
       "Employer asks for up-front visa fee — real UAE employers pay the ICP fee themselves.",
       "Free-zone company promising \"work visa in 3 days\" — real free-zone visas take 5-14 days minimum.",
-      "Recruiter uses gmail.com / yahoo.com not company domain — legitimate UAE HR always uses corporate email.",
+      "Recruiter uses gmail.com / yahoo.com instead of a company domain (a reason to double-check, not proof on its own).",
     ],
   },
   {
@@ -292,9 +292,9 @@ export const COUNTRY_REGISTRY: CountryVisaResources[] = [
       fraudReportEmail:  "reportsuspiciousactivity@fca.org.uk",
     },
     nextStepAdvice:
-      "UK Skilled Worker visas require your employer to be on the UK Government's public Register of Licensed Sponsors — check that list before accepting any UK job offer. Care worker visas require the sponsor's CQC registration in addition. Never pay a sponsor for your Certificate of Sponsorship (CoS) — that is illegal.",
+      "UK Skilled Worker visas require your employer to be on the UK Government's public Register of Licensed Sponsors — check that list before accepting any UK job offer. Care worker visas require the sponsor's CQC registration in addition. UK sponsor guidance says sponsors must not pass the Certificate of Sponsorship fee or Immigration Skills Charge on to the worker.",
     knownScamPatterns: [
-      "Employer asks you to pay for the CoS or IHS — illegal, employer must pay.",
+      "Employer asks you to reimburse the Certificate of Sponsorship fee or Immigration Skills Charge — UK sponsor guidance says sponsors must not pass these costs to the worker.",
       "\"Care visa\" without CQC-registered sponsor — walk away.",
       "\"Guaranteed\" UK visa from unlicensed Kenyan agent — every UK Skilled Worker visa requires you to apply yourself via gov.uk.",
     ],
@@ -342,7 +342,7 @@ export const COUNTRY_REGISTRY: CountryVisaResources[] = [
       visaPortal:           "https://ceac.state.gov/GenNIV/",
       visaStatusChecker:    "https://ceac.state.gov/CEACStatTracker/Status.aspx",
       workPermitChecker:    "https://egov.uscis.gov/casestatus/landing.do",
-      employerCheck:        "https://www.uscis.gov/tools/e-verify",
+      employerCheck:        "https://www.dol.gov/agencies/eta/foreign-labor/performance",
       recruitmentCheck:     null,
       embassyInKenya:       "https://ke.usembassy.gov/",
       labourMinistry:       "https://www.dol.gov/",
@@ -384,7 +384,7 @@ export const COUNTRY_REGISTRY: CountryVisaResources[] = [
       fraudReportEmail:  null,
     },
     nextStepAdvice:
-      "Australian work visas (482, 494, 186, WHV) can be verified via VEVO (Visa Entitlement Verification Online). Real Australian visas are issued electronically — there is NO visa sticker or foil. If someone shows you a sticker or physical visa document as \"proof\", it is fake.",
+      "Australian work visas (482, 494, 186, WHV) can be verified via VEVO (Visa Entitlement Verification Online). Australia records visas electronically and generally no longer issues visa labels — if someone offers a sticker or paper \"visa\" as proof, check it on VEVO before relying on it.",
   },
   {
     code: "NZ",
@@ -635,7 +635,7 @@ export const COUNTRY_REGISTRY: CountryVisaResources[] = [
       fraudReportEmail:  null,
     },
     nextStepAdvice:
-      "South Korean EPS (Employment Permit System) workers apply through their home country's HRD Korea office — Kenya is NOT currently an EPS partner country. Any \"guaranteed EPS visa from Kenya\" offer is a scam. E-9 work visas from Kenya are not directly available.",
+      "South Korean EPS (Employment Permit System) workers apply through their home country's HRD Korea office — Kenya was not an EPS partner country at our last review (2026-07). Treat any \"guaranteed EPS visa from Kenya\" offer with great caution and confirm with HRD Korea. E-9 work visas from Kenya are not directly available.",
   },
   {
     code: "SG",

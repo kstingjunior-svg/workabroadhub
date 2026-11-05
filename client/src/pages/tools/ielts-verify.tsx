@@ -61,7 +61,7 @@ const VERDICT_STYLES = {
     text: "text-emerald-700 dark:text-emerald-400",
     accent: "bg-emerald-50 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-900",
     icon: ShieldCheck,
-    label: "Consistent with genuine TRF",
+    label: "No discrepancies found",
   },
   verify_officially: {
     bg: "bg-amber-500",

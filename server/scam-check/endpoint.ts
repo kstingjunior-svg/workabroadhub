@@ -106,8 +106,8 @@ export function registerScamCheckRoute(app: Express): void {
         }
 
         const userId: string | null = req.user?.claims?.sub ?? req.user?.id ?? null;
-        const jobId = await createToolScanJob("job_scam_check", userId, req.toolPaymentId ?? null);
-        res.status(202).json({ jobId, status: "processing" });
+        const { jobId, pollKey } = await createToolScanJob("job_scam_check", userId, req.toolPaymentId ?? null);
+        res.status(202).json({ jobId, pollKey, status: "processing" });
 
         const finalText = text;
         const finalImageDataUrl = imageDataUrl;

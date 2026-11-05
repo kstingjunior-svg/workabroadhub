@@ -213,6 +213,15 @@ export function useToolPayment(tool: string) {
     clearPending(tool);
   }, [tool]);
 
+  /**
+   * 2026-11 (VerifyX): the server returned the credit (scan failed on our
+   * side — "No charge has been kept"). Put the token back so the customer
+   * can retry without paying again.
+   */
+  const restoreToken = useCallback((token: string) => {
+    if (token) setScanToken(token);
+  }, []);
+
   /** The server rejected the token (402) — clear it and re-open the modal. */
   const handle402 = useCallback((data: any) => {
     setScanToken(null);
@@ -397,5 +406,5 @@ export function useToolPayment(tool: string) {
     };
   }
 
-  return { scanToken, requestScan, consumeToken, handle402, PayModal: payModalRef.current, payOpen: open };
+  return { scanToken, requestScan, consumeToken, restoreToken, handle402, PayModal: payModalRef.current, payOpen: open };
 }

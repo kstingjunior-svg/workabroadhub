@@ -466,8 +466,8 @@ function deriveVerdict(
   return {
     riskBand: "low",
     verdict:  "trustworthy",
-    headline: `The evidence appears consistent with a legitimate ${cn} employer.`,
-    explanation: `Our checks found no significant inconsistencies. We still recommend a final official verification — no one should ever send money or quit a job based on a checker's assessment alone.`,
+    headline: `No major warning signs found in the checks we ran.`,
+    explanation: `Our checks found no significant inconsistencies, but this does not confirm the job or employer is real. We still recommend a final official verification — no one should ever send money or quit a job based on a checker's assessment alone.`,
   };
 }
 

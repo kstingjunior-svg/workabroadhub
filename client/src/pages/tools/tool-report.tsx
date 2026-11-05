@@ -77,7 +77,7 @@ function ScoreRing({ score, grade }: { score: number; grade: string }) {
 const SCAM_CONFIG = {
   low: { label: "Low Risk", icon: ShieldCheck, color: "text-green-600", bg: "bg-green-50 dark:bg-green-900/20", border: "border-green-200 dark:border-green-700", bar: "bg-green-500", badgeClass: "bg-green-100 text-green-700" },
   medium: { label: "Medium Risk", icon: AlertTriangle, color: "text-amber-600", bg: "bg-amber-50 dark:bg-amber-900/20", border: "border-amber-200 dark:border-amber-700", bar: "bg-amber-500", badgeClass: "bg-amber-100 text-amber-700" },
-  high: { label: "High Risk — Likely Scam", icon: XCircle, color: "text-red-600", bg: "bg-red-50 dark:bg-red-900/20", border: "border-red-200 dark:border-red-700", bar: "bg-red-500", badgeClass: "bg-red-100 text-red-700" },
+  high: { label: "High Risk — Serious Warning Signs", icon: XCircle, color: "text-red-600", bg: "bg-red-50 dark:bg-red-900/20", border: "border-red-200 dark:border-red-700", bar: "bg-red-500", badgeClass: "bg-red-100 text-red-700" },
 };
 
 const TOOL_META = {

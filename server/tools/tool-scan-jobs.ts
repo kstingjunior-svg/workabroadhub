@@ -18,25 +18,36 @@
 // instead of four near-identical copies of ats_check_jobs, and one shared
 // status route instead of four.
 // ─────────────────────────────────────────────────────────────────────────────
-import { randomUUID } from "crypto";
+import { randomUUID, randomBytes, createHash, timingSafeEqual } from "crypto";
 import type { Express, Request, Response } from "express";
 import { pool } from "../db";
 
 export type ScanTool = "offer_check" | "visa_check" | "ielts_verify" | "job_scam_check";
 
+// 2026-11 (VerifyX security audit S3): results used to be readable by anyone
+// holding the job UUID. Every job now gets a random poll key, returned once in
+// the 202 response; only its SHA-256 is stored. scan-status requires the key
+// (x-poll-key header) or the signed-in owner.
+export function hashPollKey(key: string): string {
+  return createHash("sha256").update(`poll:${key}`).digest("hex");
+}
+
+export interface CreatedScanJob { jobId: string; pollKey: string }
+
 export async function createToolScanJob(
   tool: ScanTool,
   userId: string | null,
   paymentId: string | null,
-): Promise<string> {
+  pollKey: string = randomBytes(24).toString("base64url"),
+): Promise<CreatedScanJob> {
   const jobId = randomUUID();
   await pool.query(
-    `INSERT INTO tool_scan_jobs (id, tool, user_id, payment_id, status) VALUES ($1, $2, $3, $4, 'processing')`,
-    [jobId, tool, userId, paymentId],
+    `INSERT INTO tool_scan_jobs (id, tool, user_id, payment_id, status, poll_key_hash) VALUES ($1, $2, $3, $4, 'processing', $5)`,
+    [jobId, tool, userId, paymentId, hashPollKey(pollKey)],
   );
   // Best-effort housekeeping — never blocks the response.
   pool.query(`DELETE FROM tool_scan_jobs WHERE created_at < NOW() - INTERVAL '24 hours'`).catch(() => {});
-  return jobId;
+  return { jobId, pollKey };
 }
 
 export async function markToolScanJobDone(jobId: string, result: Record<string, any>): Promise<void> {
@@ -61,11 +72,27 @@ export function registerToolScanStatusRoute(app: Express): void {
   app.get("/api/tools/scan-status/:jobId", async (req: Request, res: Response) => {
     try {
       const { jobId } = req.params;
+      if (!/^[0-9a-f-]{36}$/i.test(String(jobId))) {
+        return res.status(404).json({ status: "error", message: "We couldn't find that check — please try again." });
+      }
       const { rows } = await pool.query(
-        `SELECT status, result, error_message FROM tool_scan_jobs WHERE id = $1`,
+        `SELECT status, result, error_message, user_id, poll_key_hash FROM tool_scan_jobs WHERE id = $1`,
         [jobId],
       );
       const job = rows[0];
+      if (job?.poll_key_hash) {
+        const key = String(req.headers["x-poll-key"] ?? "");
+        const reqUser = (req as any).user?.claims?.sub ?? (req as any).user?.id ?? null;
+        let ok = !!reqUser && job.user_id === reqUser;
+        if (!ok && key) {
+          const a = Buffer.from(hashPollKey(key)); const b = Buffer.from(job.poll_key_hash);
+          ok = a.length === b.length && timingSafeEqual(a, b);
+        }
+        if (!ok) {
+          // Same response as "not found" — don't reveal that the job exists.
+          return res.status(404).json({ status: "error", message: "We couldn't find that check — please try again." });
+        }
+      }
       if (!job) {
         return res.status(404).json({ status: "error", message: "We couldn't find that check — please try again." });
       }
