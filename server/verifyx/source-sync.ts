@@ -197,7 +197,7 @@ export async function refreshNeaHealth(): Promise<void> {
     const okAt: Date | null = r?.ok_at ?? null;
     const fresh = okAt && Date.now() - new Date(okAt).getTime() < 48 * 3600_000;
     await pool.query(
-      `UPDATE verifyx_official_sources SET last_success_at=$2, connector_status=$3, last_error=$4, last_attempt_at=now(), updated_at=now() WHERE id='ke_nea_register'`,
+      `UPDATE verifyx_official_sources SET last_success_at=$1::timestamptz, connector_status=$2::text, last_error=$3::text, last_attempt_at=now(), updated_at=now() WHERE id='ke_nea_register'`,
       [okAt, fresh ? (r?.last_status === "partial" ? "degraded" : "operational") : "unavailable", r?.last_error ?? null],
     );
   } catch (err: any) {
@@ -241,7 +241,14 @@ export async function checkGuidanceChanges(): Promise<void> {
         [s.id, hash],
       );
     } catch (err: any) {
-      await pool.query(`UPDATE verifyx_official_sources SET last_attempt_at=now(), last_error=$2, updated_at=now() WHERE id=$1`, [s.id, String(err?.message ?? err).slice(0, 300)]).catch(() => {});
+      // Many government sites block automated requests from cloud servers
+      // (403/404 to bots while working fine in a browser). The link itself is
+      // valid; change detection for that page must be done by a person.
+      const msg = String(err?.message ?? err);
+      const note = /HTTP (403|404|429)/.test(msg)
+        ? `Automated change check blocked by the site (${msg}); link verified manually 2026-11-05 — review this page by hand.`
+        : msg;
+      await pool.query(`UPDATE verifyx_official_sources SET last_attempt_at=now(), last_error=$2, updated_at=now() WHERE id=$1`, [s.id, note.slice(0, 300)]).catch(() => {});
     }
   }
 }
