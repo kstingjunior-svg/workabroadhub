@@ -4266,6 +4266,89 @@ Crawl-delay: 1`);
     }
   });
 
+  // ── POST /api/payments/paybill-intent ─────────────────────────────────────
+  // 2026-11 (Agnes KES 1,000 case): our Paybill card tells customers to use
+  // their EMAIL as the account number. When the money arrived we knew WHO
+  // paid but not WHAT for (no order existed), so — by the finance rule
+  // "never infer the purchase from the amount" — it sat in the unmatched
+  // queue and the customer got no access. Now, when the Paybill
+  // instructions are opened, we record the customer's own choice (plan or
+  // service order) as an "awaiting_paybill" payment row. The C2B handler's
+  // "payer's own open attempt" rule (same user + same amount, 72h) then
+  // links the Paybill payment to it and activates exactly what they chose.
+  // Amount is always resolved server-side.
+  app.post("/api/payments/paybill-intent", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId: string | undefined = req.user?.claims?.sub ?? req.user?.id;
+      if (!userId) return res.status(401).json({ message: "Please sign in." });
+      const rawPlan = typeof req.body?.planId === "string" ? req.body.planId.trim().toLowerCase() : "";
+      const serviceOrderId = typeof req.body?.serviceOrderId === "string" ? req.body.serviceOrderId.trim() : "";
+
+      let amount: number | null = null;
+      let planId: string | null = null;
+      let serviceId: string;
+      let serviceName: string;
+      let metadata: Record<string, any> = { source: "paybill_intent" };
+
+      if (serviceOrderId) {
+        const order = await storage.getServiceOrderById(serviceOrderId);
+        if (!order || order.userId !== userId) return res.status(404).json({ message: "Order not found." });
+        if (["paid", "processing", "completed"].includes(String((order as any).status))) {
+          return res.json({ ok: true, alreadyPaid: true });
+        }
+        amount = Number(order.amount);
+        serviceId = order.serviceId;
+        serviceName = order.serviceName ?? order.serviceId;
+        metadata.serviceOrderId = serviceOrderId;
+      } else {
+        const allowed = ["monthly", "pro", "yearly", "pro_referral", "trial"];
+        if (!allowed.includes(rawPlan)) return res.status(400).json({ message: "Unknown plan." });
+        if (rawPlan === "trial") {
+          const { isTrialPlanWithdrawn } = await import("./lib/trial-gate");
+          if (isTrialPlanWithdrawn()) return res.status(400).json({ message: "Our KES 99 trial is no longer available.", code: "TRIAL_WITHDRAWN" });
+        }
+        const price = await resolvePrice({ planId: rawPlan, userId });
+        if (!price) return res.status(400).json({ message: "This plan is not available right now." });
+        amount = price.finalPrice;
+        planId = rawPlan;
+        serviceId = `plan_${rawPlan}`;
+        serviceName = rawPlan === "monthly" ? "Monthly Access" : rawPlan === "trial" ? "1 Day Trial" : "Yearly Access";
+        metadata = { ...metadata, planId: rawPlan, appliedPromo: price.appliedPromo ?? null };
+      }
+      if (!amount || amount <= 0) return res.status(400).json({ message: "Could not work out the amount." });
+
+      // Housekeeping: intents nobody paid within 7 days are closed.
+      pool.query(`UPDATE payments SET status = 'expired', updated_at = NOW() WHERE status = 'awaiting_paybill' AND created_at < NOW() - INTERVAL '7 days'`).catch(() => {});
+
+      // Reuse an open intent for the same thing (idempotent on repeated opens).
+      const { rows: existing } = await pool.query(
+        `SELECT id, amount FROM payments
+          WHERE user_id = $1 AND status = 'awaiting_paybill' AND service_id = $2
+            AND created_at > NOW() - INTERVAL '72 hours'
+          ORDER BY created_at DESC LIMIT 1`,
+        [userId, serviceId],
+      );
+      if (existing.length && Number(existing[0].amount) === amount) {
+        return res.json({ ok: true, intentId: existing[0].id, amount, reference: String(existing[0].id).slice(0, 8).toUpperCase() });
+      }
+      if (existing.length) {
+        // Price changed since — retire the stale intent so only one can match.
+        await pool.query(`UPDATE payments SET status = 'superseded', updated_at = NOW() WHERE id = $1`, [existing[0].id]);
+      }
+
+      const row = await storage.createPayment({
+        userId, amount, currency: "KES", method: "mpesa", status: "awaiting_paybill",
+        planId, serviceId, serviceName, paymentSource: "paybill_intent",
+        metadata: JSON.stringify(metadata),
+      } as any);
+      console.log(`[PaybillIntent] userId=${userId} ${serviceId} KES ${amount} → intent ${row.id}`);
+      res.json({ ok: true, intentId: row.id, amount, reference: String(row.id).slice(0, 8).toUpperCase() });
+    } catch (err: any) {
+      console.error("[PaybillIntent] failed:", err?.message);
+      res.status(500).json({ message: "Could not prepare Paybill details. You can still pay — use your email as the account number." });
+    }
+  });
+
   app.post("/api/payments/initiate", isAuthenticated, requireVerifiedForPayment, async (req: any, res) => {
     try {
       const userId = req.user?.claims?.sub;

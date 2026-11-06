@@ -238,9 +238,10 @@ async function tryMatchAndActivate(payload: SafaricomC2BPayload): Promise<void> 
         const { rows: attempt } = await pool.query(
           `SELECT id FROM payments
             WHERE user_id = $1 AND amount = $2
-              AND status NOT IN ('success', 'completed')
+              AND status NOT IN ('success', 'completed', 'superseded', 'refunded')
               AND created_at > NOW() - INTERVAL '72 hours'
-            ORDER BY created_at DESC LIMIT 1`,
+            -- 2026-11: the customer's explicit Paybill choice (paybill-intent) wins
+            ORDER BY (status = 'awaiting_paybill') DESC, created_at DESC LIMIT 1`,
           [resolved.userId, amountKes],
         );
         if (attempt.length) {

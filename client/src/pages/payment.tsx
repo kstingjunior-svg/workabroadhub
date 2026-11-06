@@ -1849,6 +1849,8 @@ export default function Payment() {
                     <MpesaPaybillOption
                       amount={paymentAmount}
                       account={user?.email || "your email"}
+                      serviceOrderId={new URLSearchParams(window.location.search).get("order")}
+                      planId={new URLSearchParams(window.location.search).get("order") ? null : effectivePlanId}
                       planName={(urlPlanId && (urlPlanId === "trial" ? "Trial" : urlPlanId === "monthly" ? "Monthly" : urlPlanId === "yearly" ? "Yearly" : urlPlanId)) || undefined}
                     />
 

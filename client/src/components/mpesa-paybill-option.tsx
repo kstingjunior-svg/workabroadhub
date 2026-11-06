@@ -13,7 +13,8 @@
  * 2026-06: built when founder reported 46% M-Pesa success rate and asked
  * for 70%+.
  */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { apiRequest } from "@/lib/queryClient";
 import { Card, CardContent } from "@/components/ui/card";
 import { Copy, Check, ChevronDown, ChevronUp, Building2 } from "lucide-react";
 
@@ -28,6 +29,13 @@ interface Props {
    *  set to true on the dashboard's Pro pricing modal where Paybill is the
    *  primary fallback message. */
   defaultOpen?: boolean;
+  /**
+   * 2026-11: what the customer is buying. When the instructions are opened we
+   * record this choice server-side, so a Paybill payment made with the email
+   * as account number unlocks exactly this plan / order automatically.
+   */
+  planId?: string | null;
+  serviceOrderId?: string | null;
 }
 
 function CopyValue({ value, label, big = false }: { value: string; label: string; big?: boolean }) {
@@ -53,8 +61,27 @@ function CopyValue({ value, label, big = false }: { value: string; label: string
   );
 }
 
-export function MpesaPaybillOption({ amount, account, planName, defaultOpen = false }: Props) {
+export function MpesaPaybillOption({ amount, account, planName, defaultOpen = false, planId, serviceOrderId }: Props) {
   const [open, setOpen] = useState(defaultOpen);
+  const [serverAmount, setServerAmount] = useState<number | null>(null);
+  const [intentReady, setIntentReady] = useState(false);
+  const recordedFor = useRef<string | null>(null);
+
+  // Record the customer's choice once per plan/order when the card is opened.
+  useEffect(() => {
+    const key = serviceOrderId ? `order:${serviceOrderId}` : planId ? `plan:${planId}` : null;
+    if (!open || !key || recordedFor.current === key || !account || !account.includes("@")) return;
+    recordedFor.current = key;
+    apiRequest("POST", "/api/payments/paybill-intent", serviceOrderId ? { serviceOrderId } : { planId })
+      .then((r) => r.json())
+      .then((body) => {
+        if (body?.ok && typeof body.amount === "number") setServerAmount(body.amount);
+        if (body?.ok) setIntentReady(true);
+      })
+      .catch(() => { /* card still works; payment lands in the review queue */ });
+  }, [open, planId, serviceOrderId, account]);
+
+  const shownAmount = serverAmount ?? amount;
 
   return (
     <Card className="border-2 border-emerald-200 dark:border-emerald-800/60 bg-emerald-50/40 dark:bg-emerald-950/20 mt-4">
@@ -102,13 +129,17 @@ export function MpesaPaybillOption({ amount, account, planName, defaultOpen = fa
               <li className="flex items-start gap-2">
                 <span className="font-bold shrink-0">4.</span>
                 <span>
-                  Amount: <CopyValue value={String(amount)} label="Amount" big />
+                  Amount: <CopyValue value={String(shownAmount)} label="Amount" big />
                   {planName && <span className="text-[11px] opacity-70 ml-1">({planName})</span>}
                 </span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="font-bold shrink-0">5.</span>
-                <span>Enter your M-Pesa PIN. Our system spots the payment within 2 minutes and unlocks your access automatically.</span>
+                <span>
+                  Enter your M-Pesa PIN. Our system spots the payment within 2 minutes and unlocks
+                  {planName ? ` ${planName}` : " your purchase"} automatically.
+                  {intentReady && <span className="block text-[11px] text-emerald-700/80 dark:text-emerald-300/80 mt-0.5">✓ We've noted your choice — pay the exact amount above with your email as the account number.</span>}
+                </span>
               </li>
             </ol>
             <div className="mt-3 text-[11px] text-emerald-800/80 dark:text-emerald-200/70 bg-white/40 dark:bg-black/20 rounded p-2 border border-emerald-200 dark:border-emerald-800/40">
