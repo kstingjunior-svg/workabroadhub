@@ -1758,7 +1758,11 @@ export async function syncPlanPrices(): Promise<void> {
     ];
 
     let inserted = 0, updated = 0;
+    // 2026-11: the KES 99 trial is withdrawn — keep it inactive on every boot.
+    const { isTrialPlanWithdrawn } = await import("./lib/trial-gate");
+    const trialOff = isTrialPlanWithdrawn();
     for (const t of targets) {
+      const active = !(trialOff && (t.planId === "trial" || t.planId === "basic"));
       // Try UPDATE first (preserves all fields not touched here).
       const upd = await pool.query(
         `UPDATE plans
@@ -1768,10 +1772,10 @@ export async function syncPlanPrices(): Promise<void> {
                 badge = $4,
                 billing_period = $5,
                 display_order = $6,
-                is_active = true,
+                is_active = $8,
                 updated_at = NOW()
           WHERE plan_id = $7`,
-        [t.price, t.name, t.description, t.badge, t.billingPeriod, t.displayOrder, t.planId],
+        [t.price, t.name, t.description, t.badge, t.billingPeriod, t.displayOrder, t.planId, active],
       );
       if (upd.rowCount && upd.rowCount > 0) {
         updated += upd.rowCount;
@@ -1783,9 +1787,9 @@ export async function syncPlanPrices(): Promise<void> {
           `INSERT INTO plans
              (plan_id, plan_name, price, currency, features, description, badge,
               billing_period, is_active, display_order)
-           VALUES ($1, $2, $3, 'KES', $4, $5, $6, $7, true, $8)
+           VALUES ($1, $2, $3, 'KES', $4, $5, $6, $7, $9, $8)
            ON CONFLICT (plan_id) DO NOTHING`,
-          [t.planId, t.name, t.price, JSON.stringify(t.features), t.description, t.badge, t.billingPeriod, t.displayOrder],
+          [t.planId, t.name, t.price, JSON.stringify(t.features), t.description, t.badge, t.billingPeriod, t.displayOrder, active],
         );
         inserted++;
       } catch (err: any) {

@@ -4465,6 +4465,18 @@ Crawl-delay: 1`);
       // same query, same response shape — so it doesn't matter which route
       // the client takes: one KES 99 trial per userId OR per phone number,
       // ever, across both current ('trial') and legacy ('basic') naming.
+      // 2026-11 (Tony: "switch it off"): the KES 99 trial is withdrawn —
+      // this route only blocked REPEAT trials, so a first-time trial could
+      // still be bought here. Refuse all trial purchases while withdrawn.
+      if (subscriptionPlanId === "trial" || subscriptionPlanId === "basic") {
+        const { isTrialPlanWithdrawn } = await import("./lib/trial-gate");
+        if (isTrialPlanWithdrawn()) {
+          return res.status(400).json({
+            message: "Our KES 99 trial is no longer available. Please choose Monthly (KES 1,000) or Yearly (KES 4,500).",
+            code: "TRIAL_WITHDRAWN",
+          });
+        }
+      }
       if (subscriptionPlanId === "trial" || subscriptionPlanId === "basic") {
         const { rows: trialCheck } = await pool.query<{ has_trial: boolean }>(
           `SELECT EXISTS(
@@ -21249,6 +21261,15 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
         // PLAN UPGRADE: resolve via the pricing engine.
         // Passing userId and promoCode enables per-user discounts and active promo codes.
         const planId = serviceId.replace("plan_", "");
+        if (planId === "trial" || planId === "basic") {
+          const { isTrialPlanWithdrawn } = await import("./lib/trial-gate");
+          if (isTrialPlanWithdrawn()) {
+            return res.status(400).json({
+              message: "Our KES 99 trial is no longer available. Please choose Monthly (KES 1,000) or Yearly (KES 4,500).",
+              code: "TRIAL_WITHDRAWN",
+            });
+          }
+        }
         resolvedPaypal = await resolvePrice({
           planId,
           userId,

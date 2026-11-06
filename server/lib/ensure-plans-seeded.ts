@@ -83,20 +83,25 @@ const PLAN_SEEDS: PlanSeed[] = [
 export async function ensurePlansSeeded(): Promise<void> {
   // INSERT … ON CONFLICT DO UPDATE so this is safe to run on every boot and
   // also picks up any price tweaks we make to this file later.
+  // 2026-11: keep the withdrawn KES 99 trial (and its 'basic' alias)
+  // inactive instead of re-activating it on every boot.
+  const { isTrialPlanWithdrawn } = await import("./trial-gate");
+  const trialOff = isTrialPlanWithdrawn();
   for (const p of PLAN_SEEDS) {
+    const active = !(trialOff && (p.planId === "trial" || p.planId === "basic"));
     try {
       await pool.query(
         `INSERT INTO plans (plan_id, plan_name, price, billing_period, description, display_order, currency, is_active, features, metadata, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, 'KES', true, '[]'::jsonb, '{}'::jsonb, NOW(), NOW())
+         VALUES ($1, $2, $3, $4, $5, $6, 'KES', $7, '[]'::jsonb, '{}'::jsonb, NOW(), NOW())
          ON CONFLICT (plan_id) DO UPDATE
            SET plan_name      = EXCLUDED.plan_name,
                price          = EXCLUDED.price,
                billing_period = EXCLUDED.billing_period,
                description    = EXCLUDED.description,
                display_order  = EXCLUDED.display_order,
-               is_active      = true,
+               is_active      = EXCLUDED.is_active,
                updated_at     = NOW()`,
-        [p.planId, p.planName, p.price, p.billingPeriod, p.description, p.displayOrder],
+        [p.planId, p.planName, p.price, p.billingPeriod, p.description, p.displayOrder, active],
       );
     } catch (err: any) {
       // Don't fail server boot if one plan row can't be upserted — log it
