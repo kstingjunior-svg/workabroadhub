@@ -334,6 +334,15 @@ async function tryMatchAndActivate(payload: SafaricomC2BPayload): Promise<void> 
     }
   }
 
+  // 2b. 2026-11 (audit): Paybill STK pushes ALSO produce a C2B confirmation
+  //     for the same money. When the STK side recorded the payment without
+  //     a receipt (StkRecovery query path) or the payment belongs to a
+  //     Write-From-Scratch draft (own table), the echo used to land here as
+  //     a second, "unmatched" payment — double-counting revenue and putting
+  //     already-served customers in the admin queue. Give the STK callback a
+  //     short grace period, then attach the receipt to the original record.
+  if (await isStkEcho(receipt, phone, amountKes)) return;
+
   // 3. No match — record as orphan for admin review.
   console.warn(`[c2b] ORPHAN receipt=${receipt} phone=${phone} amount=${amountKes} acctRef="${acctRef}" — saved for admin`);
   try {
@@ -366,6 +375,60 @@ async function tryMatchAndActivate(payload: SafaricomC2BPayload): Promise<void> 
   } catch (err: any) {
     console.error(`[c2b] Failed to persist orphan ${receipt}:`, err?.message);
   }
+}
+
+const PHONE_MATCH_SQL = (col: string, param: string) => `(
+  encode(extensions.digest('254' || right(regexp_replace(${col}, '\\D', '', 'g'), 9), 'sha256'), 'hex') = lower(${param})
+  OR (${param} !~ '^[0-9a-fA-F]{64}$' AND right(regexp_replace(${col}, '\\D', '', 'g'), 9) = right(regexp_replace(${param}, '\\D', '', 'g'), 9))
+)`;
+
+async function findEcho(receipt: string, phone: string, amountKes: number): Promise<string | null> {
+  // Already recorded anywhere (payments or a WFS draft)?
+  const { rows: rec } = await pool.query(
+    `SELECT 'payment:' || id AS ref FROM payments WHERE mpesa_receipt_number = $1 OR mpesa_code = $1 OR transaction_ref = $1
+     UNION ALL
+     SELECT 'wfs:' || id FROM write_from_scratch_drafts WHERE mpesa_receipt = $1
+     LIMIT 1`,
+    [receipt],
+  );
+  if (rec.length) return String(rec[0].ref);
+  // A successful STK payment from the same phone, same amount, no receipt yet.
+  const { rows: stk } = await pool.query(
+    `SELECT id FROM payments
+      WHERE amount = $1 AND status IN ('success', 'completed')
+        AND mpesa_receipt_number IS NULL
+        AND checkout_request_id IS NOT NULL
+        AND created_at > NOW() - INTERVAL '20 minutes'
+        AND coalesce(phone, fin_meta(metadata)->>'phone', '') <> ''
+        AND ${PHONE_MATCH_SQL("coalesce(phone, fin_meta(metadata)->>'phone')", "$2")}
+      ORDER BY created_at DESC LIMIT 2`,
+    [amountKes, phone],
+  );
+  if (stk.length === 1) {
+    await pool.query(
+      `UPDATE payments SET mpesa_receipt_number = $2, mpesa_code = COALESCE(mpesa_code, $2), updated_at = NOW()
+        WHERE id = $1 AND mpesa_receipt_number IS NULL`,
+      [stk[0].id, receipt],
+    );
+    return `stk:${stk[0].id}`;
+  }
+  return null;
+}
+
+async function isStkEcho(receipt: string, phone: string, amountKes: number): Promise<boolean> {
+  try {
+    for (const waitMs of [0, 45_000]) {
+      if (waitMs) await new Promise((r) => setTimeout(r, waitMs));
+      const hit = await findEcho(receipt, phone, amountKes);
+      if (hit) {
+        console.log(`[c2b] receipt=${receipt} is the C2B echo of an already-recorded payment (${hit}) — no orphan created`);
+        return true;
+      }
+    }
+  } catch (err: any) {
+    console.error(`[c2b] echo check failed for ${receipt}:`, err?.message);
+  }
+  return false;
 }
 
 // ── Route registration ───────────────────────────────────────────────────────

@@ -34,12 +34,15 @@ export default function DirectHireJobsIndex() {
   });
   const [country, setCountry] = useState("");
 
-  const { data: jobs, isLoading } = useQuery<JobListing[]>({
+  const { data: jobs, isLoading, isError } = useQuery<JobListing[]>({
     queryKey: ["/api/direct-hire/jobs", country],
     queryFn: async () => {
       const url = country ? `/api/direct-hire/jobs?country=${encodeURIComponent(country)}` : "/api/direct-hire/jobs";
       const res = await fetch(url);
-      return res.json();
+      if (!res.ok) throw new Error(`Could not load jobs (${res.status})`);
+      const body = await res.json();
+      // Never hand a non-array to .map() — an error body used to crash the page.
+      return Array.isArray(body) ? body : Array.isArray(body?.jobs) ? body.jobs : [];
     },
   });
 
@@ -71,7 +74,15 @@ export default function DirectHireJobsIndex() {
         </div>
       )}
 
-      {!isLoading && (!jobs || jobs.length === 0) && (
+      {!isLoading && isError && (
+        <Card>
+          <CardContent className="py-10 text-center text-muted-foreground">
+            We couldn't load listings right now. Please try again in a moment.
+          </CardContent>
+        </Card>
+      )}
+
+      {!isLoading && !isError && (!jobs || jobs.length === 0) && (
         <Card>
           <CardContent className="py-10 text-center text-muted-foreground">
             No open listings right now{country ? ` in "${country}"` : ""}. Check back soon.

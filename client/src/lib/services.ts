@@ -104,10 +104,15 @@ export function clearServicesCache(): void {
   }
 }
 
-const POLL_INTERVAL_MS = 10_000;
+// 2026-11 (app audit): was 10s — every open tab re-downloaded the 8 KB
+// price list 360 times an hour (mostly on Kenyan mobile data), and the
+// server already caches it for 30s. Prices change a few times a month, so
+// check every 5 minutes, and only while the tab is visible.
+const POLL_INTERVAL_MS = 5 * 60_000;
 
 export function startServicesPriceWatcher(): () => void {
   const id = setInterval(async () => {
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
     try {
       const res = await fetch("/api/services", {
         credentials: "include",

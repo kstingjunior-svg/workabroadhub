@@ -1172,11 +1172,15 @@ export default function Dashboard() {
     staleTime: 60_000,
   });
 
+  // 2026-11 (app audit): only probe the (heavy) admin stats endpoint for
+  // accounts the session already marks as admin — every customer's dashboard
+  // load used to call it and get a 403.
+  const maybeAdmin = !!user && ((user as any).isAdmin === true || ["admin", "ADMIN", "SUPER_ADMIN"].includes(String((user as any).role ?? "")));
   const { data: adminStats, error: adminError, isSuccess: adminCheckSuccess } = useQuery<{ totalUsers?: number }>({
     queryKey: ["/api/admin/stats"],
     retry: false,
     staleTime: 1000 * 60 * 10,
-    enabled: !!user,
+    enabled: maybeAdmin,
   });
 
   // 2026-06: orders + alerts don't change often. 60s stale cuts re-fetch
