@@ -267,6 +267,7 @@ export function registerVerifyxRoutes(app: Express): void {
     const m = await import("./source-sync");
     let result: any;
     if (id === "uk_sponsor_register") result = await m.syncUkSponsorRegister(true);
+    else if (id === "nl_ind_sponsor_register") result = await m.syncNlSponsorRegister(true);
     else if (id === "ke_nea_register") { await m.refreshNeaHealth(); result = { status: "refreshed" }; }
     else if (id === "guidance") { await m.checkGuidanceChanges(); result = { status: "checked" }; }
     else return res.status(400).json({ message: "This source has no automated connector." });

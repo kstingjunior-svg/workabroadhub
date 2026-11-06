@@ -20,8 +20,8 @@ import { scanForInjection } from "../verifyx/guards";
 import { buildOfferFindings, type SalaryCheck } from "../verifyx/offer-findings";
 import { extractJson, ExtractionError, str, bool, arr, num, conf, confMap, type ExtractionInput, type ModelUsage } from "../verifyx/model";
 import { assembleReport, type ExtractedFieldView, type VerifyXReport } from "../verifyx/report";
-import { checkEmailDomain, lookupNeaAgency, lookupUkSponsor } from "../verifyx/employer-lookup";
-import { emailDomainFindings, neaFindings, ukSponsorFindings } from "../verifyx/employer-findings";
+import { checkEmailDomain, lookupNeaAgency, lookupNlSponsor, lookupUkSponsor } from "../verifyx/employer-lookup";
+import { emailDomainFindings, neaFindings, nlSponsorFindings, ukSponsorFindings, userRunEmployerCheck } from "../verifyx/employer-findings";
 import { registrableDomain } from "../verifyx/names";
 
 const SYSTEM_PROMPT = `You read employment offer letters and contracts for a document-checking service.
@@ -151,14 +151,17 @@ export async function evaluateOffer(
   });
 
   if (!opts.skipNetwork) {
-    const [dnsCheck, uk, nea] = await Promise.all([
+    const [dnsCheck, uk, nea, nl] = await Promise.all([
       checkEmailDomain(f.recruiterEmail),
       country?.code === "GB" && f.employerName ? lookupUkSponsor(f.employerName) : Promise.resolve(null),
       f.recruitmentAgency || f.agencyLicenceNumber ? lookupNeaAgency(f.recruitmentAgency ?? null, f.agencyLicenceNumber ?? null) : Promise.resolve(null),
+      country?.code === "NL" && f.employerName ? lookupNlSponsor(f.employerName) : Promise.resolve(null),
     ]);
     findings.push(...emailDomainFindings(f.recruiterEmail ?? null, f.companyWebsite ? registrableDomain(f.companyWebsite) : null, dnsCheck));
     if (uk) findings.push(...ukSponsorFindings(uk, !!f.visaSponsorship));
     if (nea) findings.push(...neaFindings(nea, f.agencyLicenceNumber ?? null));
+    if (nl) findings.push(...nlSponsorFindings(nl, !!f.visaSponsorship));
+    findings.push(...userRunEmployerCheck(country?.code ?? null, f.employerName ?? null));
   }
 
   findings = attachFieldConfidence(findings, extraction.fieldConfidence, userConfirmed);

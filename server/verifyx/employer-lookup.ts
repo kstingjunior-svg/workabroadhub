@@ -19,7 +19,7 @@ export interface RegistryMatch {
 }
 
 export interface RegistryLookupResult {
-  registryId: "uk_sponsor_register" | "ke_nea_register";
+  registryId: "uk_sponsor_register" | "ke_nea_register" | "nl_ind_sponsor_register";
   queriedName: string;
   outcome: "match" | "no_match" | "close_matches" | "unavailable";
   matches: RegistryMatch[];
@@ -38,26 +38,34 @@ async function sourceFreshness(id: string): Promise<{ retrievedAt: string | null
   return { retrievedAt: at ? new Date(at).toISOString() : null, stale, usable: !!at };
 }
 
-export async function lookupUkSponsor(name: string): Promise<RegistryLookupResult> {
-  const base: RegistryLookupResult = { registryId: "uk_sponsor_register", queriedName: name, outcome: "unavailable", matches: [], retrievedAt: null, stale: true };
+/**
+ * Look a name up in a synced official register (verifyx_employer_registry).
+ * Exact normalised match → "match"; trigram ≥ 0.55 → "close_matches".
+ */
+export async function lookupSyncedRegistry(
+  registryId: "uk_sponsor_register" | "nl_ind_sponsor_register",
+  name: string,
+  minRows = 500,
+): Promise<RegistryLookupResult> {
+  const base: RegistryLookupResult = { registryId, queriedName: name, outcome: "unavailable", matches: [], retrievedAt: null, stale: true };
   try {
-    const fresh = await sourceFreshness("uk_sponsor_register");
+    const fresh = await sourceFreshness(registryId);
     base.retrievedAt = fresh.retrievedAt; base.stale = fresh.stale;
-    const { rows: [cnt] } = await pool.query(`SELECT count(*)::int AS n FROM verifyx_employer_registry WHERE registry_id='uk_sponsor_register'`);
-    if (!fresh.usable || (cnt?.n ?? 0) < 1000) return base;
+    const { rows: [cnt] } = await pool.query(`SELECT count(*)::int AS n FROM verifyx_employer_registry WHERE registry_id=$1`, [registryId]);
+    if (!fresh.usable || (cnt?.n ?? 0) < minRows) return base;
     const norm = normalizeEmployerName(name);
     if (!norm || norm.length < 3) return { ...base, outcome: "no_match" };
     const { rows: exact } = await pool.query(
       `SELECT DISTINCT name, town, county, type_rating, route FROM verifyx_employer_registry
-        WHERE registry_id='uk_sponsor_register' AND name_norm=$1 LIMIT 10`, [norm],
+        WHERE registry_id=$2 AND name_norm=$1 LIMIT 10`, [norm, registryId],
     );
     if (exact.length) {
       return { ...base, outcome: "match", matches: exact.map((r: any) => ({ name: r.name, town: r.town, county: r.county, typeRating: r.type_rating, route: r.route })) };
     }
     const { rows: close } = await pool.query(
       `SELECT name, town, type_rating, route, similarity(name_norm, $1) AS sim FROM verifyx_employer_registry
-        WHERE registry_id='uk_sponsor_register' AND name_norm % $1
-        ORDER BY sim DESC LIMIT 3`, [norm],
+        WHERE registry_id=$2 AND name_norm % $1
+        ORDER BY sim DESC LIMIT 3`, [norm, registryId],
     ).catch(() => ({ rows: [] as any[] }));
     const good = close.filter((r: any) => Number(r.sim) >= 0.55);
     if (good.length) {
@@ -65,9 +73,17 @@ export async function lookupUkSponsor(name: string): Promise<RegistryLookupResul
     }
     return { ...base, outcome: "no_match" };
   } catch (err: any) {
-    console.warn("[VerifyX] UK sponsor lookup failed:", err?.message);
+    console.warn(`[VerifyX] ${registryId} lookup failed:`, err?.message);
     return base;
   }
+}
+
+export function lookupUkSponsor(name: string): Promise<RegistryLookupResult> {
+  return lookupSyncedRegistry("uk_sponsor_register", name, 1000);
+}
+
+export function lookupNlSponsor(name: string): Promise<RegistryLookupResult> {
+  return lookupSyncedRegistry("nl_ind_sponsor_register", name, 1000);
 }
 
 let neaCache: { at: number; rows: Array<{ name: string; norm: string; licence: string | null; expiry: string | null; status: string | null }> } | null = null;

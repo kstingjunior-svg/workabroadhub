@@ -19,8 +19,8 @@ import { scanForInjection, type PdfSignatureScan } from "../verifyx/guards";
 import { buildVisaFindings, type VisaDocumentKind, type VisaFields } from "../verifyx/visa-findings";
 import { extractJson, ExtractionError, str, bool, arr, conf, confMap, type ExtractionInput, type ModelUsage } from "../verifyx/model";
 import { assembleReport, type ExtractedFieldView, type VerifyXReport } from "../verifyx/report";
-import { lookupUkSponsor } from "../verifyx/employer-lookup";
-import { ukSponsorFindings } from "../verifyx/employer-findings";
+import { lookupNlSponsor, lookupUkSponsor } from "../verifyx/employer-lookup";
+import { nlSponsorFindings, ukSponsorFindings } from "../verifyx/employer-findings";
 
 const SYSTEM_PROMPT = `You read visa, residence-permit and work-permit documents for a document-checking service.
 Your ONLY job is to transcribe what is printed or visible. Do not judge whether the document is genuine, authentic, forged or fraudulent, and do not give any score for that.
@@ -166,6 +166,10 @@ export async function evaluateVisa(
   if (country?.code === "GB" && f.employer) {
     const r = await lookupUkSponsor(f.employer);
     findings.push(...ukSponsorFindings(r, true));
+  }
+  if (country?.code === "NL" && f.employer) {
+    const r = await lookupNlSponsor(f.employer);
+    findings.push(...nlSponsorFindings(r, false));
   }
 
   findings = attachFieldConfidence(findings, extraction.fieldConfidence, userConfirmed);

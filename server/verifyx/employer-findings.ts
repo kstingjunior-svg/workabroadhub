@@ -198,3 +198,63 @@ export function emailDomainFindings(
   }
   return out;
 }
+
+
+/** Netherlands IND recognised-sponsor register (synced monthly). */
+export function nlSponsorFindings(r: RegistryLookupResult, claimsSponsorship: boolean): Finding[] {
+  const s = getSource("nl_ind_sponsor_register")!;
+  const when = r.retrievedAt ? new Date(r.retrievedAt).toISOString().slice(0, 10) : "unknown date";
+  const check = { name: "nl_ind_sponsor_lookup", version: 1, result: r.outcome };
+  if (r.outcome === "unavailable" || r.stale) {
+    return [makeFinding({
+      code: "nl_sponsor_register_unavailable", status: "unable_to_verify", priority: "medium",
+      title: "Dutch recognised-sponsor register could not be checked",
+      examined: `Whether "${r.queriedName}" is an IND recognised sponsor.`,
+      evidenceSays: "Our copy of the IND public register is not current.",
+      howToVerify: "Search the employer on the IND public register.", howToVerifyUrl: s.url,
+      method: "registry_lookup", check,
+    })];
+  }
+  if (r.outcome === "match") {
+    const m = r.matches[0];
+    return [makeFinding({
+      code: "nl_sponsor_listed", status: "consistent_with_requirements", priority: "medium",
+      title: "Employer appears on the IND register of recognised sponsors",
+      examined: `The employer name "${r.queriedName}" against the IND public register (Work), as published on ${when}.`,
+      documentSays: `Employer: ${r.queriedName}`,
+      evidenceSays: `"${m.name}"${m.route ? ` (KvK ${m.route})` : ""} is listed as a recognised sponsor.`,
+      whyItMatters: "For the Dutch highly skilled migrant route, the employer must be recognised by the IND as a sponsor.",
+      uncertainty: "This shows the organisation is a recognised sponsor. It does not confirm that this letter was issued by them. Contact the company through its own official website.",
+      howToVerify: "Search the register yourself and contact the employer through its official website.",
+      howToVerifyUrl: s.url, source: { sourceId: s.id, authority: s.authority, url: s.url, retrievedAt: r.retrievedAt },
+      method: "registry_lookup", check,
+    })];
+  }
+  const close = r.outcome === "close_matches" ? r.matches.map((m) => `"${m.name}"`).join(", ") : "";
+  return [makeFinding({
+    code: "nl_sponsor_not_found", status: claimsSponsorship ? "potential_risk_indicator" : "unable_to_verify",
+    priority: claimsSponsorship ? "high" : "medium",
+    title: "No exact match on the IND register of recognised sponsors",
+    examined: `The employer name "${r.queriedName}" against the IND public register (published ${when}).`,
+    evidenceSays: close ? `No exact match. Similar names on the register: ${close}.` : "No organisation with this exact name is on the register.",
+    whyItMatters: "Employers sponsoring highly skilled migrants to the Netherlands must be IND recognised sponsors. Some other permit types do not require it.",
+    uncertainty: "Legal names can differ from trading names (\"B.V.\" entities, parent companies). A missing exact match is not proof of anything.",
+    howToVerify: "Ask the employer for the exact legal name and KvK number, then search the IND register.",
+    howToVerifyUrl: s.url, source: { sourceId: s.id, authority: s.authority, url: s.url, retrievedAt: r.retrievedAt },
+    method: "registry_lookup", check,
+  })];
+}
+
+/** Countries where the official employer check exists but must be run by the user. */
+export function userRunEmployerCheck(countryCode: string | null, employerName: string | null): Finding[] {
+  const id = countryCode === "NZ" ? "nz_accredited_employers" : countryCode === "US" ? "us_dol_disclosure" : null;
+  if (!id) return [];
+  const s = getSource(id)!;
+  return [makeFinding({
+    code: `${id}_user_run`, status: "unable_to_verify", priority: "medium",
+    title: countryCode === "NZ" ? "Check the employer on Immigration New Zealand's accredited employer list" : "Check the employer's U.S. Department of Labor filings",
+    examined: `Whether ${employerName ? `"${employerName}"` : "the employer"} appears in the official ${s.authority} records.`,
+    evidenceSays: s.limitation, howToVerify: s.needs, howToVerifyUrl: s.url,
+    method: "deterministic", check: { name: `${id}_link`, version: 1 },
+  })];
+}

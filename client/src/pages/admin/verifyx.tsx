@@ -231,6 +231,7 @@ function Sources() {
     <div className="space-y-4">
       <div className="flex gap-2">
         <Button size="sm" variant="outline" disabled={!!busy} onClick={() => run("uk_sponsor_register")}>{busy === "uk_sponsor_register" ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <RefreshCw className="h-3.5 w-3.5 mr-1" />}Sync UK sponsor register</Button>
+        <Button size="sm" variant="outline" disabled={!!busy} onClick={() => run("nl_ind_sponsor_register")}>{busy === "nl_ind_sponsor_register" ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <RefreshCw className="h-3.5 w-3.5 mr-1" />}Sync Dutch IND register</Button>
         <Button size="sm" variant="outline" disabled={!!busy} onClick={() => run("ke_nea_register")}>Refresh NEA status</Button>
         <Button size="sm" variant="outline" disabled={!!busy} onClick={() => run("guidance")}>Check guidance pages for changes</Button>
       </div>

@@ -306,3 +306,28 @@ describe("engine copy passes the evidence validator", () => {
     }
   });
 });
+
+describe("Dutch IND register parsing + findings", () => {
+  it("parses table and line layouts", async () => {
+    const { parseIndRegisterHtml } = await import("../../server/verifyx/names");
+    const table = "<table><tr><th>Organisation</th><th>KVK</th></tr>" +
+      Array.from({ length: 60 }, (_, i) => `<tr><td>Acme ${i} B.V.</td><td>${String(10000000 + i)}</td></tr>`).join("") + "</table>";
+    expect(parseIndRegisterHtml(table)).toHaveLength(60);
+    const dl = "<dl>" + Array.from({ length: 3 }, (_, i) => `<dt>Foo &amp; Bar ${i} B.V.</dt><dd>${20000000 + i}</dd>`).join("") + "</dl>";
+    const parsed = parseIndRegisterHtml(dl);
+    expect(parsed[0]).toEqual({ name: "Foo & Bar 0 B.V.", kvk: "20000000" });
+    const lines = "<p>C-Boost B.V. 75781824</p><p>CBRE B.V. 33191573</p>";
+    expect(parseIndRegisterHtml(lines).map((x) => x.kvk)).toEqual(["75781824", "33191573"]);
+  });
+  it("NL findings pass the validator", async () => {
+    const { nlSponsorFindings, userRunEmployerCheck } = await import("../../server/verifyx/employer-findings");
+    for (const outcome of ["match", "no_match", "close_matches", "unavailable"] as const) {
+      const r = { registryId: "nl_ind_sponsor_register" as const, queriedName: "Acme B.V.", outcome, matches: [{ name: "Acme B.V.", route: "12345678" }], retrievedAt: NOW.toISOString(), stale: false };
+      const v = validateFindings(nlSponsorFindings(r, true));
+      expect(v.rejected).toEqual([]);
+      if (outcome === "match") expect(v.accepted[0].status).toBe("consistent_with_requirements");
+    }
+    expect(validateFindings([...userRunEmployerCheck("NZ", "Kiwi Ltd"), ...userRunEmployerCheck("US", "X Inc")]).rejected).toEqual([]);
+    expect(normalizeEmployerName("Acme Holding B.V.")).toBe("acme");
+  });
+});

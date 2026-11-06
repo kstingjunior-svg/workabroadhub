@@ -13,10 +13,10 @@
 import { createHash } from "crypto";
 import { pool } from "../db";
 import { OFFICIAL_SOURCES, IMMIGRATION_RULES } from "./sources";
-import { normalizeEmployerName, parseCsv, splitTradingNames } from "./names";
+import { NORMALIZER_VERSION, normalizeEmployerName, parseCsv, parseIndRegisterHtml, splitTradingNames } from "./names";
 
 const UK_CONTENT_API = "https://www.gov.uk/api/content/government/publications/register-of-licensed-sponsors-workers";
-const ALLOWED_DOWNLOAD_HOSTS = new Set(["www.gov.uk", "assets.publishing.service.gov.uk", "www.canada.ca", "u.ae", "immi.homeaffairs.gov.au", "www.icao.int", "ceac.state.gov", "www.e-verify.gov", "neaims.go.ke", "lebanon.embassy.gov.au"]);
+const ALLOWED_DOWNLOAD_HOSTS = new Set(["www.gov.uk", "assets.publishing.service.gov.uk", "www.canada.ca", "u.ae", "immi.homeaffairs.gov.au", "www.icao.int", "ceac.state.gov", "www.e-verify.gov", "neaims.go.ke", "lebanon.embassy.gov.au", "ind.nl", "immigration.govt.nz", "www.dol.gov"]);
 
 function sha256(s: string | Buffer): string {
   return createHash("sha256").update(s).digest("hex");
@@ -121,7 +121,7 @@ export async function syncUkSponsorRegister(force = false): Promise<{ status: st
     const csvUrl = String(csv.url).startsWith("http") ? String(csv.url) : `https://www.gov.uk${csv.url}`;
 
     const { rows: [cur] } = await pool.query(`SELECT content_url, content_hash, row_count FROM verifyx_official_sources WHERE id=$1`, [sourceId]);
-    if (!force && cur?.content_url === csvUrl && (cur?.row_count ?? 0) > 1000) {
+    if (!force && cur?.content_url === csvUrl && (cur?.row_count ?? 0) > 1000 && String(cur?.content_hash ?? "").startsWith(`n${NORMALIZER_VERSION}:`)) {
       await finishSync(syncId, sourceId, "unchanged", { url: csvUrl, hash: cur.content_hash, rows: cur.row_count });
       return { status: "unchanged", rows: cur.row_count };
     }
@@ -130,7 +130,7 @@ export async function syncUkSponsorRegister(force = false): Promise<{ status: st
     if (!res.ok) throw new Error(`CSV HTTP ${res.status}`);
     const text = await res.text();
     if (text.length > 80_000_000) throw new Error("CSV unexpectedly large");
-    const hash = sha256(text);
+    const hash = `n${NORMALIZER_VERSION}:` + sha256(text);
     const parsed = parseCsv(text);
     const header = (parsed.shift() ?? []).map((h) => h.trim().toLowerCase());
     const iName = header.indexOf("organisation name");
@@ -181,6 +181,65 @@ export async function syncUkSponsorRegister(force = false): Promise<{ status: st
   } catch (err: any) {
     await finishSync(syncId, sourceId, "failed", { error: String(err?.message ?? err).slice(0, 500) });
     console.error("[VerifyX] UK sponsor sync failed:", err?.message);
+    return { status: "failed", error: err?.message };
+  }
+}
+
+/** Replace one registry's rows atomically (refuses tiny result sets). */
+async function replaceRegistryRows(
+  registryId: string,
+  rows: Array<{ name: string; norm: string; town: string | null; county: string | null; type: string | null; route: string | null }>,
+): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(`DELETE FROM verifyx_employer_registry WHERE registry_id=$1`, [registryId]);
+    const CHUNK = 5000;
+    for (let i = 0; i < rows.length; i += CHUNK) {
+      const c = rows.slice(i, i + CHUNK);
+      await client.query(
+        `INSERT INTO verifyx_employer_registry (registry_id, name, name_norm, town, county, type_rating, route)
+         SELECT $1, * FROM unnest($2::text[], $3::text[], $4::text[], $5::text[], $6::text[], $7::text[])`,
+        [registryId, c.map((r) => r.name), c.map((r) => r.norm), c.map((r) => r.town), c.map((r) => r.county), c.map((r) => r.type), c.map((r) => r.route)],
+      );
+    }
+    await client.query("COMMIT");
+  } catch (e) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+/** Netherlands: IND public register of recognised sponsors — Work (monthly). */
+export async function syncNlSponsorRegister(force = false): Promise<{ status: string; rows?: number; error?: string }> {
+  const sourceId = "nl_ind_sponsor_register";
+  const url = "https://ind.nl/en/public-register-recognised-sponsors/public-register-work";
+  const syncId = await startSync(sourceId);
+  try {
+    const res = await safeFetch(url, 90_000);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const html = await res.text();
+    if (html.length > 30_000_000) throw new Error("page unexpectedly large");
+    const hash = `n${NORMALIZER_VERSION}:` + sha256(html.replace(/\s+/g, " "));
+    const { rows: [cur] } = await pool.query(`SELECT content_hash, row_count FROM verifyx_official_sources WHERE id=$1`, [sourceId]);
+    if (!force && cur?.content_hash === hash && (cur?.row_count ?? 0) > 1000) {
+      await finishSync(syncId, sourceId, "unchanged", { url, hash, rows: cur.row_count });
+      return { status: "unchanged", rows: cur.row_count };
+    }
+    const parsed = parseIndRegisterHtml(html);
+    if (parsed.length < 1000) throw new Error(`only ${parsed.length} sponsors parsed — page layout may have changed; register not replaced`);
+    const rows = parsed
+      .map((p) => ({ name: p.name, norm: normalizeEmployerName(p.name), town: null, county: null, type: "Recognised sponsor (Work)", route: p.kvk }))
+      .filter((r) => r.norm);
+    await replaceRegistryRows(sourceId, rows);
+    await finishSync(syncId, sourceId, "success", { rows: rows.length, url, hash });
+    console.log(`[VerifyX] NL IND sponsor register synced: ${rows.length} sponsors`);
+    return { status: "success", rows: rows.length };
+  } catch (err: any) {
+    await finishSync(syncId, sourceId, "failed", { error: String(err?.message ?? err).slice(0, 500) });
+    console.error("[VerifyX] NL sponsor sync failed:", err?.message);
     return { status: "failed", error: err?.message };
   }
 }
@@ -278,9 +337,14 @@ export function startVerifyxSourceSweep(): void {
   const run = async () => {
     try {
       await seedRegistry();
-      const { rows: [uk] } = await pool.query(`SELECT last_success_at FROM verifyx_official_sources WHERE id='uk_sponsor_register'`);
-      if (!uk?.last_success_at || Date.now() - new Date(uk.last_success_at).getTime() > 20 * 3600_000) {
+      const { rows: [uk] } = await pool.query(`SELECT last_success_at, content_hash FROM verifyx_official_sources WHERE id='uk_sponsor_register'`);
+      const ukOldNorm = !String(uk?.content_hash ?? "").startsWith(`n${NORMALIZER_VERSION}:`);
+      if (ukOldNorm || !uk?.last_success_at || Date.now() - new Date(uk.last_success_at).getTime() > 20 * 3600_000) {
         await syncUkSponsorRegister();
+      }
+      const { rows: [nl] } = await pool.query(`SELECT last_success_at FROM verifyx_official_sources WHERE id='nl_ind_sponsor_register'`);
+      if (!nl?.last_success_at || Date.now() - new Date(nl.last_success_at).getTime() > 7 * 24 * 3600_000) {
+        await syncNlSponsorRegister();
       }
       await refreshNeaHealth();
       if (Date.now() - lastGuidanceCheck > 7 * 24 * 3600_000) {
