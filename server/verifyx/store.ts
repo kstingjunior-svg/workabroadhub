@@ -101,11 +101,14 @@ export async function saveResult(args: {
       [requestId, revision, JSON.stringify(publicReport)],
     );
     await client.query(
-      `UPDATE verifyx_requests SET status='done', outcome=$2, country_code=$3, document_kind=$4,
-         latency_ms = COALESCE($5, latency_ms), model = COALESCE($6, model),
-         model_input_tokens = COALESCE(model_input_tokens,0) + COALESCE($7,0),
-         model_output_tokens = COALESCE(model_output_tokens,0) + COALESCE($8,0),
-         model_cost_usd = COALESCE(model_cost_usd,0) + COALESCE($9,0), updated_at=now()
+      // 2026-11-06 hotfix: explicit casts — Postgres inferred $9 as integer
+      // from COALESCE($9, 0) and rejected the fractional USD cost, failing
+      // every check at the very last step.
+      `UPDATE verifyx_requests SET status='done', outcome=$2::text, country_code=$3::text, document_kind=$4::text,
+         latency_ms = COALESCE($5::int, latency_ms), model = COALESCE($6::text, model),
+         model_input_tokens = COALESCE(model_input_tokens,0) + COALESCE($7::int,0),
+         model_output_tokens = COALESCE(model_output_tokens,0) + COALESCE($8::int,0),
+         model_cost_usd = COALESCE(model_cost_usd,0) + COALESCE($9::numeric,0), updated_at=now()
        WHERE id=$1`,
       [requestId, report.outcome, report.country?.code ?? null, report.documentKind, args.latencyMs, args.usage?.model ?? null,
        args.usage?.inputTokens ?? null, args.usage?.outputTokens ?? null, args.usage?.estCostUsd ?? null],

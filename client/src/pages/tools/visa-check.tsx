@@ -8,7 +8,7 @@
  * Route: /tools/visa-check
  * Backend: POST /api/tools/visa-verify → async job → VerifyX report
  */
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePageSeo } from "@/hooks/use-page-seo";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -37,6 +37,22 @@ export default function VisaCheckPage() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<VxReport | null>(null);
   const [consent, setConsent] = useState(false);
+
+  // Recovery link: /tools/visa-check?scanToken=<paymentId> restores an
+  // unused paid credit (e.g. after a failed check) so the customer can run
+  // the check without paying again. The server still verifies the credit.
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const t = params.get("scanToken")?.trim();
+      if (t && t.length >= 16) {
+        pay.restoreToken(t);
+        window.history.replaceState(null, "", window.location.pathname);
+        toast({ title: "Your paid check is ready", description: "Upload your document to run it — no extra charge." });
+      }
+    } catch { /* ignore */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const ACCEPTED_MIMES = new Set<string>([
     "image/jpeg", "image/jpg", "image/png", "image/webp",
