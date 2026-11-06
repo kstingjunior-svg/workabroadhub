@@ -1947,7 +1947,7 @@ Crawl-delay: 1`);
       if (profileData.phone) {
         const { parseIntlPhone } = await import("@shared/intl-phone");
         const pp = parseIntlPhone(profileData.phone, "KE");
-        if (!pp.ok) return res.status(400).json({ message: pp.error, field: "phone" });
+        if (!pp.ok) return res.status(400).json({ message: (pp as { ok: false; error: string }).error, field: "phone" });
         const ph = pp.value;
         const { rows: clash } = await pool.query(
           `SELECT 1 FROM users

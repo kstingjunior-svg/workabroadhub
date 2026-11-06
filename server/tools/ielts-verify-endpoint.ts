@@ -517,7 +517,7 @@ export function registerIeltsVerifyRoute(app: Express): void {
             const report = await analyzeIelts(analyzerInput);
 
             if (!report.ok) {
-              await markToolScanJobError(jobId, report.message);
+              await markToolScanJobError(jobId, (report as any).message ?? "We couldn't check this certificate right now. Please try again.");
               return;
             }
 
