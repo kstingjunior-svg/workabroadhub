@@ -123,6 +123,22 @@ export const OFFICIAL_SOURCES: OfficialSource[] = [
     lastReviewed: "2026-11-03",
   },
   {
+    id: "au_visa_labels_ceased", country: "AU", authority: "Australian Government (Embassy of Australia)",
+    title: "Visa labels ceased from 1 September 2015",
+    url: "https://lebanon.embassy.gov.au/birt/Frequently_Asked_Questions.html",
+    capability: "guidance_only",
+    limitation: "States that Australia stopped issuing visa labels on 1 September 2015 and that visas are checked through VEVO.",
+    lastReviewed: "2026-11-06",
+  },
+  {
+    id: "uk_brp", country: "GB", authority: "UK Home Office",
+    title: "Biometric residence permits (BRPs)",
+    url: "https://www.gov.uk/biometric-residence-permits",
+    capability: "guidance_only",
+    limitation: "Explains BRPs and the move to eVisas; most BRPs expired on 31 December 2024 without ending the holder's permission.",
+    lastReviewed: "2026-11-06",
+  },
+  {
     id: "ke_nea_register", country: "KE", authority: "National Employment Authority (Kenya)",
     title: "Register of private employment agencies",
     url: "https://neaims.go.ke/EmploymentAgencyList.aspx",
@@ -165,9 +181,10 @@ export const IMMIGRATION_RULES: ImmigrationRule[] = [
     effectiveFrom: "2025-01-01", effectiveTo: null, retrievedAt: "2026-11-03", reviewStatus: "approved",
   },
   {
-    ruleId: "GB.STATUS.PHYSICAL", version: 1, country: "GB", documentType: "visa", sourceId: "uk_view_prove_status",
-    ruleText: "Before 2025, most UK permissions were evidenced by a vignette and/or Biometric Residence Permit (BRP).",
-    effectiveFrom: null, effectiveTo: "2025-01-01", retrievedAt: "2026-11-03", reviewStatus: "pending_review",
+    ruleId: "GB.STATUS.PHYSICAL", version: 1, country: "GB", documentType: "visa", sourceId: "uk_brp",
+    ruleText: "Before 2025, most UK permissions were evidenced by a vignette and/or Biometric Residence Permit (BRP); most BRPs expired on 31 December 2024 and status is now held as an eVisa.",
+    // Approved by Tony 2026-11-06 against GOV.UK "Biometric residence permits".
+    effectiveFrom: null, effectiveTo: "2025-01-01", retrievedAt: "2026-11-06", reviewStatus: "approved",
   },
   {
     ruleId: "GB.SPONSOR.LICENSED", version: 1, country: "GB", documentType: "offer_letter", sourceId: "uk_sponsor_register",
@@ -180,9 +197,10 @@ export const IMMIGRATION_RULES: ImmigrationRule[] = [
     effectiveFrom: null, effectiveTo: null, retrievedAt: "2026-11-03", reviewStatus: "approved",
   },
   {
-    ruleId: "AU.VISA.NO_LABELS", version: 1, country: "AU", documentType: "visa", sourceId: "au_vevo",
-    ruleText: "Australia records visas electronically and generally no longer places visa labels in passports; visa details are checked through VEVO.",
-    effectiveFrom: "2015-09-01", effectiveTo: null, retrievedAt: "2026-11-03", reviewStatus: "pending_review",
+    ruleId: "AU.VISA.NO_LABELS", version: 1, country: "AU", documentType: "visa", sourceId: "au_visa_labels_ceased",
+    ruleText: "From 1 September 2015 Australia ceased issuing visa labels in passports; visa details are checked through VEVO.",
+    // Approved by Tony 2026-11-06 against the Australian Embassy FAQ (gov.au).
+    effectiveFrom: "2015-09-01", effectiveTo: null, retrievedAt: "2026-11-06", reviewStatus: "approved",
   },
 ];
 

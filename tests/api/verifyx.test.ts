@@ -139,10 +139,12 @@ describe("A4 temporal rule evaluation", () => {
     expect(rulesInForce("GB", "visa", new Date("2026-06-01")).map((r) => r.ruleId)).not.toContain("GB.STATUS.PHYSICAL");
   });
   it("unreviewed rules cannot produce confirmed findings", () => {
-    expect(ruleSource("AU.VISA.NO_LABELS")!.ruleVersion).toBeUndefined();
+    // Approved rules carry a version; an unreviewed citation (no version) is downgraded.
+    expect(ruleSource("AU.VISA.NO_LABELS")!.ruleVersion).toBe(1);
+    const unreviewed = { ...ruleSource("AU.VISA.NO_LABELS")!, ruleVersion: undefined };
     const { accepted } = validateFindings([makeFinding({
       code: "x", status: "confirmed_discrepancy", priority: "high", title: "t", examined: "e",
-      source: ruleSource("AU.VISA.NO_LABELS"), method: "deterministic", check: { name: "x", version: 1 },
+      source: unreviewed, method: "deterministic", check: { name: "x", version: 1 },
     })]);
     expect(accepted[0].status).toBe("potential_risk_indicator");
   });

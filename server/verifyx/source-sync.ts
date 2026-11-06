@@ -16,7 +16,7 @@ import { OFFICIAL_SOURCES, IMMIGRATION_RULES } from "./sources";
 import { normalizeEmployerName, parseCsv, splitTradingNames } from "./names";
 
 const UK_CONTENT_API = "https://www.gov.uk/api/content/government/publications/register-of-licensed-sponsors-workers";
-const ALLOWED_DOWNLOAD_HOSTS = new Set(["www.gov.uk", "assets.publishing.service.gov.uk", "www.canada.ca", "u.ae", "immi.homeaffairs.gov.au", "www.icao.int", "ceac.state.gov", "www.e-verify.gov", "neaims.go.ke"]);
+const ALLOWED_DOWNLOAD_HOSTS = new Set(["www.gov.uk", "assets.publishing.service.gov.uk", "www.canada.ca", "u.ae", "immi.homeaffairs.gov.au", "www.icao.int", "ceac.state.gov", "www.e-verify.gov", "neaims.go.ke", "lebanon.embassy.gov.au"]);
 
 function sha256(s: string | Buffer): string {
   return createHash("sha256").update(s).digest("hex");
