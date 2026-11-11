@@ -73,18 +73,25 @@ export const TOOL_SCAN_PRICE_KES = 100;
 // server-side recovery path (STK auto-recovery poller times out at 5 min;
 // the M-Pesa Pull-API reconciler runs every 5 min looking back 90 min).
 const PENDING_TTL_MS = 30 * 60 * 1000;
+// 2026-11 (paid-but-no-scan fix): once a payment is CONFIRMED, the record is
+// kept until the scan is actually submitted (consumeToken), for up to 30 days
+// — the server never expires a paid credit, so the phone shouldn't forget it
+// either. Previously the record was cleared the instant payment confirmed, so
+// if the upload then failed (or the page reloaded) the customer's KES 100 was
+// unrecoverable from their side. 4 customers lost a paid check this way in one week.
+const PAID_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 function pendingKey(tool: string): string {
   return `wah_toolpay_pending:${tool}`;
 }
 
-function readPending(tool: string): { paymentId: string; startedAt: number } | null {
+function readPending(tool: string): { paymentId: string; startedAt: number; paid?: boolean } | null {
   try {
     const raw = localStorage.getItem(pendingKey(tool));
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (!parsed?.paymentId || typeof parsed.startedAt !== "number") return null;
-    if (Date.now() - parsed.startedAt > PENDING_TTL_MS) {
+    if (Date.now() - parsed.startedAt > (parsed.paid ? PAID_TTL_MS : PENDING_TTL_MS)) {
       localStorage.removeItem(pendingKey(tool));
       return null;
     }
@@ -94,9 +101,9 @@ function readPending(tool: string): { paymentId: string; startedAt: number } | n
   }
 }
 
-function writePending(tool: string, paymentId: string): void {
+function writePending(tool: string, paymentId: string, paid = false): void {
   try {
-    localStorage.setItem(pendingKey(tool), JSON.stringify({ paymentId, startedAt: Date.now() }));
+    localStorage.setItem(pendingKey(tool), JSON.stringify({ paymentId, startedAt: Date.now(), paid }));
   } catch {
     /* localStorage unavailable (private mode etc.) — polling still works, just not resumable across reload */
   }
@@ -206,7 +213,10 @@ export function useToolPayment(tool: string) {
         if (cancelled) return;
         if (s.paid && !s.consumed) {
           setScanToken(pending.paymentId);
-          clearPending(tool);
+          // Keep the record (marked paid) until the scan is actually sent —
+          // consumeToken() clears it. If this attempt fails too, the next
+          // visit still finds the credit.
+          if (!pending.paid) writePending(tool, pending.paymentId, true);
           toast({
             title: "Earlier payment found",
             description: `Your KES ${TOOL_SCAN_PRICE_KES} payment for ${label} went through — you can run the check now without paying again.`,
@@ -305,7 +315,10 @@ export function useToolPayment(tool: string) {
           if (!sRes.ok) continue;
           const s = await sRes.json();
           if (s.paid) {
-            clearPending(tool);
+            // NOT clearPending: keep the paid credit on the phone until the
+            // scan is submitted (consumeToken), so a failed upload or reload
+            // can't lose the customer's payment.
+            writePending(tool, paymentId, true);
             setScanToken(paymentId);
             setPhase("paid");
             setOpen(false);

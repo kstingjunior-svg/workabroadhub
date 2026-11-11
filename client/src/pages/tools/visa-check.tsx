@@ -19,6 +19,7 @@ import { fetchCsrfToken } from "@/lib/queryClient";
 import { pollToolScanResult, ToolScanError } from "@/lib/tool-scan-poll";
 import { VerifyXReportView, type VxReport } from "@/components/verifyx-report";
 import { VerifyXConsent } from "@/components/verifyx-consent";
+import { pinFileInMemory } from "@/lib/pin-file";
 
 export default function VisaCheckPage() {
   usePageSeo({
@@ -61,8 +62,10 @@ export default function VisaCheckPage() {
     "application/msword",
   ]);
 
-  function handleFile(f: File | null) {
-    if (!f) return;
+  async function handleFile(picked: File | null) {
+    if (!picked) return;
+    // Copy into memory now so switching to the M-Pesa prompt can't revoke it.
+    const f = await pinFileInMemory(picked);
     const isAccepted = ACCEPTED_MIMES.has(f.type) || /\.(pdf|docx?|jpe?g|png|webp)$/i.test(f.name);
     if (!isAccepted) {
       toast({ title: "Unsupported file type", description: "Upload a photo (JPG/PNG/WEBP) or the document itself (PDF or Word).", variant: "destructive" });
@@ -86,6 +89,7 @@ export default function VisaCheckPage() {
     }
     setLoading(true);
     setResult(null);
+    let uploaded = false;
     try {
       const form = new FormData();
       form.append("file", file);
@@ -96,6 +100,7 @@ export default function VisaCheckPage() {
         headers: { "X-CSRF-Token": csrf, "x-scan-token": token },
         body: form,
       });
+      uploaded = true;
       if (res.status === 402) {
         const data = await res.json().catch(() => ({}));
         setLoading(false);
@@ -114,8 +119,17 @@ export default function VisaCheckPage() {
     } catch (err: any) {
       if (err instanceof ToolScanError) {
         toast({ title: "Couldn't check this document", description: err.message, variant: "destructive" });
-      } else {
+      } else if (uploaded) {
         toast({ title: "Network issue", description: "Check your connection and try again.", variant: "destructive" });
+      } else {
+        // Upload never reached the server — the paid credit is untouched
+        // (and saved on this phone), so tell the customer they won't pay again.
+        toast({
+          title: "Upload didn't go through — your payment is saved",
+          description: "Check your internet connection, then tap Check again (or re-select the file). You won't be charged again.",
+          variant: "destructive",
+          duration: 15000,
+        });
       }
     } finally {
       setLoading(false);

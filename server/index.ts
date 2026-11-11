@@ -414,32 +414,64 @@ const allowedOrigins = new Set([
     .filter(Boolean) || []),
 ].filter(Boolean));
 
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      if (!origin) return callback(null, true);
+// 2026-11 (CORS blank-page fix): this used to run on EVERY request and, for an
+// origin not in the list, call `callback(new Error(...))`. Express turned that
+// into a 500 — including on the site's own JS/CSS bundles — so a visitor whose
+// browser sent an unexpected Origin header (in-app browsers, privacy modes,
+// translation proxies) got a blank white page. Now:
+//   • Public site files are never origin-checked (they're public, no cookies).
+//   • /api and /socket.io keep the strict allow-list, but an unknown origin is
+//     refused QUIETLY (no CORS headers → the browser blocks the cross-site
+//     read) instead of crashing the request with a 500.
+//   • Each refused origin is logged at most once an hour, so a legitimate new
+//     frontend host shows up in the logs instead of failing silently.
+function isAllowedOrigin(origin: string): boolean {
+  try {
+    const originUrl = new URL(origin);
+    if (allowedOrigins.has(originUrl.origin)) return true;
+    if (process.env.NODE_ENV !== "production" && originUrl.hostname === "localhost") return true;
+  } catch {}
+  return false;
+}
 
-      try {
-        const originUrl = new URL(origin);
+const refusedOriginLog = new Map<string, number>();
+function logRefusedOrigin(origin: string, path: string): void {
+  const now = Date.now();
+  if (now - (refusedOriginLog.get(origin) ?? 0) < 60 * 60 * 1000) return;
+  if (refusedOriginLog.size > 500) refusedOriginLog.clear(); // bound memory
+  refusedOriginLog.set(origin, now);
+  console.warn(
+    `[CORS] Refused origin "${origin}" for ${path}. If this is a legitimate ` +
+    `WorkAbroad Hub site, add it to ADDITIONAL_CORS_ORIGINS on Render.`,
+  );
+}
 
-        if (allowedOrigins.has(originUrl.origin)) {
-          return callback(null, true);
-        }
+const apiCors = cors({ origin: true, credentials: true });
 
-        if (
-          process.env.NODE_ENV !== "production" &&
-          originUrl.hostname === "localhost"
-        ) {
-          return callback(null, true);
-        }
-      } catch {}
+// Static, public files: safe for any page to load (Access-Control-Allow-Origin
+// "*" never shares cookies), so a page opened through a proxy, a translator,
+// or an in-app browser can still load the app's scripts and styles.
+const PUBLIC_FILE_RE = /\.(?:js|mjs|css|map|webmanifest|json|png|jpe?g|gif|svg|webp|avif|ico|woff2?|ttf|otf|txt|xml)$/i;
 
-      callback(new Error("CORS not allowed"));
-    },
-
-    credentials: true,
-  })
-);
+app.use((req, res, next) => {
+  const p = req.path;
+  if (p.startsWith("/api") || p.startsWith("/socket.io")) {
+    const origin = req.header("Origin");
+    if (origin && !isAllowedOrigin(origin)) {
+      // Refuse cleanly. The request must NOT reach the route: the session
+      // cookie is SameSite=None, so letting a foreign site's request run
+      // would be a cross-site request forgery risk.
+      logRefusedOrigin(origin, p);
+      return res.status(403).json({ message: "Requests from this website are not allowed." });
+    }
+    return apiCors(req, res, next);
+  }
+  if ((req.method === "GET" || req.method === "HEAD") &&
+      (p.startsWith("/assets/") || PUBLIC_FILE_RE.test(p))) {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+  }
+  next();
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELMET

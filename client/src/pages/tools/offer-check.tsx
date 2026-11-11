@@ -26,6 +26,7 @@ import { fetchCsrfToken } from "@/lib/queryClient";
 import { pollToolScanResult, ToolScanError } from "@/lib/tool-scan-poll";
 import { VerifyXReportView, type VxReport } from "@/components/verifyx-report";
 import { VerifyXConsent } from "@/components/verifyx-consent";
+import { pinFileInMemory } from "@/lib/pin-file";
 
 export default function OfferCheckPage() {
   usePageSeo({
@@ -100,8 +101,10 @@ export default function OfferCheckPage() {
     "application/msword",
   ]);
 
-  function handleFile(f: File | null) {
-    if (!f) return;
+  async function handleFile(picked: File | null) {
+    if (!picked) return;
+    // Copy into memory now so switching to the M-Pesa prompt can't revoke it.
+    const f = await pinFileInMemory(picked);
     const isAccepted = ACCEPTED_MIMES.has(f.type) || /\.(pdf|docx?|jpe?g|png|webp)$/i.test(f.name);
     if (!isAccepted) {
       toast({ title: "Unsupported file type", description: "Upload a photo (JPG/PNG/WEBP) or the offer letter itself (PDF or Word).", variant: "destructive" });
@@ -121,13 +124,16 @@ export default function OfferCheckPage() {
     // credit waiting, auto-fire the scan now with that credit. The user
     // doesn't need to click Verify again — they already paid.
     if (paidCreditReady && consent) {
-      // defer by a tick so the setFile/setResult above have flushed
-      setTimeout(() => handleVerify(paidCreditReady), 0);
+      // Pass the new file in directly: handleVerify from this render still
+      // sees the OLD `file` state (null), which used to send the customer
+      // round in a "re-upload your offer letter" loop.
+      setTimeout(() => handleVerify(paidCreditReady, f), 0);
     }
   }
 
-  async function handleVerify(freshToken?: string) {
+  async function handleVerify(freshToken?: string, fileOverride?: File) {
     const token: string = freshToken ?? pay.scanToken ?? paidCreditReady ?? "";
+    const upload = fileOverride ?? file;
 
     // 2026-10 (Tony's "paid twice because scan never fired" fix): if we
     // DO have a paid credit but the file was lost (tab backgrounded, iOS
@@ -135,7 +141,7 @@ export default function OfferCheckPage() {
     // surface a clear banner so the user can re-upload. Previous
     // behaviour was `if (!file) return` which silently did nothing and
     // the user paid again, thinking the first charge had failed.
-    if (!file && token) {
+    if (!upload && token) {
       stashPaidCredit(token);
       toast({
         title: "Payment confirmed",
@@ -144,7 +150,7 @@ export default function OfferCheckPage() {
       });
       return;
     }
-    if (!file) return;
+    if (!upload) return;
     if (!consent) {
       toast({ title: "Please confirm", description: "Tick the consent box to run the check.", variant: "destructive" });
       return;
@@ -157,7 +163,7 @@ export default function OfferCheckPage() {
     // at its pre-payment value inside this closure) so it can't loop back
     // into asking for payment again.
     if (!token) {
-      pay.requestScan((t) => handleVerify(t));
+      pay.requestScan((t) => handleVerify(t, upload));
       return;
     }
     // We're about to actually fire the scan with this credit — clear the
@@ -173,7 +179,7 @@ export default function OfferCheckPage() {
     // user a specific message instead of a generic scare toast.
     async function postOnce(): Promise<Response> {
       const form = new FormData();
-      form.append("file", file!);
+      form.append("file", upload!);
       const csrf = await fetchCsrfToken();
       return fetch("/api/tools/offer-verify", {
         method: "POST",
@@ -198,10 +204,15 @@ export default function OfferCheckPage() {
     }
     if (!res) {
       console.error("[offer-verify] both attempts failed:", lastErr);
+      // The upload never reached us, so the paid credit is unused. Keep it
+      // visible (banner + sessionStorage) and say so plainly — the old
+      // "Server is warming up" message made paid customers give up.
+      stashPaidCredit(token);
       toast({
-        title: "Server is warming up",
-        description: "Our AI service is starting — please try again in a few seconds. If this keeps happening, screenshot each page as JPG and upload the images one at a time.",
+        title: "Upload didn't go through — your payment is saved",
+        description: "Check your internet connection, then tap Verify again (or re-select the file). You won't be charged again.",
         variant: "destructive",
+        duration: 15000,
       });
       setLoading(false);
       return;
