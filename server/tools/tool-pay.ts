@@ -176,7 +176,8 @@ export function requireToolCredit(tool: PaidTool) {
       // the tool the credit was bought for.
       const { rows } = await pool.query(
         `UPDATE payments
-            SET delivery_status = 'consumed'
+            SET delivery_status = 'consumed',
+                delivered_at    = NOW()
           WHERE id::text = $1
             AND service_id = $2
             AND amount >= $3
@@ -237,12 +238,19 @@ export async function releaseToolCredit(
 ): Promise<boolean> {
   try {
     const { rows } = await pool.query(
+      // 2026-11 (refund bug): the age guard used to read updated_at, but the
+      // consume above never touched updated_at — it still held the PAYMENT
+      // time. So a customer who scanned more than 15 min after paying (every
+      // recovery-link customer) was told "No charge has been kept" while the
+      // credit stayed used, and their retry was asked to pay again. The
+      // consume now stamps delivered_at; the guard reads that.
       `UPDATE payments
-          SET delivery_status = NULL
+          SET delivery_status = NULL,
+              delivered_at    = NULL
         WHERE id::text = $1
           AND service_id = $2
           AND delivery_status = 'consumed'
-          AND updated_at > NOW() - INTERVAL '15 minutes'
+          AND COALESCE(delivered_at, updated_at) > NOW() - INTERVAL '15 minutes'
       RETURNING id`,
       [toolPaymentId, `tool_${tool}`],
     );
