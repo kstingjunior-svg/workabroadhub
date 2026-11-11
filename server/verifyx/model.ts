@@ -60,6 +60,12 @@ export async function extractJson(
         { role: "user", content },
       ],
     });
+    // A long or non-English document (e.g. a Polish work permit) can run past
+    // max_tokens; the JSON is then cut off mid-string and JSON.parse throws.
+    // Surface that explicitly so the caller retries with more room.
+    if (completion.choices[0]?.finish_reason === "length") {
+      throw new Error(`output truncated at ${tokens} tokens (finish_reason=length)`);
+    }
     const raw = completion.choices[0]?.message?.content ?? "{}";
     const u: any = completion.usage ?? {};
     return {
@@ -77,19 +83,33 @@ export async function extractJson(
     return await call(userContent, maxTokens);
   } catch (err: any) {
     const msg = String(err?.message ?? "").toLowerCase();
-    const jsonIssue = msg.includes("json") || msg.includes("unexpected token") || msg.includes("unterminated string");
+    // 2026-11: the raw reason was never logged, so failures like a customer's
+    // Polish work permit (4/4 attempts, PDF and photos) were undiagnosable.
+    console.error(`[VerifyX] extraction failed (${input.kind}, ${docLabel}): ${String(err?.message ?? err).slice(0, 300)}`);
+    const jsonIssue = msg.includes("json") || msg.includes("unexpected token") || msg.includes("unterminated string") || msg.includes("truncated");
     const fatal = msg.includes("insufficient_quota") || msg.includes("credit") || msg.includes("429") || msg.includes("rate limit");
-    if (input.kind === "text" && jsonIssue && !fatal) {
+    if (jsonIssue && !fatal) {
+      // Retry once with much more room — for photos too (previously only text
+      // inputs were retried, so a long photographed document always failed).
+      const retryTokens = Math.max(maxTokens * 3, 6000);
       try {
-        const cleaned = input.text.replace(/[֐-ࣿ一-鿿぀-ヿ가-힯]+/g, " ");
-        const retry = [{
-          type: "text",
-          text: `The user uploaded a ${docLabel}; only text is available. Visual observations must be an empty array.\n\n` +
-            wrapUntrusted(cleaned).block +
-            "\n\nReturn VALID JSON only. String values must be plain ASCII English (transliterate non-Latin text).",
-        }];
-        return await call(retry, Math.max(maxTokens, 3500));
+        if (input.kind === "text") {
+          const cleaned = input.text.replace(/[֐-ࣿ一-鿿぀-ヿ가-힯]+/g, " ");
+          const retry = [{
+            type: "text",
+            text: `The user uploaded a ${docLabel}; only text is available. Visual observations must be an empty array.\n\n` +
+              wrapUntrusted(cleaned).block +
+              "\n\nReturn VALID JSON only. Keep every string value short. String values must be plain ASCII English (transliterate non-Latin text).",
+          }];
+          return await call(retry, retryTokens);
+        }
+        const retry = [
+          { type: "text", text: `Extract the fields from this ${docLabel} image. Return VALID JSON only. Keep every string value short; write values in plain ASCII English (transliterate or translate non-English text).` },
+          userContent[1],
+        ];
+        return await call(retry, retryTokens);
       } catch (err2: any) {
+        console.error(`[VerifyX] extraction retry failed (${input.kind}, ${docLabel}): ${String(err2?.message ?? err2).slice(0, 300)}`);
         throw new ExtractionError(mapModelError(err2?.message ?? ""), err2?.message ?? "extraction failed");
       }
     }
