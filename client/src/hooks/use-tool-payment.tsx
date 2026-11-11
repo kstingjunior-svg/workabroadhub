@@ -140,6 +140,33 @@ function waitTickOrVisible(ms: number): Promise<void> {
   });
 }
 
+/** Turn Safaricom's failure reason (payments.fail_reason) into a message the
+ * customer can act on. 2026-11: a Kenyan client in Saudi Arabia retried 9
+ * times seeing only "failed or was cancelled" — the real cause (code 1038,
+ * "No response from user") was the PIN prompt never reaching a roaming SIM. */
+export function friendlyMpesaFailure(reason: string | null | undefined): string {
+  const r = (reason ?? "").toLowerCase();
+  if (r.includes("no response from user") || r.includes("cannot be reached") || r.includes("ds timeout")) {
+    return "The M-Pesa PIN prompt didn't reach your phone, or it timed out. Make sure your Safaricom line is switched on and has network signal. If you're outside Kenya, turn on roaming for the Safaricom line — Wi-Fi alone won't deliver the prompt. Then tap Pay again and enter your PIN quickly.";
+  }
+  if (r.includes("cancelled by user")) {
+    return "You cancelled the M-Pesa prompt, so nothing was charged. Tap Pay to try again.";
+  }
+  if (r.includes("insufficient")) {
+    return "Your M-Pesa balance wasn't enough for this payment, so nothing was charged. Top up and try again.";
+  }
+  if (r.includes("initiator information is invalid")) {
+    return "The M-Pesa PIN entered was incorrect, so nothing was charged. Tap Pay and try again.";
+  }
+  if (r.includes("existing ussd session")) {
+    return "Another M-Pesa prompt is already open on your phone. Close it, wait about a minute, then try again.";
+  }
+  if (r.includes("customer does not exist") || r.includes("debitparty")) {
+    return "This number isn't set up for M-Pesa payments, or the M-Pesa account is restricted. Check the number, or try a different Safaricom number.";
+  }
+  return "The M-Pesa payment failed or was cancelled. Please try again.";
+}
+
 export function useToolPayment(tool: string) {
   const [open, setOpen] = useState(false);
   const [phone, setPhone] = useState("");
@@ -291,7 +318,7 @@ export function useToolPayment(tool: string) {
           }
           if (s.status === "failed") {
             clearPending(tool);
-            setPayError("The M-Pesa payment failed or was cancelled. Please try again.");
+            setPayError(friendlyMpesaFailure(s.failReason));
             setPhase("failed");
             return;
           }
@@ -396,8 +423,8 @@ export function useToolPayment(tool: string) {
               </Button>
 
               <p className="text-[11px] text-center text-muted-foreground">
-                Safaricom lines only. The result appears here the moment payment confirms —
-                keep this page open.
+                Safaricom lines only. Outside Kenya? Turn on roaming for your Safaricom line first.
+                The result appears here the moment payment confirms — keep this page open.
               </p>
             </div>
           </DialogContent>

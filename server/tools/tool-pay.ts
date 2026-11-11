@@ -131,7 +131,7 @@ export function registerToolPayRoutes(app: Express): void {
       const id = String(req.params.id ?? "").trim();
       if (!id) return res.status(400).json({ message: "Missing payment id." });
       const { rows } = await pool.query(
-        `SELECT id, status, delivery_status, service_id
+        `SELECT id, status, delivery_status, service_id, fail_reason
            FROM payments
           WHERE id::text = $1 AND service_id LIKE 'tool_%'`,
         [id],
@@ -142,6 +142,9 @@ export function registerToolPayRoutes(app: Express): void {
         status:   row.status,
         consumed: row.delivery_status === "consumed",
         paid:     row.status === "success" || row.status === "completed",
+        // Safaricom's ResultDesc (e.g. "No response from user.") so the client
+        // can tell the customer WHY it failed instead of a generic message.
+        failReason: row.status === "failed" ? (row.fail_reason ?? null) : null,
       });
     } catch (err: any) {
       console.error("[ToolPay] status check failed:", err?.message);
