@@ -115,6 +115,23 @@ export async function completePayPalCapture(
         amountUSD: orderNow.amountUSD,
       };
     } else if (orderNow.status === "APPROVED") {
+      // 2026-11: an order retired as "paypal_superseded" (buyer started a
+      // fresh one) can still be approved later from an old window. If the
+      // buyer has since paid by PayPal, don't capture — an approved order
+      // that is never captured is never charged, so no refund is needed.
+      if (paymentId) {
+        const prev: any = await storage.getPaymentById(paymentId).catch(() => null);
+        if (prev?.failReason === "paypal_superseded") {
+          const recent = (await storage.getPaymentsByUser(userId).catch(() => [])) as any[];
+          const paidSince = (recent ?? []).some((p: any) =>
+            p.method === "paypal" && p.id !== paymentId && (p.processed || p.status === "completed" || p.status === "success")
+            && p.createdAt && Date.now() - new Date(p.createdAt).getTime() < 24 * 3600 * 1000);
+          if (paidSince) {
+            console.warn(`${logTag} Not capturing superseded order ${paypalOrderId} — user ${userId} already paid by PayPal`);
+            return { status: 409, body: { message: "You've already paid for this. Nothing more has been charged.", code: "PAYPAL_ALREADY_PAID" } };
+          }
+        }
+      }
       capture = await capturePayPalOrder(paypalOrderId);
     } else {
       // CREATED / PAYER_ACTION_REQUIRED / VOIDED / anything else — buyer

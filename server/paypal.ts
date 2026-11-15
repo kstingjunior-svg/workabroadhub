@@ -88,12 +88,45 @@ export function kesToUsd(amountKes: number): number {
   return Math.max(1, Math.round(usd * 100) / 100);
 }
 
+// ─── Return / cancel URLs (full-page checkout) ───────────────────────────────
+
+const PAYPAL_RETURN_HOSTS = new Set([
+  "workabroadhub.tech",
+  "www.workabroadhub.tech",
+  "workabroadhub.onrender.com",
+  "localhost",
+  "127.0.0.1",
+]);
+const PUBLIC_BASE = (process.env.PUBLIC_BASE_URL || "https://workabroadhub.tech").replace(/\/+$/, "");
+
+/**
+ * Builds a safe PayPal return/cancel URL. Only our own hosts are accepted
+ * (no open redirect); anything else falls back to the public site with the
+ * same path. Extra query params (e.g. pid) are appended.
+ */
+export function safePayPalUrl(raw: unknown, fallbackPath: string, extra: Record<string, string> = {}): string {
+  let url: URL;
+  try {
+    const candidate = typeof raw === "string" && raw.trim() ? raw.trim() : fallbackPath;
+    url = new URL(candidate, PUBLIC_BASE);
+    if (!/^https?:$/.test(url.protocol) || !PAYPAL_RETURN_HOSTS.has(url.hostname)) {
+      url = new URL(url.pathname + url.search, PUBLIC_BASE);
+    }
+    if (url.hostname !== "localhost" && url.hostname !== "127.0.0.1") url.protocol = "https:";
+  } catch {
+    url = new URL(fallbackPath, PUBLIC_BASE);
+  }
+  for (const [k, v] of Object.entries(extra)) url.searchParams.set(k, v);
+  return url.toString();
+}
+
 // ─── Order creation ───────────────────────────────────────────────────────────
 
 export async function createPayPalOrder(
   amountKes: number,
   description: string,
-  internalRef: string
+  internalRef: string,
+  urls?: { returnUrl?: string | null; cancelUrl?: string | null },
 ): Promise<{ id: string; status: string; approvalUrl: string }> {
   const client = buildClient();
 
@@ -135,6 +168,11 @@ export async function createPayPalOrder(
       locale: "en-US",
       user_action: "PAY_NOW",
       shipping_preference: "NO_SHIPPING",
+      // 2026-11: full-page checkout. Without return_url PayPal has nowhere
+      // to send the buyer after approving on its own page, so every
+      // redirect flow (service orders, Scout, Write-From-Scratch) dead-ended.
+      ...(urls?.returnUrl ? { return_url: urls.returnUrl } : {}),
+      ...(urls?.cancelUrl ? { cancel_url: urls.cancelUrl } : {}),
     },
   } as any);
 

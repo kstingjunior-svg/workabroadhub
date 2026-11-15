@@ -4,6 +4,7 @@ import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, CheckCircle, Loader2, Shield, Square, CheckSquare, PhoneCall, RefreshCw, AlertCircle, Copy, Info, Star } from "lucide-react";
 import { Link } from "wouter";
@@ -52,7 +53,14 @@ interface PayPalConfig {
   enabled: boolean;
   clientId: string | null;
   mode: "sandbox" | "live" | null;
+  flatFeeKes?: number;
+  flatFeeUsd?: string;
 }
+
+// Facebook / Instagram / TikTok and other in-app browsers often block the
+// PayPal popup, so the full-page checkout is offered first there.
+const IN_APP_BROWSER = typeof navigator !== "undefined" &&
+  /FBAN|FBAV|FB_IAB|Instagram|Line\/|TikTok|Snapchat|; wv\)|WhatsApp/i.test(navigator.userAgent || "");
 
 const makeMpesaLabel = (amount: number) => ({
   label: "Pay with M-Pesa 🇰🇪",
@@ -931,6 +939,116 @@ export default function Payment() {
   // Update the paymentAmountRef on every render so PayPal callbacks get the fresh value
   paymentAmountRef.current = paymentAmount;
 
+  // ── PayPal full-page checkout (2026-11) ──────────────────────────────────────
+  // The popup button never completed a single payment in 75 days — much of
+  // the traffic is in-app browsers that block popups. This sends the whole
+  // tab to PayPal; PayPal returns to this page with ?paypalReturn=1&token=…
+  // and the server captures + verifies exactly like the popup flow. If the
+  // buyer never comes back, the server's PayPal recovery poller still
+  // captures the approved order.
+  const [paypalRedirecting, setPaypalRedirecting] = useState(false);
+
+  const onPayPalCaptured = useCallback((result: any) => {
+    const plan = result.planActivated || urlPlanId || "pro";
+    setActivatedPlanId(plan);
+    setPaymentSuccess(true);
+    fireSuccessConfetti();
+    trackPaymentCompleted(paymentAmountRef.current, "paypal" as any);
+    queryClient.invalidateQueries({ queryKey: ["/api/subscription"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/user/plan"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/user/services"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/profile"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+    const planLabel = plan.charAt(0).toUpperCase() + plan.slice(1);
+    toast({
+      title: `Payment Successful ✅`,
+      description: result.transactionId
+        ? `Your ${planLabel} plan is now active. PayPal Ref: ${result.transactionId}`
+        : `Your ${planLabel} plan is now active.`,
+    });
+    setTimeout(() => navigate("/dashboard"), 3000);
+  }, [urlPlanId, toast, navigate]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const payWithPayPalRedirect = useCallback(async () => {
+    if (!priceReadyRef.current) {
+      toast({ title: "One moment", description: "The price is still loading — please tap again.", variant: "destructive" });
+      return;
+    }
+    setPaypalRedirecting(true);
+    try {
+      const csrfToken = await fetchCsrfToken();
+      const here = new URL(window.location.href);
+      ["paypalReturn", "paypalCancel", "token", "PayerID", "pid"].forEach((k) => here.searchParams.delete(k));
+      const res = await fetch("/api/paypal/create-order", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken },
+        body: JSON.stringify({
+          amount: paymentAmountRef.current,
+          description: "WorkAbroad Hub — Career Consultation",
+          serviceId: `plan_${effectivePlanIdRef.current}`,
+          refCode: refCode || undefined,
+          returnUrl: here.toString(),
+          cancelUrl: here.toString(),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || "Could not start PayPal. Please try again.");
+      if (!data.approvalUrl) throw new Error("PayPal didn't return a checkout page. Please try again.");
+      window.location.href = data.approvalUrl;
+    } catch (err: any) {
+      toast({ title: "PayPal error", description: err?.message ?? "Could not start PayPal.", variant: "destructive" });
+      setPaypalRedirecting(false);
+    }
+  }, [refCode, toast]);
+
+  // Return from PayPal's page: capture once, then clean the URL.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const clean = () => {
+      const u = new URL(window.location.href);
+      ["paypalReturn", "paypalCancel", "token", "PayerID", "pid"].forEach((k) => u.searchParams.delete(k));
+      window.history.replaceState({}, "", u.pathname + u.search);
+    };
+    if (params.get("paypalCancel") === "1") {
+      clean();
+      toast({ title: "Payment cancelled", description: "You weren't charged. You can try PayPal again or pay by M-Pesa." });
+      return;
+    }
+    if (params.get("paypalReturn") !== "1") return;
+    const orderId = params.get("token");
+    const pid = params.get("pid");
+    if (!orderId) { clean(); return; }
+    const onceKey = `paypal-captured:${orderId}`;
+    try { if (sessionStorage.getItem(onceKey)) { clean(); return; } sessionStorage.setItem(onceKey, "1"); } catch { /* ignore */ }
+    clean();
+    setPaypalPending(true);
+    (async () => {
+      try {
+        const csrfToken = await fetchCsrfToken();
+        const res = await fetch("/api/paypal/capture-order", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken },
+          body: JSON.stringify({ paypalOrderId: orderId, paymentId: pid || undefined }),
+        });
+        const result = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(result.message || "We couldn't confirm the PayPal payment yet.");
+        onPayPalCaptured(result);
+      } catch (err: any) {
+        toast({
+          title: "Checking your PayPal payment",
+          description: `${err?.message ?? "We couldn't confirm it yet."} If PayPal took the money, your plan activates automatically within a few minutes — don't pay again.`,
+          variant: "destructive",
+          duration: 15000,
+        });
+      } finally {
+        setPaypalPending(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ── PayPal button renderer ───────────────────────────────────────────────────
   // Runs whenever method switches to "paypal" or the SDK loads
   useEffect(() => {
@@ -982,22 +1100,7 @@ export default function Payment() {
           });
           const result = await res.json();
           if (!res.ok) throw new Error(result.message || "Capture failed");
-          const plan = result.planActivated || urlPlanId || "pro";
-          setActivatedPlanId(plan);
-          setPaymentSuccess(true);
-          fireSuccessConfetti();
-          trackPaymentCompleted(paymentAmountRef.current, "paypal" as any);
-          queryClient.invalidateQueries({ queryKey: ["/api/subscription"] });
-          queryClient.invalidateQueries({ queryKey: ["/api/user/plan"] });
-          queryClient.invalidateQueries({ queryKey: ["/api/user/services"] });
-          queryClient.invalidateQueries({ queryKey: ["/api/profile"] });
-          queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
-          const planLabel = plan.charAt(0).toUpperCase() + plan.slice(1);
-          toast({
-            title: `Payment Successful ✅`,
-            description: `Your ${planLabel} plan is now active. PayPal Ref: ${result.transactionId}`,
-          });
-          setTimeout(() => navigate("/dashboard"), 3000);
+          onPayPalCaptured(result);
         } catch (err: any) {
           toast({ title: "Payment Failed", description: err.message, variant: "destructive" });
         } finally {
@@ -1892,11 +1995,11 @@ export default function Payment() {
                     <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 text-xs text-blue-800 dark:text-blue-200">
                       <p className="font-semibold mb-1">PayPal Secure Checkout</p>
                       <p className="leading-relaxed">
-                        You will be charged approximately{" "}
+                        PayPal payments are for <strong>full portal access (1 year)</strong>. You will be charged{" "}
                         <strong>
-                          ${Math.max(1, Math.round((paymentAmount / 130) * 100) / 100).toFixed(2)} USD
+                          ${paypalConfig?.flatFeeUsd ?? "34.62"} USD
                         </strong>{" "}
-                        (≈ KES {paymentAmount.toLocaleString()}). Pay with your PayPal balance, debit card, or credit card.
+                        (≈ KES {(paypalConfig?.flatFeeKes ?? 4500).toLocaleString()}). Pay with your PayPal balance, debit card, or credit card.
                       </p>
                     </div>
 
@@ -1924,12 +2027,37 @@ export default function Payment() {
                       </div>
                     )}
 
+                    {/* Full-page checkout — first in in-app browsers, where popups are blocked */}
+                    {paypalConfig?.enabled && IN_APP_BROWSER && (
+                      <Button
+                        type="button"
+                        onClick={payWithPayPalRedirect}
+                        disabled={paypalRedirecting || paypalPending}
+                        className="w-full h-12 bg-[#0070ba] hover:bg-[#005ea6] text-white font-semibold"
+                        data-testid="button-paypal-redirect"
+                      >
+                        {paypalRedirecting ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Opening PayPal…</> : "Pay on PayPal's website"}
+                      </Button>
+                    )}
+
                     {/* PayPal Smart Button rendered here by SDK */}
                     <div
                       id="paypal-button-container"
                       data-testid="container-paypal-buttons"
                       className="min-h-[50px]"
                     />
+
+                    {paypalConfig?.enabled && !IN_APP_BROWSER && (
+                      <button
+                        type="button"
+                        onClick={payWithPayPalRedirect}
+                        disabled={paypalRedirecting || paypalPending}
+                        className="w-full text-xs text-blue-700 dark:text-blue-300 underline underline-offset-2 py-1"
+                        data-testid="link-paypal-redirect"
+                      >
+                        {paypalRedirecting ? "Opening PayPal…" : "PayPal window didn't open? Pay on PayPal's website instead"}
+                      </button>
+                    )}
 
                     <div className="flex items-center justify-center gap-2 text-xs text-gray-400 dark:text-gray-500 pt-1 border-t border-gray-100 dark:border-gray-800">
                       <Shield className="h-3.5 w-3.5" aria-hidden="true" />

@@ -23,7 +23,7 @@ import type { Express, Request, Response } from "express";
 import { pool } from "../db";
 import { storage } from "../storage";
 import { stkPush, isMpesaAvailable, getCallbackBaseUrl } from "../mpesa";
-import { createPayPalOrder, capturePayPalOrder, isPayPalConfigured } from "../paypal";
+import { createPayPalOrder, capturePayPalOrder, isPayPalConfigured, safePayPalUrl } from "../paypal";
 import { stripHtml } from "../lib/html-sanitizer";
 import { safaricomIpGuard } from "../middleware/safaricomIpGuard";
 
@@ -386,6 +386,10 @@ export function registerScoutJobsRoutes(app: Express): void {
           PRICE_KES,
           `WorkAbroad Hub, Scout Job listing`,
           `WAH-SCOUT-${scoutJobId.slice(0, 8)}`,
+          {
+            returnUrl: safePayPalUrl("/scout-jobs/post", "/scout-jobs/post", { paypalReturn: "1" }),
+            cancelUrl: safePayPalUrl("/scout-jobs/post", "/scout-jobs/post", { paypalCancel: "1" }),
+          },
         );
       } catch (err: any) {
         console.error("[scout-jobs] PayPal order create failed:", err?.message);

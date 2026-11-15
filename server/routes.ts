@@ -21289,10 +21289,14 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
 
   // GET /api/paypal/config — public: returns client ID and mode so the frontend
   // can load the PayPal JS SDK without exposing the secret.
-  app.get("/api/paypal/config", (_req, res) => {
+  app.get("/api/paypal/config", async (_req, res) => {
     if (!isPayPalConfigured()) {
       return res.json({ enabled: false, clientId: null, mode: null });
     }
+    // 2026-11: PayPal always charges the flat full-portal fee — expose it so
+    // the page shows the real USD amount (it showed the item price before).
+    const { getPayPalFlatFeeKes } = await import("./paypal");
+    const flatFeeKes = getPayPalFlatFeeKes();
     // 2026-07: expose the KES→USD rate the server actually uses, so the
     // client can display the exact USD amount PayPal will charge. Otherwise
     // the client and server disagree and the fraud gate rejects the payment.
@@ -21302,6 +21306,8 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
       clientId: paypalClientId(),
       mode: paypalMode(),
       kesToUsdRate,
+      flatFeeKes,
+      flatFeeUsd: kesToUsd(flatFeeKes).toFixed(2),
     });
   });
 
@@ -21336,6 +21342,35 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
           ORDER BY created_at DESC LIMIT 1`,
         [userId],
       );
+      // 2026-11: a buyer who closed the PayPal window (or came back via
+      // Cancel) and tapped again was blocked for 5 minutes. If PayPal says
+      // the earlier order was never approved, nothing can be charged on it,
+      // so retire it and let the buyer start again.
+      if (ppInflightRows[0]) {
+        try {
+          const { rows: prevRows } = await pool.query<{ checkout_request_id: string | null }>(
+            `SELECT checkout_request_id FROM payments WHERE id = $1`, [ppInflightRows[0].id],
+          );
+          const prevOrderId = prevRows[0]?.checkout_request_id;
+          let retire = !prevOrderId;
+          if (prevOrderId) {
+            const { getPayPalOrder } = await import("./paypal");
+            const prev = await getPayPalOrder(prevOrderId);
+            retire = prev.status === "CREATED" || prev.status === "VOIDED";
+          }
+          if (retire) {
+            await pool.query(
+              `UPDATE payments SET status = 'failed', fail_reason = 'paypal_superseded', updated_at = NOW()
+                WHERE id = $1 AND status IN ('pending','awaiting_payment') AND processed IS NOT TRUE`,
+              [ppInflightRows[0].id],
+            );
+            console.info(`[PayPal] Superseded unapproved order paymentId=${ppInflightRows[0].id} order=${prevOrderId ?? "none"} user=${userId}`);
+            ppInflightRows.length = 0;
+          }
+        } catch (e: any) {
+          console.warn(`[PayPal] in-flight check failed for ${ppInflightRows[0]?.id}: ${e?.message ?? e}`);
+        }
+      }
       if (ppInflightRows[0]) {
         const ageSec = Math.floor((Date.now() - new Date(ppInflightRows[0].created_at).getTime()) / 1000);
         return res.status(409).json({
@@ -21518,10 +21553,17 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
         `[Payment][START] PayPal | paymentId=${paymentRecord.id} | userId=${userId} | email=${paypalInitUser?.email || "unknown"} | KES=${chargedKes} (requested ${requestedKes}) | serviceId=${serviceId}`
       );
 
+      // Full-page checkout: PayPal returns the buyer to our page with
+      // ?token=<orderId>; pid lets the page pass the payment row back.
+      const { safePayPalUrl } = await import("./paypal");
       const order = await createPayPalOrder(
         chargedKes,
         description || "WorkAbroad Hub payment",
-        paymentRecord.id
+        paymentRecord.id,
+        {
+          returnUrl: safePayPalUrl(req.body?.returnUrl, "/payment", { paypalReturn: "1", pid: paymentRecord.id }),
+          cancelUrl: safePayPalUrl(req.body?.cancelUrl, "/payment", { paypalCancel: "1" }),
+        },
       );
 
       // Persist the PayPal order ID onto the payment row — without this,
@@ -21561,8 +21603,30 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
         return res.status(503).json({ message: "PayPal is not configured." });
       }
 
-      const { paypalOrderId, paymentId } = req.body;
+      const { paypalOrderId } = req.body;
+      let { paymentId } = req.body;
       const userId = req.user?.claims?.sub as string;
+      if (!paypalOrderId || typeof paypalOrderId !== "string") {
+        return res.status(400).json({ message: "paypalOrderId is required." });
+      }
+
+      // 2026-11: the full-page return only carries PayPal's order id. Find
+      // the row created for that order (otherwise capture created a generic
+      // fallback row), and make sure it belongs to this user.
+      const { rows: ppRows } = await pool.query<{ id: string; user_id: string }>(
+        `SELECT id, user_id FROM payments WHERE method = 'paypal' AND checkout_request_id = $1 ORDER BY created_at DESC LIMIT 1`,
+        [paypalOrderId],
+      );
+      if (ppRows[0]) {
+        if (ppRows[0].user_id !== userId) {
+          console.error(`[PayPal][Security] capture-order: order ${paypalOrderId} belongs to ${ppRows[0].user_id}, not ${userId}`);
+          return res.status(403).json({ message: "This payment does not belong to your account." });
+        }
+        if (paymentId && paymentId !== ppRows[0].id) {
+          console.warn(`[PayPal][Security] capture-order: paymentId ${paymentId} doesn't match order ${paypalOrderId} (row ${ppRows[0].id}) — using the row`);
+        }
+        paymentId = ppRows[0].id;
+      }
 
       const { completePayPalCapture } = await import("./services/paypalCapture");
       const result = await completePayPalCapture({

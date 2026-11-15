@@ -38,7 +38,7 @@ import type { Express, Request, Response } from "express";
 import { pool } from "../db";
 import { storage } from "../storage";
 import { stkPush, isMpesaAvailable } from "../mpesa";
-import { createPayPalOrder, capturePayPalOrder, isPayPalConfigured } from "../paypal";
+import { createPayPalOrder, capturePayPalOrder, isPayPalConfigured, safePayPalUrl } from "../paypal";
 import { renderDocx, renderPdf } from "../services/document-renderer";
 import { safaricomIpGuard } from "../middleware/safaricomIpGuard";
 
@@ -471,6 +471,10 @@ export function registerWriteFromScratchRoutes(app: Express): void {
           PRICE_KES,
           `WorkAbroad Hub — ${docTypeLabel(docType as WriteFromScratchDocType)}`,
           `WAH-WFS-${draftId.slice(0, 8)}`,
+          {
+            returnUrl: safePayPalUrl("/tools/write-from-scratch", "/tools/write-from-scratch", { paypalReturn: "1" }),
+            cancelUrl: safePayPalUrl("/tools/write-from-scratch", "/tools/write-from-scratch", { paypalCancel: "1" }),
+          },
         );
       } catch (err: any) {
         console.error("[write-from-scratch] PayPal order creation failed:", err?.message);
