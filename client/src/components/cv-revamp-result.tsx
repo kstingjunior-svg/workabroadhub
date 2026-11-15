@@ -37,7 +37,7 @@ export function CvRevampResult({
   busy: "pdf" | "docx" | null;
   onDownload: (format: "pdf" | "docx") => void;
 }) {
-  const [recheck, setRecheck] = useState<{ loading: boolean; score?: number; sameVersion?: boolean; error?: string }>({ loading: false });
+  const [recheck, setRecheck] = useState<{ loading: boolean; score?: number; deliveredScore?: number | null; error?: string }>({ loading: false });
   const improved = ats.after > ats.before;
 
   async function runRecheck() {
@@ -52,7 +52,7 @@ export function CvRevampResult({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.message || "Couldn't re-check right now.");
-      setRecheck({ loading: false, score: data.score, sameVersion: data.sameVersion });
+      setRecheck({ loading: false, score: data.score, deliveredScore: data.deliveredScore });
     } catch (e: any) {
       setRecheck({ loading: false, error: e?.message || "Couldn't re-check right now." });
     }
@@ -77,7 +77,7 @@ export function CvRevampResult({
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-6">
           <div className="text-center flex-1">
             <p className="text-xs font-bold tracking-[0.2em] text-slate-500">ORIGINAL</p>
-            <p className="text-6xl sm:text-7xl font-extrabold text-slate-600 dark:text-slate-300 tabular-nums leading-none mt-1" data-testid="text-score-before">{ats.before}%</p>
+            <p className="text-6xl sm:text-7xl font-extrabold text-slate-600 dark:text-slate-300 tabular-nums leading-none mt-1" data-testid="text-score-before">{Math.min(100, ats.before)}%</p>
           </div>
           <div className="text-emerald-500" aria-hidden>
             <ArrowDown className="h-10 w-10 sm:hidden" />
@@ -85,7 +85,7 @@ export function CvRevampResult({
           </div>
           <div className="text-center flex-1">
             <p className="text-xs font-bold tracking-[0.2em] text-emerald-600">REVAMPED</p>
-            <p className="text-6xl sm:text-7xl font-extrabold text-emerald-600 dark:text-emerald-400 tabular-nums leading-none mt-1" data-testid="text-score-after">{ats.after}%</p>
+            <p className="text-6xl sm:text-7xl font-extrabold text-emerald-600 dark:text-emerald-400 tabular-nums leading-none mt-1" data-testid="text-score-after">{Math.min(100, ats.after)}%</p>
             {improved ? (
               <div className="mt-3 inline-flex items-center gap-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 px-4 py-2">
                 <TrendingUp className="h-5 w-5 text-emerald-600" />
@@ -147,8 +147,8 @@ export function CvRevampResult({
             <span className="flex items-center gap-2"><AlertTriangle className="h-4 w-4" /> {recheck.error}</span>
           ) : (
             <span className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4" />
-              Checked again: <strong>{recheck.score}%</strong>
-              {recheck.sameVersion ? " — the same version we delivered and scored." : " on our ATS checker just now."}
+              Re-checked just now: <strong>{recheck.score}%</strong> on the exact CV in your download
+              {typeof recheck.deliveredScore === "number" && recheck.deliveredScore !== recheck.score ? ` (measured ${recheck.deliveredScore}% at delivery — AI checkers can vary by a point or two).` : "."}
             </span>
           )}
         </div>

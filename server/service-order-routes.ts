@@ -1771,7 +1771,18 @@ CRITICAL LENGTH REQUIREMENT — READ CAREFULLY (do not violate):
           if (before.score > 0 && best.score > 0) {
             output = bestText;
             measuredOutputScore = best.score;
-            Object.assign(aiOutputExtras, buildCompareRecord(inputCv, bestText, before, best, attempts));
+            if (best.score >= before.score) {
+              Object.assign(aiOutputExtras, buildCompareRecord(inputCv, bestText, before, best, attempts));
+            } else {
+              // Never show the customer a LOWER score, and never fake a higher
+              // one: deliver without a score comparison and flag for a human.
+              await pool.query(
+                `UPDATE service_orders SET needs_human_review = true,
+                        human_review_notes = COALESCE(human_review_notes,'') || $2, updated_at = NOW()
+                  WHERE id = $1`,
+                [orderId, `\n[ats-compare] rewrite scored ${best.score} vs original ${before.score} after ${attempts} attempts — delivered without score comparison; please review.`],
+              ).catch(() => {});
+            }
             console.log(`[ats-compare] orderId=${orderId} FINAL ${before.score} → ${best.score} (${best.score - before.score >= 0 ? "+" : ""}${best.score - before.score}) after ${attempts} attempt(s)`);
           }
         }
@@ -3000,7 +3011,7 @@ export function registerServiceOrderRoutes(app: Express, isAuthenticated: Reques
       // engine as the free ATS checker. Absent when we couldn't measure.
       ats: (() => {
         const a = typeof order.ai_output === "string" ? (() => { try { return JSON.parse(order.ai_output); } catch { return null; } })() : order.ai_output;
-        if (order.status !== "completed" || !a || typeof a.inputAtsScore !== "number" || typeof a.outputAtsScore !== "number") return null;
+        if (order.status !== "completed" || !a || typeof a.inputAtsScore !== "number" || typeof a.outputAtsScore !== "number" || a.outputAtsScore < a.inputAtsScore) return null;
         return {
           before: a.inputAtsScore,
           after: a.outputAtsScore,
@@ -3038,15 +3049,14 @@ export function registerServiceOrderRoutes(app: Express, isAuthenticated: Reques
       if (n > 5) return res.status(429).json({ message: "You've re-checked this CV several times already. Upload it to the free ATS checker any time." });
       recheckCounts.set(req.params.orderId, n);
 
-      const { lookupDeliveredCv } = await import("./lib/cv-fingerprint");
-      const match = await lookupDeliveredCv(order.output_text);
-      if (match && match.deliveredScore > 0) {
-        return res.json({ score: match.deliveredScore, sameVersion: true, checkedAt: new Date().toISOString() });
-      }
+      // A FRESH run of the same checker on the exact text inside the
+      // downloadable Word/PDF — not a lookup — so the customer can verify.
       const { scoreCv } = await import("./lib/cv-ai/ats-scorer");
       const sc = await scoreCv(order.output_text, order.job_description ?? undefined);
       if (!(sc.score > 0)) return res.status(503).json({ message: "The checker is busy — please try again in a minute." });
-      return res.json({ score: sc.score, sameVersion: false, checkedAt: new Date().toISOString() });
+      const { lookupDeliveredCv } = await import("./lib/cv-fingerprint");
+      const match = await lookupDeliveredCv(order.output_text).catch(() => null);
+      return res.json({ score: Math.min(100, sc.score), deliveredScore: match?.deliveredScore ?? null, checkedAt: new Date().toISOString() });
     } catch (err: any) {
       console.error("[ats-recheck]", err?.message);
       res.status(500).json({ message: "Couldn't re-check right now. Please try again." });

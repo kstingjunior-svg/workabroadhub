@@ -395,7 +395,7 @@ export default function ServiceOrderFlow() {
           // Server may report it as `deliveredScore` or `atsScore` — accept both.
           const score = Number(data.deliveredScore ?? data.atsScore ?? 0);
           if (Number.isFinite(score) && score > 0) setDeliveredScore(score);
-          if (data.ats && typeof data.ats.before === "number" && typeof data.ats.after === "number") {
+          if (data.ats && typeof data.ats.before === "number" && typeof data.ats.after === "number" && data.ats.after >= data.ats.before) {
             setAtsCompare(data.ats as AtsCompare);
             setDeliveredScore(data.ats.after);
           }
