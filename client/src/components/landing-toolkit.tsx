@@ -12,30 +12,33 @@
  */
 import { Link } from "wouter";
 import {
-  ArrowRight, BadgeCheck, Briefcase, CheckCircle2, FileSearch, FileText, Globe2, GraduationCap,
+  ArrowRight, BadgeCheck, Briefcase, CheckCircle2, FileSearch, FileText, Globe2, FileCheck2, Mail,
   ShieldAlert, ShieldCheck, Sparkles, XCircle, Megaphone, CircleDollarSign, FileX2,
 } from "lucide-react";
 import { useLiveActivity } from "@/components/live-activity-feed";
 
+// 2026-11 (Tony's 2nd mock-up): icon + title side by side, price pill,
+// one-line benefit, solid coloured button. Copy stays honest — tools SCREEN
+// and point to the official check; none "verifies authenticity".
 const TOOLS = [
-  { href: "/tools/job-scam-checker", testid: "link-tool-scam", icon: ShieldAlert, tone: "purple", price: "KES 100", title: "Check Job Scams",
-    body: "Paste a job ad or agency message. We flag fake fees, suspicious contacts and high-risk phrases before you pay anyone.", cta: "Check an ad" },
-  { href: "/tools/visa-check", testid: "link-tool-visa-check", icon: Globe2, tone: "blue", price: "KES 100", title: "Screen a Visa",
-    body: "We check the dates and the machine-readable zone, show the evidence, and give you the official link to confirm it.", cta: "Screen a visa" },
-  { href: "/tools/offer-check", testid: "link-tool-offer-check", icon: FileText, tone: "emerald", price: "KES 100", title: "Screen an Offer Letter",
-    body: "See red flags in the terms, the sender's email and the employer before you sign or pay.", cta: "Screen a letter" },
-  { href: "/tools/visa-sponsorship-jobs", testid: "link-tool-jobs", icon: Briefcase, tone: "teal", price: "Free to browse", title: "Find Visa Sponsorship Jobs",
-    body: "Overseas jobs that offer visa sponsorship — UK, Canada, the Gulf, Australia and more.", cta: "Browse jobs" },
-  { href: "/tools/ielts-verify", testid: "link-tool-ielts-verify", icon: GraduationCap, tone: "indigo", price: "KES 100", title: "Check an IELTS Result",
-    body: "Screen a Test Report Form for inconsistencies, with the official way to confirm it.", cta: "Check a result" },
+  { href: "/tools/job-scam-checker", testid: "link-tool-scam", icon: ShieldAlert, tone: "navy", price: "KES 100", title: "Check Job Scams",
+    body: "Protect yourself. Spot scam signs in a job ad or agency message before you pay or engage.", cta: "Check Now" },
+  { href: "/tools/visa-check", testid: "link-tool-visa-check", icon: Globe2, tone: "purple", price: "KES 100", title: "Screen a Visa",
+    body: "Check the dates and details, and get the official link to confirm it.", cta: "Screen Now" },
+  { href: "/tools/offer-check", testid: "link-tool-offer-check", icon: Mail, tone: "green", price: "KES 100", title: "Screen an Offer Letter",
+    body: "Understand your offer. See red flags in the terms and the sender before you sign.", cta: "Screen Now" },
+  { href: "/tools/visa-sponsorship-jobs", testid: "link-tool-jobs", icon: Briefcase, tone: "blue", price: null, title: "Find Visa Sponsorship Jobs",
+    body: "Discover overseas jobs that offer visa sponsorship.", cta: "Search Jobs" },
+  { href: "/tools/ielts-verify", testid: "link-tool-ielts-verify", icon: FileCheck2, tone: "orange", price: "KES 100", title: "Check an IELTS Result",
+    body: "Screen your Test Report Form for inconsistencies, with the official way to confirm it.", cta: "Check Now" },
 ] as const;
 
-const TONE: Record<string, { icon: string; btn: string }> = {
-  purple:  { icon: "bg-purple-100 text-purple-600 dark:bg-purple-900/40 dark:text-purple-300", btn: "bg-purple-600 hover:bg-purple-700" },
-  blue:    { icon: "bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-300", btn: "bg-blue-600 hover:bg-blue-700" },
-  emerald: { icon: "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-300", btn: "bg-emerald-600 hover:bg-emerald-700" },
-  teal:    { icon: "bg-teal-100 text-teal-600 dark:bg-teal-900/40 dark:text-teal-300", btn: "bg-teal-600 hover:bg-teal-700" },
-  indigo:  { icon: "bg-indigo-100 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-300", btn: "bg-indigo-600 hover:bg-indigo-700" },
+const TONE: Record<string, { icon: string; pill: string; btn: string }> = {
+  navy:   { icon: "bg-blue-600 text-white",    pill: "bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300",         btn: "bg-slate-900 hover:bg-slate-800 dark:bg-slate-700 dark:hover:bg-slate-600" },
+  purple: { icon: "bg-violet-600 text-white",  pill: "bg-violet-50 text-violet-700 dark:bg-violet-950/50 dark:text-violet-300",   btn: "bg-violet-600 hover:bg-violet-700" },
+  green:  { icon: "bg-emerald-600 text-white", pill: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300", btn: "bg-emerald-600 hover:bg-emerald-700" },
+  blue:   { icon: "bg-blue-600 text-white",    pill: "bg-blue-50 text-blue-700",                                                   btn: "bg-slate-900 hover:bg-slate-800 dark:bg-slate-700 dark:hover:bg-slate-600" },
+  orange: { icon: "bg-orange-500 text-white",  pill: "bg-orange-50 text-orange-700 dark:bg-orange-950/50 dark:text-orange-300",   btn: "bg-orange-500 hover:bg-orange-600" },
 };
 
 function plus(n?: number) {
@@ -88,41 +91,59 @@ export function LandingToolkit() {
           </p>
         </div>
 
-        {/* Featured free card + tool grid */}
-        <div className="grid gap-4 lg:grid-cols-[minmax(280px,0.85fr)_2fr] lg:items-stretch">
-          <Link href="/tools/ats-cv-checker" data-testid="link-tool-ats"
-            className="group rounded-2xl border-2 border-emerald-500 bg-gradient-to-b from-emerald-50 to-white dark:from-emerald-950/40 dark:to-slate-900 p-6 sm:p-7 shadow-sm hover:shadow-xl transition flex flex-col justify-center">
-            <FileSearch className="h-14 w-14 text-emerald-600 dark:text-emerald-400" />
-            <h3 className="mt-4 text-3xl font-extrabold text-slate-900 dark:text-white">Check ATS CV</h3>
-            <p className="text-lg font-extrabold text-emerald-600 dark:text-emerald-400">— Always Free</p>
-            <div className="my-5 h-px bg-emerald-200 dark:bg-emerald-900" />
-            <div className="flex items-center gap-3 font-semibold text-slate-800 dark:text-slate-100">
-              <span className="h-11 w-11 rounded-full bg-emerald-100 dark:bg-emerald-900/50 text-emerald-600 dark:text-emerald-300 flex items-center justify-center shrink-0"><ShieldCheck className="h-5 w-5" /></span>
-              <span>Beat the bots.<br />Get more interviews.</span>
-            </div>
-            <span className="mt-6 inline-flex items-center justify-center gap-2 min-h-[52px] rounded-xl bg-emerald-600 group-hover:bg-emerald-700 text-white font-bold transition">
-              <Sparkles className="h-4 w-4" /> Check My CV Now
-            </span>
-          </Link>
+        {/* Tools — mock-up layout: featured free card + 5 tools in a 3-col grid */}
+        <div className="rounded-3xl bg-slate-50/80 dark:bg-slate-900/40 border border-slate-200/70 dark:border-slate-800 p-4 sm:p-6 lg:p-8">
+          <div className="text-center mb-6 sm:mb-8">
+            <h3 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">Everything you need before you apply</h3>
+            <p className="mt-1 text-sm sm:text-base text-slate-500 dark:text-slate-400">Smart checks. Clear evidence. Better decisions.</p>
+          </div>
 
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
-            {TOOLS.map((t, i) => {
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {/* Featured — always free */}
+            <Link href="/tools/ats-cv-checker" data-testid="link-tool-ats"
+              className="group sm:col-span-2 lg:col-span-1 rounded-2xl border-2 border-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 p-5 sm:p-6 shadow-sm hover:shadow-xl transition flex flex-col">
+              <div className="flex items-center gap-4">
+                <span className="h-16 w-16 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-emerald-600/30"><FileSearch className="h-8 w-8" /></span>
+                <div>
+                  <h4 className="text-2xl font-extrabold text-emerald-700 dark:text-emerald-400 leading-tight">Check ATS CV</h4>
+                  <p className="text-base font-bold text-slate-700 dark:text-slate-200">— Always Free</p>
+                </div>
+              </div>
+              <div className="my-4 h-px bg-emerald-200 dark:bg-emerald-900" />
+              <p className="text-sm text-slate-700 dark:text-slate-300 flex-1">Beat the bots. See your ATS score and exactly what to fix so employers notice your CV.</p>
+              <span className="mt-5 inline-flex items-center justify-center gap-2 min-h-[52px] rounded-xl bg-emerald-700 group-hover:bg-emerald-800 text-white font-bold text-base transition">
+                <Sparkles className="h-5 w-5" /> Check My CV Now
+              </span>
+            </Link>
+
+            {TOOLS.map((t) => {
               const tone = TONE[t.tone];
               const Icon = t.icon;
               return (
                 <Link key={t.href} href={t.href} data-testid={t.testid}
-                  className={`group rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5 shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition flex flex-col ${i < 3 ? "lg:col-span-2" : "lg:col-span-3"}`}>
-                  <span className={`h-12 w-12 rounded-full flex items-center justify-center ${tone.icon}`}><Icon className="h-6 w-6" /></span>
-                  <h3 className="mt-3 font-bold text-slate-900 dark:text-white">{t.title}</h3>
-                  <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-0.5">{t.price}</p>
-                  <p className="text-sm text-slate-600 dark:text-slate-300 mt-2 mb-4 flex-1 leading-relaxed">{t.body}</p>
-                  <span className={`inline-flex items-center justify-center gap-1.5 min-h-[44px] rounded-lg text-white text-sm font-semibold transition ${tone.btn}`}>
-                    {t.cta} <ArrowRight className="h-4 w-4" />
-                  </span>
+                  className="group rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5 shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition flex flex-col">
+                  <div className="flex items-center gap-3">
+                    <span className={`h-12 w-12 rounded-full flex items-center justify-center shrink-0 ${tone.icon}`}><Icon className="h-6 w-6" /></span>
+                    <h4 className="font-extrabold text-lg text-slate-900 dark:text-white leading-tight">{t.title}</h4>
+                  </div>
+                  {t.price && <span className={`mt-3 self-start rounded-full px-3 py-0.5 text-xs font-bold ${tone.pill}`}>{t.price}</span>}
+                  <p className="mt-2 mb-4 text-sm text-slate-600 dark:text-slate-300 flex-1 leading-relaxed">{t.body}</p>
+                  <span className={`self-start inline-flex items-center justify-center min-h-[44px] w-full sm:w-auto px-6 rounded-lg text-white text-sm font-bold transition ${tone.btn}`}>{t.cta}</span>
                 </Link>
               );
             })}
           </div>
+
+          {/* NEA licence strip */}
+          <Link href="/nea-agencies" data-testid="link-tool-nea"
+            className="group mt-4 mx-auto max-w-2xl rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 sm:p-5 shadow-sm hover:shadow-lg transition flex flex-col sm:flex-row sm:items-center gap-4">
+            <span className="h-12 w-12 rounded-full bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 flex items-center justify-center shrink-0"><ShieldCheck className="h-7 w-7" /></span>
+            <div className="flex-1">
+              <h4 className="font-extrabold text-lg text-slate-900 dark:text-white">Instant NEA Licence Check <span className="ml-1 align-middle rounded-full bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 text-[11px] font-bold">FREE</span></h4>
+              <p className="text-sm text-slate-600 dark:text-slate-300">Check any recruitment agency's licence against the NEA register in seconds — before you pay.</p>
+            </div>
+            <span className="inline-flex items-center justify-center min-h-[44px] px-6 rounded-lg bg-emerald-600 group-hover:bg-emerald-700 text-white text-sm font-bold transition">Check Now</span>
+          </Link>
         </div>
 
         {/* Real numbers */}
