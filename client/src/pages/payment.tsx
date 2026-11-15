@@ -969,6 +969,21 @@ export default function Payment() {
     setTimeout(() => navigate("/dashboard"), 3000);
   }, [urlPlanId, toast, navigate]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Returns true when the capture response was handled (pending / error).
+  const handlePayPalNonSuccess = (res: Response, result: any): boolean => {
+    if (result?.code === "PAYPAL_CAPTURE_PENDING") {
+      toast({ title: "Payment received — PayPal is still processing it", description: result.message, duration: 15000 });
+      return true;
+    }
+    if (result?.code === "PAYPAL_ALREADY_PAID") {
+      toast({ title: "Already paid", description: result.message });
+      setTimeout(() => navigate("/dashboard"), 2000);
+      return true;
+    }
+    if (!res.ok) throw new Error(result?.message || "We couldn't confirm the PayPal payment yet.");
+    return false;
+  };
+
   const payWithPayPalRedirect = useCallback(async () => {
     if (!priceReadyRef.current) {
       toast({ title: "One moment", description: "The price is still loading — please tap again.", variant: "destructive" });
@@ -1033,7 +1048,12 @@ export default function Payment() {
           body: JSON.stringify({ paypalOrderId: orderId, paymentId: pid || undefined }),
         });
         const result = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(result.message || "We couldn't confirm the PayPal payment yet.");
+        if (result?.code === "PAYPAL_DECLINED" && result?.retryUrl) {
+          toast({ title: "Card declined", description: "Your bank declined that card. Taking you back to PayPal to choose another card or your PayPal balance…", variant: "destructive" });
+          setTimeout(() => { window.location.href = result.retryUrl; }, 1500);
+          return;
+        }
+        if (handlePayPalNonSuccess(res, result)) return;
         onPayPalCaptured(result);
       } catch (err: any) {
         toast({
@@ -1085,7 +1105,7 @@ export default function Payment() {
         paypalPaymentIdRef.current = data.paymentId || null;
         return data.paypalOrderId;
       },
-      onApprove: async (data: any) => {
+      onApprove: async (data: any, actions: any) => {
         setPaypalPending(true);
         try {
           const csrfToken = await fetchCsrfToken();
@@ -1099,7 +1119,13 @@ export default function Payment() {
             }),
           });
           const result = await res.json();
-          if (!res.ok) throw new Error(result.message || "Capture failed");
+          // Card declined: PayPal's recommended recovery is to reopen the
+          // same order so the buyer can pick another card or their balance.
+          if (result?.code === "PAYPAL_DECLINED" && actions?.restart) {
+            toast({ title: "Card declined", description: "Your bank declined that card. Choose another card or your PayPal balance.", variant: "destructive" });
+            return actions.restart();
+          }
+          if (handlePayPalNonSuccess(res, result)) return;
           onPayPalCaptured(result);
         } catch (err: any) {
           toast({ title: "Payment Failed", description: err.message, variant: "destructive" });

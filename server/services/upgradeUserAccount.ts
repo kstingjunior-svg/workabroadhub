@@ -368,7 +368,11 @@ export async function upgradeUserAccount(opts: UpgradeOptions): Promise<UpgradeR
   // Duration is plan-specific: trial=1d, monthly=30d, yearly/pro=365d
   const durationDays = PLAN_DURATION_DAYS[resolvedPlan] ?? PLAN_DURATION_DAYS.pro;
   const durationMs   = durationDays * 24 * 60 * 60 * 1000;
-  const expiresAt    = new Date(Date.now() + durationMs);
+  const freshExpiresAt = new Date(Date.now() + durationMs);
+  // 2026-11: the real expiry comes back from activateUserPlan (renewals ADD
+  // to remaining time). Notifications and the return value used the fresh
+  // now+duration date, so a customer renewing early was told the wrong date.
+  let expiresAt = freshExpiresAt;
 
   // Thread resetMode through. Default is "extend" (for organic M-Pesa
   // re-payments). Admin grant-plan endpoint passes "reset" so manual
@@ -377,13 +381,17 @@ export async function upgradeUserAccount(opts: UpgradeOptions): Promise<UpgradeR
   const activationOptions = { resetMode: (opts.resetMode ?? "extend") as "extend" | "reset" };
 
   if (serviceId.startsWith("plan_")) {
-    await storage.activateUserPlan(resolvedUserId, resolvedPlan, paymentId, expiresAt, activationOptions);
+    const sub: any = await storage.activateUserPlan(resolvedUserId, resolvedPlan, paymentId, freshExpiresAt, activationOptions);
+    const realEnd = sub?.end_date ?? sub?.endDate;
+    if (realEnd) expiresAt = new Date(realEnd);
     console.log(
       `[Upgrade][${method.toUpperCase()}] User ${resolvedUserId} → ${resolvedPlan} ` +
       `| mode=${activationOptions.resetMode} | expires ${expiresAt.toISOString()} | txn: ${transactionId} | KES ${amountKes}`
     );
   } else {
-    await storage.activateUserPlan(resolvedUserId, resolvedPlan, paymentId, expiresAt, activationOptions);
+    const sub: any = await storage.activateUserPlan(resolvedUserId, resolvedPlan, paymentId, freshExpiresAt, activationOptions);
+    const realEnd = sub?.end_date ?? sub?.endDate;
+    if (realEnd) expiresAt = new Date(realEnd);
     console.log(
       `[Upgrade][${method.toUpperCase()}] Subscription created for user ${resolvedUserId} → ${resolvedPlan} ` +
       `| mode=${activationOptions.resetMode} | expires ${expiresAt.toISOString()} | txn: ${transactionId} | KES ${amountKes}`

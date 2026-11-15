@@ -187,6 +187,15 @@ export async function verifyPayPalPayment(opts: {
       return { verified: false, status: "mismatch", note, providerData: order as unknown as Record<string, unknown> };
     }
 
+    // 2b. Currency check — every order is created in USD; anything else
+    // would make the KES conversion below meaningless.
+    if ((order.currencyCode || "").toUpperCase() !== "USD") {
+      const note = `PayPal capture currency is "${order.currencyCode}", expected USD`;
+      await stampPayment(paymentId, "mismatch", note, true, `paypal_currency_mismatch:${order.currencyCode}`);
+      await writeAuditLog(paymentId, "verification_mismatch", ip, { paypalOrderId, captureId, currencyCode: order.currencyCode, method: "paypal" });
+      return { verified: false, status: "mismatch", note, providerData: order as unknown as Record<string, unknown> };
+    }
+
     // 3. Amount check — convert USD → KES and compare with tolerance
     const capturedUsd = parseFloat(order.amountUSD);
     const capturedKes = Math.round(capturedUsd * KES_TO_USD_RATE);

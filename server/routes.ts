@@ -37,7 +37,7 @@ import { getPoolStats, db, pool } from "./db";
 import twilio from "twilio";
 const VoiceResponse = twilio.twiml.VoiceResponse;
 import { sql, eq, and, desc, ilike, or, inArray, count, gte, lte } from "drizzle-orm";
-import { sendProActivationEmail } from "./email";
+// (sendProActivationEmail retired 2026-11 — see server/lib/payment-receipt.ts)
 import { calculateAgencyScore, recalculateAllScores } from "./score-engine";
 
 // In-memory duplicate STK push guard: orderId → unix timestamp of last push
@@ -6450,140 +6450,87 @@ Crawl-delay: 1`);
         const type: string = event?.event_type;
         const resource = event?.resource;
 
-        // Only process completed captures and approved orders
-        if (
-          type !== "PAYMENT.CAPTURE.COMPLETED" &&
-          type !== "CHECKOUT.ORDER.APPROVED"
-        ) return;
+        // 2026-11 (payment audit, CRITICAL): this handler used to mark the
+        // payment "completed" and grant a year of Pro on CHECKOUT.ORDER.APPROVED.
+        // APPROVED only means the buyer clicked Pay — no money has moved. On
+        // 2 Nov and 12 Nov the capture that followed was DECLINED by the card
+        // issuer, yet both buyers kept a year of Pro. It also skipped the
+        // amount/currency check. Every money event now goes through the SAME
+        // path as the browser and the recovery poller (completePayPalCapture):
+        // read the order from PayPal, capture only if APPROVED, verify the
+        // captured amount + currency, activate once (processed flag).
+        const HANDLED = new Set([
+          "CHECKOUT.ORDER.APPROVED", "PAYMENT.CAPTURE.COMPLETED",
+          "PAYMENT.CAPTURE.DENIED", "PAYMENT.CAPTURE.DECLINED",
+          "PAYMENT.CAPTURE.REFUNDED", "PAYMENT.CAPTURE.REVERSED", "PAYMENT.CAPTURE.PENDING",
+        ]);
+        if (!HANDLED.has(type)) return;
 
-        // 2. Resolve our internal payment ID
-        // custom_id is set in createPayPalOrder() → purchase_units[0].custom_id
-        // For PAYMENT.CAPTURE.COMPLETED the capture resource carries custom_id directly.
-        // For CHECKOUT.ORDER.APPROVED the resource is the order, check purchase_units.
         const internalId: string | undefined =
           resource?.custom_id ||
           resource?.purchase_units?.[0]?.custom_id ||
           resource?.purchase_units?.[0]?.reference_id;
+        const orderIdFromEvent: string | undefined =
+          type === "CHECKOUT.ORDER.APPROVED" ? resource?.id : resource?.supplementary_data?.related_ids?.order_id;
 
-        if (!internalId) {
-          console.error("[PAYPAL WEBHOOK] Cannot resolve payment ID — missing custom_id/reference_id");
-          return;
-        }
-
-        // 3. Fetch the payment record
-        const payment = await storage.getPaymentById(internalId);
-        if (!payment) {
-          console.error(`[PAYPAL WEBHOOK] No payment found for id=${internalId}`);
-          return;
-        }
-
-        // 4. Idempotency guard — stored status is "completed", NOT "success"
-        if (payment.status === "completed") {
-          console.log(`[PAYPAL WEBHOOK] Already completed: ${payment.id}`);
-          return;
-        }
-
-        // 5. Derive planId — payments.planId is set directly; fallback to serviceId prefix
-        const planId: string | null =
-          payment.planId ||
-          (payment.serviceId?.startsWith("plan_")
-            ? payment.serviceId.replace("plan_", "")
-            : null);
-
-        // 6. Update the payment row — amount stays raw KES (payment.amount already correct)
-        //    Store the PayPal capture/order ID in transactionRef
-        const captureId: string = resource?.id || resource?.purchase_units?.[0]?.payments?.captures?.[0]?.id || "";
-        await storage.updatePayment(payment.id, {
-          status:       "completed",
-          method:       "paypal",
-          transactionRef: captureId || payment.transactionRef,
-          updatedAt:    new Date(),
-        } as any);
-
-        // 7-8. runPaymentPipeline — processPayment → unlockService → deliverService → notify
-        const expiresAt = planId ? planExpiry(planId) : null;
-
-        // 9. Write to Firebase RTDB — payment record + revenue daily/monthly rollup
-        const ppServiceId = payment.serviceId ?? planId ?? null;
-        const ppServiceLabel = planId ? planLabel(planId)
-          : payment.serviceId ?? planId ?? "Service";
-        import("./services/firebaseRtdb").then(({ recordPaymentEvent, trackRevenue }) => {
-          recordPaymentEvent({
-            userId:           payment.userId,
-            paymentId:        captureId || payment.id,
-            amountKes:        Number(payment.amount),
-            reference:        captureId || payment.id,
-            method:           "paypal",
-            serviceId:        ppServiceId,
-            serviceLabel:     ppServiceLabel,
-            subscriptionKey:  planId ?? undefined,
-            subscriptionExpiryMs: planId
-              ? planExpiry(planId).getTime()
-              : undefined,
-          }).catch((err) => reportRejection(err, 'routes'));
-          trackRevenue({
-            userId:    payment.userId,
-            amountKes: Number(payment.amount),
-            serviceId: ppServiceId,
-            method:    "paypal",
-            reference: captureId || payment.id,
-          }).catch((err) => reportRejection(err, 'routes'));
-        }).catch((err) => reportRejection(err, 'routes'));
-
-        // Sync completed payment to Supabase
-        console.log('CALLING PAYMENT SYNC NOW');
-        await syncPaymentToSupabase({
-          user_id:       payment.userId,
-          phone:         null,
-          amount:        Number(payment.amount),
-          mpesa_code:    captureId || (payment as any).transactionRef || null,
-          status:        "completed",
-          plan_id:       planId || null,
-          base_amount:   (payment as any).baseAmount ?? null,
-          currency:      "KES",
-          discount_data: (payment as any).discountType
-            ? { discountType: (payment as any).discountType, discountValue: ((payment as any).baseAmount ?? Number(payment.amount)) - Number(payment.amount) }
-            : null,
-        });
-        if (planId) await upgradeUserToPro(payment.userId);
-        if (planId) {
-          // 2026-09 (PayPal audit fix): was hardcoded plan_id: 'pro' + 360d
-          // for every PayPal payment, causing Supabase side to say 'pro
-          // yearly' even when the user actually bought trial (KES 99, 24h)
-          // or monthly (KES 1000, 30d). Local Postgres got the right tier
-          // via runPaymentPipeline below; Supabase drifted. Now uses the
-          // real planId + planExpiry() (same map runPaymentPipeline uses).
-          const ppWebhookExpiry = planExpiry(planId);
-          syncSubscriptionToSupabase({
-            user_id: payment.userId,
-            plan_id: planId,
-            provider: "paypal",
-            status: "active",
-            auto_renew: false,
-            expires_at: ppWebhookExpiry,
-          }).catch((err) => reportRejection(err, 'routes'));
-          redeemAppliedPromo(payment.metadata).catch((err) => reportRejection(err, 'routes'));
-        }
-
-        // 7-8. runPaymentPipeline — processPayment → unlockService → deliverService → notify
-        const ppDeliveryUser = payment.userId
-          ? await storage.getUserById(payment.userId).catch(() => null)
-          : null;
-        if (ppDeliveryUser) {
-          const { runPaymentPipeline } = await import("./services/paymentPipeline");
-          await runPaymentPipeline({
-            payment,
-            user:          ppDeliveryUser,
-            method:        "paypal",
-            transactionId: captureId || payment.id,
-            planId:        planId ?? null,
-            expiresAt:     expiresAt ?? null,
-          }).catch((e: any) =>
-            console.error("[PAYPAL WEBHOOK] Pipeline error:", e?.message),
+        let payment: any = internalId ? await storage.getPaymentById(internalId).catch(() => null) : null;
+        if (!payment && orderIdFromEvent) {
+          const { rows } = await pool.query<{ id: string }>(
+            `SELECT id FROM payments WHERE method = 'paypal' AND checkout_request_id = $1 ORDER BY created_at DESC LIMIT 1`,
+            [orderIdFromEvent],
           );
+          if (rows[0]) payment = await storage.getPaymentById(rows[0].id).catch(() => null);
+        }
+        if (!payment) {
+          console.error(`[PAYPAL WEBHOOK] ${type}: no payment row (custom_id=${internalId ?? "none"} order=${orderIdFromEvent ?? "none"})`);
+          return;
+        }
+        const paypalOrderId: string | undefined = orderIdFromEvent || payment.checkoutRequestId || undefined;
+
+        // Refunds / reversals / denials: record + alert the admin. Access is
+        // NOT removed automatically — a person decides (partial refunds,
+        // disputes won later, etc.).
+        if (type === "PAYMENT.CAPTURE.REFUNDED" || type === "PAYMENT.CAPTURE.REVERSED"
+            || type === "PAYMENT.CAPTURE.DENIED" || type === "PAYMENT.CAPTURE.DECLINED") {
+          const label = type.split(".").pop()!.toLowerCase();
+          const wasPaid = payment.processed || payment.status === "completed" || payment.status === "success";
+          await pool.query(
+            `UPDATE payments SET status = CASE WHEN $2 IN ('refunded','reversed') AND (processed OR status IN ('completed','success')) THEN 'refunded'
+                                               WHEN $2 IN ('denied','declined') AND NOT processed THEN 'failed' ELSE status END,
+                                 fail_reason = COALESCE(fail_reason, 'paypal_capture_' || $2),
+                                 updated_at = NOW()
+              WHERE id = $1`,
+            [payment.id, label],
+          ).catch((e: any) => console.error("[PAYPAL WEBHOOK] status update failed:", e?.message));
+          await createSecurityAlert({
+            alertType: "payment_fraud", severity: wasPaid ? "high" : "medium",
+            title: `PayPal payment ${label}`,
+            description: `PayPal reported ${type} for payment ${payment.id} (order ${paypalOrderId ?? "?"}, capture ${resource?.id ?? "?"}, ${resource?.amount?.value ?? "?"} ${resource?.amount?.currency_code ?? ""}). ${wasPaid ? "The customer's plan is still active — review in Admin → Finance and decide whether to end it." : "No access had been granted."}`,
+            userId: payment.userId,
+            metadata: { paymentId: payment.id, paypalOrderId, captureId: resource?.id, eventType: type },
+          }).catch(() => {});
+          console.warn(`[PAYPAL WEBHOOK] ${type} recorded for payment ${payment.id} (wasPaid=${wasPaid})`);
+          return;
         }
 
-        console.log(`[PAYPAL WEBHOOK] ${payment.id} → completed | event=${type} | captureId=${captureId}`);
+        if (!paypalOrderId) {
+          console.error(`[PAYPAL WEBHOOK] ${type}: payment ${payment.id} has no PayPal order id — cannot verify`);
+          return;
+        }
+        if (payment.processed) {
+          console.log(`[PAYPAL WEBHOOK] ${type}: payment ${payment.id} already processed`);
+          return;
+        }
+
+        const { completePayPalCapture } = await import("./services/paypalCapture");
+        const result = await completePayPalCapture({
+          paypalOrderId,
+          paymentId: payment.id,
+          userId: payment.userId,
+          clientIp: "paypal-webhook",
+          source: "recovery",
+        });
+        console.log(`[PAYPAL WEBHOOK] ${type} → payment ${payment.id} order ${paypalOrderId}: ${result.status} ${String(result.body?.message ?? result.body?.code ?? "").slice(0, 120)}`);
       } catch (err: any) {
         console.error("[PAYPAL WEBHOOK ERROR]", err?.message ?? err);
       }
@@ -9920,7 +9867,7 @@ Crawl-delay: 1`);
             message: `Your ${resolvedTier} plan has been activated. Expires ${expiresAt.toLocaleDateString("en-KE")}.`,
           }).catch((err) => reportRejection(err, 'routes'));
           if (user.email && (resolvedTier === "pro" || resolvedTier === "yearly")) {
-            sendProActivationEmail(user.email, user.firstName, expiresAt, payment.transactionRef).catch((err) => reportRejection(err, 'routes'));
+            // 2026-11: receipt email is now sent once by storage.activateUserPlan() (plan-aware, amount + method + reference).
           }
           results.push({ userId: user.id, email: user.email ?? null, status: "activated", tier: resolvedTier });
         } catch (e: any) {
@@ -10026,7 +9973,7 @@ Crawl-delay: 1`);
       }).catch((err) => reportRejection(err, 'routes'));
 
       if (user.email && (resolvedTier === "pro" || resolvedTier === "yearly")) {
-        sendProActivationEmail(user.email, user.firstName, expiresAt, payment.transactionRef).catch((err) => reportRejection(err, 'routes'));
+        // 2026-11: receipt email is now sent once by storage.activateUserPlan() (plan-aware, amount + method + reference).
       }
 
       await storage.logAdminAction(adminId, "manual_stuck_payment_activate", {
@@ -10135,7 +10082,7 @@ Crawl-delay: 1`);
         }).catch((err) => reportRejection(err, 'routes'));
 
         if (user.email && (resolvedTier === "pro" || resolvedTier === "yearly")) {
-          sendProActivationEmail(user.email, user.firstName, expiresAt, String(receipt)).catch((err) => reportRejection(err, 'routes'));
+          // 2026-11: receipt email is now sent once by storage.activateUserPlan() (plan-aware, amount + method + reference).
         }
 
         await storage.logAdminAction(adminId, "stuck_payment_safaricom_confirmed", {

@@ -148,6 +148,17 @@ export function registerFinanceAdminRoutes(app: Express): void {
 
   app.get("/api/admin/finance/summary", adminOnly(async (req, res) => {
     const cat = await loadCatalog();
+    // 2026-11 (payment audit): per-gateway split. PayPal rows are stored as
+    // the KES equivalent of the USD charged; the USD figure is shown next to
+    // it and labelled, never added to KES totals.
+    const byMethodQ = pool.query(`
+      SELECT coalesce(l.method,'unknown') AS method,
+             count(*) FILTER (WHERE ${REVENUE_SQL}) AS ok_n,
+             coalesce(sum(l.amount) FILTER (WHERE ${REVENUE_SQL}),0)::numeric AS ok_kes,
+             count(*) FILTER (WHERE l.payment_status NOT IN ('success','completed','failed','cancelled','expired','timeout','reversed','refunded')) AS pending_n,
+             count(*) FILTER (WHERE l.payment_status IN ('failed','cancelled','expired','timeout')) AS failed_n,
+             count(*) FILTER (WHERE l.payment_status IN ('refunded','reversed') OR coalesce(l.refunded_amount,0) > 0) AS refunded_n
+        FROM finance_ledger l GROUP BY 1 ORDER BY ok_kes DESC`);
     const [totals, bySvc, queues, refunds] = await Promise.all([
       pool.query(`
         SELECT
@@ -183,6 +194,12 @@ export function registerFinanceAdminRoutes(app: Express): void {
           FROM refund_requests`),
     ]);
     const t = totals.rows[0]; const r = refunds.rows[0];
+    const usdRate = Number(process.env.PAYPAL_KES_RATE) || 130;
+    const byMethod = (await byMethodQ.catch(() => ({ rows: [] as any[] }))).rows.map((m: any) => ({
+      method: m.method, successful: Number(m.ok_n), kes: Number(m.ok_kes),
+      usd: m.method === "paypal" ? Math.round((Number(m.ok_kes) / usdRate) * 100) / 100 : null,
+      pending: Number(m.pending_n), failed: Number(m.failed_n), refunded: Number(m.refunded_n),
+    }));
     res.json({
       gross: Number(t.gross), grossCount: Number(t.gross_n),
       refunded: Number(r.refunded_kes), net: Number(t.gross) - Number(r.refunded_kes),
@@ -195,6 +212,7 @@ export function registerFinanceAdminRoutes(app: Express): void {
       awaitingDelivery: Number(t.awaiting_n), delivered: Number(t.delivered_n),
       refunds: { open: Number(r.open_n), outstandingKes: Number(r.outstanding_kes), completed: Number(r.done_n), refundedKes: Number(r.refunded_kes) },
       unreadAlerts: Number(queues.rows[0]?.unread ?? 0),
+      byMethod, usdRate,
       byService: bySvc.rows.map((x: any) => ({
         key: x.key, kind: x.kind, label: labelOf(cat, x.key, x.name), count: Number(x.n), kes: Number(x.kes), undelivered: Number(x.undelivered),
       })),

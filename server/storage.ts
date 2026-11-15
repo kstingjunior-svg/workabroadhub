@@ -1561,8 +1561,11 @@ export class DatabaseStorage implements IStorage {
     try {
       await client.query("BEGIN");
 
-      // Lock the current active subscription row (if any) so parallel callbacks
-      // can't read a stale end_date and both compute the same extension.
+      // 2026-11: the advisory lock is now taken FIRST and the current expiry is
+      // read after it. Previously the expiry was read before the lock, so two
+      // different payments for a user with no active row could both read
+      // "nothing", and the second one replaced the first instead of adding to it.
+      await client.query(`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, [userId]);
       const { rows: [existing] } = await client.query<{ end_date: Date | null }>(
         `SELECT end_date FROM user_subscriptions
          WHERE user_id = $1 AND status = 'active'
@@ -1637,7 +1640,7 @@ export class DatabaseStorage implements IStorage {
       // scoped when acquired via pg_advisory_xact_lock — they release at
       // COMMIT/ROLLBACK automatically. The bigint arg is a stable hash of
       // the userId string so different users don't contend.
-      await client.query(`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, [userId]);
+      // (advisory lock already held — taken above, before reading the expiry)
 
       // 2026-10 (Tony's audit — Elizabeth got 2 years instead of 1 because
       // her callback fired twice). After the advisory lock, check whether
@@ -1707,6 +1710,15 @@ export class DatabaseStorage implements IStorage {
           `[activateUserPlan] ACTIVATED "${planId}" for userId=${userId} ` +
           `| expires ${finalExpiry.toISOString()}`,
         );
+      }
+
+      // 2026-11: one receipt email per NEW activation, whichever gateway or
+      // recovery path got here (a replayed payment returned early above).
+      // Fire-and-forget — an email failure never touches the subscription.
+      if (paymentId) {
+        import("./lib/payment-receipt")
+          .then(({ sendPaymentReceipt }) => sendPaymentReceipt({ userId, paymentId, planId, activatedAt: now, expiresAt: finalExpiry }))
+          .catch((e: any) => console.warn("[activateUserPlan] receipt email error:", e?.message));
       }
 
       return created;

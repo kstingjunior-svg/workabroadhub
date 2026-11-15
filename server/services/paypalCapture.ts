@@ -86,7 +86,38 @@ export interface CompletePayPalCaptureResult {
   body: Record<string, any>;
 }
 
+/** Pulls PayPal's issue code + "redirect" link out of an SDK error. */
+export function paypalErrorInfo(err: any): { issue?: string; redirect?: string } {
+  let body: any = err;
+  if (!body?.details && typeof err?.message === "string" && err.message.trim().startsWith("{")) {
+    try { body = JSON.parse(err.message); } catch { /* not JSON */ }
+  }
+  const issue: string | undefined = body?.details?.[0]?.issue || body?.issue || err?.issue;
+  const redirect: string | undefined = body?.links?.find?.((l: any) => l?.rel === "redirect")?.href;
+  return { issue, redirect };
+}
+
+// 2026-11: the browser, the PayPal webhook and the recovery poller can all
+// try to complete the same order within the same second. Run them one at a
+// time per order so the order is captured once and access is granted once.
+const inFlightByOrder = new Map<string, Promise<CompletePayPalCaptureResult>>();
+
 export async function completePayPalCapture(
+  params: CompletePayPalCaptureParams,
+): Promise<CompletePayPalCaptureResult> {
+  const key = String(params.paypalOrderId || "");
+  if (!key) return completePayPalCaptureOnce(params);
+  const prev = inFlightByOrder.get(key);
+  const run = (prev ? prev.catch(() => null) : Promise.resolve(null)).then(() => completePayPalCaptureOnce(params));
+  inFlightByOrder.set(key, run);
+  try {
+    return await run;
+  } finally {
+    if (inFlightByOrder.get(key) === run) inFlightByOrder.delete(key);
+  }
+}
+
+async function completePayPalCaptureOnce(
   params: CompletePayPalCaptureParams,
 ): Promise<CompletePayPalCaptureResult> {
   const { paypalOrderId, paymentId, userId, source = "client" } = params;
@@ -132,7 +163,15 @@ export async function completePayPalCapture(
           }
         }
       }
-      capture = await capturePayPalOrder(paypalOrderId);
+      try {
+        capture = await capturePayPalOrder(paypalOrderId);
+      } catch (capErr: any) {
+        // Another path (e.g. a second server instance) captured it a moment
+        // ago — that's success, not a failure. Read the completed order.
+        if (paypalErrorInfo(capErr).issue !== "ORDER_ALREADY_CAPTURED") throw capErr;
+        const done = await getPayPalOrder(paypalOrderId);
+        capture = { id: done.id, status: done.status, transactionId: done.captureId, payerEmail: done.payerEmail, amountUSD: done.amountUSD };
+      }
     } else {
       // CREATED / PAYER_ACTION_REQUIRED / VOIDED / anything else — buyer
       // hasn't approved (or the order is dead). Not a server error; just
@@ -152,9 +191,10 @@ export async function completePayPalCapture(
     // the outer catch and returned a generic 500 — indistinguishable from
     // a real server bug, and it left the payment row stuck "pending"
     // forever since nothing downgraded its status.
-    const paypalIssue: string | undefined = err?.details?.[0]?.issue || err?.issue;
-    const redirectLink: string | undefined =
-      err?.links?.find?.((l: any) => l.rel === "redirect")?.href;
+    // The PayPal SDK puts the API error body in err.message as a JSON
+    // string, so err.details was always undefined: declines were reported
+    // as a generic 500 and the buyer never got PayPal's "try another card".
+    const { issue: paypalIssue, redirect: redirectLink } = paypalErrorInfo(err);
     console.error(`${logTag} capture-order error:`, err?.message ?? err);
 
     if (paymentId) {
@@ -260,6 +300,23 @@ export async function completePayPalCapture(
     expectedAmountKes: kesAmount,
     ip: clientIp,
   });
+
+  // PayPal took the money but is holding it (e.g. the receiving account
+  // must accept USD manually, eCheck, review). Not a failure: keep the row
+  // open so the webhook / recovery poller activates it when PayPal releases
+  // it, and tell the buyer not to pay again.
+  if (!paypalVerify.verified && /capture status not COMPLETED: "PENDING"/.test(paypalVerify.note || "")) {
+    await storage.updatePayment(payment.id, { status: "processing", failReason: "paypal_capture_pending" } as any)
+      .catch((e) => reportRejection(e, 'services/paypalCapture'));
+    console.warn(`${logTag} Capture PENDING at PayPal for payment ${payment.id} (order ${paypalOrderId}) — waiting for release`);
+    return {
+      status: 202,
+      body: {
+        message: "PayPal has received your payment but is still processing it. Your plan activates automatically as soon as PayPal releases it — please don't pay again.",
+        code: "PAYPAL_CAPTURE_PENDING",
+      },
+    };
+  }
 
   if (!paypalVerify.verified && paypalVerify.status !== "api_unavailable") {
     console.error(

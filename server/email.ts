@@ -205,7 +205,7 @@ export async function sendProActivationEmail(
       <p style="color:#9ca3af;font-size:12px;text-align:center;">
         Questions? Reach us at
         <a href="mailto:support@workabroadhub.tech" style="color:#1d4ed8;">support@workabroadhub.tech</a>
-        or WhatsApp +254 700 000 000.
+        
       </p>
     </div>`;
 

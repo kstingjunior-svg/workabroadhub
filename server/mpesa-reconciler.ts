@@ -231,10 +231,9 @@ async function reconcileTransaction(tx: any): Promise<void> {
             title: `${resolvedTier.charAt(0).toUpperCase() + resolvedTier.slice(1)} Plan Activated`,
             message: `Your M-Pesa payment was confirmed via reconciliation (${transId}). ${resolvedTier} plan active — expires ${expiresAt.toLocaleDateString("en-KE")}.`,
           }).catch((err) => reportRejection(err, 'mpesa-reconciler'));
-          const { sendProActivationEmail } = await import("./email");
           const user = await storage.getUserById(matchedPayment.userId).catch(() => null);
           if (user?.email && (resolvedTier === "pro" || resolvedTier === "yearly")) {
-            sendProActivationEmail(user.email, user.firstName, expiresAt, transId).catch((err) => reportRejection(err, 'mpesa-reconciler'));
+            // 2026-11: receipt email is now sent once by storage.activateUserPlan() (plan-aware, amount + method + reference).
           }
           await db.execute(sql`UPDATE mpesa_pull_transactions SET reconciled = TRUE, reconciled_at = NOW() WHERE transaction_id = ${transId}`);
           return;

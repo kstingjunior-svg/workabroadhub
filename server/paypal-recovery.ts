@@ -171,7 +171,15 @@ async function runPaypalRecovery(): Promise<void> {
           // backlog as "failed" without ever checking PayPal, because the
           // age check ran before any query. Now age/attempts only decide
           // whether to STOP RETRYING a status PayPal has already told us.
-          if (created <= maxAgeCutoff.getTime() || attempts + 1 >= MAX_QUERY_ATTEMPTS) {
+          // A capture PayPal is HOLDING means the buyer has paid — never give
+          // up on it early (PayPal can hold funds for days). Keep checking for
+          // up to 30 days; the CAPTURE.COMPLETED webhook usually lands first.
+          const capturePending = (result.body as any)?.code === "PAYPAL_CAPTURE_PENDING";
+          if (capturePending) {
+            if (created < now - 30 * 24 * 3600 * 1000) {
+              console.error(`[PaypalRecovery] Payment ${payment.id} still PENDING at PayPal after 30 days — needs manual review`);
+            }
+          } else if (created <= maxAgeCutoff.getTime() || attempts + 1 >= MAX_QUERY_ATTEMPTS) {
             await giveUp(
               payment,
               created <= maxAgeCutoff.getTime()

@@ -20,7 +20,7 @@
 
 import { storage } from "./storage";
 import { stkQuery, stkPush } from "./mpesa";
-import { sendProActivationEmail } from "./email";
+// (sendProActivationEmail retired 2026-11 — see server/lib/payment-receipt.ts)
 import { notifyPaymentRecovery } from "./sms";
 import { db } from "./db";
 import { payments } from "@shared/schema";
@@ -138,7 +138,7 @@ async function handleSuccess(payment: any, receipt: string): Promise<void> {
   try {
     const user = await storage.getUserById(payment.userId);
     if (user?.email) {
-      await sendProActivationEmail(user.email, user.firstName || "", expiresAt, receiptStr);
+      // 2026-11: receipt email is now sent once by storage.activateUserPlan() (plan-aware, amount + method + reference).
     }
   } catch (emailErr: any) {
     console.warn(`[StkRecovery] Email failed for payment ${payment.id}: ${emailErr.message}`);

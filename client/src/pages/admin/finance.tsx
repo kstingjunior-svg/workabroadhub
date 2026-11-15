@@ -114,6 +114,29 @@ function Overview({ s, loading, error, onService }: { s: any; loading: boolean; 
         <Stat title="Duplicate rows (excluded)" value={String(s.duplicates.count)} sub={`${KES(s.duplicates.kes)} would have been double-counted`} />
         <Stat title="Admin grants (no money)" value={String(s.adminGrants)} />
       </div>
+      {Array.isArray(s.byMethod) && s.byMethod.length > 0 && (
+        <Card><CardContent className="p-0">
+          <div className="px-4 py-3 border-b"><p className="font-semibold">By payment gateway</p><p className="text-xs text-muted-foreground">PayPal is charged in USD; its KES figure is the conversion at KES {s.usdRate} per USD. Currencies are never added together.</p></div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-xs text-muted-foreground"><tr className="text-left"><th className="px-4 py-2">Gateway</th><th className="text-right">Successful</th><th className="text-right">Revenue (KES)</th><th className="text-right">Revenue (USD)</th><th className="text-right">Pending</th><th className="text-right">Failed</th><th className="text-right pr-4">Refunded</th></tr></thead>
+              <tbody>
+                {s.byMethod.map((m: any) => (
+                  <tr key={m.method} className="border-t">
+                    <td className="px-4 py-2 font-medium">{m.method === "mpesa" ? "M-Pesa" : m.method === "paypal" ? "PayPal" : m.method}</td>
+                    <td className="text-right">{m.successful.toLocaleString()}</td>
+                    <td className="text-right">{KES(m.kes)}</td>
+                    <td className="text-right">{m.usd == null ? "—" : `USD ${m.usd.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}</td>
+                    <td className="text-right">{m.pending}</td>
+                    <td className="text-right">{m.failed}</td>
+                    <td className="text-right pr-4">{m.refunded}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent></Card>
+      )}
       <Card><CardContent className="p-0">
         <div className="px-4 py-3 border-b"><p className="font-semibold">Revenue by service & plan</p><p className="text-xs text-muted-foreground">Attributed verified payments only. Click a row to see its payments.</p></div>
         <div className="overflow-x-auto">
