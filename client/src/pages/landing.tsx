@@ -19,6 +19,7 @@ import { SuccessStoriesSection } from "@/components/success-stories-section";
 import { AdvisorsSection } from "@/components/advisors-section";
 import { PlatformStatsSection } from "@/components/platform-stats-section";
 import { LiveActivityPanel } from "@/components/live-activity-feed";
+import { LandingToolkit } from "@/components/landing-toolkit";
 import { usePlatformNumbers } from "@/lib/platform-numbers";
 import { trackLandingView, trackButtonClick } from "@/lib/analytics";
 import { AuthModal } from "@/components/auth-modal";
@@ -737,159 +738,8 @@ export default function Landing() {
         </section>
 
 
-        {/* ═══════════════════════════════════════════════════════════════ */}
-        {/* FREE TOOLS SECTION                                              */}
-        {/* ═══════════════════════════════════════════════════════════════ */}
-        <section id="free-tools" className="py-20 sm:py-24 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-slate-50 via-blue-50/40 to-teal-50/40 dark:from-slate-900 dark:via-blue-950/30 dark:to-teal-950/20 border-y border-blue-100 dark:border-blue-900/40">
-          <div className="max-w-6xl mx-auto">
-
-            {/* Section header */}
-            <div className="text-center mb-12 space-y-3">
-              <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded-full text-sm font-semibold border border-blue-200 dark:border-blue-700">
-                <Wrench className="h-4 w-4" />
-                Job-Seeker Toolkit
-              </div>
-              <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-slate-900 dark:text-white">
-                Everything you need to <span className="text-blue-600 dark:text-blue-400">land your overseas job</span>
-              </h2>
-              <p className="text-muted-foreground max-w-xl mx-auto text-sm sm:text-base">
-                Professional verification tools for Kenyans applying abroad — from KES 100 per check, no subscription needed.
-              </p>
-            </div>
-
-            {/* Tool cards — 6 items, 3 per row on desktop, 2 per row on tablet */}
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 mb-10">
-
-              {/* 1 — ATS CV Checker */}
-              <Link href="/tools/ats-cv-checker" data-testid="link-tool-ats" className="group">
-                <div className="h-full bg-white dark:bg-slate-800 rounded-2xl border border-blue-100 dark:border-slate-700 p-5 shadow-sm hover:shadow-lg hover:border-blue-300 dark:hover:border-blue-600 transition-all duration-300 flex flex-col">
-                  <div className="h-12 w-12 bg-blue-100 dark:bg-blue-900/50 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
-                    <FileText className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-                  </div>
-                  <div className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-emerald-600 dark:text-emerald-400 mb-1.5">
-                    <CheckCircle className="h-3 w-3" /> Always Free
-                  </div>
-                  <h3 className="font-bold text-slate-900 dark:text-white text-base mb-2 leading-tight">Check ATS CV</h3>
-                  <p className="text-xs text-muted-foreground leading-relaxed flex-1 mb-4">
-                    Upload your CV and get an instant ATS compatibility score, missing keywords, and AI suggestions for international employers.
-                  </p>
-                  <div className="flex items-center gap-1 text-sm font-semibold text-blue-600 dark:text-blue-400 group-hover:gap-2 transition-all">
-                    Check My CV <ArrowRight className="h-4 w-4" />
-                  </div>
-                </div>
-              </Link>
-
-              {/* 2 — Job Scam Checker */}
-              <Link href="/tools/job-scam-checker" data-testid="link-tool-scam" className="group">
-                <div className="h-full bg-white dark:bg-slate-800 rounded-2xl border border-red-100 dark:border-slate-700 p-5 shadow-sm hover:shadow-lg hover:border-red-300 dark:hover:border-red-700 transition-all duration-300 flex flex-col">
-                  <div className="h-12 w-12 bg-red-100 dark:bg-red-900/40 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
-                    <ShieldAlert className="h-6 w-6 text-red-600 dark:text-red-400" />
-                  </div>
-                  <div className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-red-600 dark:text-red-400 mb-1.5">
-                    <Sparkles className="h-3 w-3" /> KES 100 / Check
-                  </div>
-                  <h3 className="font-bold text-slate-900 dark:text-white text-base mb-2 leading-tight">Check Job Scams</h3>
-                  <p className="text-xs text-muted-foreground leading-relaxed flex-1 mb-4">
-                    Paste any job advert and detect scam signals instantly — fake fees, suspicious contacts, and high-risk phrases used by fraudsters.
-                  </p>
-                  <div className="flex items-center gap-1 text-sm font-semibold text-red-600 dark:text-red-400 group-hover:gap-2 transition-all">
-                    Scan Advert <ArrowRight className="h-4 w-4" />
-                  </div>
-                </div>
-              </Link>
-
-              {/* 3 — Visa Screening (NEW) */}
-              <Link href="/tools/visa-check" data-testid="link-tool-visa-check" className="group">
-                <div className="h-full bg-white dark:bg-slate-800 rounded-2xl border border-indigo-100 dark:border-slate-700 p-5 shadow-sm hover:shadow-lg hover:border-indigo-300 dark:hover:border-indigo-700 transition-all duration-300 flex flex-col">
-                  <div className="h-12 w-12 bg-indigo-100 dark:bg-indigo-900/40 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
-                    <ScanLine className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
-                  </div>
-                  <div className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-indigo-600 dark:text-indigo-400 mb-1.5">
-                    <Sparkles className="h-3 w-3" /> KES 100 / Check
-                  </div>
-                  <h3 className="font-bold text-slate-900 dark:text-white text-base mb-2 leading-tight">Screen a Visa</h3>
-                  <p className="text-xs text-muted-foreground leading-relaxed flex-1 mb-4">
-                    Upload a visa or work-permit image. We verify the machine-readable zone, check for tampering signals, and give you an instant risk report.
-                  </p>
-                  <div className="flex items-center gap-1 text-sm font-semibold text-indigo-600 dark:text-indigo-400 group-hover:gap-2 transition-all">
-                    Screen Now <ArrowRight className="h-4 w-4" />
-                  </div>
-                </div>
-              </Link>
-
-              {/* 4 — Offer Letter Screener (NEW) */}
-              <Link href="/tools/offer-check" data-testid="link-tool-offer-check" className="group">
-                <div className="h-full bg-white dark:bg-slate-800 rounded-2xl border border-orange-100 dark:border-slate-700 p-5 shadow-sm hover:shadow-lg hover:border-orange-300 dark:hover:border-orange-700 transition-all duration-300 flex flex-col">
-                  <div className="h-12 w-12 bg-orange-100 dark:bg-orange-900/40 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
-                    <FileText className="h-6 w-6 text-orange-600 dark:text-orange-400" />
-                  </div>
-                  <div className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-orange-600 dark:text-orange-400 mb-1.5">
-                    <Sparkles className="h-3 w-3" /> KES 100 / Check
-                  </div>
-                  <h3 className="font-bold text-slate-900 dark:text-white text-base mb-2 leading-tight">Screen an Offer Letter</h3>
-                  <p className="text-xs text-muted-foreground leading-relaxed flex-1 mb-4">
-                    Upload a job offer letter. We scan for 20+ scam patterns, verify the sender email domain, and give you an instant risk report.
-                  </p>
-                  <div className="flex items-center gap-1 text-sm font-semibold text-orange-600 dark:text-orange-400 group-hover:gap-2 transition-all">
-                    Screen Offer <ArrowRight className="h-4 w-4" />
-                  </div>
-                </div>
-              </Link>
-
-              {/* 5 — Visa Sponsorship Jobs */}
-              <Link href="/tools/visa-sponsorship-jobs" data-testid="link-tool-jobs" className="group">
-                <div className="h-full bg-white dark:bg-slate-800 rounded-2xl border border-teal-100 dark:border-slate-700 p-5 shadow-sm hover:shadow-lg hover:border-teal-300 dark:hover:border-teal-700 transition-all duration-300 flex flex-col">
-                  <div className="h-12 w-12 bg-teal-100 dark:bg-teal-900/40 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
-                    <Briefcase className="h-6 w-6 text-teal-600 dark:text-teal-400" />
-                  </div>
-                  <div className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-teal-600 dark:text-teal-400 mb-1.5">
-                    <BadgeCheck className="h-3 w-3" /> Visa Sponsored
-                  </div>
-                  <h3 className="font-bold text-slate-900 dark:text-white text-base mb-2 leading-tight">Find Visa Sponsorship Jobs</h3>
-                  <p className="text-xs text-muted-foreground leading-relaxed flex-1 mb-4">
-                    Browse curated overseas jobs offering visa sponsorship across UK, Canada, UAE, Australia, and more — filtered for Kenyan qualifications.
-                  </p>
-                  <div className="flex items-center gap-1 text-sm font-semibold text-teal-600 dark:text-teal-400 group-hover:gap-2 transition-all">
-                    Browse Jobs <ArrowRight className="h-4 w-4" />
-                  </div>
-                </div>
-              </Link>
-
-              {/* 6 — IELTS Verification (NEW) */}
-              <Link href="/tools/ielts-verify" data-testid="link-tool-ielts-verify" className="group">
-                <div className="h-full bg-white dark:bg-slate-800 rounded-2xl border border-purple-100 dark:border-slate-700 p-5 shadow-sm hover:shadow-lg hover:border-purple-300 dark:hover:border-purple-700 transition-all duration-300 flex flex-col">
-                  <div className="h-12 w-12 bg-purple-100 dark:bg-purple-900/40 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
-                    <GraduationCap className="h-6 w-6 text-purple-600 dark:text-purple-400" />
-                  </div>
-                  <div className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-purple-600 dark:text-purple-400 mb-1.5">
-                    <Sparkles className="h-3 w-3" /> KES 100 / Check
-                  </div>
-                  <h3 className="font-bold text-slate-900 dark:text-white text-base mb-2 leading-tight">Verify an IELTS Result</h3>
-                  <p className="text-xs text-muted-foreground leading-relaxed flex-1 mb-4">
-                    Upload your IELTS Test Report Form (TRF). We check the TRF number, test centre code, band consistency, and date validity to flag likely forgeries.
-                  </p>
-                  <div className="flex items-center gap-1 text-sm font-semibold text-purple-600 dark:text-purple-400 group-hover:gap-2 transition-all">
-                    Verify Now <ArrowRight className="h-4 w-4" />
-                  </div>
-                </div>
-              </Link>
-
-            </div>
-
-            {/* Bottom CTA strip */}
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-2">
-              <Link href="/tools" data-testid="link-all-tools">
-                <Button size="lg" className="gap-2 bg-blue-600 hover:bg-blue-700 text-white px-8 shadow-md shadow-blue-200 dark:shadow-blue-900/30">
-                  <Wrench className="h-4 w-4" />
-                  Explore All Tools
-                  <ArrowRight className="h-4 w-4" />
-                </Button>
-              </Link>
-              <p className="text-xs text-muted-foreground">ATS CV check free · verification tools KES 100 each</p>
-            </div>
-
-          </div>
-        </section>
+        {/* JOB-SEEKER TOOLKIT — 2026-11 redesign (components/landing-toolkit.tsx) */}
+        <LandingToolkit />
 
         {/* ═══════════════════════════════════════════════════════════════ */}
         {/* AUTOAPPLY AGENT — flagship AI product (2026-08 revenue play #1) */}
