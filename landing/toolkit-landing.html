@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<!--
+  WorkAbroad Hub — Job-Seeker Toolkit landing page
+  Breakpoints (mobile-first):
+    base      < 640px   phones: single column, full-width 52px buttons, sticky bottom CTA
+    ≥ 640px   large phones / small tablets: 2-column tool grid
+    ≥ 768px   tablets: hero gets more room, testimonials in 3 columns, comparison side-by-side
+    ≥ 1024px  desktop: hero split text/visual, featured free card left + tool grid right
+    ≥ 1280px  wide desktop: max content width 1180px, larger type
+
+  HONESTY NOTES (read before publishing):
+  - Figures below come from the production database on 15 Nov 2026
+    (aggregate counts only — no customer's document or details are shown):
+    16,232 ATS CV checks · 1,379 job-scam checks · 514 visas/permits screened
+    · 422 offer letters screened · 82 of 402 offer letters (≈1 in 5) raised
+    medium/high warning signs · 17,401 accounts, 2,235 paying customers.
+    Destinations most often named in screened offer letters: Canada 110,
+    Qatar 58, UAE 58, Kuwait 20, Australia 17, Saudi Arabia 15.
+    Most common warning flags in those letters: domain_mismatch 59,
+    free_email_domain 47, no_signatory 47, unrealistic_salary_usd 24;
+    34 distinct letters had visa-fee / recruitment-fee / money-transfer flags.
+    (These counts come from the pre-VerifyX screening engine's automated flags.)
+    Re-run the counts before each update so the page stays true.
+  - No star rating is shown: there is no review/rating source to back one.
+  - Testimonials: the database holds no customer testimonials. The three cards
+    are SAMPLE SLOTS. Replace each with a real customer's words, first name +
+    initial, town, and their written permission — then set
+    TESTIMONIALS_APPROVED = true at the bottom of this file. Until then the
+    section shows a clear "sample" label so nothing fake is presented as real.
+  - Wording follows VerifyX rules: tools SCREEN documents and point to the
+    official check; they never claim a visa is approved or a document genuine.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>WorkAbroad Hub — Free ATS CV Check + Scam, Visa & Offer Screening for Kenyans</title>
+<meta name="description" content="Free ATS CV check, plus job-scam, visa and offer-letter screening built for Kenyans going abroad. From KES 100.">
+<meta name="theme-color" content="#0F172A">
+<style>
+  :root{
+    --navy:#0F172A; --navy-2:#1E293B; --ink:#334155; --muted:#64748B; --line:#E2E8F0;
+    --bg:#F8FAFC; --white:#FFFFFF;
+    --green:#16A34A; --green-2:#22C55E; --green-soft:#F0FDF4; --green-line:#BBF7D0;
+    --red:#DC2626; --red-soft:#FEF2F2; --red-line:#FECACA;
+    --purple:#7C3AED; --blue:#2563EB;
+    --radius:16px; --shadow:0 1px 2px rgba(15,23,42,.06),0 8px 24px rgba(15,23,42,.08);
+    --shadow-lg:0 2px 4px rgba(15,23,42,.06),0 18px 40px rgba(15,23,42,.12);
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
+  body{margin:0;font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:var(--ink);background:var(--white);line-height:1.55;padding-bottom:84px}
+  img,svg{display:block;max-width:100%}
+  a{color:inherit}
+  .wrap{width:100%;max-width:1180px;margin:0 auto;padding:0 20px}
+  h1,h2,h3{color:var(--navy);line-height:1.15;margin:0;letter-spacing:-.02em}
+  .section{padding:56px 0}
+  .section-title{text-align:center;font-size:1.75rem;font-weight:800}
+  .section-title + .rule{width:72px;height:4px;border-radius:4px;background:var(--green);margin:14px auto 32px}
+  .eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:.8rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--green)}
+
+  /* Buttons */
+  .btn{display:flex;align-items:center;justify-content:center;gap:10px;min-height:52px;padding:14px 22px;border-radius:12px;font-weight:700;font-size:1.02rem;text-decoration:none;border:0;cursor:pointer;transition:transform .15s ease,box-shadow .15s ease,background .15s ease;width:100%}
+  .btn:focus-visible{outline:3px solid #86EFAC;outline-offset:3px}
+  .btn-green{background:var(--green);color:#fff;box-shadow:0 6px 16px rgba(22,163,74,.28)}
+  .btn-green:hover{background:#15803D;transform:translateY(-1px);box-shadow:0 10px 22px rgba(22,163,74,.32)}
+  .btn-sm{min-height:48px;font-size:.95rem;padding:12px 16px}
+  .btn-purple{background:var(--purple);color:#fff}.btn-purple:hover{background:#6D28D9}
+  .btn-blue{background:var(--blue);color:#fff}.btn-blue:hover{background:#1D4ED8}
+  .btn-outline{background:#fff;color:var(--navy);border:2px solid var(--line)}.btn-outline:hover{border-color:var(--navy)}
+
+  /* Header */
+  header{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.92);backdrop-filter:saturate(1.4) blur(8px);border-bottom:1px solid var(--line)}
+  .nav{display:flex;align-items:center;justify-content:space-between;height:64px}
+  .brand{display:flex;align-items:center;gap:10px;text-decoration:none}
+  .brand b{font-size:1.15rem;color:var(--navy)}
+  .brand small{display:block;font-size:.62rem;letter-spacing:.12em;color:var(--muted);text-transform:uppercase;margin-top:-2px}
+  .nav-cta{display:none}
+
+  /* Hero */
+  .hero{background:radial-gradient(1200px 500px at 85% 0%,#ECFDF5 0%,rgba(236,253,245,0) 60%),var(--white);padding:36px 0 40px}
+  .hero-grid{display:grid;gap:32px;align-items:center}
+  .hero h1{font-size:2.2rem;font-weight:900}
+  .hero h1 .g{color:var(--green)}
+  .hero p.sub{font-size:1.08rem;margin:16px 0 24px;color:var(--ink)}
+  .trust{display:flex;align-items:center;gap:10px;margin-top:18px;color:var(--navy);font-weight:600;font-size:.95rem}
+  .trust .dot{width:5px;height:5px;border-radius:50%;background:var(--muted)}
+  .trust .muted{color:var(--muted);font-weight:500}
+  .hero-visual{position:relative;border-radius:24px;background:linear-gradient(160deg,#0F172A 0%,#1E3A5F 100%);min-height:300px;overflow:hidden;box-shadow:var(--shadow-lg)}
+  .hero-visual .glow{position:absolute;inset:auto -40px -60px auto;width:260px;height:260px;border-radius:50%;background:radial-gradient(circle,rgba(34,197,94,.45),rgba(34,197,94,0) 70%)}
+  .passport{position:absolute;left:9%;top:14%;width:44%;max-width:210px;aspect-ratio:3/4.2;border-radius:12px;background:linear-gradient(160deg,#14532D,#166534);box-shadow:0 18px 30px rgba(0,0,0,.35);transform:rotate(-8deg);display:flex;flex-direction:column;align-items:center;justify-content:center;color:#FDE68A;text-align:center;padding:14px}
+  .passport .crest{width:46%;aspect-ratio:1;border-radius:50%;border:2px solid #FDE68A;margin:10px 0;display:grid;place-items:center;font-size:1.4rem}
+  .passport small{font-size:.58rem;letter-spacing:.14em}
+  .passport b{font-size:.9rem;letter-spacing:.2em}
+  .offer{position:absolute;right:8%;bottom:10%;width:52%;max-width:250px;aspect-ratio:3/3.7;border-radius:12px;background:#fff;box-shadow:0 18px 34px rgba(0,0,0,.35);transform:rotate(5deg);padding:16px}
+  .offer h4{margin:0 0 10px;font-size:.78rem;letter-spacing:.12em;color:var(--navy)}
+  .offer i{display:block;height:7px;border-radius:4px;background:#E2E8F0;margin:7px 0}
+  .offer i.s{width:60%}
+  .offer .tick{position:absolute;right:-14px;bottom:-14px;width:58px;height:58px;border-radius:50%;background:var(--green);display:grid;place-items:center;box-shadow:0 8px 18px rgba(22,163,74,.45)}
+  .hero-badge{position:absolute;left:6%;bottom:8%;background:rgba(255,255,255,.95);border-radius:12px;padding:10px 12px;display:flex;align-items:center;gap:10px;box-shadow:var(--shadow);font-size:.8rem;color:var(--navy);font-weight:700;max-width:58%}
+  .hero-badge span{display:block;font-weight:500;color:var(--muted);font-size:.72rem}
+
+  /* Tools */
+  .tools{background:var(--bg)}
+  .tools-grid{display:grid;gap:16px}
+  .card{background:#fff;border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:20px;display:flex;flex-direction:column}
+  .card h3{font-size:1.06rem;font-weight:800;margin-top:12px}
+  .price{font-size:.85rem;font-weight:700;color:var(--muted);margin-top:4px}
+  .price.free{color:var(--green)}
+  .card p{font-size:.93rem;margin:10px 0 16px;flex:1}
+  .icon{width:52px;height:52px;border-radius:50%;display:grid;place-items:center}
+  .i-purple{background:#F3E8FF;color:var(--purple)} .i-blue{background:#DBEAFE;color:var(--blue)}
+  .i-green{background:#DCFCE7;color:var(--green)}
+  .featured{border:2px solid var(--green);background:linear-gradient(180deg,#F0FDF4 0%,#FFFFFF 70%);padding:26px}
+  .featured h3{font-size:1.75rem;margin-top:14px}
+  .featured .free-tag{color:var(--green);font-weight:800;font-size:1.2rem;margin-top:4px}
+  .featured hr{border:0;border-top:1px solid var(--green-line);margin:18px 0}
+  .benefit{display:flex;gap:12px;align-items:center;font-weight:700;color:var(--navy);margin-bottom:20px}
+  .benefit .icon{width:44px;height:44px;flex:none}
+  .tool-note{font-size:.8rem;color:var(--muted);text-align:center;margin-top:18px}
+
+  /* Social proof */
+  .proof-sub{display:flex;align-items:center;justify-content:center;gap:10px;color:var(--ink);font-weight:500;margin:-14px 0 28px;text-align:center}
+  .t-grid{display:grid;gap:16px}
+  .t-card{background:#fff;border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:22px;text-align:left;position:relative}
+  .avatar{width:72px;height:72px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:1.4rem;color:#fff;margin-bottom:14px}
+  .q{font-size:2rem;line-height:1;color:var(--green);font-weight:900;height:18px}
+  .t-card blockquote{margin:6px 0 14px;font-style:italic;color:var(--navy);font-size:1.02rem}
+  .t-name{font-weight:800;color:var(--navy)}
+  .t-loc{font-size:.88rem;color:var(--muted);display:flex;align-items:center;gap:8px}
+  .sample-flag{position:absolute;top:12px;right:12px;font-size:.68rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;background:#FEF3C7;color:#92400E;border-radius:999px;padding:4px 9px}
+  .stats-bar{margin-top:22px;background:#fff;border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:20px;display:grid;gap:18px;align-items:center}
+  .stat{display:flex;align-items:center;gap:14px}
+  .stat .num{font-size:1.8rem;font-weight:900;color:var(--green);line-height:1}
+  .stat .lbl{font-weight:700;color:var(--navy)}
+  .stat .lbl small{display:block;font-weight:500;color:var(--muted);font-size:.78rem}
+  .flags{display:flex;gap:16px;flex-wrap:wrap}
+  .flag{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:.78rem;color:var(--ink)}
+  .flag svg{width:40px;height:26px;border-radius:3px;box-shadow:0 0 0 1px rgba(0,0,0,.08)}
+  .flags-label{font-size:.78rem;color:var(--muted);margin-bottom:8px}
+  .numbers{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:22px}
+  .n-card{background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:16px;text-align:center}
+  .n-card b{display:block;font-size:1.6rem;font-weight:900;color:var(--green);line-height:1.1}
+  .n-card span{font-size:.85rem;color:var(--navy);font-weight:600}
+  .insight{margin-top:16px;background:var(--navy);color:#E2E8F0;border-radius:var(--radius);padding:18px 20px;display:flex;gap:14px;align-items:center}
+  .insight strong{color:#fff;font-size:1.05rem}
+  .insight .big{font-size:2rem;font-weight:900;color:#4ADE80;flex:none;line-height:1}
+  .src{font-size:.75rem;color:var(--muted);text-align:center;margin-top:12px}
+  @media (min-width:768px){.numbers{grid-template-columns:repeat(4,1fr)}}
+
+  /* Comparison */
+  .cmp{display:grid;gap:18px;position:relative}
+  .side{border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow);border:1px solid}
+  .side.bad{background:var(--red-soft);border-color:var(--red-line)}
+  .side.good{background:var(--green-soft);border-color:var(--green-line)}
+  .side-head{display:flex;align-items:center;gap:12px;padding:16px 20px;color:#fff;font-weight:800;font-size:1.2rem}
+  .bad .side-head{background:var(--red)} .good .side-head{background:var(--green)}
+  .row{display:flex;gap:14px;padding:16px 20px;border-top:1px solid rgba(15,23,42,.06)}
+  .row:first-of-type{border-top:0}
+  .row .icon{flex:none;width:48px;height:48px;color:#fff}
+  .bad .row .icon{background:var(--red)} .good .row .icon{background:var(--green)}
+  .row h4{margin:0;font-size:1.02rem;font-weight:800}
+  .bad .row h4{color:#B91C1C} .good .row h4{color:#15803D}
+  .row p{margin:2px 0 0;font-size:.92rem}
+  .vs{justify-self:center;width:64px;height:64px;border-radius:50%;background:var(--navy);color:#fff;font-weight:900;font-size:1.3rem;display:grid;place-items:center;box-shadow:0 0 0 6px #fff,var(--shadow);margin:-34px 0;z-index:2}
+  .tagline{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:30px;font-weight:800;color:var(--navy);text-align:center}
+  .final{margin-top:28px;display:flex;justify-content:center}
+  .final .btn{max-width:420px}
+
+  footer{background:var(--navy);color:#CBD5E1;padding:28px 0;font-size:.85rem;text-align:center}
+  footer a{color:#fff}
+  footer p{margin:6px 0}
+
+  /* Sticky mobile CTA */
+  .sticky-cta{position:fixed;left:0;right:0;bottom:0;z-index:30;padding:10px 14px calc(10px + env(safe-area-inset-bottom));background:rgba(255,255,255,.96);border-top:1px solid var(--line);box-shadow:0 -6px 18px rgba(15,23,42,.08);transform:translateY(110%);transition:transform .25s ease}
+  .sticky-cta.show{transform:none}
+  .sticky-cta small{display:block;text-align:center;color:var(--muted);font-size:.72rem;margin-top:4px}
+
+  /* ≥ 640px */
+  @media (min-width:640px){
+    .tools-grid .others{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    .stats-bar{grid-template-columns:auto 1fr}
+    .stats-bar .stat{padding-right:18px;border-right:1px solid var(--line)}
+  }
+  /* ≥ 768px */
+  @media (min-width:768px){
+    .section{padding:80px 0}
+    .section-title{font-size:2.25rem}
+    .hero{padding:56px 0 64px}
+    .hero h1{font-size:2.9rem}
+    .hero .btn-green{width:auto;display:inline-flex;padding:16px 28px}
+    .t-grid{grid-template-columns:repeat(3,1fr)}
+    .t-card{text-align:center}.t-card .avatar{margin:0 auto 14px}.t-loc{justify-content:center}
+    .cmp{grid-template-columns:1fr auto 1fr;align-items:stretch;gap:0}
+    .vs{margin:0 -32px;align-self:center}
+    .side{max-width:none}
+  }
+  /* ≥ 1024px */
+  @media (min-width:1024px){
+    body{padding-bottom:0}
+    .sticky-cta{display:none}
+    .nav-cta{display:inline-flex;width:auto;min-height:44px;padding:10px 18px;font-size:.95rem}
+    .hero-grid{grid-template-columns:1.05fr .95fr;gap:48px}
+    .hero h1{font-size:3.4rem}
+    .hero p.sub{font-size:1.2rem}
+    .hero-visual{min-height:440px}
+    .tools-grid{grid-template-columns:minmax(300px,.85fr) 2fr;align-items:stretch}
+    .tools-grid .others{grid-template-columns:repeat(6,1fr)}
+    .tools-grid .others > .card{grid-column:span 2}
+    .tools-grid .others > .card.wide{grid-column:span 3}
+    .featured{justify-content:center}
+    .featured h3{font-size:2rem}
+  }
+  @media (min-width:1280px){ .hero h1{font-size:3.7rem} }
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap nav">
+    <a class="brand" href="https://workabroadhub.tech/" aria-label="WorkAbroad Hub home">
+      <svg width="34" height="38" viewBox="0 0 34 38" aria-hidden="true"><path d="M17 1 3 6.5v10.7C3 27 9.2 33.9 17 37c7.8-3.1 14-10 14-19.8V6.5L17 1Z" fill="#0F172A"/><path d="m11 18.5 4.2 4.2L23.5 14" stroke="#22C55E" stroke-width="3.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span><b>WorkAbroad Hub</b><small>Check before you apply</small></span>
+    </a>
+    <a class="btn btn-green nav-cta" href="https://workabroadhub.tech/tools/ats-cv-checker">Check My CV Free</a>
+  </div>
+</header>
+
+<main>
+  <!-- 1. HERO -->
+  <section class="hero" aria-labelledby="hero-title">
+    <div class="wrap hero-grid">
+      <div>
+        <span class="eyebrow">Built for Kenyans going abroad</span>
+        <h1 id="hero-title" style="margin-top:10px">Stop Losing Overseas Jobs to <span class="g">ATS and Scams</span></h1>
+        <p class="sub">Free ATS CV check + instant scam, visa &amp; offer screening built for Kenyans. <strong style="color:var(--navy)">From KES 100.</strong></p>
+        <a id="hero-cta" class="btn btn-green" href="https://workabroadhub.tech/tools/ats-cv-checker">
+          <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3Z" fill="none" stroke="#fff" stroke-width="2"/><path d="m8.5 12 2.4 2.4L15.5 9.8" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
+          Check My CV Free — 30 seconds
+        </a>
+        <div class="trust">
+          <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3Z" fill="none" stroke="#0F172A" stroke-width="2"/><path d="m8.5 12 2.4 2.4L15.5 9.8" stroke="#16A34A" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
+          <span>16,000+ CVs checked</span><span class="dot" aria-hidden="true"></span><span class="muted">900+ visas &amp; offer letters screened</span>
+        </div>
+      </div>
+
+      <div class="hero-visual" role="img" aria-label="A Kenyan passport next to a job offer letter marked with a green check">
+        <div class="glow"></div>
+        <div class="passport"><small>REPUBLIC OF KENYA</small><div class="crest">★</div><b>PASSPORT</b></div>
+        <div class="offer">
+          <h4>JOB OFFER LETTER</h4>
+          <i></i><i></i><i class="s"></i><i></i><i></i><i class="s"></i><i></i><i class="s"></i>
+          <div class="tick"><svg width="30" height="30" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        </div>
+        <div class="hero-badge">
+          <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#DCFCE7"/><path d="m7 12.3 3.2 3.2L17 8.7" stroke="#16A34A" stroke-width="2.4" fill="none" stroke-linecap="round"/></svg>
+          <div>Screened before you sign<span>Red flags shown with evidence</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. TOOLS -->
+  <section class="section tools" aria-labelledby="tools-title">
+    <div class="wrap">
+      <h2 id="tools-title" class="section-title">Everything you need before you apply</h2>
+      <div class="rule"></div>
+
+      <div class="tools-grid">
+        <article class="card featured">
+          <svg width="64" height="64" viewBox="0 0 64 64" aria-hidden="true"><rect x="10" y="6" width="34" height="44" rx="4" fill="none" stroke="#16A34A" stroke-width="3.5"/><path d="M17 18h18M17 26h18M17 34h11" stroke="#16A34A" stroke-width="3.5" stroke-linecap="round"/><circle cx="42" cy="42" r="10" fill="#fff" stroke="#16A34A" stroke-width="3.5"/><path d="m49 49 8 8" stroke="#16A34A" stroke-width="4" stroke-linecap="round"/></svg>
+          <h3>Check ATS CV</h3>
+          <div class="free-tag">— Always Free</div>
+          <hr>
+          <div class="benefit"><span class="icon i-green"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3Z" fill="none" stroke="currentColor" stroke-width="2"/><path d="m8.5 12 2.4 2.4L15.5 9.8" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg></span><span>Beat the bots.<br>Get more interviews.</span></div>
+          <a class="btn btn-green" href="https://workabroadhub.tech/tools/ats-cv-checker">✦ Check My CV Now</a>
+        </article>
+
+        <div class="others">
+          <article class="card">
+            <span class="icon i-purple"><svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3Z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 8v5M12 16h.01" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+            <h3>Check Job Scams</h3><div class="price">KES 100</div>
+            <p>Spot scam warning signs in a job ad or agency message before you pay anyone.</p>
+            <a class="btn btn-purple btn-sm" href="https://workabroadhub.tech/tools/job-scam-checker">Screen Now</a>
+          </article>
+          <article class="card">
+            <span class="icon i-blue"><svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3Z" fill="none" stroke="currentColor" stroke-width="2"/></svg></span>
+            <h3>Screen a Visa</h3><div class="price">KES 100</div>
+            <p>Check dates and the machine-readable zone, and get the official link to confirm it.</p>
+            <a class="btn btn-blue btn-sm" href="https://workabroadhub.tech/tools/visa-check">Screen Now</a>
+          </article>
+          <article class="card">
+            <span class="icon i-green"><svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h9l5 5v15H6z" fill="none" stroke="currentColor" stroke-width="2"/><path d="m9 14 2 2 4-4" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg></span>
+            <h3>Screen an Offer Letter</h3><div class="price">KES 100</div>
+            <p>See red flags in the terms and the employer before you sign or pay.</p>
+            <a class="btn btn-green btn-sm" href="https://workabroadhub.tech/tools/offer-check">Screen Now</a>
+          </article>
+          <article class="card wide">
+            <span class="icon i-green"><svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="18" height="13" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M9 7V5h6v2" stroke="currentColor" stroke-width="2" fill="none"/><circle cx="12" cy="13" r="2.5" fill="none" stroke="currentColor" stroke-width="2"/></svg></span>
+            <h3>Find Visa Sponsorship Jobs</h3>
+            <p>Discover overseas jobs that offer visa sponsorship.</p>
+            <a class="btn btn-green btn-sm" href="https://workabroadhub.tech/tools/visa-sponsorship-jobs">Find Jobs</a>
+          </article>
+          <article class="card wide">
+            <span class="icon i-purple"><svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M7 10h6M7 14h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span>
+            <h3>Check an IELTS Result</h3><div class="price">KES 100</div>
+            <p>Screen a Test Report Form for inconsistencies, with the official way to confirm it.</p>
+            <a class="btn btn-purple btn-sm" href="https://workabroadhub.tech/tools/ielts-verify">Check Now</a>
+          </article>
+        </div>
+      </div>
+      <p class="tool-note">Screening tools show what can be checked, with evidence, and where to confirm the rest with the official authority. Paid via M-Pesa.</p>
+    </div>
+  </section>
+
+  <!-- 3. SOCIAL PROOF -->
+  <section class="section" aria-labelledby="proof-title">
+    <div class="wrap">
+      <h2 id="proof-title" class="section-title">Kenyans who checked before they applied</h2>
+      <div class="rule"></div>
+      <p class="proof-sub" id="proof-sub">Sample stories — real customer stories coming soon.</p>
+
+      <div class="t-grid" id="testimonials"></div>
+
+      <div class="numbers" aria-label="What Kenyans have checked with WorkAbroad Hub">
+        <div class="n-card"><b>16,000+</b><span>CVs checked for ATS</span></div>
+        <div class="n-card"><b>1,300+</b><span>job-scam checks</span></div>
+        <div class="n-card"><b>500+</b><span>visas &amp; permits screened</span></div>
+        <div class="n-card"><b>400+</b><span>offer letters screened</span></div>
+      </div>
+
+      <div class="insight">
+        <span class="big">1 in 5</span>
+        <div><strong>offer letters screened showed warning signs.</strong><br>The most common: a sender email that didn't match the company, no named signatory, or a salary far above the going rate. <strong>34 letters asked the job-seeker to pay a visa fee, a recruitment fee or send money.</strong></div>
+      </div>
+
+      <div class="stats-bar">
+        <div class="stat">
+          <span class="icon i-green" style="width:56px;height:56px"><svg width="28" height="28" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 19c.6-3.3 3-5 6-5s5.4 1.7 6 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="17" cy="9" r="2.4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16 14c2.6 0 4.4 1.4 5 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span>
+          <div><div class="num">16,000+</div><div class="lbl">Kenyans signed up<small>2,200+ paying customers</small></div></div>
+        </div>
+        <div>
+          <div class="flags-label">Most-screened destinations:</div>
+          <div class="flags">
+            <div class="flag"><svg viewBox="0 0 60 40" aria-hidden="true"><rect width="60" height="40" fill="#fff"/><rect width="15" height="40" fill="#D52B1E"/><rect x="45" width="15" height="40" fill="#D52B1E"/><path d="M30 9l2.5 6 3-1.5-1 7 3.5-2-.8 3.5H32v5h-4v-5h-5.2l-.8-3.5 3.5 2-1-7 3 1.5z" fill="#D52B1E"/></svg>Canada</div>
+            <div class="flag"><svg viewBox="0 0 60 40" aria-hidden="true"><rect width="60" height="40" fill="#8A1538"/><path d="M0 0h18l6 2.2-6 2.2 6 2.2-6 2.2 6 2.2-6 2.2 6 2.2-6 2.2 6 2.2-6 2.2 6 2.2-6 2.2 6 2.2-6 2.2 6 2.2-6 2.2 6 2.2-6 2.2L18 40H0z" fill="#fff"/></svg>Qatar</div>
+            <div class="flag"><svg viewBox="0 0 60 40" aria-hidden="true"><rect width="60" height="40" fill="#fff"/><rect width="60" height="13.3" fill="#00732F"/><rect y="26.7" width="60" height="13.3" fill="#000"/><rect width="16" height="40" fill="#FF0000"/></svg>UAE</div>
+            <div class="flag"><svg viewBox="0 0 60 40" aria-hidden="true"><rect width="60" height="40" fill="#006C35"/><rect x="14" y="13" width="32" height="5" rx="2" fill="#fff"/><path d="M16 27h28" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/></svg>Saudi Arabia</div>
+            <div class="flag"><svg viewBox="0 0 60 40" aria-hidden="true"><rect width="60" height="40" fill="#fff"/><rect width="60" height="13.3" fill="#007A3D"/><rect y="26.7" width="60" height="13.3" fill="#CE1126"/><path d="M0 0l15 13.3v13.4L0 40z" fill="#000"/></svg>Kuwait</div>
+            <div class="flag"><svg viewBox="0 0 60 40" aria-hidden="true"><rect width="60" height="40" fill="#012169"/><path d="M0 0l30 20M30 0 0 20" stroke="#fff" stroke-width="4"/><path d="M15 0v20M0 10h30" stroke="#fff" stroke-width="6"/><path d="M15 0v20M0 10h30" stroke="#C8102E" stroke-width="3"/><circle cx="15" cy="30" r="3.4" fill="#fff"/><circle cx="45" cy="9" r="2" fill="#fff"/><circle cx="51" cy="17" r="2" fill="#fff"/><circle cx="45" cy="31" r="2" fill="#fff"/><circle cx="39" cy="19" r="2" fill="#fff"/></svg>Australia</div>
+          </div>
+        </div>
+      </div>
+      <p class="src">WorkAbroad Hub figures, May–November 2026. Totals only — no customer's document or personal details are ever shown.</p>
+    </div>
+  </section>
+
+  <!-- 4. RISK COMPARISON -->
+  <section class="section tools" aria-labelledby="cmp-title">
+    <div class="wrap">
+      <h2 id="cmp-title" class="section-title">With the Right Tools, You Win.</h2>
+      <div class="rule"></div>
+
+      <div class="cmp">
+        <div class="side bad">
+          <div class="side-head"><svg width="28" height="28" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="none" stroke="#fff" stroke-width="2"/><path d="m8.5 8.5 7 7m0-7-7 7" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/></svg>Without checking</div>
+          <div class="row"><span class="icon"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h9l5 5v15H6z" fill="none" stroke="#fff" stroke-width="2"/><path d="m10 12 5 5m0-5-5 5" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg></span><div><h4>Rejected CV</h4><p>Your CV doesn't pass ATS filters and gets overlooked.</p></div></div>
+          <div class="row"><span class="icon"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10v4l11 5V5L3 10Z" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"/><path d="M18 9v6" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg></span><div><h4>Fake job ad</h4><p>The job posting disappears or was never real.</p></div></div>
+          <div class="row"><span class="icon"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3Z" fill="none" stroke="#fff" stroke-width="2"/><path d="M12 8v5M12 16h.01" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/></svg></span><div><h4>Scam warning</h4><p>Risk of fraud, data theft and suspicious requests.</p></div></div>
+          <div class="row"><span class="icon"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="#fff" stroke-width="2"/><path d="M14.5 9.5c-.4-1-1.4-1.5-2.5-1.5-1.5 0-2.5.8-2.5 2s1 1.6 2.5 2 2.5.8 2.5 2-1 2-2.5 2c-1.2 0-2.2-.6-2.6-1.6M12 6.5v1.5M12 16v1.5" stroke="#fff" stroke-width="1.8" fill="none" stroke-linecap="round"/></svg></span><div><h4>Wasted money</h4><p>Lost agency fees, travel costs and false hopes.</p></div></div>
+        </div>
+
+        <div class="vs" aria-hidden="true">VS</div>
+
+        <div class="side good">
+          <div class="side-head"><svg width="28" height="28" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="none" stroke="#fff" stroke-width="2"/><path d="m7.5 12.3 3 3 6-6" stroke="#fff" stroke-width="2.2" fill="none" stroke-linecap="round"/></svg>After using the tools</div>
+          <div class="row"><span class="icon"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h9l5 5v15H6z" fill="none" stroke="#fff" stroke-width="2"/><path d="M9 12h6M9 16h4" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg></span><div><h4>ATS-ready CV</h4><p>See your ATS score and exactly what to fix before you apply.</p></div></div>
+          <div class="row"><span class="icon"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3Z" fill="none" stroke="#fff" stroke-width="2"/><path d="m8.5 12 2.4 2.4L15.5 9.8" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round"/></svg></span><div><h4>Job ad screened</h4><p>Scam warning signs flagged before you pay anyone.</p></div></div>
+          <div class="row"><span class="icon"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h9l5 5v15H6z" fill="none" stroke="#fff" stroke-width="2"/><path d="m9 14 2 2 4-4" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round"/></svg></span><div><h4>Offer letter screened</h4><p>Red flags in the terms and employer, shown with evidence.</p></div></div>
+          <div class="row"><span class="icon"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="#fff" stroke-width="2"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3Z" fill="none" stroke="#fff" stroke-width="2"/></svg></span><div><h4>Visa checked</h4><p>Dates and details screened, plus the official link to confirm it.</p></div></div>
+        </div>
+      </div>
+
+      <div class="tagline"><svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3Z" fill="none" stroke="#0F172A" stroke-width="2"/><path d="m8.5 12 2.4 2.4L15.5 9.8" stroke="#16A34A" stroke-width="2" fill="none" stroke-linecap="round"/></svg>Check smarter. Apply safer. Get hired faster.</div>
+      <div class="final"><a class="btn btn-green" href="https://workabroadhub.tech/tools/ats-cv-checker">Check My CV Free — 30 seconds</a></div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p><strong style="color:#fff">WorkAbroad Hub</strong> — career tools for Kenyans going abroad.</p>
+    <p>We do not sell jobs or guarantee employment or visas. We don't have access to government databases; screening results point you to the official check.</p>
+    <p>Questions? <a href="mailto:support@workabroadhub.tech">support@workabroadhub.tech</a> · WhatsApp <a href="https://wa.me/254111467601">+254 111 467 601</a></p>
+  </div>
+</footer>
+
+<div class="sticky-cta" id="sticky" aria-hidden="true">
+  <a class="btn btn-green" href="https://workabroadhub.tech/tools/ats-cv-checker" tabindex="-1">Check My CV Free</a>
+  <small>Free · 30 seconds · no card needed</small>
+</div>
+
+<script>
+  /* Set to true ONLY after replacing the entries below with real customers'
+     words and getting their written permission. */
+  var TESTIMONIALS_APPROVED = false;
+  var TESTIMONIALS = [
+    { quote: "Saved KES 45,000 from a fake agency and got my Doha visa", name: "Brian O.", place: "Nairobi, Kenya", color: "#0F172A" },
+    { quote: "ATS score went from 38% to 91% — interview in 2 weeks", name: "Wanjiku M.", place: "Kiambu, Kenya", color: "#16A34A" },
+    { quote: "Offer letter screened — avoided a Gulf scam", name: "Hassan S.", place: "Mombasa, Kenya", color: "#2563EB" }
+  ];
+
+  (function renderTestimonials(){
+    var grid = document.getElementById("testimonials");
+    var sub = document.getElementById("proof-sub");
+    var kenya = '<svg width="22" height="15" viewBox="0 0 30 20" aria-hidden="true"><rect width="30" height="20" fill="#fff"/><rect width="30" height="5.5" fill="#000"/><rect y="7" width="30" height="6" fill="#BB0000"/><rect y="14.5" width="30" height="5.5" fill="#006600"/><ellipse cx="15" cy="10" rx="3" ry="6" fill="#BB0000" stroke="#000" stroke-width=".6"/></svg>';
+    if (TESTIMONIALS_APPROVED) sub.textContent = "Real people. Real checks. Real outcomes.";
+    grid.innerHTML = TESTIMONIALS.map(function(t){
+      var initials = t.name.split(/\s+/).map(function(w){return w[0];}).join("").slice(0,2);
+      return '<figure class="t-card">' +
+        (TESTIMONIALS_APPROVED ? '' : '<span class="sample-flag">Sample</span>') +
+        '<div class="avatar" style="background:' + t.color + '" aria-hidden="true">' + initials + '</div>' +
+        '<div class="q" aria-hidden="true">“</div>' +
+        '<blockquote>' + t.quote + '</blockquote>' +
+        '<figcaption><div class="t-name">' + t.name + '</div><div class="t-loc">' + t.place + ' ' + kenya + '</div></figcaption>' +
+      '</figure>';
+    }).join("");
+  })();
+
+  /* Sticky CTA on phones: show once the hero button scrolls out of view. */
+  (function(){
+    var sticky = document.getElementById("sticky"), hero = document.getElementById("hero-cta");
+    if (!("IntersectionObserver" in window) || !sticky || !hero) return;
+    new IntersectionObserver(function(e){
+      var show = !e[0].isIntersecting;
+      sticky.classList.toggle("show", show);
+      sticky.setAttribute("aria-hidden", show ? "false" : "true");
+      sticky.querySelector("a").tabIndex = show ? 0 : -1;
+    }).observe(hero);
+  })();
+</script>
+</body>
+</html>
