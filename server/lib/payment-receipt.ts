@@ -68,11 +68,11 @@ export function buildReceipt(r: {
     <div style="text-align:center;margin:26px 0 18px;">
       <a href="https://workabroadhub.tech/dashboard" style="display:inline-block;background:#1d4ed8;color:#fff;font-size:14px;font-weight:600;padding:12px 32px;border-radius:8px;text-decoration:none;">Go to my dashboard</a>
     </div>
-    <p style="color:#9ca3af;font-size:12px;text-align:center;">Keep this email as your receipt. Questions? <a href="mailto:support@workabroadhub.tech" style="color:#1d4ed8;">support@workabroadhub.tech</a></p>
+    <p style="color:#9ca3af;font-size:12px;text-align:center;">Keep this email as your receipt. Questions? <a href="mailto:support@workabroadhub.tech" style="color:#1d4ed8;">support@workabroadhub.tech</a> or WhatsApp <a href="https://wa.me/254796881541" style="color:#1d4ed8;">+254 796 881 541</a></p>
   </div>`;
   const text = [`Hi ${name},`, "", `Your payment was received and your ${plan} plan is active.`, "",
     ...rows.map(([k, v]) => `${k}: ${v}`), "", "Dashboard: https://workabroadhub.tech/dashboard",
-    "Questions? support@workabroadhub.tech"].join("\n");
+    "Questions? support@workabroadhub.tech or WhatsApp +254 796 881 541"].join("\n");
   return { subject: `Payment received — your ${plan} plan is active`, html, text };
 }
 

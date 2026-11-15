@@ -718,7 +718,7 @@ Name: ${intake.fullName || "Candidate"}
    - Kenya Embassy / High Commission in ${intake.targetCountry || "the destination country"}: address, phone, email
    - Local emergency numbers (police, ambulance, fire)
    - NEA Kenya helpline
-   - WorkAbroad Hub support: +254 700 000 000
+   - WorkAbroad Hub support (WhatsApp): +254 796 881 541
 
 7. **STAYING CONNECTED**
    - How to get a local SIM card
