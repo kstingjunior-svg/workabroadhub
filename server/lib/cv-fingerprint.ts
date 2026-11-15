@@ -1,6 +1,14 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // CV Fingerprint Memory
 //
+// 2026-11 (Tony: "honesty and trust is the key, no fake scores on CVs"):
+// this module used to FORCE a floor (85/88/92) onto the free checker's score
+// whenever someone re-uploaded a CV we delivered, whatever the engine said.
+// Now it stores the score our ATS engine actually MEASURED for the delivered
+// CV (measured = true) and the free checker shows that same measured number
+// for the same text — consistency, not inflation. Old floor-only rows
+// (measured = false) are ignored.
+//
 // Trust guarantee: when a user pays for CV Fix Lite / Country-Specific CV
 // Rewrite / ATS CV Optimization (or any other CV-output service), we promise
 // the delivered CV passes ATS at ≥80%. If they later re-upload that same CV
@@ -66,6 +74,7 @@ async function ensureSchema(): Promise<void> {
         delivered_at     TIMESTAMPTZ     NOT NULL DEFAULT NOW()
       );
     `);
+    await pool.query(`ALTER TABLE delivered_cv_fingerprints ADD COLUMN IF NOT EXISTS measured BOOLEAN NOT NULL DEFAULT FALSE`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_dcf_exact ON delivered_cv_fingerprints (exact_hash);`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_dcf_structural ON delivered_cv_fingerprints (structural_hash);`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_dcf_user ON delivered_cv_fingerprints (user_id);`);
@@ -94,6 +103,9 @@ export async function recordDeliveredCv(args: {
   serviceOrderId?: string;
   serviceSlug: string;
   cvText: string;
+  /** The score our ATS engine measured for THIS text. Nothing is stored without it. */
+  measuredScore?: number | null;
+  /** @deprecated floors are no longer honoured — ignored. */
   deliveredScore?: number;
 }): Promise<void> {
   if (!args.cvText || args.cvText.trim().length < 100) return; // garbage in = skip
@@ -111,11 +123,14 @@ export async function recordDeliveredCv(args: {
 
     const eHash = exactHash(args.cvText);
     const sHash = structuralHash(args.cvText);
-    const score = Math.max(MIN_DELIVERED_SCORE, args.deliveredScore ?? MIN_DELIVERED_SCORE);
+    // Only a score the engine actually measured is stored as "measured".
+    const measured = typeof args.measuredScore === "number" && args.measuredScore > 0;
+    const score = measured ? Math.round(args.measuredScore as number) : 0;
+    if (!measured) return; // nothing honest to remember
     await pool.query(
       `INSERT INTO delivered_cv_fingerprints
-         (user_id, service_order_id, service_slug, exact_hash, structural_hash, delivered_score, text_length)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+         (user_id, service_order_id, service_slug, exact_hash, structural_hash, delivered_score, text_length, measured)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE)`,
       [args.userId ?? null, args.serviceOrderId ?? null, args.serviceSlug, eHash, sHash, score, args.cvText.length]
     );
     console.log(`[cv-fingerprint] recorded delivery for user=${args.userId ?? "GUEST"} slug=${args.serviceSlug} score=${score}`);
@@ -159,8 +174,8 @@ export async function lookupDeliveredCv(cvText: string): Promise<DeliveryMatch |
     }>(
       `SELECT delivered_score, delivered_at, service_slug, exact_hash
          FROM delivered_cv_fingerprints
-        WHERE exact_hash = $1 OR structural_hash = $2
-        ORDER BY delivered_score DESC, delivered_at DESC
+        WHERE (exact_hash = $1 OR structural_hash = $2) AND measured = TRUE
+        ORDER BY delivered_at DESC
         LIMIT 1`,
       [eHash, sHash]
     );

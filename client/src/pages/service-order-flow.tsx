@@ -8,6 +8,7 @@
  *   2. PROCESSING — AI is generating; polls /status every 2.5s
  *   3. DONE       — download buttons (PDF + Word)
  */
+import { CvRevampResult, type AtsCompare } from "@/components/cv-revamp-result";
 import { useEffect, useRef, useState } from "react";
 import { useRoute, useLocation, Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -216,6 +217,9 @@ export default function ServiceOrderFlow() {
   const [shareOpen, setShareOpen] = useState(false);
   const [autoOpenedShare, setAutoOpenedShare] = useState(false);
   const [deliveredScore, setDeliveredScore] = useState<number | null>(null);
+  // 2026-11: honest before/after ATS scores measured by the server (same
+  // engine as the free checker). null → fall back to the plain download card.
+  const [atsCompare, setAtsCompare] = useState<AtsCompare | null>(null);
   // Success-screen download state (mobile-safe fetch → blob → save)
   const [downloadBusy, setDownloadBusy] = useState<"pdf" | "docx" | null>(null);
   const [downloadErrorMsg, setDownloadErrorMsg] = useState<string | null>(null);
@@ -391,6 +395,10 @@ export default function ServiceOrderFlow() {
           // Server may report it as `deliveredScore` or `atsScore` — accept both.
           const score = Number(data.deliveredScore ?? data.atsScore ?? 0);
           if (Number.isFinite(score) && score > 0) setDeliveredScore(score);
+          if (data.ats && typeof data.ats.before === "number" && typeof data.ats.after === "number") {
+            setAtsCompare(data.ats as AtsCompare);
+            setDeliveredScore(data.ats.after);
+          }
           setStage("done");
         } else if (data.status === "failed") {
           if (pollRef.current) window.clearInterval(pollRef.current);
@@ -1288,7 +1296,44 @@ export default function ServiceOrderFlow() {
               from the refund_requested queue without ever forcing the
               customer to wait. */}
 
-          {stage === "done" && orderId && (
+          {stage === "done" && orderId && atsCompare && (
+            <CardContent className="py-6 sm:py-8 space-y-4">
+              <CvRevampResult
+                orderId={orderId}
+                downloadToken={downloadToken}
+                ats={atsCompare}
+                busy={downloadBusy}
+                onDownload={async (format) => {
+                  setDownloadErrorMsg(null);
+                  setDownloadBusy(format);
+                  try {
+                    const slug = (serviceName || meta.name || "document").toLowerCase().replace(/\s+/g, "-");
+                    const tokenQ = downloadToken ? `?token=${encodeURIComponent(downloadToken)}` : "";
+                    await triggerDownload(`/api/services/order/${orderId}/download/${format}${tokenQ}`, `workabroadhub-${slug}.${format}`);
+                    setDownloadedOnce(true);
+                  } catch (e: any) {
+                    setDownloadErrorMsg(e?.message || "Download failed. Please refresh and try again.");
+                  } finally {
+                    setDownloadBusy(null);
+                  }
+                }}
+              />
+              {downloadErrorMsg && (
+                <div className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-md px-3 py-2 max-w-sm mx-auto text-center">
+                  {downloadErrorMsg}{" "}
+                  <Link href="/my-documents" className="underline font-semibold">Open My Documents</Link> instead.
+                </div>
+              )}
+              <div className="pt-1 flex flex-col sm:flex-row items-center justify-center gap-2">
+                <Button onClick={() => setShareOpen(true)} className="w-full sm:w-auto bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-600 hover:to-cyan-600 text-white font-semibold" data-testid="button-open-share-modal">
+                  <Sparkles className="h-4 w-4 mr-2" /> Share your win
+                </Button>
+                <Button variant="outline" size="sm" className="w-full sm:w-auto" onClick={() => navigate("/my-documents")}>See all my documents</Button>
+              </div>
+            </CardContent>
+          )}
+
+          {stage === "done" && orderId && !atsCompare && (
             <CardContent className="text-center py-8 space-y-4">
               <CheckCircle2 className="h-14 w-14 text-green-600 mx-auto" />
               <div>

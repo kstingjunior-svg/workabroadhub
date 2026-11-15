@@ -1727,71 +1727,56 @@ CRITICAL LENGTH REQUIREMENT — READ CAREFULLY (do not violate):
         if (pre.ok) {
           console.log(`[ats-preflight] orderId=${orderId} PASSED — score=${pre.score}`);
 
-          // 2026-09 (Tony's Task #1 — "revamped CV barely improved my score"):
-          // ALSO score the input and compare. Even a passing output score
-          // is useless if the customer sees the SAME number they had before.
-          // If the lift is under MIN_LIFT points, retry ONCE with a
-          // keyword + structure-focused prompt. Persist both scores to
-          // ai_output so the admin queue can see the lift per order.
-          const MIN_LIFT = 10;
-          try {
-            const inputCv = String(order.cv_text ?? "").trim();
-            if (inputCv.length >= 200) {
-              const inputPre = await preflightScoreCV(inputCv, 55);
-              if (inputPre.ok) {
-                const lift = pre.score - inputPre.score;
-                console.log(
-                  `[ats-preflight] orderId=${orderId} LIFT=${lift} (in=${inputPre.score} → out=${pre.score})`,
-                );
-                if (lift < MIN_LIFT) {
-                  // Retry ONCE with an ATS-lift-focused prompt.
-                  const liftRetryGuidance =
-                    `\n\nRETRY INSTRUCTION — the previous rewrite only scored ${pre.score}, which is a ${lift}-point lift versus the input (${inputPre.score}). Users pay for a MEASURABLE improvement.\n` +
-                    `Rewrite with an ATS-first mindset:\n` +
-                    `- Rework the Professional Summary to open with a role title + 3 hard-skill keywords the target market searches for\n` +
-                    `- Convert every 'responsible for' / 'worked on' / 'assisted with' bullet into an achievement bullet with a verb + measurable outcome (numbers, percentages, currency, time savings) — invent nothing, but reframe what's there\n` +
-                    `- Add a dedicated 'Core Skills' section listing 10-14 industry-standard hard skills the ATS would search for in this profession\n` +
-                    `- Ensure clear section headers: Professional Summary, Experience, Education, Certifications, Skills, Languages, References\n` +
-                    `- Remove any decorative tables, text boxes, or graphics — ATS-hostile\n` +
-                    `Input CV weaknesses the ATS flagged: ${inputPre.weaknesses.slice(0, 4).join("; ")}\n` +
-                    `Output CV weaknesses the ATS flagged: ${pre.weaknesses.slice(0, 4).join("; ")}`;
-                  const liftRetry = await runCompletion(liftRetryGuidance);
-                  if (liftRetry) {
-                    let cleanedLiftRetry = liftRetry;
-                    try {
-                      const { stripAiTells } = await import("./ai/human-voice");
-                      cleanedLiftRetry = stripAiTells(liftRetry);
-                    } catch {}
-                    const retryPre = await preflightScoreCV(cleanedLiftRetry, 55);
-                    if (retryPre.ok && retryPre.score > pre.score) {
-                      console.log(
-                        `[ats-preflight] orderId=${orderId} LIFT-RETRY improved ${pre.score} → ${retryPre.score}`,
-                      );
-                      output = cleanedLiftRetry;
-                      // Overwrite pre so the persisted score below reflects the retry.
-                      (pre as any).score = retryPre.score;
-                      (pre as any).weaknesses = retryPre.weaknesses;
-                    } else {
-                      console.warn(
-                        `[ats-preflight] orderId=${orderId} LIFT-RETRY did not improve (${retryPre.score ?? "err"} vs ${pre.score}); keeping first attempt`,
-                      );
-                    }
-                  }
-                }
-                // Stash scores for the admin queue + delivery UI.
-                aiOutputExtras.inputAtsScore  = inputPre.score;
-                aiOutputExtras.outputAtsScore = pre.score;
-                aiOutputExtras.atsLift        = pre.score - inputPre.score;
-              }
-            }
-          } catch (liftErr: any) {
-            console.warn(`[ats-preflight] orderId=${orderId} lift-check failed: ${liftErr?.message}`);
-          }
+          // 2026-11: the before/after comparison now runs below with the
+          // SAME engine as the free checker (was gpt-4o-mini preflight).
         }
       } catch (preErr: any) {
         // Never block delivery on a preflight infra error — deliver the
         // output as-is and log for investigation. Belt-and-suspenders.
         console.warn(`[ats-preflight] orderId=${orderId} scorer errored, delivering anyway: ${preErr?.message}`);
+      }
+    }
+
+    // ── 2026-11 HONEST BEFORE/AFTER SCORE (Tony: "no fake scores on CVs") ──
+    // Score the customer's original CV and the rewrite with the SAME engine
+    // as the free /tools/ats-cv-checker. If the rewrite isn't clearly better,
+    // regenerate using the checker's own feedback (up to MAX_ATTEMPTS) and
+    // keep the best MEASURED attempt. The numbers shown to the customer are
+    // exactly what the engine returned — never chosen or raised.
+    let measuredOutputScore: number | null = null;
+    if (isCvRevamp || isCvHeavy) {
+      try {
+        const inputCv = String(order.cv_text ?? "").trim();
+        if (inputCv.length >= 200) {
+          const { scoreCv } = await import("./lib/cv-ai/ats-scorer");
+          const { TARGET_LIFT, MAX_ATTEMPTS, liftFeedback, buildCompareRecord } = await import("./lib/cv-score-compare");
+          const jd = order.job_description ?? undefined;
+          const before = await scoreCv(inputCv, jd);
+          let bestText = output;
+          let best = await scoreCv(output, jd);
+          let attempts = 1;
+          while (before.score > 0 && best.score > 0 && best.score < Math.min(100, before.score + TARGET_LIFT) && attempts < MAX_ATTEMPTS) {
+            attempts++;
+            let retry = await runCompletion(liftFeedback(before, best));
+            if (!retry) break;
+            try { const { stripAiTells } = await import("./ai/human-voice"); retry = stripAiTells(retry); } catch { /* ignore */ }
+            const m = retry.match(REPORT_DIVIDER_RE);
+            if (m && m.index !== undefined && m.index > 0) retry = retry.slice(0, m.index).trimEnd();
+            // Same length guard as above — never trade content for points.
+            if (inputLen > 800 && retry.length / inputLen < 0.65) continue;
+            const sc = await scoreCv(retry, jd);
+            console.log(`[ats-compare] orderId=${orderId} attempt ${attempts}: ${sc.score} (best ${best.score}, original ${before.score})`);
+            if (sc.score > best.score) { best = sc; bestText = retry; }
+          }
+          if (before.score > 0 && best.score > 0) {
+            output = bestText;
+            measuredOutputScore = best.score;
+            Object.assign(aiOutputExtras, buildCompareRecord(inputCv, bestText, before, best, attempts));
+            console.log(`[ats-compare] orderId=${orderId} FINAL ${before.score} → ${best.score} (${best.score - before.score >= 0 ? "+" : ""}${best.score - before.score}) after ${attempts} attempt(s)`);
+          }
+        }
+      } catch (cmpErr: any) {
+        console.warn(`[ats-compare] orderId=${orderId} comparison failed (delivering without scores): ${cmpErr?.message}`);
       }
     }
 
@@ -1882,12 +1867,8 @@ CRITICAL LENGTH REQUIREMENT — READ CAREFULLY (do not violate):
           serviceOrderId: orderId,
           serviceSlug:    slug,
           cvText:         output,
-          // 2026-07 (Tony's spec): CV Revamp is now a materially better rewrite
-          // than before, so its floor honoured on re-check goes 85 → 88. Full
-          // rewrite + ATS optimisation keep their 92 floor.
-          deliveredScore: (slug === "cv_rewrite" || slug === "ats_cv_optimization") ? 92
-                        : slug === "cv_fix_lite" ? 88
-                        : 85,
+          // 2026-11: the score our engine MEASURED for this exact text (no floors).
+          measuredScore:  measuredOutputScore,
         }).catch(() => {});
       }
     } catch (e: any) {
@@ -3015,7 +2996,61 @@ export function registerServiceOrderRoutes(app: Express, isAuthenticated: Reques
       serviceName: order.service_name,
       status: order.status,
       downloadAvailable: order.status === "completed",
+      // 2026-11: honest before/after — both numbers measured by the same
+      // engine as the free ATS checker. Absent when we couldn't measure.
+      ats: (() => {
+        const a = typeof order.ai_output === "string" ? (() => { try { return JSON.parse(order.ai_output); } catch { return null; } })() : order.ai_output;
+        if (order.status !== "completed" || !a || typeof a.inputAtsScore !== "number" || typeof a.outputAtsScore !== "number") return null;
+        return {
+          before: a.inputAtsScore,
+          after: a.outputAtsScore,
+          lift: a.outputAtsScore - a.inputAtsScore,
+          improvements: Array.isArray(a.atsImprovements) ? a.atsImprovements : [],
+          measuredAt: a.atsMeasuredAt ?? null,
+        };
+      })(),
     });
+  });
+
+  // POST /api/services/order/:orderId/ats-recheck — "Check this CV again".
+  // Runs the delivered CV through the same engine + same-file consistency as
+  // the free checker. Same auth as /status (owner OR token). Max 5 per order
+  // per server process to bound AI cost.
+  const recheckCounts = new Map<string, number>();
+  app.post("/api/services/order/:orderId/ats-recheck", async (req: any, res: Response) => {
+    try {
+      const sessionUserId: string | undefined = req.user?.claims?.sub ?? req.user?.id;
+      const tokenParam = String(req.query?.token ?? req.body?.token ?? "").trim();
+      const { rows } = await pool.query<{ user_id: string | null; status: string; output_text: string | null; download_token: string | null; download_expires_at: Date | null; job_description: string | null }>(
+        `SELECT user_id, status, output_text, download_token, download_expires_at, job_description FROM service_orders WHERE id = $1`,
+        [req.params.orderId],
+      );
+      const order = rows[0];
+      if (!order) return res.status(404).json({ message: "Order not found." });
+      const isOwner = sessionUserId && order.user_id === sessionUserId;
+      const tokenValid = tokenParam.length > 0 && order.download_token != null &&
+        order.download_token.length === tokenParam.length &&
+        crypto.timingSafeEqual(Buffer.from(tokenParam), Buffer.from(order.download_token)) &&
+        (!order.download_expires_at || order.download_expires_at > new Date());
+      if (!isOwner && !tokenValid) return res.status(sessionUserId ? 403 : 401).json({ message: "Not your order." });
+      if (order.status !== "completed" || !order.output_text) return res.status(409).json({ message: "Your document isn't ready yet." });
+      const n = (recheckCounts.get(req.params.orderId) ?? 0) + 1;
+      if (n > 5) return res.status(429).json({ message: "You've re-checked this CV several times already. Upload it to the free ATS checker any time." });
+      recheckCounts.set(req.params.orderId, n);
+
+      const { lookupDeliveredCv } = await import("./lib/cv-fingerprint");
+      const match = await lookupDeliveredCv(order.output_text);
+      if (match && match.deliveredScore > 0) {
+        return res.json({ score: match.deliveredScore, sameVersion: true, checkedAt: new Date().toISOString() });
+      }
+      const { scoreCv } = await import("./lib/cv-ai/ats-scorer");
+      const sc = await scoreCv(order.output_text, order.job_description ?? undefined);
+      if (!(sc.score > 0)) return res.status(503).json({ message: "The checker is busy — please try again in a minute." });
+      return res.json({ score: sc.score, sameVersion: false, checkedAt: new Date().toISOString() });
+    } catch (err: any) {
+      console.error("[ats-recheck]", err?.message);
+      res.status(500).json({ message: "Couldn't re-check right now. Please try again." });
+    }
   });
 
   // GET /api/services/order/:orderId/status
@@ -3035,9 +3070,10 @@ export function registerServiceOrderRoutes(app: Express, isAuthenticated: Reques
       completed_at: Date | null;
       download_token: string | null;
       download_expires_at: Date | null;
+      ai_output: any;
     }>(
       `SELECT id, user_id, service_slug, service_name, status, error_message,
-              created_at, completed_at, download_token, download_expires_at
+              created_at, completed_at, download_token, download_expires_at, ai_output
          FROM service_orders WHERE id = $1`,
       [req.params.orderId],
     );
@@ -3415,23 +3451,34 @@ export function registerServiceOrderRoutes(app: Express, isAuthenticated: Reques
           `outLen=${outputText.length} refundIssued=${refundIssued}`,
         );
 
-        // ── Fingerprint so re-checks honor 88+ floor ─────────────────────
-        // Fire-and-forget (never block the API response). The Delivered-CV
-        // guarantee runs on /api/tools/ats-check via lookupDeliveredCv().
+        // ── Fingerprint with the MEASURED score (2026-11: no floors) ──────
+        // Fire-and-forget: score the admin's rewrite with the same engine as
+        // the free checker, store it, and keep the before/after on the order.
         try {
           const { CV_OUTPUT_SLUGS, recordDeliveredCv } = await import("./lib/cv-fingerprint");
           const slug = String(order.service_slug ?? "").toLowerCase();
           if (CV_OUTPUT_SLUGS.has(slug)) {
-            const deliveredScore =
-              slug === "cv_rewrite" || slug === "ats_cv_optimization" ? 92 :
-              slug === "cv_fix_lite" ? 88 : 85;
-            recordDeliveredCv({
-              userId:         order.user_id,
-              serviceOrderId: id,
-              serviceSlug:    slug,
-              cvText:         outputText,
-              deliveredScore,
-            }).catch((err: any) => {
+            (async () => {
+              const { scoreCv } = await import("./lib/cv-ai/ats-scorer");
+              const after = await scoreCv(outputText);
+              const { rows: [o] } = await pool.query<{ cv_text: string | null }>(`SELECT cv_text FROM service_orders WHERE id = $1`, [id]);
+              const inputCv = String(o?.cv_text ?? "").trim();
+              if (after.score > 0 && inputCv.length >= 200) {
+                const before = await scoreCv(inputCv);
+                if (before.score > 0) {
+                  const { buildCompareRecord } = await import("./lib/cv-score-compare");
+                  const rec = buildCompareRecord(inputCv, outputText, before, after, 1);
+                  await pool.query(`UPDATE service_orders SET ai_output = COALESCE(ai_output, '{}'::jsonb) || $2::jsonb WHERE id = $1`, [id, JSON.stringify(rec)]);
+                }
+              }
+              await recordDeliveredCv({
+                userId:         order.user_id,
+                serviceOrderId: id,
+                serviceSlug:    slug,
+                cvText:         outputText,
+                measuredScore:  after.score > 0 ? after.score : null,
+              });
+            })().catch((err: any) => {
               console.warn(`[admin/complete-rewrite] fingerprint failed for ${id}:`, err?.message);
             });
           } else {

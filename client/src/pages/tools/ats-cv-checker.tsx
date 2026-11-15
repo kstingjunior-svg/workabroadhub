@@ -523,7 +523,7 @@ export default function ATSCVChecker() {
                     <div className="text-[11px] leading-snug text-emerald-800 dark:text-emerald-200">
                       <strong>We recognise this CV</strong> — we delivered it on{" "}
                       {new Date(result.deliveredCv.at).toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric" })}
-                      . Your guaranteed score of <strong>{result.deliveredCv.score}%</strong> is honoured here, no matter how many times you re-upload it.
+                      . Our checker measured it at <strong>{result.deliveredCv.score}%</strong> on delivery, so the same file always shows the same score here.
                     </div>
                   </div>
                 )}

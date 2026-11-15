@@ -10,7 +10,7 @@ const APP_NAME = "WorkAbroad Hub";
 // 2026-10 (Tony's screenshot: OTP input boxes were invisible on white
 // modal — critical signup bug). Bumping to v10 to force every PWA /
 // cached browser to pick up the new high-contrast OTP input styling.
-const CACHE_VERSION = "v19"; // 2026-11-15 payment audit: PayPal button live price state
+const CACHE_VERSION = "v20"; // 2026-11-15 payment audit: PayPal button live price state
 const STATIC_CACHE = `workabroad-static-${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `workabroad-dynamic-${CACHE_VERSION}`;
 

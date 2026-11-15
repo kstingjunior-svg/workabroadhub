@@ -53,7 +53,7 @@ export const scoreCv: AtsScorer = async (cvText, jd) => {
     const completion = await openai.chat.completions.create(
       {
         model: "gpt-4o",
-        temperature: 0.3,
+        temperature: 0, // 2026-11: same as the free checker — consistent scores
         max_tokens: 6000,
         response_format: { type: "json_object" },
         messages: [

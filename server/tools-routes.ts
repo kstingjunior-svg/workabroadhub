@@ -563,7 +563,9 @@ export function registerToolsRoutes(
     const completionOptions: any = {
       model: "gpt-4o",
       messages: aiMessages,
-      temperature: 0.3,
+      // 2026-11: 0 (was 0.3) so the same CV gets the same score every time,
+      // and matches the CV Revamp before/after scorer (lib/cv-ai/ats-scorer).
+      temperature: 0,
       max_tokens: 6000,
       response_format: { type: "json_object" },
     };
@@ -632,11 +634,14 @@ export function registerToolsRoutes(
     } catch (e: any) {
       console.warn("[ATS] Delivered-CV lookup failed:", e?.message);
     }
-    if (deliveryMatch && aiResult.score < deliveryMatch.deliveredScore) {
-      console.log(`[ATS] Honouring delivered-CV guarantee: AI=${aiResult.score} → ${deliveryMatch.deliveredScore} (${deliveryMatch.serviceSlug}, ${deliveryMatch.matchType})`);
+    // 2026-11 (no fake scores): this used to RAISE the score to a promised
+    // floor. Now, for the exact CV we delivered, we show the score our engine
+    // MEASURED for that same text at delivery — up or down — so the same file
+    // never gets two different numbers. Nothing is inflated.
+    if (deliveryMatch && deliveryMatch.deliveredScore > 0 && deliveryMatch.deliveredScore !== aiResult.score) {
+      console.log(`[ATS] Same delivered CV — showing measured score ${deliveryMatch.deliveredScore} (this run ${aiResult.score}, ${deliveryMatch.serviceSlug}, ${deliveryMatch.matchType})`);
       aiResult.score = deliveryMatch.deliveredScore;
-      if (aiResult.score >= 90) aiResult.grade = "Excellent";
-      else if (aiResult.score >= 80) aiResult.grade = "Good";
+      aiResult.grade = aiResult.score >= 90 ? "Excellent" : aiResult.score >= 80 ? "Good" : aiResult.score >= 65 ? "Average" : aiResult.score >= 50 ? "Below Average" : "Poor";
     }
 
     let finalResult: any;
