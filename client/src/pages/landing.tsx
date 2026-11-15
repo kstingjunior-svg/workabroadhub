@@ -18,6 +18,7 @@ import { LanguageSelector } from "@/components/language-selector";
 import { SuccessStoriesSection } from "@/components/success-stories-section";
 import { AdvisorsSection } from "@/components/advisors-section";
 import { PlatformStatsSection } from "@/components/platform-stats-section";
+import { LiveActivityPanel } from "@/components/live-activity-feed";
 import { trackLandingView, trackButtonClick } from "@/lib/analytics";
 import { AuthModal } from "@/components/auth-modal";
 import { useToast } from "@/hooks/use-toast";
@@ -641,22 +642,9 @@ export default function Landing() {
                     a Kenyan job seeker to come (and return) to the site. */}
                 <LandingNeaSearch />
 
-                {/* Testimonial */}
-                <div
-                  className="mt-6 p-5 italic text-sm"
-                  style={{ background: '#FFFFFF', border: '1px solid #E2DDD5' }}
-                  data-testid="hero-testimonial"
-                >
-                  <p
-                    className="leading-relaxed"
-                    style={{ fontFamily: "'Crimson Pro', serif", fontSize: '1.05rem', color: '#3A4A5A' }}
-                  >
-                    "I was about to pay an agency in Mombasa KES 85,000 for a 'visa processing fee.' I checked their license number here and discovered it expired in 2022. This service saved my family's savings."
-                  </p>
-                  <p className="mt-3 font-semibold not-italic" style={{ color: '#1A2530' }}>
-                    — John K., Registered Nurse (Mombasa → NHS UK)
-                  </p>
-                </div>
+                {/* 2026-11: invented testimonial ("John K.") replaced with REAL
+                    activity — initials + country from actual purchases. */}
+                <LiveActivityPanel className="mt-6" title="Live: Kenyans checking before they pay" max={5} />
 
                 {/* 2026-08 (Tony): big, unmissable "Report an agency" CTA sits
                     directly under the Verify widget on landing. Verify + Report
@@ -946,7 +934,7 @@ export default function Landing() {
               <Sparkles className="h-4 w-4 shrink-0" /> <span>Activate my AutoApply Agent — 7-day free Pro trial</span>
             </Button>
             <p className="text-xs text-blue-200/70 mt-3">
-              7-day Pro trial included · No credit card needed · Pro: KES 1,500/mo or KES 15,000/year (save 17%) · Free tier forever after trial
+              7-day AutoApply Pro trial included · No card needed · Then Monthly KES 1,000 or Yearly KES 4,500 · Free tier always available
             </p>
           </div>
         </section>
@@ -1056,11 +1044,6 @@ export default function Landing() {
                   blurb:     "For university &amp; scholarship applications. Compelling, structured, tailored.",
                   compare:   "SoP consultant: KES 15,000 — you save KES 14,000",
                   cta:       "Draft my SoP",
-                  testimonial: {
-                    quote: "The SoP they wrote got me my Chevening interview. Two rejections before, one win with theirs.",
-                    author: "Faith W., Chevening Scholar",
-                    detail: "Nairobi → Sheffield Hallam University",
-                  },
                 },
               ].map((service, idx) => (
                 <div
@@ -1145,40 +1128,8 @@ export default function Landing() {
               </p>
             </div>
 
-            {/* ─── Trust bar: employers where our members work ────────────
-                 Not paid endorsements — these are companies where paying
-                 members have taken up jobs after using our services.
-                 Real signal, verifiable in the community wall. Reduces
-                 "is this legit" hesitation at the moment of purchase. */}
-            <div className="mt-10 pt-8 border-t border-slate-200 dark:border-slate-800">
-              <p className="text-center text-xs uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400 mb-4">
-                Trusted by Kenyan professionals now working at
-              </p>
-              <div className="flex flex-wrap items-center justify-center gap-x-6 sm:gap-x-10 gap-y-3 opacity-70">
-                {[
-                  "NHS UK",
-                  "Emirates",
-                  "Hilton Doha",
-                  "Marriott",
-                  "Etihad Airways",
-                  "Aramco Saudi",
-                  "RBC Canada",
-                  "Deloitte",
-                  "Healthcare Australia",
-                ].map((brand) => (
-                  <span
-                    key={brand}
-                    className="text-sm sm:text-base font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap"
-                  >
-                    {brand}
-                  </span>
-                ))}
-              </div>
-              <p className="text-center text-[11px] text-slate-400 mt-3">
-                Companies where WorkAbroad Hub members have been hired since 2024. Verify at{" "}
-                <Link href="/trust" className="underline hover:text-slate-600 dark:hover:text-slate-300">/trust</Link>.
-              </p>
-            </div>
+            {/* 2026-11: the "now working at NHS / Emirates / Aramco…" strip was
+                removed — there was no record behind it. */}
           </div>
         </section>
 

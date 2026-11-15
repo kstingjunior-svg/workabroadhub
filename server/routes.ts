@@ -2168,6 +2168,33 @@ Crawl-delay: 1`);
     }
   });
 
+  // ── Public: live activity feed — REAL usage only (2026-11) ────────────────
+  // Initials + country for known buyers, "Someone" for anonymous tool use.
+  // See server/lib/live-activity.ts for exactly what is (and isn't) exposed.
+  app.get("/api/public/live-activity", async (_req, res) => {
+    try {
+      const { loadLiveActivity } = await import("./lib/live-activity");
+      const data = await withCache("live-activity:v1", 60_000, () => loadLiveActivity());
+      res.set("Cache-Control", "public, max-age=30");
+      res.json({ ...data, generatedAt: new Date().toISOString() });
+    } catch (err: any) {
+      console.error("[LiveActivity]", err?.message);
+      res.status(500).json({ message: "Failed to load activity" });
+    }
+  });
+
+  // Let a signed-in user hide their initials from the public feed.
+  app.get("/api/me/activity-visibility", isAuthenticated, async (req: any, res) => {
+    const { rows } = await pool.query<{ v: boolean }>(`SELECT COALESCE(show_in_activity, TRUE) AS v FROM users WHERE id = $1`, [req.user?.claims?.sub]);
+    res.json({ showInActivity: rows[0]?.v ?? true });
+  });
+  app.post("/api/me/activity-visibility", isAuthenticated, async (req: any, res) => {
+    const v = req.body?.showInActivity !== false;
+    await pool.query(`UPDATE users SET show_in_activity = $2 WHERE id = $1`, [req.user?.claims?.sub, v]);
+    cache.invalidate("live-activity");
+    res.json({ showInActivity: v });
+  });
+
   // ── Admin plan management ──────────────────────────────────────────────────
   app.get("/api/admin/plans", isAuthenticated, isAdmin, async (_req: any, res) => {
     try {

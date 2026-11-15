@@ -25,7 +25,7 @@ import { useUpgradeModal } from "@/contexts/upgrade-modal-context";
 import { LockedFeature } from "@/components/locked-feature";
 import { UrgencyBanner } from "@/components/urgency-banner";
 import { DashboardHeroCTA } from "@/components/dashboard-hero-cta";
-import { LiveHelpTicker } from "@/components/live-help-ticker";
+import { LiveActivityFeed, LiveActivityPanel } from "@/components/live-activity-feed";
 import { DashboardServicesGrid } from "@/components/dashboard-services-grid";
 import { DashboardProUpsell } from "@/components/dashboard-pro-upsell";
 import { PlanStatusBanner } from "@/components/plan-status-banner";
@@ -38,7 +38,6 @@ import { DashboardCalculatorCard } from "@/components/dashboard-calculator-card"
 import { DashboardCanadaCard } from "@/components/dashboard-canada-card";
 import { FounderNote } from "@/components/founder-note";
 import { WeveBeenWhereYouAre } from "@/components/weve-been-where-you-are";
-import { DashboardSuccessStories } from "@/components/dashboard-success-stories";
 import { DashboardBestMatch } from "@/components/dashboard-best-match";
 // 2026-09 REMOVED — DashboardVisaJobsLocked killed trust ("we're selling
 // jobs, not helping you get them"). See comment at the former render site.
@@ -1335,7 +1334,7 @@ export default function Dashboard() {
             • Replaces the buried "CV Services" + "Tools to Accelerate" sections
             ─────────────────────────────────────────────────────────────────── */}
         {/* Live ticker — cycles "we just helped someone in {Kenyan city}…" */}
-        <LiveHelpTicker />
+        <LiveActivityFeed inline className="mb-3" />
         <DashboardHeroCTA />
         {/* Trial/Monthly/Yearly users see their countdown here so they never
             mistake "trial ended" for "the app forgot my payment" */}
@@ -2089,7 +2088,7 @@ export default function Dashboard() {
         <CreditsWidget userId={user?.id} />
 
         {/* ── SUCCESS STORIES (rotating Kenyan testimonials) ───────────── */}
-        <DashboardSuccessStories />
+        <LiveActivityPanel className="mb-6" title="What Kenyans are checking right now" />
 
         {/* ── "We've been where you are" trust section ────────────────── */}
         <WeveBeenWhereYouAre />
@@ -2180,7 +2179,7 @@ export default function Dashboard() {
               <span className="text-2xl flex-shrink-0" aria-hidden="true">🚀</span>
               <div className="flex-1 min-w-0">
                 <p className="font-bold text-white text-sm leading-tight">Get advisor guidance for these opportunities</p>
-                <p className="text-white/80 text-xs mt-0.5">1,000+ users upgraded this month · Full access for 365 days</p>
+                <p className="text-white/80 text-xs mt-0.5">Yearly KES 4,500 · Full access for 365 days</p>
               </div>
               <div className="flex-shrink-0 bg-white text-orange-600 text-xs font-bold px-3 py-1.5 rounded-full shadow-sm">Upgrade ✨</div>
             </div>

@@ -35,8 +35,8 @@ export function WeveBeenWhereYouAre() {
         <div className="text-xs text-muted-foreground italic flex items-start gap-1.5">
           <Sparkles className="h-3 w-3 mt-0.5 shrink-0 text-amber-600" />
           <span>
-            — The WorkAbroad Hub team · Built in Nairobi · 9 countries covered ·
-            1,200+ Kenyans helped (and counting)
+            — The WorkAbroad Hub team · Built in Nairobi ·
+            2,200+ paying customers (and counting)
           </span>
         </div>
       </CardContent>

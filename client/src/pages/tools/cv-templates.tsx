@@ -194,7 +194,7 @@ export default function CVTemplates() {
           <CardContent className="p-5 text-center space-y-2">
             <p className="text-sm font-semibold">Need a professionally written CV?</p>
             <p className="text-xs text-muted-foreground leading-relaxed max-w-xs mx-auto">
-              Our consultants write ATS-optimised CVs tailored for specific countries and roles. Trusted by 500+ Kenyans now working abroad.
+              Our consultants write ATS-optimised CVs tailored for specific countries and roles.
             </p>
             <Link href="/services">
               <Button size="sm" className="mt-1" data-testid="button-cv-writing-service">

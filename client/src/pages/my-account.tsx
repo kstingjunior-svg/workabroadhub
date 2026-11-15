@@ -174,6 +174,37 @@ function AppStatusBadge({
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
+function ActivityVisibilityToggle() {
+  const { data, refetch } = useQuery<{ showInActivity: boolean }>({ queryKey: ["/api/me/activity-visibility"] });
+  const [saving, setSaving] = useState(false);
+  const on = data?.showInActivity ?? true;
+  const toggle = async () => {
+    setSaving(true);
+    try {
+      const { fetchCsrfToken } = await import("@/lib/queryClient");
+      const csrf = await fetchCsrfToken();
+      await fetch("/api/me/activity-visibility", {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
+        body: JSON.stringify({ showInActivity: !on }),
+      });
+      await refetch();
+    } finally { setSaving(false); }
+  };
+  if (!data) return null;
+  return (
+    <div className="mt-6 bg-white dark:bg-gray-800 border border-[#E2DDD5] dark:border-gray-700 rounded-2xl p-5 flex items-start justify-between gap-4" data-testid="activity-visibility">
+      <div>
+        <p className="font-semibold text-[#1A2530] dark:text-white text-sm">Show my initials in the live activity feed</p>
+        <p className="text-xs text-[#5A6A7A] dark:text-gray-400 mt-1">When you use a service we may show e.g. "A. M. · Kenya screened a visa". Never your name, documents or results.</p>
+      </div>
+      <Button variant={on ? "default" : "outline"} size="sm" disabled={saving} onClick={toggle} data-testid="button-activity-visibility">
+        {on ? "On" : "Off"}
+      </Button>
+    </div>
+  );
+}
+
 export default function MyAccountPage() {
   const { user } = useAuth();
   const [, navigate] = useLocation();
@@ -855,6 +886,9 @@ export default function MyAccountPage() {
               </Button>
             </div>
           )}
+
+        {/* ── Live activity privacy (2026-11) ── */}
+        <ActivityVisibilityToggle />
 
         {/* ── Footer note ── */}
         <p className="mt-6 text-center text-xs text-[#7A8A9A] dark:text-gray-500">

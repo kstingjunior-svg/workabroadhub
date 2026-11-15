@@ -25,9 +25,9 @@ export function LandingFinalCta({ onStartClick }: LandingFinalCtaProps) {
           className="rounded-3xl bg-gradient-to-br from-emerald-50 via-white to-teal-50 dark:from-emerald-950/40 dark:via-gray-900 dark:to-teal-950/40 border border-emerald-200 dark:border-emerald-900/40 shadow-xl shadow-emerald-100 dark:shadow-emerald-950/20 p-8 sm:p-12 text-center"
           data-testid="landing-final-cta"
         >
-          <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-amber-100 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 text-xs font-bold uppercase tracking-wide animate-pulse">
+          <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 text-xs font-bold uppercase tracking-wide">
             <Sparkles className="h-3 w-3" />
-            Limited consultation slots this week
+            Free CV check · screening from KES 100
           </span>
 
           <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 dark:text-white mt-5 leading-tight">

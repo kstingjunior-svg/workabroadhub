@@ -59,7 +59,7 @@ interface ServiceContent {
   after:  { example: string; tags: string[]; wins: string[] };
   benefits: { icon: string; title: string; desc: string }[];
   stats: { number: string; label: string }[];
-  testimonial: { text: string; author: string; role: string; initials: string };
+  testimonial?: { text: string; author: string; role: string; initials: string }; // 2026-11: invented quotes removed — only real, consented ones
 }
 
 const SERVICE_CONTENT: Record<string, ServiceContent> = {
@@ -75,8 +75,7 @@ const SERVICE_CONTENT: Record<string, ServiceContent> = {
       { icon: "🔑", title: "Top 15 Keywords for Your Industry", desc: "Data-driven keyword list specific to your target role and country. Add these to rank higher in searches." },
       { icon: "🌍", title: "Country-Specific Positioning", desc: "We tailor your profile for UK (NHS keywords), Canada (Express Entry terms), UAE (tax-free positioning), etc." },
     ],
-    stats: [{ number: "87%", label: "Recruiters search LinkedIn first" }, { number: "11×", label: "More profile views after optimization" }, { number: "3 min", label: "AI delivery time" }],
-    testimonial: { text: "I'd had my LinkedIn for 3 years with no messages. Within a week of getting it optimized by WorkAbroad Hub, I had 4 recruiters from the UK reach out.", author: "Grace M.", role: "Nurse → NHS England", initials: "GM" },
+    stats: [{ number: "3 min", label: "AI delivery time" }, { number: "M-Pesa", label: "or PayPal — pay securely" }, { number: "Email", label: "+ instant download" }],
   },
   "ATS CV Optimization": {
     badge: "⚡ Most In-Demand Service",
@@ -90,8 +89,7 @@ const SERVICE_CONTENT: Record<string, ServiceContent> = {
       { icon: "📊", title: "Quantified Achievements", desc: "Your experience rewritten with numbers and impact metrics that recruiters and ATS systems love." },
       { icon: "🌍", title: "Country-Format Compliance", desc: "Formatted to the exact expectations of UK, Canada, UAE, Australia or US hiring managers." },
     ],
-    stats: [{ number: "75%", label: "CVs rejected by ATS without human review" }, { number: "3×", label: "More interviews with ATS-optimized CV" }, { number: "3 min", label: "AI delivery time" }],
-    testimonial: { text: "I was applying for months with no response. WorkAbroad Hub rewrote my CV for ATS and within 2 weeks I had 3 interview calls from the UAE.", author: "Brian K.", role: "Accountant → Dubai", initials: "BK" },
+    stats: [{ number: "3 min", label: "AI delivery time" }, { number: "M-Pesa", label: "or PayPal — pay securely" }, { number: "Email", label: "+ instant download" }],
   },
   "Cover Letter Writing": {
     badge: "✍️ Instant AI Generation",
@@ -105,8 +103,7 @@ const SERVICE_CONTENT: Record<string, ServiceContent> = {
       { icon: "💼", title: "Professional Tone & Format", desc: "Calibrated tone — confident but not arrogant — that international employers respond to." },
       { icon: "⚡", title: "Ready in Under 3 Minutes", desc: "No waiting. Your cover letter is generated and delivered the moment payment confirms." },
     ],
-    stats: [{ number: "72%", label: "Hiring managers skip generic letters" }, { number: "3×", label: "More callbacks with tailored letters" }, { number: "3 min", label: "AI delivery time" }],
-    testimonial: { text: "The cover letter WorkAbroad Hub wrote for me was so good, the Canadian recruiter mentioned it specifically in my first interview!", author: "Esther W.", role: "Teacher → Canada", initials: "EW" },
+    stats: [{ number: "3 min", label: "AI delivery time" }, { number: "M-Pesa", label: "or PayPal — pay securely" }, { number: "Email", label: "+ instant download" }],
   },
   "Interview Coaching": {
     badge: "🎤 Live Mock Interview Included",
@@ -120,8 +117,7 @@ const SERVICE_CONTENT: Record<string, ServiceContent> = {
       { icon: "💰", title: "Salary Negotiation Scripts", desc: "Exact phrases and salary ranges for your target country so you don't undersell yourself." },
       { icon: "🌍", title: "Cultural Fit Coaching", desc: "What UK, Canadian, UAE and Australian interviewers really look for — and how to signal it." },
     ],
-    stats: [{ number: "85%", label: "Success rate after our mock interviews" }, { number: "30+", label: "Questions with model answers" }, { number: "3 min", label: "AI delivery time" }],
-    testimonial: { text: "I failed 4 interviews before. WorkAbroad Hub gave me a preparation pack and mock session — I passed my UK hospital interview first try.", author: "Samuel O.", role: "Nurse → NHS Scotland", initials: "SO" },
+    stats: [{ number: "3 min", label: "AI delivery time" }, { number: "M-Pesa", label: "or PayPal — pay securely" }, { number: "Email", label: "+ instant download" }],
   },
   "Visa Guidance Session": {
     badge: "🛂 Step-by-Step Visa Roadmap",
@@ -135,8 +131,7 @@ const SERVICE_CONTENT: Record<string, ServiceContent> = {
       { icon: "🏛️", title: "Embassy & Consulate Contacts", desc: "Kenya-based embassy details, appointment booking links, and processing time estimates." },
       { icon: "💡", title: "Interview Tips (Where Applicable)", desc: "What consular officers look for and how to present yourself confidently." },
     ],
-    stats: [{ number: "40%", label: "Visa applications rejected for avoidable reasons" }, { number: "2×", label: "Higher approval rate with proper preparation" }, { number: "3 min", label: "AI delivery time" }],
-    testimonial: { text: "The visa guide saved me from making two mistakes that would have got my application rejected. Got my UAE visa approved in 3 weeks.", author: "Peter N.", role: "Engineer → Dubai, UAE", initials: "PN" },
+    stats: [{ number: "3 min", label: "AI delivery time" }, { number: "M-Pesa", label: "or PayPal — pay securely" }, { number: "Email", label: "+ instant download" }],
   },
   "SOP / Statement of Purpose": {
     badge: "🎓 University & Scholarship Ready",
@@ -150,8 +145,7 @@ const SERVICE_CONTENT: Record<string, ServiceContent> = {
       { icon: "🌍", title: "Country-Standard Formatting", desc: "Calibrated to US, UK, Canadian, Australian or European university expectations." },
       { icon: "✅", title: "Authenticity Guaranteed", desc: "Zero placeholder text — every sentence uses your actual background, goals and motivations." },
     ],
-    stats: [{ number: "800+", label: "SOPs written for Kenyan students" }, { number: "78%", label: "Acceptance rate for our clients" }, { number: "3 min", label: "AI delivery time" }],
-    testimonial: { text: "My SOP from WorkAbroad Hub was so strong my supervisor said it was one of the best he'd read. I got a full scholarship to study in Canada.", author: "Faith A.", role: "Masters Student → University of Toronto", initials: "FA" },
+    stats: [{ number: "3 min", label: "AI delivery time" }, { number: "M-Pesa", label: "or PayPal — pay securely" }, { number: "Email", label: "+ instant download" }],
   },
   "Employment Contract Review": {
     badge: "⚖️ Protect Yourself Before You Sign",
@@ -165,8 +159,7 @@ const SERVICE_CONTENT: Record<string, ServiceContent> = {
       { icon: "❓", title: "Questions to Ask Your Employer", desc: "Specific questions you can send to your recruiter or HR to clarify risky terms." },
       { icon: "📊", title: "Overall Risk Score", desc: "Low/Medium/High rating so you know at a glance how risky this contract is." },
     ],
-    stats: [{ number: "1 in 3", label: "Overseas contracts contain unfair clauses" }, { number: "KES 50K+", label: "Average savings from avoiding bad contracts" }, { number: "3 min", label: "AI delivery time" }],
-    testimonial: { text: "WorkAbroad Hub found a 24-month bond clause that would have cost me KES 200,000 if I left early. They saved me from a terrible situation.", author: "David M.", role: "IT Specialist → Riyadh", initials: "DM" },
+    stats: [{ number: "3 min", label: "AI delivery time" }, { number: "M-Pesa", label: "or PayPal — pay securely" }, { number: "Email", label: "+ instant download" }],
   },
   "Employer Verification Report": {
     badge: "🔍 Scam Protection",
@@ -180,8 +173,7 @@ const SERVICE_CONTENT: Record<string, ServiceContent> = {
       { icon: "🚩", title: "10 Scam Indicator Checklist", desc: "The classic signs of a fraudulent employer — including subtle ones that are easy to miss." },
       { icon: "📝", title: "Legitimacy Score & Recommendation", desc: "A clear Proceed / Caution / Avoid recommendation based on all available evidence." },
     ],
-    stats: [{ number: "2,400+", label: "Kenyans defrauded by fake employers yearly" }, { number: "KES 80K", label: "Average amount lost to overseas job scams" }, { number: "3 min", label: "AI delivery time" }],
-    testimonial: { text: "WorkAbroad Hub's verification report showed me the company wasn't registered anywhere. I didn't send the 'processing fee' they asked for. It was a scam.", author: "Joyce K.", role: "Nairobi → Protected", initials: "JK" },
+    stats: [{ number: "3 min", label: "AI delivery time" }, { number: "M-Pesa", label: "or PayPal — pay securely" }, { number: "Email", label: "+ instant download" }],
   },
 };
 
@@ -197,8 +189,7 @@ const DEFAULT_SERVICE_CONTENT: ServiceContent = {
     { icon: "🌍", title: "Country-Specific", desc: "Formatted and worded for your exact target country's expectations." },
     { icon: "🔄", title: "Revisions Available", desc: "Not satisfied? Request a revision from your dashboard at any time." },
   ],
-  stats: [{ number: "3 min", label: "Average delivery time" }, { number: "5,000+", label: "Documents generated" }, { number: "4.9★", label: "Client satisfaction" }],
-  testimonial: { text: "WorkAbroad Hub made the whole process so much easier. I had my documents within minutes and landed an interview the following week.", author: "Mary N.", role: "WorkAbroad Hub Client", initials: "MN" },
+  stats: [{ number: "3 min", label: "AI delivery time" }, { number: "M-Pesa", label: "or PayPal — pay securely" }, { number: "Email", label: "+ instant download" }],
 };
 
 export default function ServiceOrderPage() {
@@ -1117,7 +1108,8 @@ export default function ServiceOrderPage() {
               </div>
             </div>
 
-            {/* Testimonial */}
+            {/* Testimonial — only rendered for a real, consented customer quote */}
+            {content.testimonial && (
             <div className="rounded-2xl bg-card border-l-4 border-primary border p-6 shadow-sm">
               <p className="font-serif text-lg italic text-foreground/90 mb-4">"{content.testimonial.text}"</p>
               <div className="flex items-center gap-3">
@@ -1130,6 +1122,7 @@ export default function ServiceOrderPage() {
                 </div>
               </div>
             </div>
+            )}
           </div>
 
           {/* ── RIGHT: Checkout / Form ───────────────────────────────────── */}
