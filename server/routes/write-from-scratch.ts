@@ -342,6 +342,13 @@ export function registerWriteFromScratchRoutes(app: Express): void {
       // Successful payment → grab receipt + amount from metadata.
       let receipt: string | null = null;
       if (resultCode === 0) {
+        // 2026-11 audit: refuse success callbacks Safaricom contradicts.
+        const { confirmStkSuccess } = await import("../lib/stk-verify");
+        const conf = await confirmStkSuccess(checkoutId, 2);
+        if (conf.result === "rejected") {
+          console.warn(`[write-from-scratch][Security] success callback contradicted by Safaricom for ${checkoutId}: ${conf.detail} — ignored`);
+          return res.json({ ResultCode: 0, ResultDesc: "ignored" });
+        }
         const items = body.CallbackMetadata?.Item as Array<{ Name: string; Value: any }> | undefined;
         if (items) {
           const receiptItem = items.find((i) => i.Name === "MpesaReceiptNumber");

@@ -13,6 +13,7 @@
  */
 
 import { Request, Response, NextFunction } from "express";
+import { trustedSourceIp } from "./safaricomIpGuard";
 import { storage } from "../storage";
 import { reportRejection } from "../lib/sentry";
 
@@ -125,14 +126,13 @@ const HIGH_RISK_SCORE_THRESHOLD = 60;
 // HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
 
+// 2026-11 (security audit): the first X-Forwarded-For entry is set by the
+// caller, so an attacker could dodge bans — or get a shared Safaricom
+// mobile IP banned for everyone behind it. Use the proxy-appended peer /
+// Cloudflare's CF-Connecting-IP instead (see safaricomIpGuard.trustedSourceIp).
 export function getClientIp(req: Request): string {
-  const forwarded = req.headers["x-forwarded-for"];
-  if (forwarded) {
-    return (typeof forwarded === "string" ? forwarded : forwarded[0])
-      .split(",")[0]
-      .trim();
-  }
-  return req.socket?.remoteAddress ?? "unknown";
+  const ip = trustedSourceIp(req);
+  return ip || req.socket?.remoteAddress || "unknown";
 }
 
 function isPrivateIp(ip: string): boolean {

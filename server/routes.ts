@@ -335,6 +335,8 @@ function normalizePhone(phone: string | null | undefined, country = "KE"): strin
   if (country === "KE") {
     if (phone.startsWith("0"))   return "254" + phone.slice(1);
     if (phone.startsWith("7"))   return "254" + phone;
+    // 2026-11 audit: 9-digit "1XXXXXXXX" (Safaricom 011x lines typed without 0)
+    if (phone.startsWith("1") && phone.length === 9) return "254" + phone;
     if (phone.startsWith("254")) return phone;
   }
 
@@ -351,6 +353,21 @@ function normalizePhone(phone: string | null | undefined, country = "KE"): strin
   }
 
   return phone;
+}
+
+
+/**
+ * 2026-11 (payment audit — Kenyans abroad): the STK push can only reach a
+ * Kenyan Safaricom M-Pesa line. Customers whose profile holds a foreign
+ * number (e.g. +974…, +44…) used to get a bare "Invalid phone number".
+ * Tell them exactly what works instead.
+ */
+function mpesaPhoneError(normalized: string): string {
+  const digits = String(normalized || "").replace(/\D/g, "");
+  if (digits && !digits.startsWith("254") && digits.length >= 8) {
+    return "M-Pesa prompts can only be sent to a Kenyan Safaricom number (07… or 01…). If you're abroad, enter a Kenyan M-Pesa line (your own on roaming, or a relative's), pay by Paybill 4153025 using your email as the account number, or choose PayPal.";
+  }
+  return "Invalid phone number. Use a Safaricom M-Pesa number: 07XXXXXXXX, 01XXXXXXXX or +2547XXXXXXXX.";
 }
 
 function detectCountry(phone: string | null | undefined): string | null {
@@ -2834,7 +2851,7 @@ Crawl-delay: 1`);
 
       const normalizedPhone = normalizePhone(phoneNumber, "KE") ?? phoneNumber;
       if (!/^254[71]\d{8}$/.test(normalizedPhone)) {
-        return res.status(400).json({ message: "Invalid phone number. Use format: 0712345678, 0115364029, or +254712345678" });
+        return res.status(400).json({ message: mpesaPhoneError(normalizedPhone), code: "MPESA_PHONE_INVALID" });
       }
 
       // 2026-08 SECURITY (Phase 3 audit): one KES 99 trial per user + phone.
@@ -4392,7 +4409,7 @@ Crawl-delay: 1`);
       if (method === "mpesa" && phoneNumber) {
         normalizedPhone = normalizePhone(phoneNumber, "KE") ?? phoneNumber;
         if (!/^254[71]\d{8}$/.test(normalizedPhone)) {
-          return res.status(400).json({ message: "Invalid phone number. Use 07XXXXXXXX, 01XXXXXXXX, or +254XXXXXXXXX" });
+          return res.status(400).json({ message: mpesaPhoneError(normalizedPhone), code: "MPESA_PHONE_INVALID" });
         }
       }
 
@@ -5905,6 +5922,12 @@ Crawl-delay: 1`);
           // Orphan success — money confirmed by Safaricom but no matching DB record.
           // Parse what we can from the callback, try to match a user by phone, and flag for admin review.
           if (ResultCode === 0 && CallbackMetadata?.Item) {
+            const { confirmStkSuccess } = await import("./lib/stk-verify");
+            const conf = await confirmStkSuccess(CheckoutRequestID, 2);
+            if (conf.result === "rejected") {
+              console.warn(`[MPESA/PAYMENTS CALLBACK][Security] Orphan success callback contradicted by Safaricom (${CheckoutRequestID}): ${conf.detail} — ignored`);
+              return;
+            }
             let orphanReceipt: string | null = null, orphanAmount: number | null = null, orphanPhone: string | null = null;
             for (const item of CallbackMetadata.Item) {
               if (item.Name === "MpesaReceiptNumber") orphanReceipt = String(item.Value);
@@ -5937,6 +5960,26 @@ Crawl-delay: 1`);
         if (payment.status === "success" || payment.status === "completed") {
           console.log(`[MPESA/PAYMENTS CALLBACK] Already completed: ${payment.id}`);
           return;
+        }
+
+        // 3a. 2026-11 audit: never act on a "success" callback body alone —
+        // confirm with Safaricom first (see server/lib/stk-verify.ts).
+        if (ResultCode === 0) {
+          const { confirmStkSuccess } = await import("./lib/stk-verify");
+          const conf = await confirmStkSuccess(CheckoutRequestID);
+          if (conf.result !== "confirmed") {
+            console.warn(`[MPESA/PAYMENTS CALLBACK][Security] Success callback NOT confirmed by Safaricom for ${CheckoutRequestID} (payment ${payment.id}): ${conf.result} — ${conf.detail}. Left pending for StkRecovery.`);
+            if (conf.result === "rejected") {
+              await createSecurityAlert({
+                alertType: "payment_fraud", severity: "high",
+                title: "M-Pesa success callback contradicted by Safaricom",
+                description: `Callback said success for ${CheckoutRequestID} but STK Query said: ${conf.detail}. Payment ${payment.id} NOT activated.`,
+                userId: payment.userId,
+                metadata: { paymentId: payment.id, CheckoutRequestID, detail: conf.detail },
+              }).catch(() => {});
+            }
+            return;
+          }
         }
 
         // 3b. Atomic processed flag — blocks parallel Safaricom retries at the DB level.
@@ -8812,7 +8855,8 @@ Crawl-delay: 1`);
     }
   });
 
-  app.post("/api/mpesa/license-renewal/callback", async (req, res) => {
+  // 2026-11 audit: this callback had NO Safaricom IP guard at all.
+  app.post("/api/mpesa/license-renewal/callback", safaricomIpGuard, async (req, res) => {
     try {
       if (!req.body.Body?.stkCallback) {
         return res.status(400).end();
@@ -8839,6 +8883,14 @@ Crawl-delay: 1`);
         return res.json({ ResultCode: 0, ResultDesc: "Rejected" });
       }
 
+      {
+        const { confirmStkSuccess } = await import("./lib/stk-verify");
+        const conf = await confirmStkSuccess(checkoutRequestId, 2);
+        if (conf.result === "rejected") {
+          console.warn(`[LicenseRenewal][Security] success callback contradicted by Safaricom for ${checkoutRequestId}: ${conf.detail} — ignored`);
+          return res.json({ ResultCode: 0, ResultDesc: "Ignored" });
+        }
+      }
       const items = callback.CallbackMetadata?.Item || [];
       const amount = items.find((i: any) => i.Name === "Amount")?.Value;
       const receipt = items.find((i: any) => i.Name === "MpesaReceiptNumber")?.Value;
@@ -21430,13 +21482,28 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
         paypalServiceName = svcRow.name ?? null; // store the real service name
       }
 
+      // 2026-11 (payment audit): createPayPalOrder() ALWAYS charges the flat
+      // full-portal fee (getPayPalFlatFeeKes, Tony's 2026-08 rule), but this
+      // row used to record the item price (e.g. KES 1,000 for Monthly or KES
+      // 300 for a CV service). verifyPayPalPayment() compares the captured
+      // USD against the row amount, so any non-Yearly purchase would have been
+      // captured ($34.62) and then BLOCKED as an "amount mismatch" — paid, no
+      // access. Record what is actually charged, and the plan that flat fee
+      // buys (full portal access = Yearly/pro). The originally requested
+      // price is kept in metadata for audit.
+      const { getPayPalFlatFeeKes } = await import("./paypal");
+      const chargedKes = getPayPalFlatFeeKes();
+      const requestedKes = verifiedAmount;
+      const paypalPlanId = serviceId.startsWith("plan_") ? "pro" : null;
+
       // Fetch user email so the payment record is always linked by both userId AND email
       const paypalInitUser = await storage.getUserById(userId);
       // Create a pending payment record so capture-order can look it up
       const paymentRecord = await storage.createPayment({
         userId,
         email: paypalInitUser?.email || null,
-        amount: verifiedAmount,
+        amount: chargedKes,
+        planId: paypalPlanId,
         baseAmount: resolvedPaypal?.basePrice ?? null,
         discountType: resolvedPaypal?.discountType ?? null,
         currency: "KES",
@@ -21444,15 +21511,15 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
         status: "pending",
         serviceId,
         serviceName: paypalServiceName,
-        metadata: JSON.stringify({ refCode: refCode || null, appliedPromo: resolvedPaypal?.appliedPromo || null }),
+        metadata: JSON.stringify({ refCode: refCode || null, appliedPromo: resolvedPaypal?.appliedPromo || null, requestedKes, chargedKes, paypalFlatFee: true, ...(serviceOrderId ? { serviceOrderId } : {}) }),
       } as any);
 
       console.info(
-        `[Payment][START] PayPal | paymentId=${paymentRecord.id} | userId=${userId} | email=${paypalInitUser?.email || "unknown"} | KES=${verifiedAmount} | serviceId=${serviceId}`
+        `[Payment][START] PayPal | paymentId=${paymentRecord.id} | userId=${userId} | email=${paypalInitUser?.email || "unknown"} | KES=${chargedKes} (requested ${requestedKes}) | serviceId=${serviceId}`
       );
 
       const order = await createPayPalOrder(
-        verifiedAmount,
+        chargedKes,
         description || "WorkAbroad Hub payment",
         paymentRecord.id
       );
@@ -21468,7 +21535,7 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
         paypalOrderId: order.id,
         paymentId: paymentRecord.id,
         approvalUrl: order.approvalUrl,
-        amountUSD: kesToUsd(verifiedAmount).toFixed(2),
+        amountUSD: kesToUsd(chargedKes).toFixed(2),
         status: order.status,
       });
     } catch (err: any) {

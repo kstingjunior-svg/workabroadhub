@@ -288,7 +288,16 @@ export default function Payment() {
     document.body.appendChild(script);
   }, [paypalConfig]);
 
-  const paymentAmountRef = { current: paymentAmount };
+  // 2026-11 (payment audit): these were plain objects re-created each render,
+  // so the PayPal button (rendered once) kept the values from its FIRST
+  // render — if PayPal's script loaded before the price, every click failed
+  // with "Plan price not yet loaded". Real refs, updated every render.
+  const paymentAmountRef = useRef(paymentAmount);
+  paymentAmountRef.current = paymentAmount;
+  const priceReadyRef = useRef(priceReady);
+  priceReadyRef.current = priceReady;
+  const effectivePlanIdRef = useRef(effectivePlanId);
+  effectivePlanIdRef.current = effectivePlanId;
 
   // 2026-08 (Tony): PayPal is charged as a flat fee for FULL portal access,
   // not per-item. Mirrors PAYPAL_FLAT_FEE_KES on the server (server always
@@ -938,9 +947,9 @@ export default function Payment() {
     win.paypal.Buttons({
       style: { layout: "vertical", color: "blue", shape: "rect", label: "pay" },
       createOrder: async () => {
-        if (!priceReady) throw new Error("Plan price not yet loaded. Please try again.");
+        if (!priceReadyRef.current) throw new Error("Plan price not yet loaded. Please try again.");
         const csrfToken = await fetchCsrfToken();
-        const serviceId = `plan_${effectivePlanId}`;
+        const serviceId = `plan_${effectivePlanIdRef.current}`;
         const res = await fetch("/api/paypal/create-order", {
           method: "POST",
           credentials: "include",

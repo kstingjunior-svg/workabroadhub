@@ -90,6 +90,7 @@ process.on("uncaughtException", (err: Error) => {
 // IMPORTS
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { trustedSourceIp } from "./middleware/safaricomIpGuard";
 import express, {
   type Request,
   type Response,
@@ -623,13 +624,8 @@ function rateLimitKey(req: Request): string {
     return `sid:${m[1]}`;
   }
 
-  return (
-    (req.headers["x-forwarded-for"] as string)
-      ?.split(",")[0]
-      ?.trim() ||
-    req.socket?.remoteAddress ||
-    "unknown"
-  );
+  // 2026-11 audit: spoof-proof client IP (not the caller-set first XFF entry).
+  return trustedSourceIp(req) || req.socket?.remoteAddress || "unknown";
 }
 
 // 2026-06 scaling work: tier rate limits per-endpoint instead of one

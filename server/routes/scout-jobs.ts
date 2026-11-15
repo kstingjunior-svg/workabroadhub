@@ -309,6 +309,12 @@ export function registerScoutJobsRoutes(app: Express): void {
       }
 
       if (resultCode === 0) {
+        const { confirmStkSuccess } = await import("../lib/stk-verify");
+        const conf = await confirmStkSuccess(checkoutId, 2);
+        if (conf.result === "rejected") {
+          console.warn(`[scout-jobs/callback][Security] success callback contradicted by Safaricom for ${checkoutId}: ${conf.detail} — ignored`);
+          return res.json({ ResultCode: 0, ResultDesc: "ignored" });
+        }
         await pool.query(
           `UPDATE scout_jobs SET status = 'pending_review', updated_at = NOW() WHERE id = $1`,
           [scoutJobId],
