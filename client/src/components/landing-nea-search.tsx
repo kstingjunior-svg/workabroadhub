@@ -39,6 +39,7 @@ interface Agency {
   email?: string | null;
   website?: string | null;
   country?: string | null;
+  partnerBadgeUntil?: string | null;
 }
 
 interface PublicStats {
@@ -233,6 +234,11 @@ export function LandingNeaSearch() {
                 <div className="flex items-start justify-between gap-3 flex-wrap">
                   <div className="min-w-0 flex-1">
                     <p className="font-bold text-base">{firstMatch.agencyName}</p>
+                    {firstMatch.partnerBadgeUntil && new Date(firstMatch.partnerBadgeUntil) > new Date() && badge?.kind === "ok" && (
+                      <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-blue-600 text-white px-2.5 py-0.5 text-[11px] font-bold" data-testid="badge-verified-partner">
+                        ✓ WorkAbroad Hub Verified Partner
+                      </span>
+                    )}
                     {firstMatch.licenseNumber && (
                       <p className="text-xs text-gray-600 dark:text-gray-400 font-mono">{firstMatch.licenseNumber}</p>
                     )}

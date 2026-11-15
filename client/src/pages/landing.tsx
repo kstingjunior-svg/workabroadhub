@@ -827,12 +827,12 @@ export default function Landing() {
                       Checker widget uses. Previously hardcoded 798/1,293
                       and drifted out of sync as the DB grew — Tony spotted
                       798 here while the widget showed 1,709 expired. */}
-                  Stand out from <strong className="text-white">{agencyExpired} expired-license agencies</strong>. Get a verified badge, priority placement in {agencyValid} active listings, and direct contact from
-                  thousands of monthly job-seekers. Built specifically for licensed recruiters serving Kenyans abroad.
+                  Stand out from <strong className="text-white">{agencyExpired} expired-license agencies</strong>. Get a blue Verified Partner badge, priority placement among {agencyValid} active listings, and direct contact from
+                  Kenyan job-seekers. Built specifically for licensed recruiters serving Kenyans abroad.
                 </p>
 
                 <p className="text-sm text-emerald-200/90 font-semibold">
-                  💼 Recruiters using WorkAbroad Hub fill positions <span className="underline">3× faster</span> than via classifieds.
+                  💼 Verified Partner badge: <span className="underline">KES 5,000 per month</span> — blue badge, featured placement, promotion to job-seekers.
                 </p>
 
                 <div className="grid sm:grid-cols-3 gap-4 py-2">
@@ -861,8 +861,8 @@ export default function Landing() {
                     </Link>
                   </Button>
                   <div className="text-xs text-blue-200/70 sm:py-3">
-                    Free to list · Verification in 24h<br/>
-                    Paid add-ons from KES 5,000
+                    Free to claim your profile<br/>
+                    Verified Partner from KES 5,000/month
                   </div>
                 </div>
               </div>

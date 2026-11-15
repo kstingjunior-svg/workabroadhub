@@ -8722,15 +8722,23 @@ Crawl-delay: 1`);
   // LICENSE RENEWAL PAYMENT ENDPOINTS
   // ============================================
 
+  // 2026-11 (Tony): agencies pay KES 5,000 PER MONTH for the Verified
+  // Partner badge + featured listing. This is OUR product — it never touches
+  // the agency's NEA licence expiry (only the NEAIMS sync may change that;
+  // previously a payment here overwrote expiry_date, which would have let an
+  // agency with an expired NEA licence show as licensed by paying us).
+  const PARTNER_PRICE_PER_MONTH_KES = 5000;
   const LICENSE_RENEWAL_FEES: Record<number, number> = {
-    12: 5000,
-    24: 9000,
+    1:  1 * PARTNER_PRICE_PER_MONTH_KES,
+    3:  3 * PARTNER_PRICE_PER_MONTH_KES,
+    12: 12 * PARTNER_PRICE_PER_MONTH_KES,
   };
+  const partnerLabel = (m: number) => (m === 1 ? "1 month" : m === 12 ? "12 months" : `${m} months`);
 
   const initiateRenewalSchema = z.object({
     agencyId: z.string().min(1),
     phoneNumber: z.string().min(10),
-    durationMonths: z.union([z.literal(12), z.literal(24)]),
+    durationMonths: z.union([z.literal(1), z.literal(3), z.literal(12)]),
   });
 
   app.post("/api/license-renewal/initiate", isAuthenticated, async (req: any, res) => {
@@ -8762,7 +8770,19 @@ Crawl-delay: 1`);
         return res.status(400).json({ message: "Invalid phone number. Use 07XXXXXXXX, 01XXXXXXXX, or +254XXXXXXXXX" });
       }
 
-      const amount = LICENSE_RENEWAL_FEES[durationMonths] || LICENSE_RENEWAL_FEES[12];
+      // The badge says "licensed + verified partner" — only sell it while the
+      // NEA licence itself is active.
+      const licenceActive = new Date(agency.expiryDate) > new Date()
+        && !["expired", "revoked", "unlisted", "suspended"].includes(String((agency as any).statusOverride ?? ""));
+      if (!licenceActive) {
+        return res.status(400).json({
+          message: "Your NEA licence isn't active on the NEA register, so we can't list you as a Verified Partner. Renew with NEA first — our register updates automatically within a day.",
+          code: "NEA_LICENCE_NOT_ACTIVE",
+        });
+      }
+
+      const amount = LICENSE_RENEWAL_FEES[durationMonths];
+      if (!amount) return res.status(400).json({ message: "Choose 1, 3 or 12 months." });
 
       const renewalPayment = await storage.createLicenseRenewalPayment({
         agencyId,
@@ -8804,36 +8824,10 @@ Crawl-delay: 1`);
           res.status(500).json({ message: "Failed to initiate M-Pesa payment. Please try again." });
         }
       } else {
-        setTimeout(async () => {
-          try {
-            const receipt = `LRNW${Date.now()}`;
-            const currentExpiry = new Date(agency.expiryDate);
-            const baseDate = currentExpiry > new Date() ? currentExpiry : new Date();
-            const newExpiry = new Date(baseDate);
-            newExpiry.setMonth(newExpiry.getMonth() + durationMonths);
-
-            await storage.updateLicenseRenewalPayment(renewalPayment.id, {
-              status: "success",
-              mpesaReceiptNumber: receipt,
-              newExpiryDate: newExpiry,
-              processedAt: new Date(),
-            });
-
-            await storage.updateNeaAgency(agencyId, {
-              expiryDate: newExpiry,
-              statusOverride: null,
-            });
-          } catch (err) {
-            console.error("[LicenseRenewal] Simulation error:", err);
-          }
-        }, 3000);
-
-        res.json({
-          success: true,
-          paymentId: renewalPayment.id,
-          amount,
-          message: "STK push sent to your phone. Please enter your M-PESA PIN.",
-        });
+        // 2026-11: the old fallback "simulated" a successful payment after 3s
+        // when M-Pesa keys were missing — free badge, no money. Refuse instead.
+        await storage.updateLicenseRenewalPayment(renewalPayment.id, { status: "failed" });
+        res.status(503).json({ message: "M-Pesa is temporarily unavailable. Please try again shortly." });
       }
     } catch (error) {
       console.error("[LicenseRenewal] Error initiating payment:", error);
@@ -8895,10 +8889,16 @@ Crawl-delay: 1`);
         return res.json({ ResultCode: 0, ResultDesc: "Agency not found" });
       }
 
-      const currentExpiry = new Date(agency.expiryDate);
-      const baseDate = currentExpiry > new Date() ? currentExpiry : new Date();
-      const newExpiry = new Date(baseDate);
-      newExpiry.setMonth(newExpiry.getMonth() + renewalPayment.renewalDurationMonths);
+      // Extend the Verified Partner badge (NOT the NEA licence expiry).
+      const { rows: [badgeRow] } = await pool.query<{ until: Date }>(
+        `UPDATE nea_agencies
+            SET partner_badge_until = GREATEST(COALESCE(partner_badge_until, NOW()), NOW()) + make_interval(months => $2::int),
+                last_updated = NOW()
+          WHERE id = $1
+        RETURNING partner_badge_until AS until`,
+        [renewalPayment.agencyId, renewalPayment.renewalDurationMonths],
+      );
+      const newExpiry = badgeRow?.until ? new Date(badgeRow.until) : new Date();
 
       await storage.updateLicenseRenewalPayment(renewalPayment.id, {
         status: "success",
@@ -8907,18 +8907,13 @@ Crawl-delay: 1`);
         processedAt: new Date(),
       });
 
-      await storage.updateNeaAgency(renewalPayment.agencyId, {
-        expiryDate: newExpiry,
-        statusOverride: null,
-      });
-
       // Invalidate NEA agencies cache so public pages reflect the renewed license immediately
       cache.invalidate("nea-agencies:");
 
-      console.log(`[LicenseRenewal] License renewed: ${agency.licenseNumber}, new expiry: ${newExpiry.toISOString()}`);
+      console.log(`[PartnerBadge] ${agency.licenseNumber} Verified Partner until ${newExpiry.toISOString()}`);
 
       // Fire-and-forget SMS via background queue (non-blocking)
-      asyncQueue.enqueue<SmsJob>(QUEUE_TYPES.SMS, { type: 'payment_received', phone: String(phone), amount: Number(amount), serviceName: `License Renewal - ${agency.licenseNumber}` }, 2);
+      asyncQueue.enqueue<SmsJob>(QUEUE_TYPES.SMS, { type: 'payment_received', phone: String(phone), amount: Number(amount), serviceName: `Verified Partner badge - ${agency.licenseNumber}` }, 2);
 
       return res.json({ ResultCode: 0, ResultDesc: "Accepted" });
     } catch (error: any) {
@@ -8965,8 +8960,9 @@ Crawl-delay: 1`);
       fees: Object.entries(LICENSE_RENEWAL_FEES).map(([months, amount]) => ({
         durationMonths: parseInt(months),
         amount,
-        label: parseInt(months) === 12 ? "1 Year" : `${parseInt(months) / 12} Years`,
+        label: partnerLabel(parseInt(months)),
       })),
+      pricePerMonth: PARTNER_PRICE_PER_MONTH_KES,
       currency: "KES",
     });
   });

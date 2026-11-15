@@ -476,7 +476,7 @@ export default function AgencyPortal() {
   const [phoneNumber, setPhoneNumber] = useState("");
   const [isRenewalOpen, setIsRenewalOpen] = useState(false);
   const [renewalPhone, setRenewalPhone] = useState("");
-  const [renewalDuration, setRenewalDuration] = useState("12");
+  const [renewalDuration, setRenewalDuration] = useState("1");
   const [renewalPaymentId, setRenewalPaymentId] = useState<string | null>(null);
   const [renewalPolling, setRenewalPolling] = useState(false);
 
@@ -669,7 +669,7 @@ export default function AgencyPortal() {
       setRenewalPaymentId(null);
       queryClient.invalidateQueries({ queryKey: ["/api/agency-portal/my-agency"] });
       queryClient.invalidateQueries({ queryKey: ["/api/license-renewal/history", myAgency?.id] });
-      toast({ title: "License renewed successfully!", description: `Receipt: ${renewalStatus.mpesaReceiptNumber}` });
+      toast({ title: "You're now a Verified Partner!", description: `Receipt: ${renewalStatus.mpesaReceiptNumber}` });
     }
     if (renewalStatus?.status === "failed" && renewalPolling) {
       setRenewalPolling(false);
@@ -900,7 +900,7 @@ export default function AgencyPortal() {
           <TabsList>
             <TabsTrigger value="overview" data-testid="tab-overview">Overview</TabsTrigger>
             <TabsTrigger value="jobs" data-testid="tab-jobs">My Jobs</TabsTrigger>
-            <TabsTrigger value="renewal" data-testid="tab-renewal">License Renewal</TabsTrigger>
+            <TabsTrigger value="renewal" data-testid="tab-renewal">Verified Partner</TabsTrigger>
             <TabsTrigger value="packages" data-testid="tab-packages">My Packages</TabsTrigger>
             {hasClickAnalytics && (
               <TabsTrigger value="analytics" data-testid="tab-analytics">Analytics</TabsTrigger>
@@ -1037,7 +1037,7 @@ export default function AgencyPortal() {
               <Card>
                 <CardContent className="py-12 text-center">
                   <RefreshCw className="h-10 w-10 mx-auto text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground">Claim your agency first to access license renewal.</p>
+                  <p className="text-muted-foreground">Claim your agency first to become a Verified Partner.</p>
                 </CardContent>
               </Card>
             ) : (
@@ -1045,10 +1045,10 @@ export default function AgencyPortal() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <RefreshCw className="h-5 w-5" />
-                  Renew Your License
+                  Verified Partner badge &amp; featured listing
                 </CardTitle>
                 <CardDescription>
-                  Extend your recruitment agency licence validity via M-PESA payment
+                  KES 5,000 per month — blue Verified Partner badge, priority placement in the agency directory and promotion to Kenyan job-seekers. Your NEA licence itself is renewed with NEA, not here.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -1056,15 +1056,15 @@ export default function AgencyPortal() {
                   <div className="flex items-start gap-3 p-4 bg-destructive/10 border border-destructive/20 rounded-lg" data-testid="license-expired-warning">
                     <AlertTriangle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
                     <div>
-                      <p className="font-medium text-destructive">License Expired</p>
+                      <p className="font-medium text-destructive">NEA licence not active</p>
                       <p className="text-sm text-muted-foreground">
-                        Your license expired on {new Date(myAgency.expiryDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}. Renew now to restore your valid status.
+                        The NEA register shows your licence expired on {new Date(myAgency.expiryDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}. Renew it with NEA first — our register updates automatically within a day — then you can become a Verified Partner.
                       </p>
                     </div>
                   </div>
                 )}
 
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-4 sm:grid-cols-3">
                   {renewalFees?.fees.map((fee) => (
                     <div
                       key={fee.durationMonths}
@@ -1083,9 +1083,7 @@ export default function AgencyPortal() {
                       <p className="text-2xl font-bold text-primary">
                         KES {fee.amount.toLocaleString()}
                       </p>
-                      {fee.durationMonths === 24 && (
-                        <Badge variant="secondary" className="mt-2">Save KES 1,000</Badge>
-                      )}
+                      <p className="text-xs text-muted-foreground mt-1">KES 5,000 / month</p>
                     </div>
                   ))}
                 </div>
@@ -1114,14 +1112,14 @@ export default function AgencyPortal() {
                     <span className="font-medium">{myAgency.licenseNumber}</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span>Current Expiry</span>
+                    <span>NEA licence expiry</span>
                     <span className="font-medium">
                       {new Date(myAgency.expiryDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span>Duration</span>
-                    <span className="font-medium">{selectedFee?.label || "1 Year"}</span>
+                    <span className="font-medium">{selectedFee?.label || "1 month"}</span>
                   </div>
                   <div className="flex justify-between text-sm border-t pt-2 mt-2">
                     <span className="font-semibold">Total Amount</span>
@@ -1165,7 +1163,7 @@ export default function AgencyPortal() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Receipt className="h-5 w-5" />
-                    Renewal History
+                    Partner payments
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -1177,7 +1175,7 @@ export default function AgencyPortal() {
                           <p className="text-sm text-muted-foreground">
                             {new Date(payment.createdAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
                             {" - "}
-                            {payment.renewalDurationMonths === 12 ? "1 Year" : `${payment.renewalDurationMonths / 12} Years`}
+                            {payment.renewalDurationMonths === 1 ? "1 month" : `${payment.renewalDurationMonths} months`} · Verified Partner
                           </p>
                           {payment.mpesaReceiptNumber && (
                             <p className="text-xs text-muted-foreground">Receipt: {payment.mpesaReceiptNumber}</p>
@@ -1329,9 +1327,9 @@ export default function AgencyPortal() {
       <AlertDialog open={isRenewalOpen} onOpenChange={setIsRenewalOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirm License Renewal</AlertDialogTitle>
+            <AlertDialogTitle>Confirm Verified Partner payment</AlertDialogTitle>
             <AlertDialogDescription>
-              You are about to pay <strong>KES {(selectedFee?.amount || 5000).toLocaleString()}</strong> for a <strong>{selectedFee?.label || "1 Year"}</strong> license renewal via M-PESA to phone number <strong>{renewalPhone}</strong>.
+              You are about to pay <strong>KES {(selectedFee?.amount || 5000).toLocaleString()}</strong> for <strong>{selectedFee?.label || "1 month"}</strong> of Verified Partner listing via M-PESA to phone number <strong>{renewalPhone}</strong>.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="p-3 bg-muted rounded-lg text-sm space-y-1">

@@ -454,6 +454,9 @@ export const neaAgencies = pgTable("nea_agencies", {
   claimedAt: timestamp("claimed_at"),
   isVerifiedOwner: boolean("is_verified_owner").notNull().default(false),
   verifiedOwnerAt: timestamp("verified_owner_at"),
+  // 2026-11: paid Verified Partner badge (KES 5,000/month). Separate from the
+  // NEA licence expiry, which only the NEAIMS sync changes.
+  partnerBadgeUntil: timestamp("partner_badge_until"),
   latitude: varchar("latitude"),
   longitude: varchar("longitude"),
   country: varchar("country"),
