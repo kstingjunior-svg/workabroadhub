@@ -19,6 +19,7 @@ import { SuccessStoriesSection } from "@/components/success-stories-section";
 import { AdvisorsSection } from "@/components/advisors-section";
 import { PlatformStatsSection } from "@/components/platform-stats-section";
 import { LiveActivityPanel } from "@/components/live-activity-feed";
+import { usePlatformNumbers } from "@/lib/platform-numbers";
 import { trackLandingView, trackButtonClick } from "@/lib/analytics";
 import { AuthModal } from "@/components/auth-modal";
 import { useToast } from "@/hooks/use-toast";
@@ -62,6 +63,8 @@ export default function Landing() {
   });
 
   const agencyTotal = agencyStats?.total?.toLocaleString() ?? "…";
+  // 2026-11: portal + country numbers come from the database, never hard-coded.
+  const platform = usePlatformNumbers();
   const agencyValid = agencyStats?.valid?.toLocaleString() ?? "…";
   const agencyExpired = agencyStats?.expired?.toLocaleString() ?? "…";
   const agencyLastUpdated = agencyStats?.lastUpdated
@@ -174,7 +177,7 @@ export default function Landing() {
       bgGradient: "from-emerald-50/80 to-teal-50/80 dark:from-emerald-950/40 dark:to-teal-950/40",
       iconBg: "bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900/60 dark:to-teal-900/60",
       iconColor: "text-emerald-600 dark:text-emerald-400",
-      stat: "30+ portals"
+      stat: `${platform.portalsLabel} portals`
     },
     {
       icon: GraduationCap,
@@ -185,7 +188,7 @@ export default function Landing() {
       bgGradient: "from-blue-50/80 to-indigo-50/80 dark:from-blue-950/40 dark:to-indigo-950/40",
       iconBg: "bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-blue-900/60 dark:to-indigo-900/60",
       iconColor: "text-blue-600 dark:text-blue-400",
-      stat: "6 countries"
+      stat: `${platform.countries} countries`
     },
     {
       icon: Shield,
@@ -205,7 +208,7 @@ export default function Landing() {
       code: "US", 
       name: "United States", 
       tagline: "Federal & private sector jobs",
-      portals: "3+ verified portals",
+      portals: `${platform.portalsFor("usa") ?? "…"} verified portals`,
       demand: "High demand",
       gradient: "from-blue-600 to-red-600"
     },
@@ -213,7 +216,7 @@ export default function Landing() {
       code: "CA", 
       name: "Canada", 
       tagline: "Skilled worker programs",
-      portals: "5+ verified portals",
+      portals: `${platform.portalsFor("canada") ?? "…"} verified portals`,
       demand: "Express Entry",
       gradient: "from-red-500 to-red-600"
     },
@@ -221,7 +224,7 @@ export default function Landing() {
       code: "UK", 
       name: "United Kingdom", 
       tagline: "NHS & skilled migration",
-      portals: "5+ verified portals",
+      portals: `${platform.portalsFor("uk") ?? "…"} verified portals`,
       demand: "Tier 2 Visa",
       gradient: "from-blue-700 to-red-700"
     },
@@ -229,7 +232,7 @@ export default function Landing() {
       code: "AU", 
       name: "Australia", 
       tagline: "Points-based migration",
-      portals: "5+ verified portals",
+      portals: `${platform.portalsFor("australia") ?? "…"} verified portals`,
       demand: "Skilled visas",
       gradient: "from-blue-600 to-yellow-500"
     },
@@ -237,7 +240,7 @@ export default function Landing() {
       code: "AE", 
       name: "UAE / Gulf States", 
       tagline: "Tax-free opportunities",
-      portals: "5+ verified portals",
+      portals: `${platform.portalsFor("uae") ?? "…"} verified portals`,
       demand: "High salaries",
       gradient: "from-green-600 to-red-600"
     },
@@ -245,7 +248,7 @@ export default function Landing() {
       code: "EU",
       name: "Europe",
       tagline: "7 countries covered",
-      portals: "14+ verified portals",
+      portals: `${platform.portalsFor("europe") ?? "…"} verified portals`,
       demand: "EU Blue Card",
       gradient: "from-blue-600 to-yellow-500"
     },
@@ -257,7 +260,7 @@ export default function Landing() {
       code: "LU",
       name: "Luxembourg",
       tagline: "Skilled IT, finance & fund admin only",
-      portals: "4 verified portals",
+      portals: `${platform.portalsFor("luxembourg") ?? "…"} verified portals`,
       demand: "EU Blue Card · KES 800k+/mo",
       gradient: "from-sky-500 to-red-500"
     },
@@ -269,7 +272,7 @@ export default function Landing() {
       code: "LT",
       name: "Lithuania",
       tagline: "Truck drivers, welders & Vilnius IT",
-      portals: "5 verified portals",
+      portals: `${platform.portalsFor("lithuania") ?? "…"} verified portals`,
       demand: "D-visa · KES 300k–520k/mo",
       gradient: "from-yellow-500 to-green-600"
     }
@@ -550,9 +553,9 @@ export default function Landing() {
                   <ul className="space-y-2 text-sm" style={{ color: '#3A4A5A' }}>
                     {[
                       '1-on-1 WhatsApp session with advisor',
-                      'Access to 30+ verified job portals',
+                      `Access to ${platform.portalsLabel} job portals in ${platform.countries} countries`,
                       'Recruitment agency licence database',
-                      'CV templates for 6 countries',
+                      'Country-specific CV templates',
                     ].map((item) => (
                       <li key={item} className="flex items-start gap-2">
                         <CheckCircle className="h-4 w-4 flex-shrink-0 mt-0.5" style={{ color: '#4A6A5E' }} />
@@ -1199,7 +1202,7 @@ export default function Landing() {
                   </Button>
                   <div className="text-xs text-blue-200/70 sm:py-3">
                     Free to list · Verification in 24h<br/>
-                    Premium upgrades from KES 1,500/mo
+                    Paid add-ons from KES 5,000
                   </div>
                 </div>
               </div>
@@ -1717,7 +1720,7 @@ export default function Landing() {
                   step: "3",
                   icon: Globe,
                   title: "Access Verified Portals",
-                  description: "Browse our curated list of 30+ verified job portals across USA, Canada, UK, Australia, UAE, and Europe. All links verified and regularly updated.",
+                  description: `Browse our curated list of ${platform.portalsLabel} job portals across ${platform.countries} countries — UK, Canada, the Gulf, Australia, Europe and more. Links are checked regularly.`,
                   gradient: "from-purple-500 to-violet-600"
                 },
                 {
@@ -1771,10 +1774,10 @@ export default function Landing() {
             
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6 sm:gap-8">
               {[
-                { value: "30+", label: "Verified Job Portals", sublabel: "Curated & updated regularly", id: "portals" },
-                { value: "6", label: "Countries Covered", sublabel: "USA, Canada, UK, UAE, Australia, Europe", id: "countries" },
+                { value: platform.portalsLabel, label: "Job Portals", sublabel: "Curated & updated regularly", id: "portals" },
+                { value: String(platform.countries), label: "Countries Covered", sublabel: "UK, Canada, the Gulf, Australia, Europe & more", id: "countries" },
                 { value: agencyTotal, label: "Licensed Recruitment Agencies", sublabel: "Check before you pay", id: "agencies" },
-                { value: "24/7", label: "WhatsApp Support", sublabel: "Career guidance when you need it", id: "support" }
+                { value: "WhatsApp", label: "Support", sublabel: "During working hours", id: "support" }
               ].map((stat, index) => (
                 <div key={index} className="text-center p-6 bg-white/5 rounded-2xl border border-white/10 backdrop-blur-sm" data-testid={`stat-${stat.id}`}>
                   <div className="text-3xl sm:text-4xl font-bold text-white mb-2">{stat.value}</div>
@@ -1808,7 +1811,7 @@ export default function Landing() {
                   What exactly am I paying for with the KES 4,500 fee?
                 </AccordionTrigger>
                 <AccordionContent className="text-muted-foreground pb-5 leading-relaxed">
-                  The KES 4,500 is a one-time career consultation fee that includes: (1) A personalized 1-on-1 WhatsApp consultation with our career advisors who will assess your skills, experience, and goals to recommend the best countries and job types for you, (2) Access to our curated database of 30+ verified job portals across 6 countries (USA, Canada, UK, Australia, UAE, and Europe) for as long as the service remains available, (3) Country-specific CV templates and application guidance, (4) Access to our recruitment agency verification database to protect you from scams, and (5) Regular updates as we add new resources and job portals. Access to online resources continues for as long as the service is operational.
+                  The KES 4,500 is a one-time career consultation fee that includes: (1) A personalized 1-on-1 WhatsApp consultation with our career advisors who will assess your skills, experience, and goals to recommend the best countries and job types for you, (2) Access to our curated database of job portals across our country hubs (UK, Canada, the Gulf, Australia, Europe and more) for as long as the service remains available, (3) Country-specific CV templates and application guidance, (4) Access to our recruitment agency verification database to protect you from scams, and (5) Regular updates as we add new resources and job portals. Access to online resources continues for as long as the service is operational.
                 </AccordionContent>
               </AccordionItem>
               

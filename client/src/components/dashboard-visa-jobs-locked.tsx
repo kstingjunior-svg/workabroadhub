@@ -234,7 +234,7 @@ export function DashboardVisaJobsLocked() {
           <div className="flex-1 min-w-0">
             <p className="text-sm font-bold mb-0.5">All {jobs.length} jobs unlock with Pro</p>
             <p className="text-xs text-white/85">
-              KES 4,500/year · Less than mandazi/day · Apply to every job + 30+ portals + WhatsApp support
+              KES 4,500/year · Less than mandazi/day · Apply to every job + all job portals + WhatsApp support
             </p>
           </div>
           <Link

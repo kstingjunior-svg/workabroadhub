@@ -51,7 +51,7 @@ const UPGRADE_MODAL_FREE_LIST = [
 
 const UPGRADE_MODAL_PRO_LIST = [
   "Unlimited agency licence checks",
-  "All 30+ portals",
+  "All curated job portals",
   "ATS CV scanner",
   "WhatsApp consultation",
   "Application tracking",

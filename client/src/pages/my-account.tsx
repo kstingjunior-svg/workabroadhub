@@ -565,7 +565,7 @@ export default function MyAccountPage() {
                       </h4>
                       {key === "pro_plan" && (
                         <p className="text-sm text-[#5A6A7A] dark:text-gray-400">
-                          Unlimited agency licence checks · 30+ portals · ATS scanner · WhatsApp consultation
+                          Unlimited agency licence checks · all job portals · ATS scanner · WhatsApp consultation
                         </p>
                       )}
                       {sub.paidAmount > 0 && (

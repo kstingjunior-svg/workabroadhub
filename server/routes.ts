@@ -2102,6 +2102,16 @@ Crawl-delay: 1`);
 
       const activeVisitors = await storage.getActiveUsers(10);
       const countriesServed = Number(((distinctCountries as any).rows?.[0]?.c) ?? 0) || 15;
+      // 2026-11 (Tony: "I need them to match"): the job-portal links users
+      // actually see live in job_links (per country hub). verified_portals is
+      // an unused legacy table (0 rows), so the "Verified Portals" stat read 0.
+      const portalRows = await pool.query<{ code: string; n: number }>(
+        `SELECT c.code, count(j.*)::int AS n
+           FROM countries c JOIN job_links j ON j.country_id = c.id AND j.is_active
+          WHERE c.is_active GROUP BY c.code`,
+      ).catch(() => ({ rows: [] as { code: string; n: number }[] }));
+      const portalsByCountry = Object.fromEntries(portalRows.rows.map((r) => [r.code, Number(r.n)]));
+      const jobPortals = portalRows.rows.reduce((t, r) => t + Number(r.n), 0);
 
       // 2026-06 UNIFY: count online users from the SAME source the admin
       // dashboard uses — the `active_sessions` table with is_online = true.
@@ -2135,7 +2145,9 @@ Crawl-delay: 1`);
         inMemoryActive: inMemoryActive.total,
         activeVisitors,
         // ── Public stats card metrics ──────────────────────────────────────
-        activePortals: Number(activePortals[0]?.c ?? 0),
+        activePortals: jobPortals || Number(activePortals[0]?.c ?? 0),
+        jobPortals,
+        portalsByCountry,
         successStories: Number(verifiedSuccessStories[0]?.c ?? 0),
         consultationsCompleted: Number(completedConsultations[0]?.c ?? 0),
         agencyReviews: Number(agencyReviewCount[0]?.c ?? 0),

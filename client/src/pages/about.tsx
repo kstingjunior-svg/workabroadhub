@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useQuery } from "@tanstack/react-query";
+import { usePlatformNumbers } from "@/lib/platform-numbers";
 import {
   Shield, Users, Award, MapPin, Phone, Mail,
   CheckCircle, Globe, Star, Target, Heart, ArrowRight, Briefcase
@@ -61,7 +62,8 @@ export default function AboutPage() {
 
   const [bookingOpen, setBookingOpen] = useState(false);
 
-  const { data: publicStats } = useQuery<{ totalUsers: number; expiredAgencies: number }>({
+  const platform = usePlatformNumbers();
+  const { data: publicStats } = useQuery<{ totalUsers: number; expiredAgencies: number; totalAgencies?: number }>({
     queryKey: ["/api/public/stats"],
     staleTime: 5 * 60 * 1000,
   });
@@ -106,9 +108,9 @@ export default function AboutPage() {
         <div className="max-w-4xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
           {[
             { value: publicStats?.totalUsers ? `${publicStats.totalUsers.toLocaleString()}+` : "…", label: "Users Served" },
-            { value: "1,296", label: "Licensed Recruitment Agencies" },
-            { value: "30+", label: "Job Portals Curated" },
-            { value: "6", label: "Destination Countries" },
+            { value: publicStats?.totalAgencies ? publicStats.totalAgencies.toLocaleString() : "…", label: "Licensed Recruitment Agencies" },
+            { value: platform.portalsLabel, label: "Job Portals Curated" },
+            { value: String(platform.countries), label: "Destination Countries" },
           ].map(s => (
             <div key={s.label} data-testid={`stat-${s.label.toLowerCase().replace(/ /g, "-")}`}>
               <div className="text-3xl font-bold text-teal-600">{s.value}</div>

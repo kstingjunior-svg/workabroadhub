@@ -11,6 +11,7 @@
  */
 import { Sparkles, MessageCircle, CreditCard, CheckCircle2 } from "lucide-react";
 import { Link } from "wouter";
+import { usePlatformNumbers } from "@/lib/platform-numbers";
 
 interface LandingFinalCtaProps {
   /** Called when user clicks "Start now". Lets the parent open the signup modal. */
@@ -18,6 +19,7 @@ interface LandingFinalCtaProps {
 }
 
 export function LandingFinalCta({ onStartClick }: LandingFinalCtaProps) {
+  const platform = usePlatformNumbers();
   return (
     <section className="py-16 px-4 sm:px-6 lg:px-8 bg-white dark:bg-gray-950">
       <div className="max-w-4xl mx-auto">
@@ -81,7 +83,7 @@ export function LandingFinalCta({ onStartClick }: LandingFinalCtaProps) {
           <div className="mt-7 inline-flex items-start gap-2 px-4 py-3 rounded-xl bg-white/70 dark:bg-gray-900/50 text-left text-sm text-gray-700 dark:text-gray-300 max-w-2xl mx-auto">
             <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
             <span>
-              <strong className="text-gray-900 dark:text-white">What you get immediately:</strong> live agency licence verification, 30+ verified portals, 6 country-specific CV templates, and a 30-minute 1-on-1 WhatsApp session with an advisor.
+              <strong className="text-gray-900 dark:text-white">What you get immediately:</strong> live agency licence verification, curated job portals across {platform.countries} countries, country-specific CV templates, and a 30-minute 1-on-1 WhatsApp session with an advisor.
             </span>
           </div>
 

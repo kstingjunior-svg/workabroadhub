@@ -12,7 +12,7 @@ const FEE_SERVICES = [
   },
   {
     name: "Portal Database Access",
-    description: "30+ verified overseas job portals (UK, Canada, UAE & more)",
+    description: "Curated overseas job portals (UK, Canada, the Gulf & more)",
     value: 1000,
     color: "bg-blue-500",
     lightBg: "bg-blue-50 dark:bg-blue-950/30",

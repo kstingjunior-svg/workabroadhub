@@ -516,31 +516,13 @@ function RecentSignupsPanel() {
 }
 
 /* ── Support Team ── */
+// 2026-11 (Tony): "Grace M. / James K. / Sarah W." were not real people and
+// their "Available now" status was invented. These are now honest topic
+// shortcuts that all open a chat with the real WorkAbroad Hub support line.
 const ADVISORS = [
-  {
-    initials: "GM",
-    name: "Grace M.",
-    role: "UK NHS Specialist",
-    statusLabel: "🟢 Available now",
-    statusColor: "#4CAF50",
-    waQuery: "Hi Grace, I need guidance on NHS healthcare jobs in the UK.",
-  },
-  {
-    initials: "JK",
-    name: "James K.",
-    role: "Gulf & UAE Expert",
-    statusLabel: "🟡 Available at 2 PM",
-    statusColor: "#E6A700",
-    waQuery: "Hi James, I need guidance on jobs in the Gulf/UAE.",
-  },
-  {
-    initials: "SW",
-    name: "Sarah W.",
-    role: "Canada Express Entry",
-    statusLabel: "🟢 Available now",
-    statusColor: "#4CAF50",
-    waQuery: "Hi Sarah, I need guidance on Canada Express Entry and jobs in Canada.",
-  },
+  { initials: "UK", name: "UK & NHS jobs", role: "Ask our support team", waQuery: "Hi WorkAbroad Hub, I need guidance on NHS / healthcare jobs in the UK." },
+  { initials: "GCC", name: "Gulf & UAE jobs", role: "Ask our support team", waQuery: "Hi WorkAbroad Hub, I need guidance on jobs in the Gulf/UAE." },
+  { initials: "CA", name: "Canada", role: "Ask our support team", waQuery: "Hi WorkAbroad Hub, I need guidance on Canada Express Entry and jobs in Canada." },
 ];
 
 function SupportTeamSection({ isPro, onUpgrade }: { isPro: boolean; onUpgrade: () => void }) {
@@ -553,7 +535,7 @@ function SupportTeamSection({ isPro, onUpgrade }: { isPro: boolean; onUpgrade: (
       {/* Header */}
       <div className="flex items-center justify-between mb-5">
         <h4 className="text-base font-semibold text-gray-900 dark:text-gray-100">
-          👋 Your Support Team
+          👋 Talk to WorkAbroad Hub support
         </h4>
         {isPro && (
           <a
@@ -582,7 +564,6 @@ function SupportTeamSection({ isPro, onUpgrade }: { isPro: boolean; onUpgrade: (
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 leading-snug">{a.name}</p>
               <p className="text-[11px] text-gray-500 dark:text-gray-400 mb-1">{a.role}</p>
-              <p className="text-[11px] font-medium mb-2" style={{ color: a.statusColor }}>{a.statusLabel}</p>
               {isPro ? (
                 <a
                   href={`https://wa.me/${waBase}?text=${encodeURIComponent(a.waQuery)}`}
@@ -609,7 +590,7 @@ function SupportTeamSection({ isPro, onUpgrade }: { isPro: boolean; onUpgrade: (
 
       {/* Note */}
       <p className="mt-5 text-xs text-gray-500 dark:text-gray-400 bg-[#F9F8F6] dark:bg-gray-700/50 rounded-lg px-3 py-2.5 leading-relaxed">
-        💬 <strong className="text-gray-700 dark:text-gray-300">Need immediate help?</strong> Your advisors are real professionals who understand the Kenyan overseas job market.
+        💬 <strong className="text-gray-700 dark:text-gray-300">Real people, on WhatsApp</strong> · we reply during working hours.
       </p>
     </div>
   );
