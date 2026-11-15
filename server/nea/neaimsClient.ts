@@ -73,9 +73,29 @@ interface NeaimsListResponse {
  *                     and self-submitted rows we'll filter later)
  */
 export async function fetchNeaimsAgencies(verifiedOnly: boolean): Promise<NeaimsAgency[]> {
+  // 2026-11: page through instead of trusting one request. If NEAIMS caps the
+  // page size below PAGE_SIZE, a single call silently dropped every agency
+  // past the cap. Stops when a page comes back short or `count` is reached.
+  const all: NeaimsAgency[] = [];
+  const seen = new Set<string>();
+  for (let page = 1; page <= 20; page++) {
+    const { data, count } = await fetchNeaimsPage(verifiedOnly, page);
+    let fresh = 0;
+    for (const r of data) {
+      const key = r.instId || `${r.instRegNo}|${r.instName}`;
+      if (seen.has(key)) continue;
+      seen.add(key); all.push(r); fresh++;
+    }
+    const total = Number(count) || 0;
+    if (data.length === 0 || fresh === 0 || (total > 0 && all.length >= total) || (total === 0 && data.length < PAGE_SIZE)) break;
+  }
+  return all;
+}
+
+async function fetchNeaimsPage(verifiedOnly: boolean, page: number): Promise<{ data: NeaimsAgency[]; count: number }> {
   const url = `${NEAIMS_BASE}${NEAIMS_LIST_PATH}`;
   const body = JSON.stringify({
-    page:         1,
+    page,
     size:         PAGE_SIZE,
     search:       "",
     verifiedOnly,
@@ -146,7 +166,7 @@ export async function fetchNeaimsAgencies(verifiedOnly: boolean): Promise<Neaims
     );
   }
 
-  return json.data;
+  return { data: json.data, count: Number(json.count) || 0 };
 }
 
 /**

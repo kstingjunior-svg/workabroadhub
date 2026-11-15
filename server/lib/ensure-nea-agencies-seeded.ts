@@ -619,6 +619,24 @@ const NEA_AGENCIES: NeaSeed[] = [
 ];
 
 export async function ensureNeaAgenciesSeeded(): Promise<void> {
+  // 2026-11 (Tony: "why is ABC (African) showing EXPIRED?"): this June-26
+  // snapshot ran on EVERY boot and overwrote expiry_date with June data,
+  // undoing the live NEAIMS sync. Agencies that renewed after June (e.g. ABC,
+  // NEA expiry 20/09/2027) flipped back to "expired" after each deploy — 73
+  // licensed agencies were wrongly shown expired. The live NEAIMS sync is the
+  // source of truth now: once it has run, this seed never touches the table.
+  // Before that (fresh database), it only INSERTS missing agencies.
+  try {
+    const { rows } = await pool.query<{ ok: boolean }>(
+      `SELECT EXISTS (SELECT 1 FROM nea_sync_runs
+                       WHERE status IN ('succeeded','partial') AND COALESCE(clean_total,0) > 100) AS ok`,
+    );
+    if (rows[0]?.ok) {
+      console.log("[ensureNeaAgencies] Skipped — live NEAIMS sync is the source of truth.");
+      return;
+    }
+  } catch { /* table missing on a fresh DB → fall through to insert-only seed */ }
+
   const client = await pool.connect();
   let inserted = 0;
   let updated = 0;
@@ -648,18 +666,7 @@ export async function ensureNeaAgenciesSeeded(): Promise<void> {
              (agency_name, license_number, email, service_type, issue_date,
               expiry_date, status_override, is_published, last_updated)
            VALUES ($1, $2, $3, $4, $5::date, $6::date, $7, true, NOW())
-           ON CONFLICT (license_number) DO UPDATE
-             SET agency_name = EXCLUDED.agency_name,
-                 email = EXCLUDED.email,
-                 service_type = EXCLUDED.service_type,
-                 expiry_date = EXCLUDED.expiry_date,
-                 status_override = CASE
-                   WHEN nea_agencies.status_override = 'verified'
-                        AND EXCLUDED.expiry_date < CURRENT_DATE
-                     THEN NULL
-                   ELSE nea_agencies.status_override
-                 END,
-                 last_updated = NOW()
+           ON CONFLICT (license_number) DO NOTHING
            RETURNING (xmax = 0) AS inserted`,
           [a.agencyName, a.licenseNumber, a.email, a.serviceType, a.issueDate, a.expiryDate, initialOverride],
         );
