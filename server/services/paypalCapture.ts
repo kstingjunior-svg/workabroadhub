@@ -332,6 +332,48 @@ async function completePayPalCaptureOnce(
     console.warn(`${logTag}[Verify] API unavailable for paymentId=${payment.id} — proceeding with upgrade (non-blocking)`);
   }
 
+  // ── 3b. One-off SERVICE purchase (e.g. CV Revamp) — 2026-11 ─────────────
+  // upgradeUserAccount() only accepts plan_* purchases and marked service
+  // payments "failed"+suspicious even after PayPal took the money. For a
+  // service order: mark the payment completed once (atomic), start the
+  // service order, and only grant portal access if the flat full-portal fee
+  // was charged (Tony's August rule). Exact-price services (CV Revamp at
+  // KES 200) buy the document only.
+  {
+    let meta: any = {};
+    try { meta = typeof payment.metadata === "string" ? JSON.parse(payment.metadata) : (payment.metadata ?? {}); } catch { meta = {}; }
+    const serviceOrderId: string | undefined = meta?.serviceOrderId;
+    const isPlanPurchase = String(payment.serviceId ?? "").startsWith("plan_");
+    if (!isPlanPurchase && serviceOrderId) {
+      const { rows: claimed } = await pool.query<{ id: string }>(
+        `UPDATE payments
+            SET status = 'completed', processed = true, processed_at = NOW(),
+                transaction_ref = $2, updated_at = NOW()
+          WHERE id = $1 AND processed IS NOT TRUE
+        RETURNING id`,
+        [payment.id, capture.transactionId],
+      );
+      if (claimed[0]) {
+        const { onPaymentSuccessForServiceOrder } = await import("../service-order-routes");
+        onPaymentSuccessForServiceOrder(serviceOrderId).catch((e: any) => console.error(`${logTag} service order start failed:`, e?.message));
+        if (meta?.paypalFlatFee === true) {
+          // Flat fee = full portal access as advertised.
+          await upgradeUserAccount({
+            userId, email: capture.payerEmail || (payment as any).email || undefined,
+            planType: "pro", transactionId: capture.transactionId, paymentId: payment.id,
+            serviceId: "plan_pro", method: "paypal", paymentSource: "web", amountKes: kesAmount,
+            extraMeta: { paypalOrderId, serviceOrderId, flatFeeService: payment.serviceId, source },
+          }).catch((e: any) => console.error(`${logTag} flat-fee plan activation failed:`, e?.message));
+        }
+        console.info(`[Payment][COMPLETE] PayPal SERVICE | txn=${capture.transactionId} | paymentId=${payment.id} | order=${serviceOrderId} | KES=${kesAmount} | flatFee=${meta?.paypalFlatFee === true} | source=${source}`);
+      }
+      return {
+        status: 200,
+        body: { success: true, transactionId: capture.transactionId, amountUSD: capture.amountUSD, serviceOrderId, alreadyProcessed: !claimed[0] },
+      };
+    }
+  }
+
   // ── 4. Auto-unlock via centralized upgradeUserAccount ───────────────────
   const svcId = payment.serviceId || "main_subscription";
   const CANONICAL = new Set(["trial", "basic", "monthly", "yearly", "pro", "pro_referral"]);

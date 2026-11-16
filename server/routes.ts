@@ -15766,48 +15766,26 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
         return res.json({ success: true, status: order.status });
       }
 
-      const { transactionId } = req.body;
-      const paymentRef = transactionId || `PP-${Date.now()}`;
-
-      await storage.updateServiceOrder(order.id, {
-        status: "processing",
-        paymentMethod: "paypal",
-        paymentRef,
-      });
-
-      // Notify the user
-      await storage.createUserNotification({
-        userId: order.userId,
-        orderId: order.id,
-        title: "Payment Confirmed — Order Processing",
-        message: `PayPal payment confirmed (${paymentRef}). Your ${order.serviceName} is now being prepared.`,
-        type: "order_update",
-      }).catch((err) => reportRejection(err, 'routes'));
-
-      // Sync completed payment to Supabase
-      console.log('CALLING PAYMENT SYNC NOW');
-      await syncPaymentToSupabase({
-        user_id:  order.userId,
-        phone:    null,
-        amount:   Number((order as any).amount || (order as any).totalPrice || 0),
-        mpesa_code: paymentRef || null,
-        status:   "completed",
-        currency: "KES",
-      });
-      await upgradeUserToPro(order.userId);
-
-      // Auto-trigger AI processing in the background
-      setImmediate(async () => {
-        try {
-          const { processAndDeliverOrder } = await import("./services/ai-processor");
-          await processAndDeliverOrder(order.id);
-          console.log(`[ServiceOrder][PayPal] Auto-processing complete for ${order.id}`);
-        } catch (aiErr: any) {
-          console.error(`[ServiceOrder][PayPal] Auto-processing failed for ${order.id}:`, aiErr.message);
-        }
-      });
-
-      res.json({ success: true, status: "processing" });
+      // 2026-11 (SECURITY): this endpoint used to trust the browser — it set
+      // the order to processing, upgraded the user to Pro and started
+      // generation with NO check that PayPal had been paid. Now it only
+      // proceeds if a PayPal payment for THIS order and THIS user has been
+      // captured and verified server-side (completePayPalCapture), which also
+      // starts the order itself. This call is just a confirmation for the UI.
+      const { rows: paid } = await pool.query<{ id: string; transaction_ref: string | null }>(
+        `SELECT id, transaction_ref FROM payments
+          WHERE user_id = $1 AND method = 'paypal'
+            AND (processed = true OR status IN ('completed','success'))
+            AND metadata::text LIKE '%"serviceOrderId":"' || $2 || '"%'
+          ORDER BY created_at DESC LIMIT 1`,
+        [userId, order.id],
+      );
+      if (!paid[0]) {
+        return res.status(402).json({ message: "We haven't received a confirmed PayPal payment for this order yet. If PayPal took the money, it will be confirmed automatically within a few minutes." });
+      }
+      const { onPaymentSuccessForServiceOrder } = await import("./service-order-routes");
+      await onPaymentSuccessForServiceOrder(order.id).catch(() => {});
+      res.json({ success: true, status: "processing", paymentRef: paid[0].transaction_ref });
     } catch (error) {
       console.error("Error completing PayPal service order:", error);
       res.status(500).json({ message: "Failed to complete order" });
@@ -21290,6 +21268,7 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
       kesToUsdRate,
       flatFeeKes,
       flatFeeUsd: kesToUsd(flatFeeKes).toFixed(2),
+      exactPriceSlugs: ["cv_fix_lite"],
     });
   });
 
@@ -21508,8 +21487,11 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
       // access. Record what is actually charged, and the plan that flat fee
       // buys (full portal access = Yearly/pro). The originally requested
       // price is kept in metadata for audit.
-      const { getPayPalFlatFeeKes } = await import("./paypal");
-      const chargedKes = getPayPalFlatFeeKes();
+      const { getPayPalFlatFeeKes, PAYPAL_EXACT_PRICE_SLUGS } = await import("./paypal");
+      // 2026-11 (Tony): CV Revamp is sold on PayPal at its own price (KES 200),
+      // like M-Pesa. Everything else keeps the flat full-portal fee.
+      const exactPrice = PAYPAL_EXACT_PRICE_SLUGS.has(String(serviceId).toLowerCase()) && verifiedAmount > 0;
+      const chargedKes = exactPrice ? verifiedAmount : getPayPalFlatFeeKes();
       const requestedKes = verifiedAmount;
       const paypalPlanId = serviceId.startsWith("plan_") ? "pro" : null;
 
@@ -21528,7 +21510,7 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
         status: "pending",
         serviceId,
         serviceName: paypalServiceName,
-        metadata: JSON.stringify({ refCode: refCode || null, appliedPromo: resolvedPaypal?.appliedPromo || null, requestedKes, chargedKes, paypalFlatFee: true, ...(serviceOrderId ? { serviceOrderId } : {}) }),
+        metadata: JSON.stringify({ refCode: refCode || null, appliedPromo: resolvedPaypal?.appliedPromo || null, requestedKes, chargedKes, paypalFlatFee: !exactPrice, ...(serviceOrderId ? { serviceOrderId } : {}) }),
       } as any);
 
       console.info(
@@ -21546,6 +21528,7 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
           returnUrl: safePayPalUrl(req.body?.returnUrl, "/payment", { paypalReturn: "1", pid: paymentRecord.id }),
           cancelUrl: safePayPalUrl(req.body?.cancelUrl, "/payment", { paypalCancel: "1" }),
         },
+        { exactPrice },
       );
 
       // Persist the PayPal order ID onto the payment row — without this,

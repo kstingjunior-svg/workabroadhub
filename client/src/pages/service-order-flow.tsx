@@ -138,6 +138,12 @@ export default function ServiceOrderFlow() {
 
   // ── Payment-stage state (standalone M-Pesa STK on the same page) ─────────
   const [amount, setAmount] = useState<number>(0);
+  // 2026-11: show the real PayPal charge before redirecting. CV Revamp is
+  // charged its own price; other services use the flat full-portal fee.
+  const [paypalCfg, setPaypalCfg] = useState<{ flatFeeUsd?: string; flatFeeKes?: number; kesToUsdRate?: number; exactPriceSlugs?: string[] } | null>(null);
+  useEffect(() => {
+    fetch("/api/paypal/config", { credentials: "include" }).then((r) => r.ok ? r.json() : null).then((d) => d && setPaypalCfg(d)).catch(() => {});
+  }, []);
   const [mpesaPhone, setMpesaPhone] = useState<string>("");
   const [payingNow, setPayingNow] = useState<boolean>(false);
   const [stkSent, setStkSent] = useState<boolean>(false);
@@ -1244,8 +1250,18 @@ export default function ServiceOrderFlow() {
                 <div className="flex-1 h-px bg-border" />
               </div>
 
-              <div className="rounded-xl border border-blue-300 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30 px-3 py-2 text-[11px] text-blue-800 dark:text-blue-200 flex items-center gap-2">
+              <div className="rounded-xl border border-blue-300 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30 px-3 py-2 text-[11px] text-blue-800 dark:text-blue-200 flex flex-col gap-1">
                 <span>🌍 Not in Kenya? Use PayPal — works with any card (Visa, Mastercard, PayPal balance)</span>
+                {paypalCfg && (() => {
+                  const exact = (paypalCfg.exactPriceSlugs ?? []).includes(String(slug));
+                  const rate = paypalCfg.kesToUsdRate || 130;
+                  const usd = exact ? Math.max(1, Math.round((amount / rate) * 100) / 100).toFixed(2) : paypalCfg.flatFeeUsd;
+                  return (
+                    <strong className="text-blue-900 dark:text-blue-100" data-testid="text-paypal-charge">
+                      PayPal charge: USD {usd}{exact ? ` (≈ KES ${amount.toLocaleString()})` : ` — includes 1 year of full portal access`}
+                    </strong>
+                  );
+                })()}
               </div>
 
               <Button

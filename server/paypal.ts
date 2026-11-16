@@ -40,6 +40,13 @@ const KES_TO_USD_RATE = Number(process.env.PAYPAL_KES_RATE) || 130;
 const PAYPAL_FLAT_FEE_KES = Number(process.env.PAYPAL_FLAT_FEE_KES) || 4500;
 export function getPayPalFlatFeeKes(): number { return PAYPAL_FLAT_FEE_KES; }
 
+/**
+ * 2026-11 (Tony): services sold on PayPal at their OWN price instead of the
+ * flat fee. CV Revamp is KES 200 on M-Pesa and on PayPal (≈ USD 1.54), and
+ * buys the CV only — no portal access.
+ */
+export const PAYPAL_EXACT_PRICE_SLUGS = new Set<string>(["cv_fix_lite"]);
+
 // ─── Client factory ──────────────────────────────────────────────────────────
 // Never cache the client — tokens expire. Always call this fresh per request.
 
@@ -127,6 +134,7 @@ export async function createPayPalOrder(
   description: string,
   internalRef: string,
   urls?: { returnUrl?: string | null; cancelUrl?: string | null },
+  opts?: { exactPrice?: boolean },
 ): Promise<{ id: string; status: string; approvalUrl: string }> {
   const client = buildClient();
 
@@ -136,7 +144,7 @@ export async function createPayPalOrder(
   // Log the requested vs. effective amount so we can audit anyone who
   // was undercharged before this change landed.
   const requestedKes = amountKes;
-  const effectiveKes = PAYPAL_FLAT_FEE_KES;
+  const effectiveKes = opts?.exactPrice ? amountKes : PAYPAL_FLAT_FEE_KES;
   if (requestedKes !== effectiveKes) {
     console.log(
       `[PayPal] Flat-fee override: caller requested KES ${requestedKes} → charged KES ${effectiveKes} for full-portal access.`
@@ -146,7 +154,9 @@ export async function createPayPalOrder(
 
   // Rewrite the description so the PayPal checkout page tells the
   // buyer exactly what they're paying for.
-  const flatFeeDescription = `WorkAbroad Hub — Full portal access (${description})`.slice(0, 127);
+  const flatFeeDescription = (opts?.exactPrice
+    ? `WorkAbroad Hub — ${description}`
+    : `WorkAbroad Hub — Full portal access (${description})`).slice(0, 127);
 
   const request = new paypalCheckout.orders.OrdersCreateRequest();
   request.prefer("return=representation");
