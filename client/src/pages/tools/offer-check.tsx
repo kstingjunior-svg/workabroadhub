@@ -45,6 +45,9 @@ export default function OfferCheckPage() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<VxReport | null>(null);
   const [consent, setConsent] = useState(false);
+  // 2026-11 intelligence engine: optional recruiter email for sender / payment checks.
+  const [recruiterEmail, setRecruiterEmail] = useState("");
+  const [showEmail, setShowEmail] = useState(false);
 
   // 2026-10 (Tony's "customer paid twice because scan never fired" fix):
   // if payment confirms AFTER the file state was lost (tab backgrounded
@@ -180,6 +183,7 @@ export default function OfferCheckPage() {
     async function postOnce(): Promise<Response> {
       const form = new FormData();
       form.append("file", upload!);
+      if (recruiterEmail.trim()) form.append("recruiterEmail", recruiterEmail.trim().slice(0, 20000));
       const csrf = await fetchCsrfToken();
       return fetch("/api/tools/offer-verify", {
         method: "POST",
@@ -361,6 +365,22 @@ export default function OfferCheckPage() {
                       </div>
                     </div>
                   )}
+                  <div className="rounded-lg border border-gray-200 dark:border-gray-800 p-3 bg-white dark:bg-gray-900/40">
+                    {!showEmail ? (
+                      <button type="button" onClick={() => setShowEmail(true)} className="text-sm font-semibold text-teal-700 dark:text-teal-400 hover:underline text-left" data-testid="button-add-recruiter-email">
+                        + Add the recruiter's email (optional, recommended)
+                      </button>
+                    ) : (
+                      <div className="space-y-1.5">
+                        <label htmlFor="recruiter-email" className="text-sm font-semibold text-gray-900 dark:text-white">Recruiter's email (optional)</label>
+                        <p className="text-xs text-gray-600 dark:text-gray-400">Paste the whole email, including the From and Reply-To lines if you can see them. We check the sender's domain, hidden reply addresses, look-alike company domains and payment requests. No extra charge.</p>
+                        <textarea id="recruiter-email" value={recruiterEmail} onChange={(e) => setRecruiterEmail(e.target.value)} maxLength={20000}
+                          rows={5} placeholder={"From: ...\nReply-To: ...\n\nDear ..."}
+                          className="w-full rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 p-2 text-sm"
+                          data-testid="input-recruiter-email" />
+                      </div>
+                    )}
+                  </div>
                   <VerifyXConsent checked={consent} onChange={setConsent} />
                   <div className="flex gap-2">
                     <Button

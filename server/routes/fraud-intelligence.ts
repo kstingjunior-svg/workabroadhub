@@ -170,6 +170,12 @@ export function registerFraudIntelligenceRoutes(app: Express): void {
         linkedinUrl:    p.linkedinUrl,
       });
 
+      // 2b. Private Scam Intelligence Network — admin-only alert if this report
+      //     shares details with earlier offer checks / reports. Best effort.
+      import("../intel/network")
+        .then(({ alertOnNewScamReport }) => alertOnNewScamReport(String(reportId)))
+        .catch((e) => console.warn("[intel] scam-report alert failed:", e?.message));
+
       // 3. Update the aggregated agency profile
       await upsertAgencyProfile(agency, {
         country:         p.country,

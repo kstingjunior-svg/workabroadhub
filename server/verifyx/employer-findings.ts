@@ -3,7 +3,7 @@ import { makeFinding, type Finding } from "./evidence";
 import { getSource } from "./sources";
 import type { DomainCheck, RegistryLookupResult } from "./employer-lookup";
 
-const FREE_EMAIL = new Set([
+export const FREE_EMAIL = new Set([
   "gmail.com", "googlemail.com", "yahoo.com", "yahoo.co.uk", "hotmail.com", "outlook.com", "live.com",
   "aol.com", "icloud.com", "protonmail.com", "proton.me", "yandex.com", "mail.com", "zoho.com", "gmx.com",
 ]);

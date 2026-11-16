@@ -23,6 +23,10 @@ import { assembleReport, type ExtractedFieldView, type VerifyXReport } from "../
 import { checkEmailDomain, lookupNeaAgency, lookupNlSponsor, lookupUkSponsor } from "../verifyx/employer-lookup";
 import { emailDomainFindings, neaFindings, nlSponsorFindings, ukSponsorFindings, userRunEmployerCheck } from "../verifyx/employer-findings";
 import { registrableDomain } from "../verifyx/names";
+import {
+  emailFindings, identityConsistency, identityFindings, parseMentions, parsePastedEmail, parsePayments, paymentFindings,
+  type IdentityMention, type PaymentRequest,
+} from "../verifyx/forensics";
 
 const SYSTEM_PROMPT = `You read employment offer letters and contracts for a document-checking service.
 Your ONLY job is to transcribe what the letter says. Do not judge whether it is genuine, legitimate or fraudulent, and do not give any score for that.
@@ -46,7 +50,9 @@ Return ONLY a JSON object with exactly these keys:
   "fieldConfidence": { "<field name>": 0-100 for how clearly you could read that field },
   "readability": 0-100,
   "visualObservations": array of short, concrete observations of visible irregularities (e.g. "the salary figure is in a different font from the surrounding text"). Never write conclusions such as "fake", "genuine" or "legitimate". Empty array if none,
-  "containsInstructionsToAi": boolean
+  "containsInstructionsToAi": boolean,
+  "applicantMentions": every separate place the APPLICANT / EMPLOYEE the offer is addressed to is named or identified — addressee block, salutation, body, each page header and footer, acceptance/signature block, any ID section. Do NOT include the employer's staff, signatories, recruiters or referees. Array of { "name": exactly as printed or null, "passportNumber": as printed or null, "dateOfBirth": "YYYY-MM-DD"|null, "location": short place description such as "page 1 addressee block", "page 2 footer", "acceptance block", "page": number|null, "confidence": 0-100 how clearly you read it }. Pages are marked "=== Page N ===" in text input,
+  "paymentRequests": every payment the APPLICANT is asked to make (fees, deposits, tickets, medicals, visa processing, training, etc.). Array of { "amount": number|null, "currency": ISO code|null, "purpose": string|null, "payTo": who receives it as written|null, "method": e.g. "M-Pesa", "bank transfer", "paybill"|null, "accountRef": account / till / paybill / phone as written|null, "quote": the exact sentence|null }. Empty array if none
 }
 Unknown → null. Never guess. Dates only as YYYY-MM-DD when unambiguous.`;
 
@@ -57,10 +63,15 @@ export interface OfferExtraction {
   visualObservations: string[];
   aiFlaggedInstructions: boolean;
   scannedText: string | null;
+  /** 2026-11 intelligence engine. Optional so stored older extractions still evaluate. */
+  applicantMentions?: IdentityMention[];
+  paymentRequests?: PaymentRequest[];
+  /** Recruiter email the customer pasted (optional). */
+  recruiterEmailText?: string | null;
 }
 
 export async function extractOffer(input: ExtractionInput): Promise<{ extraction: OfferExtraction; usage: ModelUsage }> {
-  const { json: v, usage } = await extractJson(SYSTEM_PROMPT, input, "employment offer letter", 2400);
+  const { json: v, usage } = await extractJson(SYSTEM_PROMPT, input, "employment offer letter", 3200);
   const fields: OfferExtraction["fields"] = {
     employerName: str(v.employerName), companyRegistrationNumber: str(v.companyRegistrationNumber),
     companyAddress: str(v.companyAddress), country: str(v.country), jobTitle: str(v.jobTitle),
@@ -85,6 +96,8 @@ export async function extractOffer(input: ExtractionInput): Promise<{ extraction
       visualObservations: input.kind === "image" ? arr(v.visualObservations, 5) : [],
       aiFlaggedInstructions: bool(v.containsInstructionsToAi),
       scannedText: input.kind === "text" ? input.text.slice(0, 50_000) : (fields.fullText ?? null),
+      applicantMentions: parseMentions(v.applicantMentions),
+      paymentRequests: parsePayments(v.paymentRequests),
     },
   };
 }
@@ -135,7 +148,7 @@ function assessSalary(fields: ExtractedOfferFields, countryCode: string | null, 
 
 export async function evaluateOffer(
   ex: OfferExtraction,
-  opts: { corrections?: Corrections | null; revision?: number; now?: Date; skipNetwork?: boolean },
+  opts: { corrections?: Corrections | null; revision?: number; now?: Date; skipNetwork?: boolean; intelFindings?: import("../verifyx/evidence").Finding[] },
 ): Promise<VerifyXReport> {
   const now = opts.now ?? new Date();
   const { extraction, userConfirmed } = applyOfferCorrections(ex, opts.corrections ?? null);
@@ -149,6 +162,15 @@ export async function evaluateOffer(
     fields: f, patterns, salary, countryCode: country?.code ?? null, injection,
     aiFlaggedInstructions: extraction.aiFlaggedInstructions, visualObservations: extraction.visualObservations, now,
   });
+
+  // 2026-11 intelligence engine: cross-location identity, payment requests, pasted email.
+  const mentions = extraction.applicantMentions ?? [];
+  findings.push(...identityFindings(mentions, now));
+  findings.push(...paymentFindings(extraction.paymentRequests ?? [], country?.code ?? null, now, country?.links.immigration ?? null));
+  findings.push(...emailFindings(parsePastedEmail(extraction.recruiterEmailText), {
+    employerName: f.employerName ?? null, companyWebsite: f.companyWebsite ?? null, letterEmail: f.recruiterEmail ?? null,
+  }, now));
+  if (opts.intelFindings?.length) findings.push(...opts.intelFindings);
 
   if (!opts.skipNetwork) {
     const [dnsCheck, uk, nea, nl] = await Promise.all([
@@ -177,6 +199,7 @@ export async function evaluateOffer(
   return assembleReport({
     tool: "offer_check", docLabel: "offer letter", rawFindings: findings, extractedFields: fieldViews,
     documentKind: "offer_letter", country, revision: opts.revision, now,
+    identityConsistency: mentions.length ? identityConsistency(mentions) : null,
   });
 }
 
@@ -184,10 +207,16 @@ export type AnalyzeOfferResult =
   | { ok: true; report: VerifyXReport; extraction: OfferExtraction; usage: ModelUsage }
   | { ok: false; error: string; message: string };
 
-export async function analyzeOffer(input: ExtractionInput): Promise<AnalyzeOfferResult> {
+export async function analyzeOffer(input: ExtractionInput, opts: { recruiterEmailText?: string | null } = {}): Promise<AnalyzeOfferResult> {
   try {
-    const { extraction, usage } = await extractOffer(input);
-    const report = await evaluateOffer(extraction, {});
+    const { extraction: ex, usage } = await extractOffer(input);
+    const extraction: OfferExtraction = { ...ex, recruiterEmailText: opts.recruiterEmailText?.slice(0, 20_000) ?? null };
+    let intelFindings: import("../verifyx/evidence").Finding[] = [];
+    try {
+      const { confirmedIntelFindings } = await import("../intel/network");
+      intelFindings = await confirmedIntelFindings(extraction);
+    } catch (e: any) { console.warn("[offer-analyzer] intel lookup skipped:", e?.message); }
+    const report = await evaluateOffer(extraction, { intelFindings });
     return { ok: true, report, extraction, usage };
   } catch (err: any) {
     if (err instanceof ExtractionError) return { ok: false, error: "extraction_failed", message: err.userMessage };

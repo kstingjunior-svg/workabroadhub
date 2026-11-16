@@ -287,6 +287,50 @@ function Sources() {
   );
 }
 
+const RISK_STYLE: Record<string, string> = {
+  CRITICAL: "bg-rose-600 text-white", HIGH: "bg-rose-100 text-rose-800", MODERATE: "bg-amber-100 text-amber-800",
+  LOW: "bg-emerald-100 text-emerald-800", INSUFFICIENT_EVIDENCE: "bg-slate-200 text-slate-700",
+};
+const STATE_STYLE: Record<string, string> = {
+  confirmed: "text-emerald-700 font-semibold", passed: "text-sky-700 font-semibold", failed: "text-rose-700 font-semibold",
+  not_confirmed: "text-amber-700 font-semibold", not_checked: "text-slate-500",
+};
+
+function AdminReviewBox({ requestId, findings }: { requestId: string; findings: any[] }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [notes, setNotes] = useState("");
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function act(action: string) {
+    setBusy(true);
+    try {
+      await send("POST", `/api/admin/verifyx/requests/${requestId}/admin-review`, { action, notes: notes || undefined, findingCode: code || undefined });
+      toast({ title: "Recorded", description: "Saved to the audit trail. The customer's report is unchanged." });
+      setNotes(""); setCode("");
+      qc.invalidateQueries({ queryKey: ["/api/admin/verifyx/requests", requestId] });
+    } catch (e: any) { toast({ title: "Not saved", description: e.message, variant: "destructive" }); }
+    finally { setBusy(false); }
+  }
+  return (
+    <div className="border rounded p-2 space-y-2 bg-slate-50 dark:bg-slate-900">
+      <p className="font-semibold">Review notes</p>
+      <select className="w-full border rounded p-1 bg-white dark:bg-slate-800" value={code} onChange={(e) => setCode(e.target.value)} data-testid="select-review-finding">
+        <option value="">Whole report</option>
+        {findings.map((f: any) => <option key={f.id} value={f.code}>{f.id} · {f.title}</option>)}
+      </select>
+      <textarea className="w-full border rounded p-1.5 min-h-[60px] bg-white dark:bg-slate-800" placeholder="What did you check, and what did you find?" value={notes} onChange={(e) => setNotes(e.target.value)} data-testid="input-review-notes" />
+      <div className="flex flex-wrap gap-1.5">
+        <Button size="sm" variant="outline" disabled={busy} onClick={() => act("send_to_review")} data-testid="button-send-review">Send to review</Button>
+        <Button size="sm" disabled={busy} onClick={() => act("approve")} data-testid="button-approve-report">Approve report</Button>
+        <Button size="sm" variant="outline" disabled={busy || !notes} onClick={() => act("false_positive")} data-testid="button-false-positive">False positive</Button>
+        <Button size="sm" variant="outline" disabled={busy || !notes} onClick={() => act("false_negative")}>Missed risk</Button>
+      </div>
+      <p className="text-[11px] text-slate-500">Decisions feed the accuracy numbers on the Overview tab. They are never shown to customers as a government verification.</p>
+    </div>
+  );
+}
+
 function Inspector({ id, onClose }: { id: string | null; onClose: () => void }) {
   const q = useQuery({ queryKey: ["/api/admin/verifyx/requests", id], queryFn: () => getJson(`/api/admin/verifyx/requests/${id}`), enabled: !!id });
   const d: any = q.data;
@@ -297,10 +341,25 @@ function Inspector({ id, onClose }: { id: string | null; onClose: () => void }) 
         {q.isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : d && (
           <div className="space-y-3 text-xs">
             <p>{label(d.request.tool)} · {dt(d.request.created_at)} · <Pill v={d.request.outcome ?? d.request.status} map={OUTCOME_STYLE} /> · engine {d.request.engine_version} · retention until {dt(d.request.retention_expires_at)}{d.request.purged_at ? " · PURGED" : ""}</p>
+            {d.report?.risk && (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={`rounded px-2 py-0.5 text-xs font-bold ${RISK_STYLE[d.report.risk.level] ?? "bg-slate-100"}`}>{d.report.risk.label}</span>
+                <span className="text-slate-500">{d.report.risk.statement}</span>
+              </div>
+            )}
             {d.report?.headline && <p className="text-sm font-semibold">{d.report.headline}</p>}
+            {Array.isArray(d.report?.verificationStates) && (
+              <div className="grid sm:grid-cols-2 gap-1.5">
+                {d.report.verificationStates.map((s: any) => (
+                  <div key={s.key} className="border rounded p-1.5"><b>{s.label}</b>: <span className={STATE_STYLE[s.state] ?? ""}>{label(s.state)}</span><p className="text-slate-500">{s.detail}</p></div>
+                ))}
+              </div>
+            )}
+            <AdminReviewBox requestId={id!} findings={d.report?.findings ?? []} />
             {(d.report?.findings ?? []).map((f: any) => (
               <div key={f.id} className="border rounded p-2 space-y-0.5">
                 <p><b>{f.id}</b> · {STATUS_META[f.status as EvidenceStatus]?.label ?? f.status} · {f.title} <span className="text-slate-400">({f.method}{f.downgradedFrom ? `, downgraded from ${label(f.downgradedFrom)}` : ""})</span></p>
+                {Array.isArray(f.documentRefs) && f.documentRefs.length > 0 && <p className="text-slate-500">Read: {f.documentRefs.map((r: any) => `${r.field} = ${r.value ?? "—"} (${r.ocrConfidence ?? "?"}%${r.userConfirmed ? ", confirmed by user" : ""})`).join(" · ")}</p>}
                 {f.documentSays && <p>Document: {f.documentSays}</p>}
                 {f.evidenceSays && <p>Evidence: {f.evidenceSays}</p>}
                 {f.uncertainty && <p className="text-slate-500">Limits: {f.uncertainty}</p>}

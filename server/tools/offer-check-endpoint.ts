@@ -477,6 +477,7 @@ export function registerOfferCheckRoute(app: Express): void {
         runVerification({
           tool: "offer_check", buffer: req.file.buffer, mime: mt, fileName: req.file.originalname,
           fileKind: fileCheck.kind, userId, paymentId: req.toolPaymentId ?? null, jobId, accessKey,
+          recruiterEmailText: typeof req.body?.recruiterEmail === "string" ? req.body.recruiterEmail.slice(0, 20_000) : null,
         }).catch((err: any) => console.error("[VerifyX] pipeline crashed:", err?.message));
       } catch (err: any) {
         console.error("[OfferVerify] endpoint error:", err?.message);

@@ -36,6 +36,9 @@ export interface VxReport {
   outcome: "discrepancies_found" | "needs_attention" | "no_discrepancies_found" | "insufficient_information";
   headline: string; explanation: string; limitation: string;
   counts: Record<EvidenceStatus, number>;
+  /** 2026-11 intelligence engine — absent on older stored reports. */
+  risk?: { level: "LOW" | "MODERATE" | "HIGH" | "CRITICAL" | "INSUFFICIENT_EVIDENCE"; label: string; reasons: string[]; recommendedAction: string; statement: string };
+  verificationStates?: Array<{ key: string; label: string; state: "confirmed" | "passed" | "failed" | "not_confirmed" | "not_checked"; detail: string }>;
   findings: VxFinding[];
   extractedFields: Array<{ field: string; label: string; value: string | null; confidence: number | null; userCorrected: boolean; correctable: boolean }>;
   documentKind: string | null;
@@ -103,6 +106,66 @@ function headersFor(report: VxReport, csrf: string): Record<string, string> {
   return h;
 }
 
+const RISK_UI: Record<NonNullable<VxReport["risk"]>["level"], { box: string; badge: string; bar: number }> = {
+  CRITICAL: { box: "border-red-400 bg-red-50 dark:border-red-800 dark:bg-red-950/40", badge: "bg-red-600 text-white", bar: 4 },
+  HIGH: { box: "border-red-300 bg-red-50 dark:border-red-900 dark:bg-red-950/30", badge: "bg-red-100 text-red-800 dark:bg-red-900/60 dark:text-red-200", bar: 3 },
+  MODERATE: { box: "border-amber-300 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30", badge: "bg-amber-100 text-amber-900 dark:bg-amber-900/60 dark:text-amber-100", bar: 2 },
+  LOW: { box: "border-emerald-300 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/30", badge: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-100", bar: 1 },
+  INSUFFICIENT_EVIDENCE: { box: "border-slate-300 bg-slate-50 dark:border-slate-700 dark:bg-slate-900/40", badge: "bg-slate-200 text-slate-800 dark:bg-slate-700 dark:text-slate-100", bar: 0 },
+};
+const STATE_UI: Record<string, { icon: any; cls: string; word: string }> = {
+  confirmed: { icon: ShieldCheck, cls: "text-emerald-700 dark:text-emerald-400", word: "Confirmed" },
+  passed: { icon: CheckCircle2, cls: "text-sky-700 dark:text-sky-400", word: "Passed" },
+  failed: { icon: AlertOctagon, cls: "text-red-700 dark:text-red-400", word: "Failed" },
+  not_confirmed: { icon: HelpCircle, cls: "text-amber-700 dark:text-amber-400", word: "Not confirmed" },
+  not_checked: { icon: HelpCircle, cls: "text-slate-500", word: "Not checked" },
+};
+
+function RiskSummary({ report }: { report: VxReport }) {
+  const r = report.risk!;
+  const ui = RISK_UI[r.level];
+  return (
+    <Card className={`border-2 ${ui.box}`} data-testid="risk-summary">
+      <CardContent className="pt-5 pb-5 space-y-3">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <span className="text-[11px] font-semibold tracking-wide text-gray-600 dark:text-gray-400 uppercase">AI investigation report</span>
+          <span className={`rounded-full px-3 py-1 text-xs font-extrabold tracking-wide ${ui.badge}`} data-testid="text-risk-level">{r.label.toUpperCase()}</span>
+        </div>
+        {r.level !== "INSUFFICIENT_EVIDENCE" && (
+          <div className="flex gap-1" aria-hidden>
+            {[1, 2, 3, 4].map((n) => <span key={n} className={`h-1.5 flex-1 rounded-full ${n <= ui.bar ? (ui.bar >= 3 ? "bg-red-500" : ui.bar === 2 ? "bg-amber-500" : "bg-emerald-500") : "bg-gray-200 dark:bg-gray-700"}`} />)}
+          </div>
+        )}
+        {r.reasons.length > 0 && (
+          <ul className="space-y-1">
+            {r.reasons.map((x, i) => <li key={i} className="text-sm text-gray-800 dark:text-gray-200 flex gap-2"><span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-current flex-shrink-0" />{x}</li>)}
+          </ul>
+        )}
+        <div className="rounded-md bg-white/80 dark:bg-black/20 border border-gray-200 dark:border-gray-800 p-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Recommended action</p>
+          <p className="text-sm font-medium text-gray-900 dark:text-white">{r.recommendedAction}</p>
+        </div>
+        {report.verificationStates && report.verificationStates.length > 0 && (
+          <div className="grid gap-1.5 sm:grid-cols-2">
+            {report.verificationStates.map((s) => {
+              const st = STATE_UI[s.state] ?? STATE_UI.not_checked;
+              return (
+                <div key={s.key} className="rounded-md border border-gray-200 dark:border-gray-800 bg-white/60 dark:bg-black/10 p-2.5" data-testid={`state-${s.key}`}>
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-900 dark:text-white">
+                    <st.icon className={`h-3.5 w-3.5 ${st.cls}`} /> {s.key === "overall" ? <span className={st.cls}>{s.label}</span> : <>{s.label}: <span className={st.cls}>{st.word}</span></>}
+                  </div>
+                  <p className="mt-0.5 text-[11px] text-gray-600 dark:text-gray-400 leading-snug">{s.detail}</p>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        <p className="text-[11px] text-gray-500 italic">{r.statement}</p>
+      </CardContent>
+    </Card>
+  );
+}
+
 export function VerifyXReportView({ report, onReportChange, onReset, docNoun }: {
   report: VxReport; onReportChange: (r: VxReport) => void; onReset: () => void; docNoun: string;
 }) {
@@ -162,6 +225,8 @@ export function VerifyXReportView({ report, onReportChange, onReset, docNoun }: 
 
   return (
     <div className="space-y-4" data-testid="verifyx-report">
+      {report.risk && <RiskSummary report={report} />}
+
       {/* Headline */}
       <Card className={`border-2 ${OUTCOME_STYLE[report.outcome]}`}>
         <CardContent className="pt-5 pb-5 space-y-3">

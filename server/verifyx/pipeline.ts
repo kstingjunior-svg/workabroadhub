@@ -20,6 +20,8 @@ export interface PipelineArgs {
   paymentId: string | null;
   jobId: string;
   accessKey: string;
+  /** Optional recruiter email pasted by the customer (offer checks). */
+  recruiterEmailText?: string | null;
 }
 
 export async function runVerification(a: PipelineArgs): Promise<void> {
@@ -45,8 +47,10 @@ export async function runVerification(a: PipelineArgs): Promise<void> {
     if (isImage) {
       input = { kind: "image", imageBase64DataUrl: `data:${a.mime};base64,${a.buffer.toString("base64")}` };
     } else {
-      const { extractTextFromBuffer } = await import("../utils/extract-text");
-      const extracted = await extractTextFromBuffer(a.buffer, a.mime, a.fileName);
+      const { extractTextFromBuffer, extractPdfTextWithPages } = await import("../utils/extract-text");
+      // PDFs with a text layer keep page markers so forensics can say where a name appears.
+      const paged = a.fileKind === "pdf" ? await extractPdfTextWithPages(a.buffer).catch(() => "") : "";
+      const extracted = paged ? { text: paged } : await extractTextFromBuffer(a.buffer, a.mime, a.fileName);
       if (!extracted?.text || extracted.text.trim().length < 50) {
         await fail("We couldn't read enough text from this file — no charge has been kept. Try a clearer scan, or upload a photo (JPG/PNG) of each page.", true);
         return;
@@ -60,7 +64,7 @@ export async function runVerification(a: PipelineArgs): Promise<void> {
       out = await analyzeVisa(input, { pdf });
     } else {
       const { analyzeOffer } = await import("../offer-verify/analyzer");
-      out = await analyzeOffer(input);
+      out = await analyzeOffer(input, { recruiterEmailText: a.recruiterEmailText ?? null });
     }
     if (!out.ok) {
       await fail(out.message, true);
@@ -75,6 +79,12 @@ export async function runVerification(a: PipelineArgs): Promise<void> {
       usage: out.usage, latencyMs: Date.now() - t0, revision: 1,
     });
     await markToolScanJobDone(a.jobId, publicReport(report));
+    if (a.tool === "offer_check") {
+      // Private Scam Intelligence Network: index indicators + alert admins on matches. Never shown to customers.
+      import("../intel/network")
+        .then(({ indexOfferCheck }) => indexOfferCheck(requestId!, out.extraction, report.risk?.level ?? null))
+        .catch((e) => console.warn("[intel] index failed:", e?.message));
+    }
     console.log(`[VerifyX] ${a.tool} ${referenceNo} outcome=${report.outcome} findings=${report.findings.length} rejected=${report._rejected?.length ?? 0} in ${Date.now() - t0}ms`);
   } catch (err: any) {
     console.error(`[VerifyX] ${a.tool} job=${a.jobId} failed:`, err?.message);

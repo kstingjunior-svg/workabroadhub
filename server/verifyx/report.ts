@@ -5,6 +5,7 @@ import {
   type EvidenceStatus, type Finding, type OverallOutcome,
 } from "./evidence";
 import { officialStatusCheck, getSource, type OfficialCheck } from "./sources";
+import { assessRisk, verificationStates, type RiskAssessment, type VerificationState } from "./risk";
 
 export interface ExtractedFieldView {
   field: string;
@@ -29,6 +30,10 @@ export interface VerifyXReport {
   explanation: string;
   limitation: string;
   counts: Record<EvidenceStatus, number>;
+  /** Intelligence engine (2026-11): deterministic overall risk level. */
+  risk: RiskAssessment;
+  /** Separate verification states — never collapsed into "genuine". */
+  verificationStates: VerificationState[];
   findings: Finding[];
   extractedFields: ExtractedFieldView[];
   documentKind: string | null;
@@ -60,6 +65,7 @@ export function assembleReport(args: {
   country: CountryVisaResources | null;
   revision?: number;
   now?: Date;
+  identityConsistency?: "consistent" | "inconsistent" | "not_enough" | null;
 }): VerifyXReport {
   const { accepted, rejected } = validateFindings(args.rawFindings);
   const official = officialStatusCheck(
@@ -91,6 +97,8 @@ export function assembleReport(args: {
     explanation: summary.explanation,
     limitation: summary.limitation,
     counts: summary.counts,
+    risk: assessRisk(accepted, summary.outcome),
+    verificationStates: verificationStates(accepted, { tool: args.tool, identity: args.identityConsistency ?? null }),
     findings: accepted,
     extractedFields: args.extractedFields,
     documentKind: args.documentKind,

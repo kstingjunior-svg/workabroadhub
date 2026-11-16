@@ -23,6 +23,7 @@ import {
   audit, currentRevision, loadCorrections, loadExtraction, loadOwnedRequest, loadReport, saveResult,
 } from "./store";
 import { publicReport } from "./report";
+import { registerIntelRoutes } from "../intel/routes";
 
 function sessionUserId(req: any): string | null {
   const id = req.user?.claims?.sub ?? req.user?.id ?? req.session?.customUserId ?? null;
@@ -38,7 +39,7 @@ async function isAdmin(userId: string | null): Promise<boolean> {
   const u = rows[0];
   return !!u && (u.is_admin === true || ["admin", "ADMIN", "SUPER_ADMIN"].includes(String(u.role ?? "")));
 }
-function adminOnly(handler: (req: any, res: Response, adminId: string) => Promise<any>) {
+export function adminOnly(handler: (req: any, res: Response, adminId: string) => Promise<any>) {
   return async (req: any, res: Response) => {
     const uid = sessionUserId(req);
     if (!uid) return res.status(401).json({ message: "Please sign in." });
@@ -117,7 +118,9 @@ export function registerVerifyxRoutes(app: Express): void {
         report = await evaluateVisa(extraction, { pdf: extraction.__pdf ?? null, corrections: all, revision });
       } else {
         const { evaluateOffer } = await import("../offer-verify/analyzer");
-        report = await evaluateOffer(extraction, { corrections: all, revision });
+        const { confirmedIntelFindings } = await import("../intel/network");
+        const intelFindings = await confirmedIntelFindings(extraction).catch(() => []);
+        report = await evaluateOffer(extraction, { corrections: all, revision, intelFindings });
       }
       report = { ...report, requestId: r.id, referenceNo: r.reference_no };
       const fieldMap: Record<string, any> = {};
@@ -225,6 +228,31 @@ export function registerVerifyxRoutes(app: Express): void {
     res.json({ request: safe, report, fields, corrections, reviews, auditTrail: trail, rejectedFindings: rejected });
   }));
 
+  // Intelligence engine (2026-11): admin review straight from the case screen.
+  // Records the decision for audit / accuracy metrics; it never changes what
+  // the customer's report says and is never presented as a government check.
+  app.post("/api/admin/verifyx/requests/:id/admin-review", adminOnly(async (req, res, adminId) => {
+    const id = String(req.params.id);
+    if (!/^[0-9a-f-]{36}$/i.test(id)) return res.status(404).json({ message: "Not found" });
+    const action = String(req.body?.action ?? "");
+    const notes = req.body?.notes ? String(req.body.notes).slice(0, 4000) : null;
+    const findingCode = req.body?.findingCode ? String(req.body.findingCode).slice(0, 80) : null;
+    if (!["send_to_review", "approve", "false_positive", "false_negative"].includes(action)) return res.status(400).json({ message: "Unknown action" });
+    if ((action === "false_positive" || action === "false_negative") && !notes) return res.status(400).json({ message: "Add a note explaining the correction." });
+    const { rows: [r] } = await pool.query(`SELECT id FROM verifyx_requests WHERE id=$1`, [id]);
+    if (!r) return res.status(404).json({ message: "Not found" });
+    const resolved = action !== "send_to_review";
+    const text = [findingCode ? `[${findingCode}]` : null, notes].filter(Boolean).join(" ") || null;
+    const { rows: [c] } = await pool.query(
+      `INSERT INTO verifyx_review_cases (request_id, opened_by, kind, status, reviewer_id, decision, decision_notes, false_positive, false_negative, resolved_at)
+       VALUES ($1,$2,'admin_review',$3,$2,$4,$5,$6,$7, CASE WHEN $3='resolved' THEN now() END) RETURNING *`,
+      [id, adminId, resolved ? "resolved" : "open",
+       action === "approve" ? "upheld" : action === "send_to_review" ? null : "corrected",
+       text, action === "false_positive" ? true : null, action === "false_negative" ? true : null]);
+    await audit(`admin.${action}`, { requestId: id, actorId: adminId, actorKind: "admin", detail: { caseId: c.id, findingCode } });
+    res.json({ review: c });
+  }));
+
   app.get("/api/admin/verifyx/reviews", adminOnly(async (req, res) => {
     const status = String(req.query.status ?? "open");
     const { rows } = await pool.query(
@@ -295,6 +323,9 @@ export function registerVerifyxRoutes(app: Express): void {
     await audit("admin.rule_review", { actorId: adminId, actorKind: "admin", detail: row });
     res.json({ rule: row, note: "Rule review status is recorded for audit. Code-side rules take effect on the next deploy." });
   }));
+
+  // Intelligence engine (2026-11): private Scam Intelligence Network + risk analytics.
+  registerIntelRoutes(app, adminOnly);
 
   console.log("[VerifyX] ✓ routes registered (/api/verifyx/*, /api/admin/verifyx/*)");
 }

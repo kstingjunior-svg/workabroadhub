@@ -149,7 +149,7 @@ async function tryMammoth(buf: Buffer): Promise<string> {
  * pdfjs-dist extraction — handles compressed / cross-reference-stream PDFs.
  * Uses the legacy Node.js build (no canvas dependency required).
  */
-async function tryPdfJs(buf: Buffer): Promise<string> {
+async function tryPdfJs(buf: Buffer, pageMarkers = false): Promise<string> {
   try {
     const { pathToFileURL } = await import("url");
     const { resolve }       = await import("path");
@@ -173,10 +173,10 @@ async function tryPdfJs(buf: Buffer): Promise<string> {
       const text    = (content.items as any[])
         .map((item: any) => item.str ?? "")
         .join(" ");
-      pageTexts.push(text);
+      pageTexts.push(pageMarkers ? `=== Page ${p} ===\n${text}` : text);
     }
 
-    return pageTexts.join("\n").trim();
+    return pageTexts.join(pageMarkers ? "\n\n" : "\n").trim();
   } catch (err) {
     console.warn("[extractText] pdfjs-dist failed:", err instanceof Error ? err.message : err);
     return "";
@@ -493,4 +493,15 @@ export async function extractTextFromBuffer(
   if (isReadableText(utf8text) && !looksLikeBinary(utf8text)) return { text: utf8text, method: "utf8-strip-guess" };
 
   return { text: "", method: "unknown-failed" };
+}
+
+
+/**
+ * VerifyX (2026-11): PDF text with "=== Page N ===" markers so document
+ * forensics can say WHERE a name or number appears. Returns "" when the PDF
+ * has no text layer (caller falls back to the normal OCR cascade).
+ */
+export async function extractPdfTextWithPages(buf: Buffer): Promise<string> {
+  const t = await tryPdfJs(buf, true);
+  return t.replace(/=== Page \d+ ===/g, "").trim().length >= 50 ? t : "";
 }
