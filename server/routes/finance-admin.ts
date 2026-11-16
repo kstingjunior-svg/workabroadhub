@@ -146,6 +146,71 @@ function buildRegisterWhere(q: Record<string, any>) {
 
 export function registerFinanceAdminRoutes(app: Express): void {
 
+  // 2026-11 (Tony: "how can I read this surely"): one plain-English overview
+  // for the /admin home page. Revenue uses the SAME definition as Finance →
+  // Overview (verified money only), so the two pages always agree.
+  app.get("/api/admin/overview", adminOnly(async (_req, res) => {
+    const DAY0 = `(date_trunc('day', now() AT TIME ZONE 'Africa/Nairobi') AT TIME ZONE 'Africa/Nairobi')`;
+    const MONTH0 = `(date_trunc('month', now() AT TIME ZONE 'Africa/Nairobi') AT TIME ZONE 'Africa/Nairobi')`;
+    const [money, users, plans, online, funnel, recent, sold] = await Promise.all([
+      pool.query(`
+        SELECT coalesce(sum(amount) FILTER (WHERE l.created_at >= ${DAY0}),0)::numeric AS today,
+               count(*) FILTER (WHERE l.created_at >= ${DAY0}) AS today_n,
+               coalesce(sum(amount) FILTER (WHERE l.created_at >= now() - interval '7 days'),0)::numeric AS week,
+               coalesce(sum(amount) FILTER (WHERE l.created_at >= ${MONTH0}),0)::numeric AS month,
+               count(*) FILTER (WHERE l.created_at >= ${MONTH0}) AS month_n,
+               coalesce(sum(amount),0)::numeric AS all_time
+          FROM finance_ledger l WHERE ${REVENUE_SQL}`),
+      pool.query(`SELECT count(*) AS total,
+                         count(*) FILTER (WHERE created_at >= ${DAY0}) AS today,
+                         count(*) FILTER (WHERE created_at >= now() - interval '7 days') AS week
+                    FROM users`),
+      pool.query(`SELECT plan, count(*) AS n FROM user_subscriptions
+                   WHERE status = 'active' AND end_date > now()
+                     AND plan IN ('monthly','yearly','pro','pro_referral','trial','basic')
+                   GROUP BY plan`),
+      pool.query(`SELECT count(*) AS n FROM active_sessions WHERE is_online = true AND last_seen > now() - interval '10 minutes'`)
+        .catch(() => ({ rows: [{ n: 0 }] })),
+      pool.query(`
+        WITH u AS (SELECT id, email_verified FROM users WHERE created_at > now() - interval '30 days')
+        SELECT (SELECT count(*) FROM u) AS signed_up,
+               (SELECT count(*) FROM u WHERE email_verified) AS verified,
+               (SELECT count(DISTINCT p.user_id) FROM payments p JOIN u ON u.id = p.user_id) AS tried_to_pay,
+               (SELECT count(DISTINCT p.user_id) FROM payments p JOIN u ON u.id = p.user_id WHERE p.status IN ('success','completed')) AS paid`),
+      pool.query(`
+        SELECT l.created_at, l.customer_name, l.customer_email, l.amount, l.currency, l.method, l.receipt,
+               l.reconciliation_status, ${PURPOSE_KEY_SQL} AS purpose_key, l.service_name
+          FROM finance_ledger l WHERE ${REVENUE_SQL}
+         ORDER BY l.created_at DESC LIMIT 12`),
+      pool.query(`
+        SELECT ${PURPOSE_KEY_SQL} AS purpose_key, max(l.service_name) AS name, count(*) AS n, sum(l.amount)::numeric AS kes
+          FROM finance_ledger l WHERE ${REVENUE_SQL} AND l.created_at >= now() - interval '30 days'
+         GROUP BY 1 ORDER BY kes DESC NULLS LAST LIMIT 8`),
+    ]);
+    const cat = await loadCatalog();
+    const m = money.rows[0], u = users.rows[0], f = funnel.rows[0];
+    const planCounts: Record<string, number> = {};
+    for (const r of plans.rows) planCounts[r.plan] = Number(r.n);
+    res.json({
+      revenue: { today: Number(m.today), todayPayments: Number(m.today_n), week: Number(m.week), month: Number(m.month), monthPayments: Number(m.month_n), allTime: Number(m.all_time) },
+      users: { total: Number(u.total), today: Number(u.today), week: Number(u.week) },
+      activePlans: {
+        total: Object.values(planCounts).reduce((a, b) => a + b, 0),
+        monthly: planCounts.monthly ?? 0,
+        yearly: (planCounts.yearly ?? 0) + (planCounts.pro ?? 0) + (planCounts.pro_referral ?? 0),
+        trial: (planCounts.trial ?? 0) + (planCounts.basic ?? 0),
+      },
+      onlineNow: Number(online.rows[0]?.n ?? 0),
+      funnel30d: { signedUp: Number(f.signed_up), verified: Number(f.verified), triedToPay: Number(f.tried_to_pay), paid: Number(f.paid) },
+      recentPayments: recent.rows.map((r: any) => ({
+        at: r.created_at, customer: r.customer_name || r.customer_email || "Unknown payer", amount: Number(r.amount), currency: r.currency || "KES",
+        method: r.method, receipt: r.receipt, what: labelOf(cat, r.purpose_key, r.service_name), unmatched: r.reconciliation_status === "unmatched",
+      })),
+      topSellers30d: sold.rows.map((r: any) => ({ what: labelOf(cat, r.purpose_key, r.name), count: Number(r.n), kes: Number(r.kes) })),
+      generatedAt: new Date().toISOString(),
+    });
+  }));
+
   app.get("/api/admin/finance/summary", adminOnly(async (req, res) => {
     const cat = await loadCatalog();
     // 2026-11 (payment audit): per-gateway split. PayPal rows are stored as
