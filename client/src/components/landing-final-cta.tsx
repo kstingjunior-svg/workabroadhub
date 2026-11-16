@@ -29,7 +29,7 @@ export function LandingFinalCta({ onStartClick }: LandingFinalCtaProps) {
         >
           <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 text-xs font-bold uppercase tracking-wide">
             <Sparkles className="h-3 w-3" />
-            Free CV check · screening from KES 100
+            Free CV check · screening from KES 300
           </span>
 
           <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 dark:text-white mt-5 leading-tight">

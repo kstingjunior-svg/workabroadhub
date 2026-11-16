@@ -344,6 +344,19 @@ async function completePayPalCaptureOnce(
     try { meta = typeof payment.metadata === "string" ? JSON.parse(payment.metadata) : (payment.metadata ?? {}); } catch { meta = {}; }
     const serviceOrderId: string | undefined = meta?.serviceOrderId;
     const isPlanPurchase = String(payment.serviceId ?? "").startsWith("plan_");
+
+    // Pay-per-check tool credit (visa / offer / IELTS / job-scam): becomes a
+    // scan token once paid — no plan, no service order.
+    if (meta?.isToolScan === true && String(payment.serviceId ?? "").startsWith("tool_")) {
+      const { rows: claimedTool } = await pool.query<{ id: string }>(
+        `UPDATE payments SET status = 'completed', processed = true, processed_at = NOW(),
+                transaction_ref = $2, updated_at = NOW()
+          WHERE id = $1 AND processed IS NOT TRUE RETURNING id`,
+        [payment.id, capture.transactionId],
+      );
+      console.info(`[Payment][COMPLETE] PayPal TOOL credit | txn=${capture.transactionId} | paymentId=${payment.id} | ${payment.serviceId} | KES=${kesAmount} | source=${source}`);
+      return { status: 200, body: { success: true, transactionId: capture.transactionId, toolPaymentId: payment.id, alreadyProcessed: !claimedTool[0] } };
+    }
     if (!isPlanPurchase && serviceOrderId) {
       const { rows: claimed } = await pool.query<{ id: string }>(
         `UPDATE payments

@@ -64,7 +64,8 @@ import { Loader2, ShieldCheck, Smartphone } from "lucide-react";
 import { fetchCsrfToken } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
-export const TOOL_SCAN_PRICE_KES = 100;
+// 2026-11 (Tony): KES 100 → KES 300 per check. Payable by M-Pesa or PayPal.
+export const TOOL_SCAN_PRICE_KES = 300;
 
 // ── Pending-payment persistence ─────────────────────────────────────────────
 // Survives a reload, a backgrounded/evicted tab, or the user just closing the
@@ -236,6 +237,78 @@ export function useToolPayment(tool: string) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tool]);
 
+  // ── PayPal return (2026-11) ───────────────────────────────────────────────
+  // PayPal sends the buyer back to this page with ?paypalReturn=1&toolPid=…
+  // Capture once, then hand the paid credit to the page (the file has to be
+  // picked again after the redirect).
+  useEffect(() => {
+    let params: URLSearchParams;
+    try { params = new URLSearchParams(window.location.search); } catch { return; }
+    const clean = () => {
+      try {
+        const u = new URL(window.location.href);
+        ["paypalReturn", "paypalCancel", "toolPid", "token", "PayerID", "pid"].forEach((k) => u.searchParams.delete(k));
+        window.history.replaceState({}, "", u.pathname + u.search);
+      } catch { /* ignore */ }
+    };
+    if (params.get("paypalCancel") === "1") {
+      clean();
+      toast({ title: "PayPal payment cancelled", description: "You weren't charged. You can pay by M-Pesa or try PayPal again." });
+      return;
+    }
+    const pid = params.get("toolPid");
+    if (params.get("paypalReturn") !== "1" || !pid) return;
+    clean();
+    (async () => {
+      try {
+        const csrf = await fetchCsrfToken().catch(() => "");
+        const res = await fetch("/api/tools/pay/paypal/capture", {
+          method: "POST", credentials: "include",
+          headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
+          body: JSON.stringify({ paymentId: pid }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data?.paid) {
+          writePending(tool, pid, true);
+          setScanToken(pid);
+          toast({ title: "PayPal payment received", description: `Your ${label} is paid for. Choose your document again and tap Check — no extra charge.` });
+        } else if (data?.code === "PAYPAL_CAPTURE_PENDING") {
+          writePending(tool, pid);
+          toast({ title: "PayPal is still processing your payment", description: "Your check unlocks automatically once PayPal releases it — please don't pay again." });
+        } else {
+          toast({ title: "PayPal payment not completed", description: data?.message || "We couldn't confirm the payment. You were not charged unless PayPal shows a completed payment.", variant: "destructive" });
+        }
+      } catch {
+        writePending(tool, pid);
+        toast({ title: "Checking your PayPal payment", description: "If PayPal took the money, your check unlocks automatically within a few minutes.", variant: "destructive" });
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tool]);
+
+  const [paypalBusy, setPaypalBusy] = useState(false);
+  const startPayPal = useCallback(async () => {
+    setPayError(null);
+    setPaypalBusy(true);
+    try {
+      const csrf = await fetchCsrfToken().catch(() => "");
+      const here = new URL(window.location.href);
+      ["paypalReturn", "paypalCancel", "toolPid", "token", "PayerID"].forEach((k) => here.searchParams.delete(k));
+      const res = await fetch("/api/tools/pay/paypal", {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
+        body: JSON.stringify({ tool, returnUrl: here.toString() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.approvalUrl) throw new Error(data?.message || "Could not start PayPal. Please try M-Pesa.");
+      writePending(tool, data.paymentId);
+      window.location.href = data.approvalUrl;
+    } catch (e: any) {
+      setPayError(e?.message || "Could not start PayPal.");
+      setPaypalBusy(false);
+    }
+  }, [tool]);
+
   /** Open the pay modal; `run(token)` fires automatically once payment confirms. */
   const requestScan = useCallback((run: (token: string) => void) => {
     onPaidRef.current = run;
@@ -372,13 +445,13 @@ export function useToolPayment(tool: string) {
   // ref (refreshed on every render, before PayModal itself is rendered as a
   // child) keeps the component's output current without ever changing its
   // identity, so React just updates it in place and focus is preserved.
-  const liveRef = useRef({ open, phone, phase, payError, busy, label, setPhone, startPayment, closeModal });
-  liveRef.current = { open, phone, phase, payError, busy, label, setPhone, startPayment, closeModal };
+  const liveRef = useRef({ open, phone, phase, payError, busy, label, setPhone, startPayment, closeModal, startPayPal, paypalBusy });
+  liveRef.current = { open, phone, phase, payError, busy, label, setPhone, startPayment, closeModal, startPayPal, paypalBusy };
 
   const payModalRef = useRef<(() => JSX.Element) | null>(null);
   if (!payModalRef.current) {
     payModalRef.current = function PayModal() {
-      const { open, phone, phase, payError, busy, label, setPhone, startPayment, closeModal } = liveRef.current;
+      const { open, phone, phase, payError, busy, label, setPhone, startPayment, closeModal, startPayPal, paypalBusy } = liveRef.current;
       return (
         <Dialog open={open} onOpenChange={(o) => { if (!o) closeModal(); }}>
           <DialogContent className="sm:max-w-md">
@@ -388,9 +461,9 @@ export function useToolPayment(tool: string) {
                 {label} — KES {TOOL_SCAN_PRICE_KES}
               </DialogTitle>
               <DialogDescription>
-                Each check costs KES {TOOL_SCAN_PRICE_KES}, paid via M-Pesa. Enter your
-                Safaricom number, approve the prompt on your phone, and your scan runs
-                immediately. One payment covers one check.
+                Each check costs KES {TOOL_SCAN_PRICE_KES}. Pay by M-Pesa (enter your Safaricom
+                number and approve the prompt) or by PayPal / card from anywhere. One payment
+                covers one check.
               </DialogDescription>
             </DialogHeader>
 
@@ -436,8 +509,25 @@ export function useToolPayment(tool: string) {
               </Button>
 
               <p className="text-[11px] text-center text-muted-foreground">
-                Safaricom lines only. Outside Kenya? Turn on roaming for your Safaricom line first.
-                The result appears here the moment payment confirms — keep this page open.
+                M-Pesa: Safaricom lines only — outside Kenya, turn on roaming first. Keep this page open.
+              </p>
+
+              <div className="flex items-center gap-3 pt-1">
+                <div className="flex-1 h-px bg-border" />
+                <span className="text-xs text-muted-foreground">or pay from anywhere</span>
+                <div className="flex-1 h-px bg-border" />
+              </div>
+              <Button
+                type="button"
+                className="w-full min-h-[48px] bg-[#0070ba] hover:bg-[#005ea6] text-white font-semibold"
+                onClick={startPayPal}
+                disabled={busy || paypalBusy}
+                data-testid="button-tool-pay-paypal"
+              >
+                {paypalBusy ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Opening PayPal…</> : <>Pay with PayPal / card — USD {Math.max(1, Math.round((TOOL_SCAN_PRICE_KES / 130) * 100) / 100).toFixed(2)}</>}
+              </Button>
+              <p className="text-[11px] text-center text-muted-foreground">
+                You'll go to PayPal, then come back here. Pick your document again and tap Check — no extra charge.
               </p>
             </div>
           </DialogContent>

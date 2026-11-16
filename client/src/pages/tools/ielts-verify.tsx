@@ -89,7 +89,7 @@ const VERDICT_STYLES = {
 
 export default function IeltsVerifyPage() {
   usePageSeo({
-    title:       "IELTS Verification (KES 100/check) — Verify Any TRF Report | WorkAbroad Hub",
+    title:       "IELTS Verification (KES 300/check) — Verify Any TRF Report | WorkAbroad Hub",
     description: "Upload your IELTS Test Report Form (TRF) and get instant AI verification. Detects forged certificates, wrong band-score formats, invalid centre codes, and other IELTS fraud signals.",
     path:        "/tools/ielts-verify",
     keywords:    ["ielts verification kenya", "verify ielts trf", "fake ielts check", "ielts certificate verify"],
@@ -215,7 +215,7 @@ export default function IeltsVerifyPage() {
             Our AI reads the Test Report Form, checks band-score math, formatting, and security features, and shows you exactly where to verify officially.
           </p>
           <p className="text-xs font-semibold text-teal-700 dark:text-teal-300">
-            KES {TOOL_SCAN_PRICE_KES} per check · paid via M-Pesa · one payment = one scan
+            KES {TOOL_SCAN_PRICE_KES} per check · M-Pesa or PayPal · one payment = one scan
           </p>
         </div>
 

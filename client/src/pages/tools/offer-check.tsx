@@ -30,7 +30,7 @@ import { pinFileInMemory } from "@/lib/pin-file";
 
 export default function OfferCheckPage() {
   usePageSeo({
-    title:       "Offer Letter Check (KES 100) — Evidence-Based Employer & Offer Screening | WorkAbroad Hub",
+    title:       "Offer Letter Check (KES 300) — Evidence-Based Employer & Offer Screening | WorkAbroad Hub",
     description: "Upload an overseas job offer and get an evidence-based report: employer checks against official registers where available, sender-domain checks, fee and pressure warning signs, and how to confirm the offer with the employer yourself.",
     path:        "/tools/offer-check",
     keywords:    ["offer letter check kenya", "job offer scam warning signs", "check overseas employer", "employment letter check kenya"],
@@ -275,7 +275,7 @@ export default function OfferCheckPage() {
             We read the letter, check the employer against official registers where we can (UK sponsor register, Kenya NEA agency register), check the sender's email domain, flag fee and pressure warning signs, and show you how to confirm the offer with the employer yourself.
           </p>
           <p className="text-xs font-semibold text-teal-700 dark:text-teal-300">
-            KES {TOOL_SCAN_PRICE_KES} per check · paid via M-Pesa · free re-check if we misread anything
+            KES {TOOL_SCAN_PRICE_KES} per check · M-Pesa or PayPal · free re-check if we misread anything
           </p>
         </div>
 

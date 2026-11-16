@@ -23,7 +23,7 @@ import { pinFileInMemory } from "@/lib/pin-file";
 
 export default function VisaCheckPage() {
   usePageSeo({
-    title:       "Visa & Work-Permit Check (KES 100) — Evidence-Based Screening | WorkAbroad Hub",
+    title:       "Visa & Work-Permit Check (KES 300) — Evidence-Based Screening | WorkAbroad Hub",
     description: "Upload a visa or work permit and get an evidence-based report: date and machine-readable-zone checks, official sponsor-register lookups where available, and the exact official service to confirm the document yourself.",
     path:        "/tools/visa-check",
     keywords:    ["visa check kenya", "work permit check", "check visa validity", "visa document screening kenya"],
@@ -156,7 +156,7 @@ export default function VisaCheckPage() {
             We read the document, run checks we can prove (dates, machine-readable zone, official registers where available), show the evidence for every finding, and tell you exactly where to confirm it with the issuing authority.
           </p>
           <p className="text-xs font-semibold text-teal-700 dark:text-teal-300">
-            KES {TOOL_SCAN_PRICE_KES} per check · paid via M-Pesa · free re-check if we misread anything
+            KES {TOOL_SCAN_PRICE_KES} per check · M-Pesa or PayPal · free re-check if we misread anything
           </p>
         </div>
 

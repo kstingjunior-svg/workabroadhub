@@ -91,7 +91,7 @@ const VERDICT_STYLES = {
 
 export default function JobScamCheckerPage() {
   usePageSeo({
-    title:       "Job Scam Checker (KES 100/check) — Spot Fake Overseas Job Offers in Seconds | WorkAbroad Hub",
+    title:       "Job Scam Checker (KES 300/check) — Spot Fake Overseas Job Offers in Seconds | WorkAbroad Hub",
     description: "Paste any suspicious job posting, agency message, or offer letter. Get instant AI analysis identifying red flags: fake salaries, unreliable agencies, upfront-fee scams, and phishing signs.",
     path:        "/tools/job-scam-checker",
     keywords:    ["job scam checker kenya", "fake job offer check", "recruitment scam detector kenya", "overseas job scam verify"],
@@ -213,7 +213,7 @@ export default function JobScamCheckerPage() {
             Paste the WhatsApp chat, email, or job ad. Upload a screenshot too if you have one. We check the recruiter, payment method, phone number, salary, and 40+ scam patterns.
           </p>
           <p className="text-xs font-semibold text-teal-700 dark:text-teal-300">
-            KES {TOOL_SCAN_PRICE_KES} per check · paid via M-Pesa · one payment = one scan
+            KES {TOOL_SCAN_PRICE_KES} per check · M-Pesa or PayPal · one payment = one scan
           </p>
         </div>
 

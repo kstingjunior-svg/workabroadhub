@@ -36,7 +36,10 @@ import { pool } from "../db";
 import { storage } from "../storage";
 import { stkPush } from "../mpesa";
 
-export const TOOL_SCAN_PRICE_KES = 100;
+// 2026-11 (Tony): KES 100 → KES 300 per check, on M-Pesa AND PayPal.
+export const TOOL_SCAN_PRICE_KES = 300;
+// Credits already bought at the old KES 100 price stay valid.
+const TOOL_SCAN_MIN_ACCEPTED_KES = 100;
 
 export const PAID_TOOLS: Record<string, string> = {
   offer_check:    "Offer Letter Screening",
@@ -117,7 +120,7 @@ export function registerToolPayRoutes(app: Express): void {
       return res.json({
         paymentId: String(payment.id),
         amount: TOOL_SCAN_PRICE_KES,
-        message: "Enter your M-Pesa PIN on your phone to complete the KES 100 payment.",
+        message: `Enter your M-Pesa PIN on your phone to complete the KES ${TOOL_SCAN_PRICE_KES} payment.`,
       });
     } catch (err: any) {
       console.error("[ToolPay] initiation failed:", err?.message);
@@ -152,7 +155,75 @@ export function registerToolPayRoutes(app: Express): void {
     }
   });
 
-  console.log("[ToolPay] ✓ /api/tools/pay + /api/tools/pay/:id/status registered (KES 100/scan)");
+  // ── 4. PayPal: pay for one check by card / PayPal balance (2026-11) ──────
+  // Same credit model as M-Pesa: a payments row (service_id tool_<tool>,
+  // amount TOOL_SCAN_PRICE_KES) becomes the scan token once PayPal confirms.
+  // Charged at the tool's own price (≈ USD 2.31), not the flat portal fee.
+  app.post("/api/tools/pay/paypal", async (req: any, res: Response) => {
+    try {
+      const tool = String(req.body?.tool ?? "").trim();
+      if (!PAID_TOOLS[tool]) return res.status(400).json({ message: "Unknown tool.", code: "INVALID_TOOL" });
+      const { isPayPalConfigured, createPayPalOrder, safePayPalUrl, kesToUsd } = await import("../paypal");
+      if (!isPayPalConfigured()) return res.status(503).json({ message: "PayPal is not available right now. Please use M-Pesa." });
+      const userId: string = req.user?.claims?.sub ?? req.user?.id ?? "guest_tool_scan";
+      const payment = await storage.createPayment({
+        userId,
+        amount:      TOOL_SCAN_PRICE_KES,
+        currency:    "KES",
+        method:      "paypal",
+        status:      "pending",
+        serviceId:   `tool_${tool}`,
+        serviceName: `${PAID_TOOLS[tool]} (per-scan)`,
+        metadata:    JSON.stringify({ isToolScan: true, tool, paypalFlatFee: false, chargedKes: TOOL_SCAN_PRICE_KES }),
+      } as any);
+      const pid = String(payment.id);
+      const order = await createPayPalOrder(
+        TOOL_SCAN_PRICE_KES,
+        `${PAID_TOOLS[tool]} (1 check)`,
+        pid,
+        {
+          returnUrl: safePayPalUrl(req.body?.returnUrl, "/tools", { paypalReturn: "1", toolPid: pid }),
+          cancelUrl: safePayPalUrl(req.body?.returnUrl, "/tools", { paypalCancel: "1" }),
+        },
+        { exactPrice: true },
+      );
+      await storage.updatePayment(payment.id, { checkoutRequestId: order.id } as any);
+      console.log(`[ToolPay] PayPal order: tool=${tool} paymentId=${pid} order=${order.id}`);
+      return res.json({ paymentId: pid, approvalUrl: order.approvalUrl, amountKes: TOOL_SCAN_PRICE_KES, amountUSD: kesToUsd(TOOL_SCAN_PRICE_KES).toFixed(2) });
+    } catch (err: any) {
+      console.error("[ToolPay] PayPal init failed:", err?.message);
+      return res.status(500).json({ message: "Could not start PayPal. Please try again or use M-Pesa.", code: "PAY_INIT_FAILED" });
+    }
+  });
+
+  // Capture after the buyer returns from PayPal. Knowing the paymentId (a
+  // random UUID) is the same proof of possession the status endpoint uses.
+  // completePayPalCapture verifies amount + currency with PayPal and marks
+  // the credit paid exactly once.
+  app.post("/api/tools/pay/paypal/capture", async (req: any, res: Response) => {
+    try {
+      const pid = String(req.body?.paymentId ?? "").trim();
+      const { rows } = await pool.query<{ id: string; user_id: string; checkout_request_id: string | null; status: string }>(
+        `SELECT id, user_id, checkout_request_id, status FROM payments
+          WHERE id::text = $1 AND method = 'paypal' AND service_id LIKE 'tool_%'`,
+        [pid],
+      );
+      const row = rows[0];
+      if (!row || !row.checkout_request_id) return res.status(404).json({ message: "Payment not found." });
+      if (row.status === "completed" || row.status === "success") return res.json({ paid: true, paymentId: pid });
+      const { completePayPalCapture } = await import("../services/paypalCapture");
+      const result = await completePayPalCapture({
+        paypalOrderId: row.checkout_request_id, paymentId: pid, userId: row.user_id, clientIp: String(req.ip || ""), source: "client",
+      });
+      if (result.status === 200) return res.json({ paid: true, paymentId: pid });
+      return res.status(result.status).json({ paid: false, ...result.body });
+    } catch (err: any) {
+      console.error("[ToolPay] PayPal capture failed:", err?.message);
+      return res.status(500).json({ message: "Couldn't confirm the PayPal payment yet. If PayPal took the money it will be confirmed automatically." });
+    }
+  });
+
+  console.log(`[ToolPay] ✓ /api/tools/pay (M-Pesa + PayPal) registered (KES ${TOOL_SCAN_PRICE_KES}/scan)`);
 }
 
 // ── 3. The gate: consume exactly one paid credit per scan ────────────────────
@@ -184,7 +255,7 @@ export function requireToolCredit(tool: PaidTool) {
             AND status IN ('success', 'completed')
             AND delivery_status IS DISTINCT FROM 'consumed'
         RETURNING id`,
-        [token, `tool_${tool}`, TOOL_SCAN_PRICE_KES],
+        [token, `tool_${tool}`, TOOL_SCAN_MIN_ACCEPTED_KES],
       );
       if (rows.length) {
         (req as any).toolPaymentId = token;
@@ -197,16 +268,16 @@ export function requireToolCredit(tool: PaidTool) {
         [token],
       );
       if (!existing.length) {
-        return res.status(402).json({ message: "Payment not found. Please pay KES 100 to run this check.", code: "PAYMENT_REQUIRED", priceKes: TOOL_SCAN_PRICE_KES, tool });
+        return res.status(402).json({ message: `Payment not found. Please pay KES ${TOOL_SCAN_PRICE_KES} to run this check.`, code: "PAYMENT_REQUIRED", priceKes: TOOL_SCAN_PRICE_KES, tool });
       }
       const row = existing[0];
       if (row.delivery_status === "consumed") {
-        return res.status(402).json({ message: "That payment was already used for a scan. Each KES 100 payment covers one check.", code: "CREDIT_ALREADY_USED", priceKes: TOOL_SCAN_PRICE_KES, tool });
+        return res.status(402).json({ message: "That payment was already used for a scan. Each payment covers one check.", code: "CREDIT_ALREADY_USED", priceKes: TOOL_SCAN_PRICE_KES, tool });
       }
       if (row.service_id !== `tool_${tool}`) {
         return res.status(402).json({ message: "That payment was for a different tool.", code: "WRONG_TOOL_CREDIT", priceKes: TOOL_SCAN_PRICE_KES, tool });
       }
-      return res.status(402).json({ message: "Payment not confirmed yet. Complete the M-Pesa prompt, then try again.", code: "PAYMENT_PENDING", priceKes: TOOL_SCAN_PRICE_KES, tool });
+      return res.status(402).json({ message: "Payment not confirmed yet. Complete the M-Pesa or PayPal payment, then try again.", code: "PAYMENT_PENDING", priceKes: TOOL_SCAN_PRICE_KES, tool });
     } catch (err: any) {
       console.error(`[ToolPay] credit check failed (tool=${tool}):`, err?.message);
       // Fail CLOSED — this gate exists to stop free scans.

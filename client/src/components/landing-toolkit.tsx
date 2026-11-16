@@ -21,15 +21,15 @@ import { useLiveActivity } from "@/components/live-activity-feed";
 // one-line benefit, solid coloured button. Copy stays honest — tools SCREEN
 // and point to the official check; none "verifies authenticity".
 const TOOLS = [
-  { href: "/tools/job-scam-checker", testid: "link-tool-scam", icon: ShieldAlert, tone: "navy", price: "KES 100", title: "Check Job Scams",
+  { href: "/tools/job-scam-checker", testid: "link-tool-scam", icon: ShieldAlert, tone: "navy", price: "KES 300", title: "Check Job Scams",
     body: "Protect yourself. Spot scam signs in a job ad or agency message before you pay or engage.", cta: "Check Now" },
-  { href: "/tools/visa-check", testid: "link-tool-visa-check", icon: Globe2, tone: "purple", price: "KES 100", title: "Screen a Visa",
+  { href: "/tools/visa-check", testid: "link-tool-visa-check", icon: Globe2, tone: "purple", price: "KES 300", title: "Screen a Visa",
     body: "Check the dates and details, and get the official link to confirm it.", cta: "Screen Now" },
-  { href: "/tools/offer-check", testid: "link-tool-offer-check", icon: Mail, tone: "green", price: "KES 100", title: "Screen an Offer Letter",
+  { href: "/tools/offer-check", testid: "link-tool-offer-check", icon: Mail, tone: "green", price: "KES 300", title: "Screen an Offer Letter",
     body: "Understand your offer. See red flags in the terms and the sender before you sign.", cta: "Screen Now" },
   { href: "/tools/visa-sponsorship-jobs", testid: "link-tool-jobs", icon: Briefcase, tone: "blue", price: null, title: "Find Visa Sponsorship Jobs",
     body: "Discover overseas jobs that offer visa sponsorship.", cta: "Search Jobs" },
-  { href: "/tools/ielts-verify", testid: "link-tool-ielts-verify", icon: FileCheck2, tone: "orange", price: "KES 100", title: "Check an IELTS Result",
+  { href: "/tools/ielts-verify", testid: "link-tool-ielts-verify", icon: FileCheck2, tone: "orange", price: "KES 300", title: "Check an IELTS Result",
     body: "Screen your Test Report Form for inconsistencies, with the official way to confirm it.", cta: "Check Now" },
 ] as const;
 
@@ -77,7 +77,7 @@ export function LandingToolkit() {
             Stop losing overseas jobs to <span className="text-emerald-600 dark:text-emerald-400">ATS and scams</span>
           </h2>
           <p className="mt-4 text-base sm:text-lg text-slate-600 dark:text-slate-300">
-            Free ATS CV check + scam, visa &amp; offer-letter screening built for Kenyans. <strong className="text-slate-900 dark:text-white">From KES 100.</strong>
+            Free ATS CV check + scam, visa &amp; offer-letter screening built for Kenyans. <strong className="text-slate-900 dark:text-white">From KES 300.</strong>
           </p>
           <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
             <Link href="/tools/ats-cv-checker" data-testid="link-toolkit-hero-cta"
