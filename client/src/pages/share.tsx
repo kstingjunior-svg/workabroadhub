@@ -7,7 +7,7 @@
  *   2. Fetch the sanitized card data from /api/share/:token
  *   3. Render the identical ShareSuccessCard so the visitor sees the same
  *      thing the referrer posted
- *   4. Big CTAs: "Get YOURS for KES 99" → /services/order/cv_fix_lite
+ *   4. Big CTAs: "Get YOURS for KES 200" → /services/order/cv_fix_lite
  *
  * SEO note: this page is deliberately no-index (via meta robots) — it's
  * a viral surface, not a canonical URL we want Google indexing 10,000
@@ -114,7 +114,7 @@ export default function SharePage() {
                 className="bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-600 hover:to-cyan-600 text-white font-semibold"
                 data-testid="button-not-found-cta"
               >
-                Optimize my CV — KES 99
+                Optimize my CV — KES 200
                 <ArrowRight className="h-4 w-4 ml-2" />
               </Button>
             </CardContent>
@@ -160,7 +160,7 @@ export default function SharePage() {
                 data-testid="button-primary-cta"
               >
                 <Sparkles className="h-5 w-5 mr-2" />
-                Get YOUR CV optimized — KES 99
+                Get YOUR CV optimized — KES 200
                 <ArrowRight className="h-5 w-5 ml-2" />
               </Button>
 

@@ -353,8 +353,8 @@ issues (abandoned carts, declining country interest) before being asked.` : ""}
 ── FORBIDDEN PRICES (NEVER quote these — they are OLD numbers from before 2026 pricing reset) ──
 • KES 3,500 — DO NOT use this number for ANY service, especially NOT for any CV service.
   The current CV lineup (verify exact current names in LIVE SERVICE PRICES — they DO get
-  renamed, e.g. "CV Revamp" is now called "The Quick Fix"): the cheapest CV fix is ~KES 99,
-  the ATS-optimisation tier is ~KES 499, the country-specific rewrite is ~KES 699.
+  renamed, e.g. "CV Revamp" is now called "The Quick Fix"): the cheapest CV fix (CV Revamp) is KES 200,
+  writing a CV from scratch is KES 300 (the older KES 499 / KES 699 rewrites are retired).
 • KES 3,000 — old visa-guidance and LinkedIn price. Use the LIVE prices above.
 • KES 2,500, KES 1,500, KES 4,500-as-a-one-off-service-price — also old. KES 4,500 IS
   currently correct as the Yearly PLAN price (see LIVE SUBSCRIPTION PLANS) — don't confuse
@@ -436,8 +436,7 @@ Weave them, don't list them.
 
 ── COMMON QUESTIONS — CANONICAL ANSWERS ──
 • "How much for CV?" → Use the exact current names + prices from LIVE SERVICE PRICES above
-  (roughly: a quick fix ~KES 99, an ATS-optimised rewrite ~KES 499, a country-specific rewrite
-  ~KES 699). Recommend based on their goal, don't just list all three.
+  (roughly: CV Revamp KES 200, Write from Scratch KES 300, free ATS CV check). Recommend based on their goal.
 • "How much for the platform?" → Use LIVE SUBSCRIPTION PLANS above for the exact numbers. Lead
   with Yearly as the smart move (see WHY PRO below) unless they clearly just want to test the
   waters, in which case Trial is fine — once.

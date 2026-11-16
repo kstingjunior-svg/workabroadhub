@@ -72,7 +72,7 @@ export default function TrustPage() {
               <li className="flex gap-2"><span className="text-emerald-600">✓</span><span>Founded and operated by <strong>Antony Macloud</strong> — publicly named, publicly reachable.</span></li>
               <li className="flex gap-2"><span className="text-emerald-600">✓</span><span>We are a <strong>career-consultation service</strong>, NOT a recruitment agency and NOT a NEA-licensed placement firm.</span></li>
               <li className="flex gap-2"><span className="text-emerald-600">✓</span><span>All our free tools work without payment or account. Verify us before you spend a shilling.</span></li>
-              <li className="flex gap-2"><span className="text-emerald-600">✓</span><span>Pricing is transparent, published, and starts at <strong>KES 99</strong> for CV rewrites.</span></li>
+              <li className="flex gap-2"><span className="text-emerald-600">✓</span><span>Pricing is transparent, published, and starts at <strong>KES 200</strong> for a CV revamp.</span></li>
               <li className="flex gap-2"><span className="text-emerald-600">✓</span><span>We never charge placement fees, never guarantee jobs, and never handle your salary.</span></li>
             </ul>
           </CardContent>
@@ -122,7 +122,7 @@ export default function TrustPage() {
                 <li>• A career-tech platform based in Nairobi</li>
                 <li>• Free CV, scam &amp; visa verification tools</li>
                 <li>• Curated database of verified overseas job portals</li>
-                <li>• Paid career services from KES 99 (CV, cover, SoP, LinkedIn, coaching)</li>
+                <li>• Paid career services from KES 200 (CV, cover, SoP, LinkedIn, coaching)</li>
                 <li>• A public directory of Kenya&apos;s 2,600+ NEA-registered recruitment agencies</li>
                 <li>• A community reporting wall for recruitment fraud</li>
               </ul>
@@ -262,8 +262,8 @@ export default function TrustPage() {
               <span className="text-muted-foreground text-xl group-open:rotate-45 transition-transform">+</span>
             </summary>
             <p className="text-sm text-muted-foreground mt-3 leading-relaxed">
-              We charge for career services — CV rewrites (KES 99), cover letters (KES 149), SoP
-              writing (KES 249), and consultation packages (KES 4,500 one-time). We don&apos;t take
+              We charge for career services — CV revamps (KES 200), CVs and cover letters written from scratch (KES 300), SoP
+              writing (KES 999), and plans (Monthly KES 1,000, Yearly KES 4,500). We don&apos;t take
               a cut of anyone&apos;s future salary, don&apos;t collect placement fees, and don&apos;t receive
               kickbacks from recruitment agencies. It&apos;s a standard freemium software model: free
               tools attract users, and a small percentage pay for premium services.

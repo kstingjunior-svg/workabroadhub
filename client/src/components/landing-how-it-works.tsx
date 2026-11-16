@@ -26,7 +26,7 @@ const STEPS = [
     n: 2,
     icon: FileText,
     title: "Get your CV recruiter-friendly",
-    body: "Country-specific CV templates, document checklists, cover letters that get read. From KES 99 (about the price of two mandazi).",
+    body: "Country-specific CV templates, document checklists, cover letters that get read. From KES 200.",
     accent: "from-amber-500 to-orange-500",
     chipColor: "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300",
   },

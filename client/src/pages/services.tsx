@@ -556,7 +556,7 @@ export default function Services() {
           <div className="flex items-center gap-3 bg-primary/5 border border-primary/20 rounded-xl px-4 py-3">
             <span className="text-2xl">🔥</span>
             <div>
-              <p className="font-semibold text-sm">Start with just Ksh 99</p>
+              <p className="font-semibold text-sm">Start with just Ksh 200</p>
               <p className="text-xs text-muted-foreground">No hidden charges</p>
             </div>
           </div>

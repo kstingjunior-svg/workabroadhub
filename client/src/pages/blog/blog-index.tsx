@@ -126,7 +126,7 @@ export default function BlogIndex() {
             </Link>
             <Link href="/services">
               <Button size="lg" variant="outline" className="border-white/30 bg-transparent text-white hover:bg-white/10">
-                Career Services from KES 99
+                Career Services from KES 200
               </Button>
             </Link>
           </div>

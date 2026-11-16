@@ -113,7 +113,7 @@ export function buildShareCardSvg(p: ShareCardProps): string {
   <g transform="translate(0, 880)">
     <rect x="80" y="0" width="920" height="120" rx="24" fill="${accent}"/>
     <text x="540" y="55" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="36" font-weight="800" fill="#ffffff">
-      Get YOURS for KES 99
+      Get YOURS for KES 200
     </text>
     <text x="540" y="95" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="26" font-weight="500" fill="#ffffff" fill-opacity="0.9">
       workabroadhub.tech

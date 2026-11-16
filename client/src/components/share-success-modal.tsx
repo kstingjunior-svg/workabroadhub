@@ -63,7 +63,7 @@ export function ShareSuccessModal({ open, onOpenChange, orderId, card }: ShareSu
     const first = (card.firstName || "").split(/\s+/)[0] || "I";
     const service = card.serviceName || "CV";
     const country = card.targetCountry ? ` for ${card.targetCountry}` : "";
-    return `${first} just got a professional ${service}${country} on WorkAbroadHub — for KES 99. Take a look and get yours 👇\n${shareUrl}`;
+    return `${first} just got a professional ${service}${country} on WorkAbroadHub — for KES 200. Take a look and get yours 👇\n${shareUrl}`;
   }, [card, shareUrl]);
 
   async function handleNativeShare() {

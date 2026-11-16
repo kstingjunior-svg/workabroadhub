@@ -31,7 +31,7 @@ export function DashboardHeroCTA() {
             <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center">
               <FileText className="h-6 w-6" />
             </div>
-            <span className="text-[10px] font-bold bg-white/20 px-2 py-1 rounded-full">FROM KES 99</span>
+            <span className="text-[10px] font-bold bg-white/20 px-2 py-1 rounded-full">FROM KES 200</span>
           </div>
           <h3 className="text-lg sm:text-xl font-bold mb-1">📝 Fix my CV</h3>
           <p className="text-sm text-white/90 mb-3 leading-snug">

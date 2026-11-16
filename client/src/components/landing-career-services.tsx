@@ -7,7 +7,7 @@
  *   lg ≥ 1024px      Free card large on the left, three paid cards in a row
  *
  * Prices and routes are the live ones: CV Health Check (free ATS checker),
- * CV Revamp KES 99 (cv_fix_lite), Write from Scratch KES 300 (own page),
+ * CV Revamp KES 200 (cv_fix_lite), Write from Scratch KES 300 (own page),
  * SoP KES 999 (sop_writing). Anonymous checkout — no sign-up wall.
  */
 import { Link, useLocation } from "wouter";
@@ -15,7 +15,7 @@ import { ArrowRight, Clock, FileCheck2, Gift, GraduationCap, PenLine, ShieldChec
 
 const PAID = [
   {
-    key: "cv_fix_lite", title: "CV Revamp", price: 99, icon: Wand2, badge: "MOST AFFORDABLE",
+    key: "cv_fix_lite", title: "CV Revamp", price: 200, icon: Wand2, badge: "MOST AFFORDABLE",
     blurb: "Grammar, formatting & structure cleaned up. Recruiter-ready. Word + PDF.",
     save: { label: "Typical typist", was: 1500 },
     cta: "Get my CV revamped", to: "/services/order/cv_fix_lite",

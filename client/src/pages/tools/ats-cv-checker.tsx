@@ -567,12 +567,11 @@ export default function ATSCVChecker() {
                           </Badge>
                         </div>
                         <h3 className="text-lg font-bold leading-tight">
-                          Fix everything we found — for KES 99
+                          Fix everything we found — for KES 200
                         </h3>
                         <p className="text-sm text-muted-foreground leading-relaxed mt-1">
                           Your CV scored {result.score}/100. CV Revamp rewrites the formatting,
-                          fixes grammar, and restructures it to pass ATS — delivered in 3 minutes
-                          for less than a mandazi.
+                          fixes grammar, and restructures it to pass ATS — delivered in 3 minutes.
                         </p>
                       </div>
 
@@ -591,7 +590,7 @@ export default function ATSCVChecker() {
                           className="flex-1 inline-flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-bold text-sm py-3 px-4 rounded-xl shadow-md hover:shadow-lg transition-all"
                           data-testid="button-tripwire-cv-fix"
                         >
-                          🎯 Fix My CV for KES 99
+                          🎯 Fix My CV for KES 200
                           <ChevronRight className="h-4 w-4" />
                         </button>
                         <Link href="/services" className="text-xs text-center sm:text-left text-muted-foreground hover:text-foreground transition-colors px-2 py-2"
@@ -633,7 +632,7 @@ export default function ATSCVChecker() {
                             </Badge>
                           </div>
                           <h3 className="text-lg font-bold leading-tight">
-                            Fix my CV now — KES 99
+                            Fix my CV now — KES 200
                           </h3>
                           <p className="text-sm text-muted-foreground leading-relaxed mt-1">
                             Your CV scored {result.score}/100. Our writers restructure the
@@ -653,7 +652,7 @@ export default function ATSCVChecker() {
                         className="inline-flex w-full items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-bold text-sm py-3 px-4 rounded-xl shadow-md hover:shadow-lg transition-all"
                         data-testid="button-anon-cv-fix"
                       >
-                        🎯 Fix My CV for KES 99
+                        🎯 Fix My CV for KES 200
                         <ChevronRight className="h-4 w-4" />
                       </Link>
                     </CardContent>
@@ -688,8 +687,7 @@ export default function ATSCVChecker() {
                         </h3>
                         <p className="text-sm text-muted-foreground leading-relaxed mt-1">
                           Your CV scored {result.score}/100. CV Revamp gives you the full report PLUS rewrites the
-                          formatting, fixes grammar, and restructures it to pass ATS — delivered in 3 minutes for less
-                          than a mandazi.
+                          formatting, fixes grammar, and restructures it to pass ATS — delivered in 3 minutes.
                         </p>
                       </div>
                     </div>
@@ -698,7 +696,7 @@ export default function ATSCVChecker() {
                       className="inline-flex w-full items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-bold text-sm py-3 px-4 rounded-xl shadow-md hover:shadow-lg transition-all"
                       data-testid="button-locked-cv-fix"
                     >
-                      🎯 Fix My CV for KES 99
+                      🎯 Fix My CV for KES 200
                       <ChevronRight className="h-4 w-4" />
                     </button>
                   </CardContent>
@@ -915,7 +913,7 @@ export default function ATSCVChecker() {
         </div>
       </div>
 
-      {/* ── Instant-pay modal — opens when user taps "Fix My CV for KES 99" ── */}
+      {/* ── Instant-pay modal — opens when user taps "Fix My CV for KES 200" ── */}
       <CvFixLiteInstantPayModal
         open={instantPayOpen}
         onOpenChange={setInstantPayOpen}

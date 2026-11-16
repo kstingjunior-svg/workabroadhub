@@ -3,7 +3,7 @@
 //
 // Closes the highest-leverage conversion loop on the platform: the moment
 // someone sees their CV score on /tools/ats-cv-checker, they should be able
-// to tap "Fix it for KES 99" and have an M-Pesa STK push fire on their
+// to tap "Fix it for KES 200" and have an M-Pesa STK push fire on their
 // phone in two clicks. No re-upload, no second page, no friction.
 //
 // FLOW:
@@ -156,7 +156,7 @@ export function CvFixLiteInstantPayModal({ open, onOpenChange, cvFile, score }: 
           // one frustrated customer). Also send both keys for max compat.
           serviceOrderId: createdOrderId,
           orderId: createdOrderId,
-          amount: 99,
+          amount: 200,
         }),
       });
       const data = await res.json();
@@ -263,12 +263,12 @@ export function CvFixLiteInstantPayModal({ open, onOpenChange, cvFile, score }: 
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Zap className="h-5 w-5 text-amber-500" />
-            Fix my CV for KES 99
+            Fix my CV for KES 200
           </DialogTitle>
           <DialogDescription>
             {score != null && stage === "intro"
               ? `Your CV scored ${score}/100. We'll fix everything we flagged — delivered in 3 minutes.`
-              : "Delivered in 3 minutes. Costs less than a mandazi."}
+              : "Delivered in 3 minutes. A typist would charge KES 1,500."}
           </DialogDescription>
         </DialogHeader>
 
@@ -277,7 +277,7 @@ export function CvFixLiteInstantPayModal({ open, onOpenChange, cvFile, score }: 
           <div className="space-y-4 py-2">
             <div className="flex items-center justify-between rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-3 py-2">
               <span className="text-sm font-medium">CV Revamp</span>
-              <Badge className="bg-amber-500 text-white border-0">KES 99</Badge>
+              <Badge className="bg-amber-500 text-white border-0">KES 200</Badge>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="ipay-phone">M-Pesa phone</Label>
@@ -353,7 +353,7 @@ export function CvFixLiteInstantPayModal({ open, onOpenChange, cvFile, score }: 
             </div>
             <h3 className="font-bold text-base">Check your phone</h3>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              Enter your M-Pesa PIN to confirm <strong>KES 99</strong>.
+              Enter your M-Pesa PIN to confirm <strong>KES 200</strong>.
               We'll start fixing your CV the moment you confirm.
             </p>
             <p className="text-[11px] text-muted-foreground">
@@ -439,7 +439,7 @@ export function CvFixLiteInstantPayModal({ open, onOpenChange, cvFile, score }: 
         open={readyOpen}
         onOpenChange={setReadyOpen}
         onConfirmed={_runPaymentFlow}
-        amountKes={99}
+        amountKes={200}
         phone={normalisedPhone()}
         productName="CV Revamp"
       />

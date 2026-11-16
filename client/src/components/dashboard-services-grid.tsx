@@ -44,11 +44,11 @@ const SERVICES: ServiceCard[] = [
     emoji: "✨",
     name: "CV Revamp",
     desc: "Grammar, formatting & structure cleaned up. 3 minutes.",
-    price: 99,
+    price: 200,
     bgColor: "bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800",
     textColor: "text-blue-700 dark:text-blue-300",
     socialProof: "Most affordable",
-    priceAnchor: "≈ 1 mandazi · Typist: KES 1,500",
+    priceAnchor: "Typist: KES 1,500 — you save KES 1,300",
   },
   // 2026-09 REMOVED (Tony: "remove the 149 completely") — the standalone
   // KES 149 Cover Letter card (cover_letter) duplicated Write from

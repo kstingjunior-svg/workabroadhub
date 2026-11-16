@@ -76,7 +76,7 @@ WorkAbroad Hub is a **career-tech platform** that helps Kenyan job-seekers apply
 
 2. **Curated verified job portals** — we maintain a database of 30+ government-recognised employment portals across 15 countries (NHS Jobs UK, IRCC Canada, ADEM Luxembourg, UŽT Lithuania, etc.). We link you directly to those portals so you apply straight to the employer.
 
-3. **Paid career services** — CV rewrites (from KES 99), cover letters, SoPs, LinkedIn optimisation, and 1-on-1 WhatsApp consultation packages (KES 4,500 one-time). You pay for our work; we don't take a cut of anyone's salary or placement fee.
+3. **Paid career services** — CV revamps (from KES 200), cover letters, SoPs, LinkedIn optimisation, and 1-on-1 WhatsApp consultation packages (KES 4,500 one-time). You pay for our work; we don't take a cut of anyone's salary or placement fee.
 
 ## What we are NOT
 
@@ -116,7 +116,7 @@ A few reasons Google's AI summary might look scary:
 
 **2. "Scam exposer" accounts on Instagram sometimes flag legitimate paid services as scams** because their model is "any paid service = suspicious." Being paid doesn't make a service a scam. Doctors, lawyers, and dentists all charge for services and are not scams. The same applies to CV writing and career consultation.
 
-**3. We charge fees.** KES 99 for a CV revamp, KES 4,500 for a career-consultation package. Legitimate services charge for their work. What's actually illegal is a **recruitment agency** charging job-seekers placement fees — and we don't do that because we're not a recruitment agency.
+**3. We charge fees.** KES 200 for a CV revamp, KES 4,500 for a career-consultation package. Legitimate services charge for their work. What's actually illegal is a **recruitment agency** charging job-seekers placement fees — and we don't do that because we're not a recruitment agency.
 
 **4. Kenyan diaspora forums sometimes generalise about overseas-job platforms.** We're a specific platform with a specific product. The generic warnings ("always be careful of platforms offering overseas jobs") apply to real scammers — not to us.
 
@@ -143,7 +143,7 @@ We don't do any of these. Check for yourself.
 
 Do the smart thing — use the free tools first. Every one of our free tools works without an account and without any payment. Try the ATS CV Checker with your own CV, or verify a recruitment agency using our NEA lookup. If the tools work well and the results make sense, you've verified us. If they don't, you've lost 5 minutes and nothing else.
 
-Only once you've tried the free tools should you consider the paid services (starting at KES 99). Even at KES 99 it's the lowest-risk paid product in Kenyan overseas-jobs tech.
+Only once you've tried the free tools should you consider the paid services (starting at KES 200). Even at KES 200 it's the lowest-risk paid product in Kenyan overseas-jobs tech.
 
 ## Contact me directly
 
@@ -253,7 +253,7 @@ Why: the ATS scores your CV by keyword match against the job description. If the
 
 Every CV you send without professional review is a lottery ticket. WorkAbroad Hub offers:
 - **[Free ATS CV Check](/tools/ats-cv-checker)** — instant score, keyword gaps, and formatting issues (no cost)
-- **[CV Revamp (KES 99)](/services)** — professional rewrite with country-specific formatting, delivered in Word + PDF within 3 minutes
+- **[CV Revamp (KES 200)](/services)** — professional rewrite with country-specific formatting, delivered in Word + PDF within 3 minutes
 - **[Cover Letter (KES 149)](/services)** — custom letter for any job you apply to
 
 If you're applying to a specific job, do the free check first. If your score is below 70%, upgrade to the paid revamp — the difference in interview rates is measurable.
@@ -273,7 +273,7 @@ If you're serious about applying abroad in the next 90 days:
 
 1. Rewrite your CV using the rules above.
 2. Run it through the [free ATS checker](/tools/ats-cv-checker) — score it against 3 different jobs you want.
-3. If you're getting below 70% consistently, invest in the [KES 99 CV Revamp](/services) — it pays for itself with one interview.
+3. If you're getting below 70% consistently, invest in the [KES 200 CV Revamp](/services) — it pays for itself with one interview.
 4. Look for verified [visa-sponsoring jobs](/tools/visa-sponsorship-jobs) so you don't waste applications on employers who won't sponsor Kenyans.
 
 Kenyans get overseas jobs every day. The applicants who succeed aren't smarter or more qualified — they just present their skills in a format the target market can actually read.
@@ -534,7 +534,7 @@ Total realistic timeline: **4–6 months** from serious job-hunt start to arrivi
 The Skilled Worker Visa process is bureaucratic but well-documented. Most applicants can handle it themselves. Where WorkAbroad Hub adds value:
 
 - **[Free ATS CV Check](/tools/ats-cv-checker)** — before applying to any UK employer, score your CV
-- **[CV Revamp KES 99](/services)** — get your CV rewritten in UK format
+- **[CV Revamp KES 200](/services)** — get your CV rewritten in UK format
 - **[Cover Letter KES 149](/services)** — custom letter for each UK role you apply to
 - **[Verify the employer's Sponsor Licence](/nea-agencies)** — although this is for NEA agencies, the same skepticism applies to UK "sponsors" contacting you via WhatsApp
 - **[Visa Sponsorship Jobs tool](/tools/visa-sponsorship-jobs)** — curated list of verified UK sponsors currently hiring Kenyans
@@ -1209,7 +1209,7 @@ If you're 22 with a fresh degree, focus first on getting 2-3 years of solid Keny
 - **[Free ATS CV Check](/tools/ats-cv-checker)** — see how your CV scores against real overseas job descriptions
 - **[Visa Sponsorship Jobs](/tools/visa-sponsorship-jobs)** — live list of overseas employers currently sponsoring Kenyans
 - **[Country hubs](/services)** — deep guides for USA, Canada, UK, Australia, UAE, Europe, and 9 other countries
-- **[Career services from KES 99](/services)** — CV rewrite, cover letter, LinkedIn optimisation
+- **[Career services from KES 200](/services)** — CV rewrite, cover letter, LinkedIn optimisation
 
 ## Final word
 
@@ -1394,7 +1394,7 @@ After ILR + 1 more year = British citizenship application eligibility.
 
 1. **Get your IELTS scheduled** — book British Council Nairobi for the next available Saturday (usually 3-6 weeks out).
 2. **Apply for your Certificate of Good Conduct** now via eCitizen — it takes 2-3 weeks.
-3. **Update your CV to UK format** — see our [CV writing guide](/blog/how-to-write-cv-overseas-jobs-kenya). Consider our [KES 99 CV Revamp](/services) if you want expert help.
+3. **Update your CV to UK format** — see our [CV writing guide](/blog/how-to-write-cv-overseas-jobs-kenya). Consider our [KES 200 CV Revamp](/services) if you want expert help.
 4. **Start applying to real UK sponsors** — 30-50 applications is realistic before you get 1-2 offers. Use jobs.nhs.uk, indeed.co.uk, and our [visa sponsorship jobs tool](/tools/visa-sponsorship-jobs).
 5. **Save aggressively** — target KES 350,000 minimum before your visa fees + flight + first UK month.
 
@@ -1610,7 +1610,7 @@ You must leave Germany within the visa validity period. You can:
 
 ## Getting help
 
-- **[CV Revamp in Europass format](/services)** — KES 99, we format your CV for German recruiters
+- **[CV Revamp in Europass format](/services)** — KES 200, we format your CV for German recruiters
 - **[Certificate of Good Conduct Guide](/blog/certificate-of-good-conduct-kenya-guide)** — required + must be legalised
 - **[Fake agency warnings](/blog/fake-recruitment-agencies-kenya-warning-signs)** — same scam patterns apply for German "opportunities"
 - **[Europe country hub](/country/europe)** — related EU visa routes
