@@ -40,7 +40,7 @@ function openerFor(path: string): string {
     return `Hey, I see you're reading through one of our guides — pretty thorough one, that. Quick question: are you most interested in the visa side, the CV/application side, or how to vet the employer? I can save you the scrolling.`;
   }
   if (path.startsWith("/services") || path.startsWith("/pricing")) {
-    return `Hey, I saw you looking at services. Mind if I ask what you're trying to fix? Sometimes the right answer isn't the most expensive one — I'd rather point you to a KES 99 CV polish if that's all you need.`;
+    return `Hey, I saw you looking at services. Mind if I ask what you're trying to fix? Sometimes the right answer isn't the most expensive one — I'd rather point you to the KES 200 CV Revamp if that's all you need.`;
   }
   if (path.startsWith("/tools/")) {
     return `Quick one — I noticed you're using one of our free tools. If anything's confusing or your result didn't make sense, just tell me what you got and I'll explain plainly.`;

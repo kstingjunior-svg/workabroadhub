@@ -240,10 +240,10 @@ export function KenyaCareersApplySheet({
               <div className="rounded-lg bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 ring-1 ring-emerald-200 dark:ring-emerald-800 p-4 mb-3">
                 <div className="flex items-center gap-1.5 mb-2">
                   <Sparkles className="h-4 w-4 text-emerald-600" />
-                  <strong className="text-sm">Unlock applying — KES 99</strong>
+                  <strong className="text-sm">Unlock applying — from KES 1,000</strong>
                 </div>
                 <p className="text-sm text-muted-foreground mb-2">
-                  One trial subscription covers <strong>both</strong> the overseas board AND Kenya Careers:
+                  One subscription covers <strong>both</strong> the overseas board AND Kenya Careers:
                 </p>
                 <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
                   <li><strong>Unlimited applications</strong> — we don't charge per apply</li>

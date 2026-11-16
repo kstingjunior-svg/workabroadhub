@@ -126,7 +126,7 @@ export function requirePaidPlan(minTier: Exclude<Tier, "free"> = "basic") {
     return res.status(402).json({
       message: minTier === "pro"
         ? "This is a Pro feature. Upgrade to Pro to unlock it — from KES 1,000/month."
-        : "This tool requires an active plan. Upgrade from KES 99 to unlock it.",
+        : "This tool requires an active plan — Monthly KES 1,000 or Yearly KES 4,500.",
       code: "PLAN_UPGRADE_REQUIRED",
       currentPlan: plan,
       requiredPlan: minTier,

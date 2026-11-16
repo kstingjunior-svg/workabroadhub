@@ -187,7 +187,7 @@ export default function JobMatchPage() {
                         You can see the matches for free. Applying requires an active account so we can invest in keeping the job database fresh + AI matching sharp for you.
                       </div>
                       <div className="text-xs text-amber-800 dark:text-amber-300 mt-2">
-                        <b>KES 99</b> for a 1-day trial · <b>KES 1,000</b>/month · <b>KES 4,500</b>/year (save 62%)
+                        <b>KES 1,000</b>/month · <b>KES 4,500</b>/year (save 62%)
                       </div>
                     </div>
                   </div>

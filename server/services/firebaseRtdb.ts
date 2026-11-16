@@ -328,6 +328,14 @@ export const AMOUNT_SERVICE_MAP: Record<
   }
 > = {
   // ── CV & Document Services ─────────────────────────────────────────────
+  // 2026-11: CV Revamp is now KES 200 (99 kept for historical payments).
+  200: {
+    creditType:      "cv_services",
+    credits:         1,
+    expiryDays:      null,
+    packName:        "CV Revamp",
+    revenueCategory: "cv_services",
+  },
   99: {
     creditType:      "cv_services",
     credits:         1,

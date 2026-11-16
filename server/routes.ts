@@ -23736,7 +23736,7 @@ LIVE PRICE OVERRIDE wins. Never quote a price not in this list.
 ━━━ FORBIDDEN NUMBERS (NEVER use these — they're old pre-2026 prices) ━━━
 NEVER quote KES 3,500 / 3500 / "three thousand five hundred" for ANYTHING,
 especially NOT for any CV service. The CORRECT CV prices are in the SERVICES
-block above — typically KES 99 (Fix Lite), KES 499 (ATS), KES 699 (Rewrite).
+block above — CV Revamp KES 200, Write from Scratch KES 300 (the KES 499 / 699 rewrites are retired).
 Also forbidden: KES 3,000, KES 2,500, KES 1,500, KES 4,500 — all old.
 If your instinct says "3,500", STOP and re-read the SERVICES block above.`;
       } catch (priceErr: any) {

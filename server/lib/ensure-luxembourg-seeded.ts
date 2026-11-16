@@ -104,7 +104,7 @@ const LUX_GUIDES = [
       "that salary floor. Standard salaried work permits require ~€55,000/year and the employer " +
       "must prove no EU citizen could fill the role.\n\n" +
       "Hospitality, driving, cleaning, and general unskilled work DO NOT get permits for Kenyans here — " +
-      "those roles are filled by cross-border French/Belgian/German workers. Please do not pay our KES 99 " +
+      "those roles are filled by cross-border French/Belgian/German workers. Please do not pay our KES 1,000 " +
       "or KES 4,500 fee expecting access to those jobs in Luxembourg — they don't exist for you here.\n\n" +
       "Use ONLY the four portals listed above. Apply directly. Never pay an agency for a guaranteed " +
       "Luxembourg job — every legitimate Luxembourg employer hires through ADEM at no cost to you.",
