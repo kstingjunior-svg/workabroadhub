@@ -389,6 +389,25 @@ export function initWebSocketServer(httpServer: Server, sessionParser?: RequestH
       return;
     }
 
+    // 2026-11 SECURITY: /ws/analytics carries admin-only data (paying users'
+    // names, emails, phones, current page; sign-up emails + IPs; payments).
+    // It was open to anyone. Only signed-in admins may connect now.
+    if (target === wss) {
+      const t = target;
+      import("./lib/ws-admin-auth")
+        .then(({ isAdminRequest }) => isAdminRequest(req))
+        .then((ok) => {
+          if (!ok) {
+            socket.write("HTTP/1.1 401 Unauthorized\r\nConnection: close\r\nContent-Length: 0\r\n\r\n");
+            socket.destroy();
+            return;
+          }
+          t.handleUpgrade(req, socket as any, head, (ws) => { t.emit("connection", ws, req); });
+        })
+        .catch(() => { try { socket.write("HTTP/1.1 500 Internal Server Error\r\nConnection: close\r\n\r\n"); } catch {} socket.destroy(); });
+      return;
+    }
+
     target.handleUpgrade(req, socket as any, head, (ws) => {
       target!.emit("connection", ws, req);
     });

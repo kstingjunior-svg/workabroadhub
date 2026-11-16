@@ -2516,7 +2516,7 @@ Crawl-delay: 1`);
         })
         .eq("id", userId);
 
-      getIO().emit("user_active", {
+      getIO().to("admin").emit("user_active", {
         user_id: user.id,
         time: new Date().toISOString(),
       });
@@ -6248,7 +6248,7 @@ Crawl-delay: 1`);
               : (payment.metadata ?? {});
             if (tmeta?.isToolScan === true) {
               console.log(`[MPESA/PAYMENTS CALLBACK] Tool-scan credit confirmed: paymentId=${payment.id} tool=${tmeta.tool ?? "?"}`);
-              getIO().emit("new_payment", {
+              getIO().to("admin").emit("new_payment", {
                 amount: amountPaid != null ? Math.round(amountPaid) : (payment.amount ?? 0),
                 phone:  phonePaid || null,
               });
@@ -6263,7 +6263,7 @@ Crawl-delay: 1`);
             String(payment.id),
           ).catch((e) => console.error("[ServiceRequest] STK callback path failed:", e?.message));
 
-          getIO().emit("new_payment", {
+          getIO().to("admin").emit("new_payment", {
             amount: amountPaid != null ? Math.round(amountPaid) : (payment.amount ?? 0),
             phone:  phonePaid || null,
           });
@@ -6322,7 +6322,7 @@ Crawl-delay: 1`);
                 ? ((await resolveSupabaseUuidFromPhone(phonePaid)) ?? payment.userId)
                 : payment.userId;
               upgradeUserToPro(supabaseUid).catch((err) => reportRejection(err, 'routes'));
-              getIO().emit("user_upgraded", { user_id: supabaseUid });
+              getIO().to("admin").emit("user_upgraded", { user_id: supabaseUid });
             }
             const { runPaymentPipeline } = await import("./services/paymentPipeline");
             // Resolve planId robustly. Different code paths historically set

@@ -63,7 +63,7 @@ function sentence(i: LiveActivityItem) {
   );
 }
 
-/** Shared data hook: polls every 60s and refreshes instantly on a real payment. */
+/** Shared data hook: polls the public endpoint every 60s. */
 export function useLiveActivity() {
   const queryClient = useQueryClient();
   const q = useQuery<LiveActivityResponse>({
@@ -72,31 +72,10 @@ export function useLiveActivity() {
     refetchInterval: 60_000,
   });
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-    let ws: WebSocket | null = null;
-    let timer: ReturnType<typeof setTimeout>;
-    let closed = false;
-    const connect = () => {
-      try {
-        ws = new WebSocket(`${proto}//${window.location.host}/ws/analytics`);
-        ws.onmessage = (evt) => {
-          try {
-            const msg = JSON.parse(evt.data);
-            if (msg?.type === "payment_confirmed" || msg?.type === "new_user") {
-              // give the server cache a moment, then pull the real event
-              setTimeout(() => queryClient.invalidateQueries({ queryKey: ["/api/public/live-activity"] }), 61_000);
-            }
-          } catch { /* ignore */ }
-        };
-        ws.onclose = () => { if (!closed) timer = setTimeout(connect, 10_000); };
-        ws.onerror = () => ws?.close();
-      } catch { /* ignore */ }
-    };
-    connect();
-    return () => { closed = true; clearTimeout(timer); ws?.close(); };
-  }, [queryClient]);
+  // 2026-11 SECURITY: this used to open /ws/analytics for every visitor —
+  // an admin channel that carried paying users' contact details. The feed
+  // now simply polls the public, privacy-safe endpoint every minute.
+  void queryClient;
 
   // re-render every 30s so "x min ago" stays true
   const [, setTick] = useState(0);

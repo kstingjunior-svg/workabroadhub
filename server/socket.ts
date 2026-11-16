@@ -9,7 +9,14 @@ export function initSocketIO(httpServer: HttpServer): Server {
   });
 
   io.on("connection", (socket) => {
-    console.log("⚡ Socket connected:", socket.id);
+    // 2026-11 SECURITY: payment / activity events are admin-only. They used
+    // to be broadcast to every socket (including community-chat visitors),
+    // with the payer's phone number. Admins are put in the "admin" room and
+    // the events are sent to that room only.
+    import("./lib/ws-admin-auth")
+      .then(({ isAdminRequest }) => isAdminRequest(socket.request))
+      .then((ok) => { if (ok) socket.join("admin"); })
+      .catch(() => {});
 
     // Community chat room subscriptions. Client emits "chat:join" with a
     // valid room slug; server adds the socket to that room and starts
