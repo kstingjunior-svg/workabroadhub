@@ -236,7 +236,7 @@ export function requireToolCredit(tool: PaidTool) {
 
       if (!token) {
         return res.status(402).json({
-          message: `This check costs KES ${TOOL_SCAN_PRICE_KES}. Pay via M-Pesa to run it.`,
+          message: `This check costs KES ${TOOL_SCAN_PRICE_KES}. Pay by M-Pesa or PayPal to run it.`,
           code: "PAYMENT_REQUIRED",
           priceKes: TOOL_SCAN_PRICE_KES,
           tool,

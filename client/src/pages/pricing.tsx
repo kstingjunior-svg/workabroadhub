@@ -399,7 +399,7 @@ export default function PricingPage() {
         {!trialEligible && (
           <div className="mb-6 rounded-2xl border-2 border-amber-300 bg-amber-50 p-5 text-center" data-testid="trial-used-upsell">
             <p className="text-sm font-bold text-amber-900 mb-1">
-              You've already used your one-time KES 99 trial.
+              Pick your plan — pay by M-Pesa or PayPal.
             </p>
             <p className="text-sm text-amber-800 mb-4">
               Ready for the full experience? Get 30 days for <strong>KES 1,000</strong>, or a full year for <strong>KES 4,500</strong> — the best value.
