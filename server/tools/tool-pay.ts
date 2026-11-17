@@ -75,6 +75,13 @@ export function registerToolPayRoutes(app: Express): void {
         });
       }
 
+      // 2026-11: stop the "pressed Pay 20 times, phone unreachable" loop.
+      {
+        const { checkUnreachable } = await import("../lib/mpesa-retry-guard");
+        const g = await checkUnreachable(phone);
+        if (g.blocked) return res.status(429).json({ message: g.message, code: "MPESA_PHONE_UNREACHABLE", retryAfterMin: g.retryAfterMin });
+      }
+
       const userId: string =
         req.user?.claims?.sub ?? req.user?.id ?? "guest_tool_scan";
 

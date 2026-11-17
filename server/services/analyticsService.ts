@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { classifyOutcome } from "../lib/payment-outcome";
 /**
  * Revenue Analytics Service
  *
@@ -207,6 +208,8 @@ export interface RecentTransaction {
   method: string;
   status: string;
   createdAt: string;
+  outcome?: { kind: string; label: string };
+  what?: string | null;
 }
 
 export async function getRecentTransactions(limit = 20): Promise<RecentTransaction[]> {
@@ -224,6 +227,9 @@ export async function getRecentTransactions(limit = 20): Promise<RecentTransacti
     method: p.method,
     status: p.status,
     createdAt: p.createdAt?.toISOString() ?? "",
+    // 2026-11: say what actually happened instead of a bare "Failed".
+    outcome: classifyOutcome(p.status, (p as any).failReason ?? null, p.method),
+    what: (p as any).serviceName ?? (p as any).serviceId ?? (p as any).planId ?? null,
   }));
 }
 

@@ -2893,6 +2893,16 @@ Crawl-delay: 1`);
         return res.status(400).json({ message: mpesaPhoneError(normalizedPhone), code: "MPESA_PHONE_INVALID" });
       }
 
+      // 2026-11: stop repeated prompts to a phone M-Pesa cannot reach.
+      {
+        const { checkUnreachable } = await import("./lib/mpesa-retry-guard");
+        const g = await checkUnreachable(normalizedPhone);
+        if (g.blocked) return res.status(429).json({
+          title: "M-Pesa can't reach this phone", message: g.message, code: "MPESA_PHONE_UNREACHABLE", retryAfterMin: g.retryAfterMin,
+          nextStep: "Check the phone has signal, try another Safaricom number, or pay manually by Paybill below — no need to keep tapping Pay.", offerPaybill: true, retrySafe: false,
+        });
+      }
+
       // 2026-08 SECURITY (Phase 3 audit): one KES 99 trial per user + phone.
       // Previously ANY user could buy the trial repeatedly, or spin up new
       // accounts (email aliases) and pay KES 99 forever instead of KES 4,500
@@ -4822,6 +4832,11 @@ Crawl-delay: 1`);
       }
       if (!phone) {
         return res.status(400).json({ success: false, error: "No phone number on record. Update your profile and try again." });
+      }
+      {
+        const { checkUnreachable } = await import("./lib/mpesa-retry-guard");
+        const g = await checkUnreachable(phone);
+        if (g.blocked) return res.status(429).json({ success: false, error: g.message, message: g.message, code: "MPESA_PHONE_UNREACHABLE", retryAfterMin: g.retryAfterMin });
       }
 
       const amount = Number((payment as any).amount ?? 0);
@@ -18329,6 +18344,19 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
       res.json(txns);
     } catch (err: any) {
       res.status(500).json({ message: "Failed to fetch transactions" });
+    }
+  });
+
+  // GET /api/admin/analytics/payment-funnel — people who tried vs paid, with plain reasons (2026-11)
+  app.get("/api/admin/analytics/payment-funnel", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const days = Math.min(90, Math.max(1, Number((req.query as any).days ?? 7)));
+      const { paymentFunnel } = await import("./lib/payment-outcome");
+      const { paypalHealth } = await import("./lib/paypal-health");
+      res.json({ ...(await paymentFunnel(days)), paypal: await paypalHealth() });
+    } catch (err: any) {
+      console.error("[analytics/payment-funnel]", err?.message);
+      res.status(500).json({ message: "Failed to load payment funnel" });
     }
   });
 

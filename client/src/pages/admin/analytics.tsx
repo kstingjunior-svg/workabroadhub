@@ -80,6 +80,76 @@ interface RecentTransaction {
   method: string;
   status: string;
   createdAt: string;
+  outcome?: { kind: string; label: string };
+  what?: string | null;
+}
+
+interface PaymentFunnel {
+  days: number;
+  methods: { method: string; attempts: number; people: number; peoplePaid: number; reasons: { label: string; n: number }[] }[];
+  paypal: { status: "ok" | "no_approvals" | "quiet"; message: string; ordersAllTime: number; paidAllTime: number };
+}
+
+const OUTCOME_STYLE: Record<string, string> = {
+  paid: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300",
+  pending: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
+  customer: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
+  phone: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
+  abandoned: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400",
+  system: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300",
+  other: "bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300",
+};
+const OUTCOME_HINT: Record<string, string> = {
+  customer: "Customer's choice — not a fault", phone: "Phone/SIM problem on the customer's side",
+  abandoned: "Opened PayPal but never approved", system: "Problem on Safaricom's side", pending: "Still in progress", paid: "Money received",
+};
+
+function OutcomeBadge({ t }: { t: RecentTransaction }) {
+  if (!t.outcome) return <StatusBadge status={t.status} />;
+  return (
+    <span title={OUTCOME_HINT[t.outcome.kind] ?? ""} className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap ${OUTCOME_STYLE[t.outcome.kind] ?? OUTCOME_STYLE.other}`}>
+      {t.outcome.label}
+    </span>
+  );
+}
+
+function PaymentFunnelCard() {
+  const { data } = useQuery<PaymentFunnel>({ queryKey: ["/api/admin/analytics/payment-funnel"], refetchInterval: 120000 });
+  if (!data) return null;
+  const name = (m: string) => (m === "mpesa" ? "M-Pesa" : m === "paypal" ? "PayPal" : m);
+  return (
+    <Card data-testid="card-payment-funnel">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2"><Users className="h-5 w-5" /> Who paid — last {data.days} days</CardTitle>
+        <CardDescription>Counted by person (phone number or account), not by attempt — one customer retrying 20 times counts once.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {data.paypal.status === "no_approvals" && (
+          <div className="rounded-lg border border-red-300 bg-red-50 dark:bg-red-950/30 p-3 text-sm text-red-800 dark:text-red-200" data-testid="alert-paypal-health">
+            <b>PayPal problem:</b> {data.paypal.message}
+          </div>
+        )}
+        <div className="grid gap-4 sm:grid-cols-2">
+          {data.methods.sort((a, b) => b.people - a.people).map((m) => (
+            <div key={m.method} className="rounded-lg border p-3 space-y-2">
+              <div className="flex items-baseline justify-between">
+                <span className="font-semibold">{name(m.method)}</span>
+                <span className="text-xs text-muted-foreground">{m.attempts} attempts</span>
+              </div>
+              <p className="text-2xl font-bold tabular-nums">{m.peoplePaid} <span className="text-base font-normal text-muted-foreground">of {m.people} people paid</span></p>
+              <div className="h-2 rounded-full bg-muted overflow-hidden"><div className="h-full bg-green-500" style={{ width: `${m.people ? (m.peoplePaid / m.people) * 100 : 0}%` }} /></div>
+              {m.reasons.length > 0 && (
+                <div className="text-xs space-y-0.5 pt-1">
+                  <p className="text-muted-foreground">Attempts that didn't go through:</p>
+                  {m.reasons.slice(0, 6).map((r) => <div key={r.label} className="flex justify-between"><span>{r.label}</span><b className="tabular-nums">{r.n}</b></div>)}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
 // ─── Helper: Format KES ───────────────────────────────────────────────────────
@@ -487,6 +557,8 @@ export default function AdminAnalytics() {
               </Card>
             </div>
 
+            <PaymentFunnelCard />
+
             {/* Recent Transactions */}
             <Card>
               <CardHeader>
@@ -494,7 +566,7 @@ export default function AdminAnalytics() {
                   <Activity className="h-5 w-5" />
                   Recent Transactions
                 </CardTitle>
-                <CardDescription>Last 20 payment events</CardDescription>
+                <CardDescription>Last 20 payment attempts — status says what actually happened (hover for whose side).</CardDescription>
               </CardHeader>
               <CardContent>
                 {txnsLoading ? (
@@ -519,7 +591,7 @@ export default function AdminAnalytics() {
                             <td className="py-2 pr-3 text-right tabular-nums font-medium">
                               {t.currency !== "KES" ? `$${t.amount} (${fmtKes(t.amountKes)})` : fmtKes(t.amount)}
                             </td>
-                            <td className="py-2 pr-3"><StatusBadge status={t.status} /></td>
+                            <td className="py-2 pr-3"><OutcomeBadge t={t} />{t.what ? <span className="block text-[11px] text-muted-foreground truncate max-w-[220px]">{t.what}</span> : null}</td>
                             <td className="py-2 text-muted-foreground">
                               {new Date(t.createdAt).toLocaleDateString("en-KE", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
                             </td>

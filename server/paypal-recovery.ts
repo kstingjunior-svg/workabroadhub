@@ -204,6 +204,11 @@ export function startPaypalRecoveryPoller(): void {
   timer = setInterval(runPaypalRecovery, POLL_INTERVAL_MS);
   // Run shortly after startup to catch anything stuck from before restart.
   setTimeout(runPaypalRecovery, 10_000);
+  // 2026-11: alert admins (once a day) when PayPal orders stop being approved.
+  import("./lib/paypal-health").then(({ checkPayPalHealthAndNotify }) => {
+    setTimeout(checkPayPalHealthAndNotify, 60_000);
+    setInterval(checkPayPalHealthAndNotify, 6 * 3600_000);
+  }).catch(() => {});
   console.log("[PaypalRecovery] Auto-recovery poller started (every 60s, gives up after 6h or 30 attempts)");
 }
 

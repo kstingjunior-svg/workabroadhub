@@ -155,7 +155,7 @@ function waitTickOrVisible(ms: number): Promise<void> {
 export function friendlyMpesaFailure(reason: string | null | undefined): string {
   const r = (reason ?? "").toLowerCase();
   if (r.includes("no response from user") || r.includes("cannot be reached") || r.includes("ds timeout")) {
-    return "The M-Pesa PIN prompt didn't reach your phone, or it timed out. Make sure your Safaricom line is switched on and has network signal. If you're outside Kenya, turn on roaming for the Safaricom line — Wi-Fi alone won't deliver the prompt. Then tap Pay again and enter your PIN quickly.";
+    return "The M-Pesa PIN prompt didn't reach your phone, or it timed out. Make sure your Safaricom line is switched on and has network signal (outside Kenya, turn on roaming — Wi-Fi alone won't deliver the prompt). If it keeps failing, restart the phone or use a different Safaricom number — very old SIM cards and some iPhone eSIMs don't show M-Pesa prompts. Then tap Pay again and enter your PIN quickly.";
   }
   if (r.includes("cancelled by user")) {
     return "You cancelled the M-Pesa prompt, so nothing was charged. Tap Pay to try again.";
