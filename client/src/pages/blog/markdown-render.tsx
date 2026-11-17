@@ -18,6 +18,11 @@
 import type { ReactNode } from "react";
 import { Link } from "wouter";
 
+// Markdown table divider row ("| --- | :---: |"). Written as an alternation, not a
+// bracket character class: Tailwind scans source files and read the old
+// bracket form as an arbitrary CSS property, breaking the CSS build (2026-11).
+const TABLE_DIVIDER = /^\s*\|?(?:-|:|\s|\|)+\|?\s*$/;
+
 type Node = ReactNode;
 
 export function renderMarkdown(md: string): Node[] {
@@ -94,7 +99,7 @@ export function renderMarkdown(md: string): Node[] {
     }
 
     // Table (GFM)
-    if (line.includes("|") && i + 1 < lines.length && /^\s*\|?[-:\s|]+\|?\s*$/.test(lines[i + 1])) {
+    if (line.includes("|") && i + 1 < lines.length && TABLE_DIVIDER.test(lines[i + 1])) {
       const headerCells = splitPipe(line);
       i += 2; // skip header + separator
       const rows: string[][] = [];
