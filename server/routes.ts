@@ -1159,7 +1159,8 @@ async function renderHtmlToPdf(html: string): Promise<Buffer> {
   });
   try {
     const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: "networkidle0" });
+    // puppeteer 24.43+: setContent only accepts "load" / "domcontentloaded" (networkidle0 was removed for setContent).
+    await page.setContent(html, { waitUntil: "load" });
     const pdf = await page.pdf({
       format: "A4",
       printBackground: true,
