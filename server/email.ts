@@ -2,7 +2,7 @@
 // Uses nodemailer with Gmail (GMAIL_USER + GMAIL_APP_PASSWORD) or generic SMTP (SMTP_* vars)
 // + Resend HTTP API as automatic fallback (RESEND_API_KEY). Multi-provider
 // failover + diagnostic logging lives in lib/email-providers.ts.
-import nodemailer from "nodemailer";
+import nodemailer, { type Transporter } from "nodemailer";
 import { sendWithFailover, clearProviderCache } from "./lib/email-providers";
 import { isEmailSuppressed } from "./lib/email-suppressions";
 
@@ -22,9 +22,9 @@ export interface EmailResult {
   error?: string;
 }
 
-let _transporter: nodemailer.Transporter | null = null;
+let _transporter: Transporter | null = null;
 
-function buildTransporter(): nodemailer.Transporter | null {
+function buildTransporter(): Transporter | null {
   // ── Option 1: Gmail / Google Workspace ───────────────────────────────────
   const gmailUser = (process.env.GMAIL_USER || "").trim();
   // Strip spaces — Google shows app passwords as "xxxx xxxx xxxx xxxx" but SMTP needs no spaces
@@ -58,7 +58,7 @@ function buildTransporter(): nodemailer.Transporter | null {
   return null;
 }
 
-function getTransporter(): nodemailer.Transporter | null {
+function getTransporter(): Transporter | null {
   if (!_transporter) _transporter = buildTransporter();
   return _transporter;
 }

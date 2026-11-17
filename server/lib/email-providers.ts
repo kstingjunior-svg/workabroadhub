@@ -15,7 +15,7 @@
  * Recent attempts (success + failure) are kept in a 200-entry ring buffer so
  * the admin diagnostic endpoint can show what's actually happening.
  */
-import nodemailer from "nodemailer";
+import nodemailer, { type Transporter } from "nodemailer";
 
 export interface SendArgs {
   to: string;
@@ -79,10 +79,10 @@ export function getProviderStats(): {
 }
 
 // ── Gmail / SMTP transport ────────────────────────────────────────────────
-let _smtpTransport: nodemailer.Transporter | null = null;
+let _smtpTransport: Transporter | null = null;
 let _smtpAuthedAs: string | null = null;
 
-function buildSmtpTransport(): { transport: nodemailer.Transporter; authedAs: string; kind: "gmail" | "smtp" } | null {
+function buildSmtpTransport(): { transport: Transporter; authedAs: string; kind: "gmail" | "smtp" } | null {
   // 2026-06: SMTP_* now takes precedence over GMAIL_*. The founder migrated
   // from Gmail SMTP to Hostinger business email
   // (workabroadhub.tech@workabroadhub.tech) so verification codes come FROM
@@ -127,7 +127,7 @@ function buildSmtpTransport(): { transport: nodemailer.Transporter; authedAs: st
 
 let _smtpKind: "gmail" | "smtp" | null = null;
 
-function getSmtpTransport(): { transport: nodemailer.Transporter; authedAs: string; kind: "gmail" | "smtp" } | null {
+function getSmtpTransport(): { transport: Transporter; authedAs: string; kind: "gmail" | "smtp" } | null {
   if (!_smtpTransport) {
     const built = buildSmtpTransport();
     if (!built) return null;
