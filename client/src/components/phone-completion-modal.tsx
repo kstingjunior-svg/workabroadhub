@@ -54,6 +54,17 @@ export function PhoneCompletionModal() {
   const [intlIso, setIntlIso] = useState("AE");
   const [subscriber, setSubscriber] = useState(""); // digits after the country prefix
   const [error, setError] = useState("");
+  // 2026-11 signup redesign: the phone is no longer required. This prompt is
+  // now OPTIONAL and can be skipped; we ask again after 7 days. Payment
+  // screens still ask for an M-Pesa number when one is needed.
+  const [skippedUntil, setSkippedUntil] = useState<number>(() => {
+    try { return Number(localStorage.getItem("phone_prompt_skipped_until") || 0); } catch { return 0; }
+  });
+  const skip = () => {
+    const until = Date.now() + 7 * 86400_000;
+    try { localStorage.setItem("phone_prompt_skipped_until", String(until)); } catch { /* ignore */ }
+    setSkippedUntil(until);
+  };
   const intl = DIAL_COUNTRIES.find((d) => d.iso === intlIso) ?? DIAL_COUNTRIES[1];
   const c = country === "INTL"
     ? { flag: intl.flag, prefix: intl.code, name: intl.name, subscriberLength: intl.max, regex: /^\d+$/, placeholder: "number" }
@@ -109,6 +120,12 @@ export function PhoneCompletionModal() {
   // in the meantime; once emailVerified flips true, this modal takes over
   // to collect the phone.
   if ((user as any).emailVerified !== true) return null;
+  if (skippedUntil > Date.now()) return null;
+  // Brand-new accounts aren't asked on their first day — let them look around first.
+  {
+    const created = (user as any).createdAt ? new Date((user as any).createdAt).getTime() : 0;
+    if (created && Date.now() - created < 86400_000) return null;
+  }
 
   /** digits after stripping the country prefix / leading 0 */
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -147,22 +164,18 @@ export function PhoneCompletionModal() {
   const isFull = country === "INTL" ? subscriber.length >= intl.min : subscriber.length === c.subscriberLength;
 
   return (
-    <Dialog open={true} onOpenChange={() => {}}>
-      <DialogContent
-        className="sm:max-w-sm"
-        onInteractOutside={(e) => e.preventDefault()}
-        onEscapeKeyDown={(e) => e.preventDefault()}
-      >
+    <Dialog open={true} onOpenChange={(o) => { if (!o) skip(); }}>
+      <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <div className="flex items-center gap-2 mb-1">
             <div className="p-2.5 rounded-full bg-green-100 dark:bg-green-900/30">
               <Phone className="h-5 w-5 text-green-600" />
             </div>
-            <DialogTitle className="text-lg font-bold">Enter WhatsApp Number to Continue</DialogTitle>
+            <DialogTitle className="text-lg font-bold">Add your WhatsApp number (optional)</DialogTitle>
           </div>
           <DialogDescription className="text-sm text-muted-foreground">
-            A WhatsApp number is required to access services. This is used for
-            payment prompts, service delivery and account recovery.
+            It helps with M-Pesa payment prompts, WhatsApp support and account
+            recovery. You can skip this and add it later in your profile.
           </DialogDescription>
         </DialogHeader>
 
@@ -264,18 +277,16 @@ export function PhoneCompletionModal() {
             </p>
           </div>
 
-          <div className="flex items-center gap-2 text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
-            <AlertCircle className="h-4 w-4 shrink-0" />
-            <span className="font-medium">No phone number = no access to services</span>
-          </div>
-
           <Button
             type="submit"
             className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold"
             disabled={saveMutation.isPending || !isFull}
             data-testid="btn-save-phone"
           >
-            {saveMutation.isPending ? "Saving…" : "Continue →"}
+            {saveMutation.isPending ? "Saving…" : "Save number"}
+          </Button>
+          <Button type="button" variant="ghost" className="w-full" onClick={skip} data-testid="btn-phone-skip">
+            Skip for now
           </Button>
 
           <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 rounded-lg p-3">

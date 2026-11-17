@@ -56,7 +56,8 @@ export default function Landing() {
   // persistent bar down to logo + Sign Up + toggle, which always fits.
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const openSignUp = () => { setAuthModalTab("signup"); setAuthModalOpen(true); setMobileMenuOpen(false); };
+  // 2026-11: sign-up is the dedicated passwordless /signup page (name + email → code).
+  const openSignUp = () => { setMobileMenuOpen(false); navigate("/signup"); };
   const openLogin = () => { setAuthModalTab("login"); setAuthModalOpen(true); setMobileMenuOpen(false); };
 
   const { data: agencyStats } = useQuery<{ total: number; valid: number; expired: number; lastUpdated: string }>({

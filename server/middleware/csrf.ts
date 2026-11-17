@@ -79,6 +79,9 @@ const CSRF_EXEMPT = new Set([
   // 2026-10: passwordless sign-in code — pre-session, same reasoning as login.
   "/api/auth/login-code/request",
   "/api/auth/login-code/verify",
+  // 2026-11: passwordless sign-up (name + email → code) — pre-session.
+  "/api/auth/signup/start",
+  "/api/auth/signup/verify",
 ]);
 
 function isCsrfExempt(path: string): boolean {

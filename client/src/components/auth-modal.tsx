@@ -289,6 +289,22 @@ export function AuthModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, defaultTab, prefillEmail]);
 
+  // 2026-11 (signup redesign): new accounts are created on the dedicated
+  // passwordless /signup page (name + email → code). Whenever this modal
+  // would show the old sign-up form — opened in signup mode, or the user
+  // tapped "Create account" — send them there instead. Sign-in (password
+  // or email code) for existing users stays in this modal unchanged.
+  useEffect(() => {
+    if (!open || tab !== "signup") return;
+    const qs = new URLSearchParams();
+    const dest = redirectPath || (() => { try { return localStorage.getItem("auth_redirect"); } catch { return null; } })();
+    if (dest && /^\/(?![/\\])/.test(dest) && dest !== "/dashboard") qs.set("redirect", dest);
+    if (email.trim().includes("@")) qs.set("email", email.trim());
+    onClose();
+    navigate(`/signup${qs.toString() ? `?${qs}` : ""}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, tab]);
+
   const validate = (): boolean => {
     const errs: FieldErrors = {};
 

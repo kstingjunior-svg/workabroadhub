@@ -208,6 +208,7 @@ const ServiceOrderFlow = lazyWithRetry(() => import("@/pages/service-order-flow"
 // 2026-08 (Tony's anonymous-checkout): magic-link download page for guest orders.
 const DownloadMagic = lazyWithRetry(() => import("@/pages/download-magic"));
 const LoginPage = lazyWithRetry(() => import("@/pages/login"));
+const SignupPage = lazyWithRetry(() => import("@/pages/signup"));
 const ForgotPassword = lazyWithRetry(() => import("@/pages/forgot-password"));
 const ResetPassword = lazyWithRetry(() => import("@/pages/reset-password"));
 const SharedDocument = lazyWithRetry(() => import("@/pages/shared-document"));
@@ -541,6 +542,7 @@ const LazyUploadCV = withSuspense(UploadCV);
 const LazyAutoApply = withSuspense(AutoApply);
 const LazyForum = withSuspense(Forum);
 const LazyLoginPage = withSuspense(LoginPage);
+const LazySignupPage = withSuspense(SignupPage);
 const LazyForgotPassword = withSuspense(ForgotPassword);
 const LazyResetPassword = withSuspense(ResetPassword);
 const LazySharedDocument = withSuspense(SharedDocument);
@@ -738,7 +740,7 @@ function AuthenticatedRoutes() {
       {/* 2026-08 (guest orders): public magic-link download page — no auth. */}
       <Route path="/download/:token" component={withSuspense(DownloadMagic)} />
       <Route path="/login" component={LazyLoginPage} />
-      <Route path="/signup" component={LazyLoginPage} />
+      <Route path="/signup" component={LazySignupPage} />
       <Route path="/forgot-password" component={LazyForgotPassword} />
       <Route path="/reset-password" component={LazyResetPassword} />
       <Route path="/shared/:id" component={LazySharedDocument} />
@@ -1139,7 +1141,7 @@ function Router() {
         <Route path="/canada/jobs" component={ProtectedRedirect} />
         <Route path="/canada" component={ProtectedRedirect} />
         <Route path="/login" component={LazyLoginPage} />
-        <Route path="/signup" component={LazyLoginPage} />
+        <Route path="/signup" component={LazySignupPage} />
         <Route path="/forgot-password" component={LazyForgotPassword} />
         <Route path="/reset-password" component={LazyResetPassword} />
         <Route path="/shared/:id" component={LazySharedDocument} />

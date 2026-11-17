@@ -62,7 +62,7 @@ function setSessionUserId(req: Request, userId: string): Promise<void> {
 type AuthEvent =
   | "password_ok" | "wrong_password" | "no_account" | "unverified" | "locked"
   | "deleted" | "code_sent" | "code_ok" | "code_wrong" | "reset_no_account" | "reset_sent"
-  | "verify_ok" | "email_changed";
+  | "verify_ok" | "email_changed" | "signup_started" | "signup_ok";
 
 function clientIpOf(req: Request): string {
   return String(req.headers["x-forwarded-for"] || req.ip || "unknown").split(",")[0].trim().slice(0, 60);
@@ -156,6 +156,162 @@ function noAccountPayload(identifierKind: "email" | "phone", typed: string, hint
 }
 
 export function registerAuthRoutes(app: Express) {
+  // ══════════════════════════════════════════════════════════════════════
+  // 2026-11 PASSWORDLESS SIGN-UP (Tony's signup redesign).
+  //
+  // Only two fields: full name + email. No phone, no password. Reuses the
+  // existing verification_codes OTP system (crypto.randomInt 6 digits,
+  // sha256 at rest, 10-minute expiry, 5 wrong tries per code, 60 s resend
+  // reuse, 6 codes/hour/address) — no second OTP system.
+  //
+  //   POST /api/auth/signup/start   { fullName, email, referralCode? }
+  //        → creates the account UNVERIFIED (no session, no password) or,
+  //          if the email already has an account, sends that account a
+  //          sign-in code instead of making a duplicate.
+  //   POST /api/auth/signup/verify  { email, code }
+  //        → verifies, marks email verified, signs the user in.
+  //
+  // Existing password accounts are untouched: /api/auth/login, password
+  // reset and "email me a code" keep working exactly as before.
+  // Both paths are under /api/auth/signup → authLimiter (20 per 15 min).
+  // ══════════════════════════════════════════════════════════════════════
+  app.post("/api/auth/signup/start", async (req: Request, res: Response) => {
+    try {
+      const fullName = String(req.body?.fullName ?? "").replace(/\s+/g, " ").trim().slice(0, 100);
+      const rawEmail = String(req.body?.email ?? "").trim().toLowerCase();
+      const rawReferralCode = String(req.body?.referralCode ?? req.body?.referral_code ?? "").trim().toUpperCase().slice(0, 32);
+
+      if (fullName.length < 2) return res.status(400).json({ message: "Please enter your full name.", field: "fullName" });
+      const parts = fullName.split(" ");
+      const firstName = parts[0];
+      const lastName = parts.length > 1 ? parts.slice(1).join(" ") : null;
+
+      const emailCheck = await validateEmail(rawEmail);
+      if (emailCheck.valid === false) {
+        return res.status(400).json({ message: emailCheck.message, reason: emailCheck.reason, suggestion: (emailCheck as any).suggestion, field: "email" });
+      }
+      const cleanEmail = emailCheck.normalized;
+
+      const { validateName } = await import("../../utils/name-validator");
+      const fn = validateName(firstName, "first", cleanEmail.split("@")[0]);
+      if (!fn.ok) return res.status(400).json({ message: fn.message, reason: fn.code, field: "fullName" });
+      if (lastName) {
+        const ln = validateName(lastName, "last", cleanEmail.split("@")[0]);
+        if (!ln.ok) return res.status(400).json({ message: ln.message, reason: ln.code, field: "fullName" });
+      }
+
+      const { rows: found } = await pool.query<{ id: string; email: string; email_verified: boolean | null; is_active: boolean | null; referred_by: string | null; first_name: string | null }>(
+        `SELECT id, email, email_verified, is_active, referred_by, first_name FROM users WHERE LOWER(email) = $1 LIMIT 1`, [cleanEmail]);
+      let user = found[0];
+      let existing = false;
+
+      if (user && user.is_active === false) {
+        return res.status(403).json({
+          message: "This email belonged to an account that was deleted. Please use a different email, or contact support@workabroadhub.tech.",
+          accountDeleted: true,
+        });
+      }
+
+      // Referral — same rules as /api/auth/register: must belong to another user; never fail signup over it.
+      let validReferrerCode: string | null = null;
+      if (rawReferralCode && /^[A-Z0-9-]{3,32}$/.test(rawReferralCode)) {
+        try {
+          const { rows: r } = await pool.query<{ id: string; email: string }>(
+            `SELECT id, email FROM users WHERE referral_code = $1 LIMIT 1`, [rawReferralCode]);
+          if (r[0] && r[0].email?.toLowerCase() !== cleanEmail && r[0].id !== user?.id) validReferrerCode = rawReferralCode;
+          else if (!r[0]) console.warn(`[Auth][signup] unknown referral code, dropping: ${rawReferralCode}`);
+        } catch (e: any) { console.warn("[Auth][signup] referral lookup failed (non-fatal):", e?.message); }
+      }
+
+      if (user) {
+        // Already registered: never create a duplicate. Verified → this
+        // becomes a passwordless sign-in. Unverified → finish that signup.
+        existing = user.email_verified === true;
+        if (!existing) {
+          await pool.query(
+            `UPDATE users SET first_name = COALESCE(NULLIF(first_name,''), $2), last_name = COALESCE(NULLIF(last_name,''), $3),
+                    referred_by = COALESCE(referred_by, $4), updated_at = NOW()
+              WHERE id = $1 AND email_verified IS NOT TRUE`,
+            [user.id, firstName, lastName, validReferrerCode]);
+        }
+      } else {
+        try {
+          const [created] = await db.insert(users).values({
+            email: cleanEmail,
+            passwordHash: null,
+            authMethod: "email",
+            firstName,
+            lastName,
+            ...(validReferrerCode ? { referredBy: validReferrerCode } : {}),
+          }).returning();
+          user = { id: created.id, email: created.email!, email_verified: false, is_active: true, referred_by: validReferrerCode, first_name: firstName };
+          if (validReferrerCode) console.log(`[Auth][signup] ✓ referral linked: newUserId=${created.id} referredBy=${validReferrerCode}`);
+        } catch (insertErr: any) {
+          // Double-tap / two tabs: the other request created it — carry on with that row.
+          const code = String(insertErr?.code ?? insertErr?.cause?.code ?? "");
+          if (code !== "23505" && !/duplicate key|unique/i.test(String(insertErr?.message ?? ""))) throw insertErr;
+          const { rows: again } = await pool.query(
+            `SELECT id, email, email_verified, is_active, referred_by, first_name FROM users WHERE LOWER(email) = $1 LIMIT 1`, [cleanEmail]);
+          user = again[0];
+          if (!user) throw insertErr;
+          existing = user.email_verified === true;
+        }
+      }
+
+      const result = await sendEmailVerificationCode(user.id, user.email);
+      if (!result.ok) {
+        return res.status(result.code === "rate_limited" ? 429 : 502).json({
+          message: result.code === "rate_limited"
+            ? "You've asked for several codes in the last hour. Use the newest code in your inbox, or try again a little later."
+            : "We couldn't send your code just now. Please check the email address and try again.",
+          code: result.code,
+        });
+      }
+      logAuthEvent(req, existing ? "code_sent" : "signup_started", "email", user.id);
+      res.json({
+        ok: true,
+        existing,
+        email: user.email.toLowerCase(),
+        maskedEmail: maskEmail(user.email.toLowerCase()),
+        expiresAt: result.expiresAt,
+        codeHint: (result as any).codeHint,
+        reused: !!result.reused,
+      });
+    } catch (err: any) {
+      console.error("[Auth][signup/start] error:", err?.message);
+      res.status(500).json({ message: "Something went wrong. Please try again." });
+    }
+  });
+
+  app.post("/api/auth/signup/verify", async (req: Request, res: Response) => {
+    try {
+      const email = String(req.body?.email ?? "").trim().toLowerCase();
+      const code = String(req.body?.code ?? "").replace(/\D/g, "");
+      if (!/^\d{6}$/.test(code)) return res.status(400).json({ message: "Enter the 6-digit code from your email." });
+      const { rows } = await pool.query<{ id: string; email: string; is_active: boolean | null; first_name: string | null; created_at: Date; email_verified: boolean | null }>(
+        `SELECT id, email, is_active, first_name, created_at, email_verified FROM users WHERE LOWER(email) = $1 LIMIT 1`, [email]);
+      const u = rows[0];
+      if (!u || u.is_active === false) return res.status(400).json({ message: "That code doesn't match. Tap Resend for a fresh one." });
+      const wasNew = u.email_verified !== true;
+      const result = await verifyCode(u.id, "email", code);
+      if (!result.ok) {
+        logAuthEvent(req, "code_wrong", "email", u.id);
+        return res.status(400).json({ message: result.message, reason: result.reason });
+      }
+      await setSessionUserId(req, u.id);
+      invalidateAuthUserCache(u.id);
+      try {
+        const { clearAllAttemptsForEmail } = await import("../../lib/security-guard");
+        clearAllAttemptsForEmail(email);
+      } catch { /* non-fatal */ }
+      logAuthEvent(req, wasNew ? "signup_ok" : "code_ok", "email", u.id);
+      res.json({ ok: true, id: u.id, email: u.email, firstName: u.first_name, isNew: wasNew });
+    } catch (err: any) {
+      console.error("[Auth][signup/verify] error:", err?.message);
+      res.status(500).json({ message: "Couldn't verify right now. Please try again." });
+    }
+  });
+
   app.post("/api/auth/register", async (req: Request, res: Response) => {
     try {
       const rawEmail = String(req.body?.email ?? "").trim().toLowerCase();
