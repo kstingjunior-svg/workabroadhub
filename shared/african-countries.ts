@@ -356,20 +356,48 @@ export function toE164(country: AfricanCountry, national: string): string {
 /**
  * Best-guess country default for a fresh user. Attempts (in order):
  *   1. explicit ISO argument
- *   2. browser language region (e.g. "en-KE" → KE)
- *   3. fall back to Kenya (primary market)
+ *   2. device time zone (e.g. "Africa/Nairobi" → KE)
+ *   3. browser language region — but NOT "US"/"GB": almost every phone
+ *      ships with "en-US" (or "en-GB") regardless of where it is, so on
+ *      17 Nov 2026 Kenyan visitors were seeing 🇺🇸 +1 and getting
+ *      "United States numbers have 10 digits" when typing 0712…
+ *   4. fall back to Kenya (primary market)
  */
-export function defaultCountry(hint?: { iso?: string; languageTag?: string }): AfricanCountry {
+export function defaultCountry(hint?: { iso?: string; languageTag?: string; timeZone?: string }): AfricanCountry {
   if (hint?.iso) {
     const byIso = findCountryByIso(hint.iso);
     if (byIso) return byIso;
   }
+  if (hint?.timeZone) {
+    const byTz = countryForTimeZone(hint.timeZone);
+    if (byTz) return byTz;
+  }
   if (hint?.languageTag) {
     const region = hint.languageTag.split("-")[1]?.toUpperCase();
-    if (region) {
+    if (region && region !== "US" && region !== "GB") {
       const byRegion = findCountryByIso(region);
       if (byRegion) return byRegion;
     }
   }
   return findCountryByIso("KE")!;
+}
+
+/** Exact IANA zone match against each country's timezoneHint, plus common aliases. */
+const TZ_ALIASES: Record<string, string> = {
+  "Africa/Asmera": "ER", "Asia/Calcutta": "IN", "Asia/Katmandu": "NP", "Asia/Saigon": "VN",
+  "America/Chicago": "US", "America/Denver": "US", "America/Los_Angeles": "US", "America/Phoenix": "US",
+  "America/Anchorage": "US", "Pacific/Honolulu": "US", "America/Detroit": "US",
+  "America/Vancouver": "CA", "America/Edmonton": "CA", "America/Winnipeg": "CA", "America/Halifax": "CA",
+  "Australia/Melbourne": "AU", "Australia/Brisbane": "AU", "Australia/Perth": "AU", "Australia/Adelaide": "AU",
+};
+export function countryForTimeZone(tz: string | null | undefined): AfricanCountry | null {
+  if (!tz) return null;
+  const alias = TZ_ALIASES[tz];
+  if (alias) return findCountryByIso(alias) ?? null;
+  return AFRICAN_COUNTRIES.find((c) => c.timezoneHint === tz) ?? null;
+}
+
+/** A Kenyan mobile typed the local way (07…/01… or 7…/1…), 9 digits after any leading 0. */
+export function looksLikeKenyanMobile(digits: string): boolean {
+  return /^0?[71]\d{8}$/.test(digits);
 }

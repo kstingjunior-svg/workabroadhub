@@ -23,6 +23,8 @@ import {
   AFRICAN_COUNTRIES,
   defaultCountry,
   findCountryByIso,
+  parseE164,
+  looksLikeKenyanMobile,
   toE164,
   validateNationalNumber,
   type AfricanCountry,
@@ -74,6 +76,9 @@ export function PhoneInput({
   const [country, setCountry] = useState<AfricanCountry>(() =>
     defaultCountry({
       iso: defaultIso,
+      // 2026-11: time zone first — phones in Kenya almost all report "en-US",
+      // which used to preselect 🇺🇸 +1 for Kenyan visitors.
+      timeZone: (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return undefined; } })(),
       languageTag: typeof navigator !== "undefined" ? navigator.language : undefined,
     }),
   );
@@ -194,10 +199,27 @@ export function PhoneInput({
   }
 
   function handleNationalChange(v: string) {
-    // Only allow digits; strip leading zeros silently (trunk prefix handling)
+    // 2026-11: people paste "+254 712 345 678" or type "254712…" — read the
+    // country from it instead of showing "number too long".
+    const trimmed = v.trim();
     const digits = v.replace(/\D/g, "");
+    if (trimmed.startsWith("+") || trimmed.startsWith("00")) {
+      const parsed = parseE164(trimmed.startsWith("00") ? digits.slice(2) : digits);
+      if (parsed && parsed.national.length >= parsed.country.minNationalLen) {
+        setCountry(parsed.country);
+        setNational(parsed.national);
+        return;
+      }
+    } else if (digits.startsWith(country.dialCode) && digits.length > country.dialCode.length + country.maxNationalLen - 1
+               && digits.length - country.dialCode.length >= country.minNationalLen) {
+      setNational(digits.slice(country.dialCode.length));
+      return;
+    }
     setNational(digits);
   }
+
+  // A Kenyan number typed while another country is selected (e.g. the old 🇺🇸 default).
+  const suggestKenya = country.iso !== "KE" && !validation.valid && looksLikeKenyanMobile(national);
 
   const showError = national.length >= 3 && !validation.valid;
 
@@ -359,8 +381,19 @@ export function PhoneInput({
         />
       </div>
 
+      {suggestKenya && (
+        <button
+          type="button"
+          onClick={() => handleCountrySelect("KE")}
+          className="w-full text-left rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-sm text-amber-900 dark:text-amber-200"
+          data-testid={`${testId}-switch-ke`}
+        >
+          Is this a Kenyan number? <span className="font-semibold underline">Tap to switch to 🇰🇪 +254</span>
+        </button>
+      )}
+
       {/* Live validation error */}
-      {showError && (
+      {showError && !suggestKenya && (
         <p id={`${testId}-error`} className="text-xs text-red-500" data-testid={`${testId}-error`}>
           {validation.reason}
         </p>
