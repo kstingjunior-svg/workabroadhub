@@ -568,11 +568,14 @@ export default function WriteFromScratchPage() {
         )}
 
         {state === "paying" && (
-          <WaitView
-            title="Waiting for your payment"
-            body="Check your phone and enter your M-Pesa PIN. We'll start generating as soon as the payment is confirmed."
-            spinner
-          />
+          <>
+            <WaitView
+              title="Waiting for your payment"
+              body="Check your phone and enter your M-Pesa PIN. We'll start generating as soon as the payment is confirmed. Your details are saved."
+              spinner
+            />
+            {draftId && user && <RepayCard draftId={draftId} phone={phone} setPhone={setPhone} />}
+          </>
         )}
 
         {state === "generating" && (
@@ -697,7 +700,7 @@ function RecentDraftsCard({ drafts }: { drafts: RecentDraft[] }) {
       return { label: "Paid — resume to finish", color: "text-blue-700 dark:text-blue-300", bg: "bg-blue-50 dark:bg-blue-950/30" };
     }
     if (d.status === "pending_payment") {
-      return { label: "Waiting on payment", color: "text-amber-700 dark:text-amber-300", bg: "bg-amber-50 dark:bg-amber-950/30" };
+      return { label: "Saved — finish payment", color: "text-amber-700 dark:text-amber-300", bg: "bg-amber-50 dark:bg-amber-950/30" };
     }
     if (d.status === "failed") {
       return { label: "Failed — retry", color: "text-red-700 dark:text-red-300", bg: "bg-red-50 dark:bg-red-950/30" };
@@ -1069,6 +1072,45 @@ function ResultView({
         <RetailorCard onRetailor={onRetailor} matchInput={matchInput} needsPhone={needsPhone} phone={phone} setPhone={setPhone} />
       )}
     </div>
+  );
+}
+
+// ─── Re-send the M-Pesa prompt for a saved, unpaid draft ────────────────────
+
+function RepayCard({ draftId, phone, setPhone }: { draftId: string; phone: string; setPhone: (p: string) => void }) {
+  const { toast } = useToast();
+  const [busy, setBusy] = useState(false);
+  const [needsPhone, setNeedsPhone] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  async function resend() {
+    setBusy(true); setMsg(null);
+    try {
+      const res = await apiRequest("POST", `/api/write-from-scratch/${draftId}/repay`, { phone: phone.trim() || undefined });
+      const j = await res.json();
+      if (!res.ok) {
+        if (j.needsPhone) setNeedsPhone(true);
+        setMsg(j.error ?? "Could not send the prompt.");
+        return;
+      }
+      toast({ title: "Prompt sent", description: j.message ?? "Check your phone and enter your M-Pesa PIN." });
+    } catch (e: any) {
+      setMsg(e?.message ?? "Could not send the prompt.");
+    } finally { setBusy(false); }
+  }
+  return (
+    <Card data-testid="card-repay">
+      <CardContent className="p-5 space-y-3 text-center">
+        <p className="text-sm text-muted-foreground">Didn't get the prompt, or it timed out?</p>
+        {needsPhone && (
+          <Input type="tel" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="M-Pesa number, 07XX XXX XXX" className="max-w-xs mx-auto" />
+        )}
+        <Button onClick={resend} disabled={busy} className="bg-green-600 hover:bg-green-700 text-white min-h-[44px]" data-testid="button-repay">
+          {busy ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null} Send the M-Pesa prompt again
+        </Button>
+        {msg && <p className="text-sm text-red-600">{msg}</p>}
+        <p className="text-[11px] text-muted-foreground">If it never arrives: make sure the phone is on with Safaricom signal, or enter a different Safaricom number. Help: WhatsApp +254 111 467 601.</p>
+      </CardContent>
+    </Card>
   );
 }
 

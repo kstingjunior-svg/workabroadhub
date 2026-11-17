@@ -415,7 +415,7 @@ export function registerWriteFromScratchRoutes(app: Express): void {
               SET status        = 'paid',
                   mpesa_receipt = $1,
                   paid_at       = NOW()
-            WHERE mpesa_checkout_id = $2
+            WHERE (mpesa_checkout_id = $2 OR $2 = ANY(coalesce(prior_checkout_ids, '{}'::text[])))
               AND status = 'pending_payment'`,
           [receipt, checkoutId],
         );
@@ -431,7 +431,7 @@ export function registerWriteFromScratchRoutes(app: Express): void {
         try {
           const { rows: paidRows } = await pool.query<{ id: string }>(
             `SELECT id FROM write_from_scratch_drafts
-              WHERE mpesa_checkout_id = $1 AND status = 'paid'
+              WHERE (mpesa_checkout_id = $1 OR $1 = ANY(coalesce(prior_checkout_ids, '{}'::text[]))) AND status = 'paid'
               LIMIT 1`,
             [checkoutId],
           );
@@ -744,6 +744,60 @@ export function registerWriteFromScratchRoutes(app: Express): void {
    * surface (or the tool landing page itself) can offer a one-click
    * "Resume" for any paid-but-not-downloaded row. Guests get an empty list.
    */
+  /* ─── POST /api/write-from-scratch/:id/repay ───────────────────────────
+   * 2026-11 (abandoned-payment recovery): re-send the M-Pesa prompt for a
+   * draft the customer filled in but never paid. Same draft, same amount —
+   * they don't retype anything. Owner only.
+   */
+  app.post("/api/write-from-scratch/:id/repay", async (req: Request, res: Response) => {
+    try {
+      const userId = currentUserId(req);
+      if (!userId) return res.status(401).json({ error: "Please sign in to finish this payment." });
+      const id = String(req.params.id);
+      if (!/^[0-9a-f-]{36}$/i.test(id)) return res.status(404).json({ error: "Document not found." });
+      const { rows } = await pool.query(
+        `SELECT id, user_id, doc_type, status, mpesa_amount, mpesa_phone FROM write_from_scratch_drafts WHERE id = $1`, [id]);
+      const d = rows[0];
+      if (!d || d.user_id !== userId) return res.status(404).json({ error: "Document not found." });
+      if (d.status !== "pending_payment") return res.json({ draftId: id, status: d.status });
+      if (!(await assertEmailVerified(res, userId))) return;
+
+      let payerPhone: string | null = typeof req.body?.phone === "string" && req.body.phone.trim().length >= 9 ? req.body.phone.trim() : (d.mpesa_phone ?? null);
+      if (!payerPhone) {
+        const { rows: u } = await pool.query(`SELECT phone FROM users WHERE id = $1`, [userId]);
+        payerPhone = u[0]?.phone ?? null;
+      }
+      if (!payerPhone) return res.status(400).json({ error: "We need an M-Pesa phone number.", needsPhone: true });
+
+      const { checkUnreachable } = await import("../lib/mpesa-retry-guard");
+      const g = await checkUnreachable(payerPhone);
+      if (g.blocked) return res.status(429).json({ error: g.message, code: "MPESA_PHONE_UNREACHABLE" });
+      if (!isMpesaAvailable()) return res.status(503).json({ error: "M-Pesa is temporarily unavailable. Please try again in a moment." });
+
+      const amount = Number(d.mpesa_amount) > 0 ? Number(d.mpesa_amount) : PRICE_KES;
+      let stk;
+      try {
+        stk = await stkPush(payerPhone, amount, `WorkAbroad Hub — ${docTypeLabel(d.doc_type)}`, `WAH-WFS-${id.slice(0, 8)}`,
+          `${getCallbackBaseUrl(req)}/api/write-from-scratch/mpesa-callback`);
+      } catch (err: any) {
+        console.error("[write-from-scratch/repay] STK failed:", err?.message);
+        return res.status(502).json({ error: "Could not send the M-Pesa prompt. Please try again." });
+      }
+      await pool.query(
+        // Keep earlier checkout ids: if the customer pays the OLD prompt late, the callback must still find this draft.
+        `UPDATE write_from_scratch_drafts
+            SET prior_checkout_ids = CASE WHEN mpesa_checkout_id IS NULL THEN prior_checkout_ids
+                                          ELSE array_append(coalesce(prior_checkout_ids, '{}'::text[]), mpesa_checkout_id) END,
+                mpesa_checkout_id = $1, mpesa_phone = $2
+          WHERE id = $3 AND status = 'pending_payment'`,
+        [stk?.CheckoutRequestID ?? null, payerPhone, id]);
+      return res.json({ draftId: id, status: "pending_payment", amount, message: "Check your phone for the M-Pesa prompt and enter your PIN." });
+    } catch (err: any) {
+      console.error("[write-from-scratch/repay] error:", err?.message);
+      return res.status(500).json({ error: "Could not restart the payment." });
+    }
+  });
+
   /* ─── POST /api/write-from-scratch/match ────────────────────────────────
    * 2026-11: free "How well you match this job" panel, shown before payment.
    * Body: { input, jobDescription } → MatchReport. Signed-in users only.

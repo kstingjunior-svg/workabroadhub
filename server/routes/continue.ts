@@ -29,7 +29,9 @@ interface ContinueCandidate {
     | "service_ready"
     | "interview_resume"
     | "journey_progress"
-    | "journey_finished";
+    | "journey_finished"
+    | "wfs_unpaid"
+    | "wfs_paid";
   priority: number;          // higher = pick this
   href: string;              // where the CTA sends them
   headline: string;          // "Continue your UAE journey"
@@ -126,6 +128,37 @@ async function getServiceOrderCandidate(userId: string): Promise<ContinueCandida
     return null;
   } catch (err: any) {
     if (!isMissingTable(err)) console.warn("[continue/service]", err?.message);
+    return null;
+  }
+}
+
+/** 2026-11: Write-from-Scratch document saved but not paid / paid but not generated. */
+async function getWfsCandidate(userId: string): Promise<ContinueCandidate | null> {
+  try {
+    const { rows } = await pool.query(
+      `SELECT d.id, d.doc_type, d.status, d.mpesa_amount, d.created_at
+         FROM write_from_scratch_drafts d
+        WHERE d.user_id = $1
+          AND (d.status = 'paid' OR (d.status = 'pending_payment' AND d.created_at > now() - interval '7 days'))
+          AND NOT EXISTS (SELECT 1 FROM write_from_scratch_drafts x
+                           WHERE x.user_id = d.user_id AND x.created_at > d.created_at AND x.status IN ('paid','generated'))
+        ORDER BY (d.status = 'paid') DESC, d.created_at DESC LIMIT 1`, [userId]);
+    const d = rows[0];
+    if (!d) return null;
+    const label: Record<string, string> = { cv: "CV", cover_letter: "cover letter", recruitment_cv: "recruitment CV", reference_letter: "reference letter" };
+    const doc = label[d.doc_type] ?? "document";
+    const href = `/tools/write-from-scratch?draftId=${d.id}`;
+    if (d.status === "paid") {
+      return { kind: "wfs_paid", priority: 95, href, headline: `Your ${doc} is paid for — tap to finish it`, subhead: `Paid ${humanAgo(d.created_at)} · it takes about 20 seconds`, icon: "download", accent: "emerald" };
+    }
+    return {
+      kind: "wfs_unpaid", priority: 80, href,
+      headline: `Your ${doc} details are saved`,
+      subhead: `Started ${humanAgo(d.created_at)} · finish the KES ${Number(d.mpesa_amount) || 300} M-Pesa payment and it's written in seconds`,
+      icon: "sparkles", accent: "blue",
+    };
+  } catch (err: any) {
+    if (!isMissingTable(err)) console.warn("[continue/wfs]", err?.message);
     return null;
   }
 }
@@ -279,13 +312,14 @@ export function registerContinueRoute(app: Express): void {
       if (!userId) return res.status(401).json({ continue: null });
 
       // Pull all signals in parallel — any failure is silently skipped.
-      const [svc, interview, journey] = await Promise.all([
+      const [svc, interview, journey, wfs] = await Promise.all([
         getServiceOrderCandidate(userId),
         getInterviewCandidate(userId),
         getJourneyCandidate(userId),
+        getWfsCandidate(userId),
       ]);
 
-      const candidates = [svc, interview, journey].filter(Boolean) as ContinueCandidate[];
+      const candidates = [svc, interview, journey, wfs].filter(Boolean) as ContinueCandidate[];
       if (candidates.length === 0) {
         return res.json({ continue: null });
       }

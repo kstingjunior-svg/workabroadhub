@@ -281,6 +281,13 @@ httpServer.listen(PORT, "0.0.0.0", () => {
     } catch (err: any) {
       console.error("[Server] ❌ Verification reminder sweep failed to start:", err?.message);
     }
+    // 2026-11: one "finish your payment" email for unfinished Write from Scratch drafts (WFS_PAYMENT_REMINDERS=on).
+    try {
+      const { startWfsPaymentReminders } = await import("./lib/wfs-payment-reminder");
+      startWfsPaymentReminders();
+    } catch (err: any) {
+      console.error("[Server] ❌ WFS payment reminder failed to start:", err?.message);
+    }
     // 2026-10: one-time "welcome back" drip to paying-but-unverified users.
     try {
       const { startWelcomeBackDrip } = await import("./lib/welcome-back-drip");
