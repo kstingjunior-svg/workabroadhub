@@ -67,15 +67,36 @@
 
 No payment code was changed. M-Pesa (Daraja STK, callbacks, C2B), PayPal, subscriptions, tool credits and referral commissions are untouched. Registration stays free. `requireVerifiedForPayment` already needed only a verified email.
 
-## 5. Tests
+## 5. Tests (live site, 17–18 Nov, after deploy 4a5bf96f)
 
-| Check | Result |
-|---|---|
-| Server type-check (`tsc -p tsconfig.server.json`) | pass |
-| Client type-check (`tsc -p .`) | pass |
-| `vite build` / vitest in my sandbox | **not run.** The Windows `npm install` removed the Linux build binary my sandbox needs. Render builds on Linux and is the real build check. |
-| Live tests: new email, correct/wrong/expired code, resend, existing email, referral, Android/iPhone/desktop viewports, existing password login, M-Pesa/PayPal | **to do after deploy.** Creating real accounts needs Tony's go-ahead (see below). |
+Test accounts used Gmail aliases approved by Tony. All three test accounts were soft-deleted afterwards.
 
+| # | Test | Result |
+|---|---|---|
+| 1 | New user registration (mobile 375×812) | ✅ Name + email → code screen; account created unverified, no password, no phone. |
+| 2 | Email code delivery | ✅ Arrived in the Gmail **Inbox** within seconds. Last 2 digits matched the on-screen hint. |
+| 3 | Correct code | ✅ Pasted → auto-verified → "Welcome to WorkAbroad Hub, Tony!" → `/dashboard` (~5 s). |
+| 4 | Wrong code | ✅ "That code doesn't match — 4 tries left"; boxes cleared. |
+| 5 | Expired code | ✅ "This code has expired (codes last 10 minutes). Tap Resend…" |
+| 6 | Resend | ✅ 60 s countdown; a repeat request inside 60 s reuses the live code (no email spam). |
+| 7 | Duplicate email (already verified) | ✅ No second account; sent a sign-in code; verifying signed the user back in (`isNew:false`). |
+| 8 | Old code replayed after success | ✅ Rejected (all codes retired on success). |
+| 9 | Referral attribution | ✅ `referred_by` set from the code. |
+| 10 | Two simultaneous submits | ✅ 1 account, 1 code. |
+| 11 | Session persistence | ✅ Reload → still signed in, `emailVerified:true`. |
+| 12 | Phone prompt | ✅ No phone prompt for a new account; no horizontal scroll on mobile. |
+| 13 | Validation | ✅ Rejected: empty name, keyboard-mash names (e.g. "Tony Test"), invalid emails, fake test addresses. A misspelt domain gets "Did you mean …@gmail.com?" |
+| 14 | `/login` | ✅ Opens the sign-in modal (bug found and fixed in 4a5bf96f). "Create a free account" opens `/signup`. |
+| 15 | Landing "Sign Up" | ✅ Opens `/signup`. |
+| 16 | Desktop layout | ✅ Centred card, same flow. |
+| 17 | Floating widgets on `/signup` | ✅ Hidden (they overlapped the form). |
+| 18 | Server/client type-check | ✅ |
+| 19 | Render production build | ✅ |
+
+**Not tested:**
+- **Real M-Pesa/PayPal payment:** no payment code was changed.
+- **Password login with a real existing account:** I don't enter passwords on the live site. The code path is unchanged.
+- **Real iPhone or Android devices:** tested with mobile-size emulation only.
 ## 6. Remaining issues and follow-ups
 
 - **Code emails:** 40% are "delivery delayed" (normal for Gmail greylisting, but codes can arrive late). The page says the code lasts 10 minutes and to check Spam/Promotions, and shows the last 2 digits as a hint.
