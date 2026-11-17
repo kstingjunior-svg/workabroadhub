@@ -29,35 +29,25 @@ export function esc(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 }
 
-/** PURE — exact email we send (shown to Tony for approval). */
+/** PURE — exact email we send. Wording approved by Tony 2026-11-17 (option C). */
 export function buildReminderEmail(a: { firstName: string | null; docType: string; draftId: string; amount: number; jobTitle?: string | null }) {
   const doc = DOC_LABEL[a.docType] ?? "document";
+  const Doc = doc === "CV" ? "CV" : doc.charAt(0).toUpperCase() + doc.slice(1);
   const link = `${BASE_URL}/tools/write-from-scratch?draftId=${encodeURIComponent(a.draftId)}`;
   const hi = a.firstName ? `Hi ${a.firstName},` : "Hi,";
   const forJob = a.jobTitle ? ` for the ${a.jobTitle} job` : "";
-  const subject = `Your ${doc} details are saved, finish when you're ready`;
+  const subject = `Finish your ${doc}, details saved`;
+  const line = `${hi} your ${doc}${forJob} is saved but not paid yet. Tap below, approve KES ${a.amount} on M-Pesa, done in 20 seconds.`;
   const text =
-`${hi}
+`${line}
 
-You filled in your details for a ${doc}${forJob} on WorkAbroad Hub, but the M-Pesa payment (KES ${a.amount}) didn't go through, so we haven't written it yet.
+Finish my ${Doc}: ${link}
 
-Your details are saved. Open the link below, tap "Send the M-Pesa prompt again", enter your PIN, and your ${doc} is written in about 20 seconds:
-${link}
-
-If the prompt didn't reach your phone last time: check the phone is on with Safaricom signal, or use a different Safaricom number.
-
-Need help? WhatsApp us on +254 111 467 601.
-
-This is the only reminder we will send about this ${doc}.
-WorkAbroad Hub`;
+Help: WhatsApp +254 111 467 601. We'll only remind you once.`;
   const html = `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.55;color:#111;max-width:560px">
-<p>${esc(hi)}</p>
-<p>You filled in your details for a ${esc(doc)}${esc(forJob)} on WorkAbroad Hub, but the M-Pesa payment (KES ${a.amount}) didn't go through, so we haven't written it yet.</p>
-<p><b>Your details are saved.</b> Tap the button, then "Send the M-Pesa prompt again", enter your PIN, and your ${esc(doc)} is written in about 20 seconds.</p>
-<p><a href="${esc(link)}" style="display:inline-block;background:#16a34a;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:bold">Finish my ${esc(doc)}</a></p>
-<p style="font-size:13px;color:#555">If the prompt didn't reach your phone last time: check the phone is on with Safaricom signal, or use a different Safaricom number.</p>
-<p style="font-size:13px;color:#555">Need help? WhatsApp us on +254 111 467 601.</p>
-<p style="font-size:12px;color:#888">This is the only reminder we will send about this ${esc(doc)}.<br>WorkAbroad Hub</p>
+<p>${esc(line)}</p>
+<p><a href="${esc(link)}" style="display:inline-block;background:#16a34a;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:bold">Finish my ${esc(Doc)}</a></p>
+<p style="font-size:13px;color:#555">Help: WhatsApp +254 111 467 601. We'll only remind you once.</p>
 </div>`;
   return { subject, text, html, link };
 }

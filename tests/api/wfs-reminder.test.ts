@@ -10,8 +10,10 @@ describe("finish-your-payment reminder", () => {
   });
   it("is honest: real price, saved details, one reminder only, no discount or fake urgency", () => {
     expect(e.text).toMatch(/KES 300/);
-    expect(e.text).toMatch(/details are saved/);
-    expect(e.text).toMatch(/only reminder/);
+    expect(e.subject).toBe("Finish your CV, details saved");
+    expect(e.text).toMatch(/is saved but not paid yet/);
+    expect(e.text).toMatch(/for the Private Chef job/);
+    expect(e.text).toMatch(/only remind you once/);
     expect(e.text).not.toMatch(/discount|% off|expires|last chance|hurry/i);
     expect(e.text).toMatch(/\+254 111 467 601/);
   });
