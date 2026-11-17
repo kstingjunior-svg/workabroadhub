@@ -33,11 +33,13 @@ export interface CvInput {
   email?: string;
   education?: string;           // one-liner or paragraph
   extras?: string;              // catch-all: certifications, languages, etc.
+  workHistory?: string;         // 2026-11: real employers / roles / years, free text
+  jobDescription?: string;      // 2026-11: pasted job ad to tailor to
+  jobTitle?: string;
 }
 
 export interface CoverLetterInput extends CvInput {
   employerName?: string;        // e.g. "Al Ahli Hospital"
-  jobTitle?: string;            // e.g. "Staff Nurse — ICU"
   jobSource?: string;           // e.g. "LinkedIn", "employer website"
 }
 

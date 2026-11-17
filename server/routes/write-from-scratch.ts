@@ -82,6 +82,52 @@ import {
 } from "../services/writeFromScratch/generator";
 
 const PRICE_KES = 300;
+/** 2026-11: "Tailor for another job" — re-use a CV you already paid for, new job description. */
+const RETAILOR_PRICE_KES = 100;
+const TAILORABLE: WriteFromScratchDocType[] = ["cv", "recruitment_cv", "cover_letter"];
+
+/** Trim + cap the free-text fields we added for tailoring. */
+function sanitizeTailoring(input: any): any {
+  const out = { ...input };
+  if (typeof out.jobDescription === "string") out.jobDescription = out.jobDescription.trim().slice(0, 8000) || undefined;
+  else delete out.jobDescription;
+  if (typeof out.workHistory === "string") out.workHistory = out.workHistory.trim().slice(0, 3000) || undefined;
+  else delete out.workHistory;
+  return out;
+}
+
+/**
+ * Resolve a "tailor for another job" request: the parent must be the caller's
+ * own, already-generated document of a tailorable type. The new draft copies
+ * the parent's details EXACTLY and only swaps the job description, so the
+ * KES 100 price can't be used to write a different person's CV.
+ */
+async function resolveRetailor(userId: string | null, parentDraftId: unknown, jobDescription: unknown):
+  Promise<{ ok: true; docType: WriteFromScratchDocType; input: any } | { ok: false; status: number; error: string }> {
+  if (!userId) return { ok: false, status: 401, error: "Please sign in to tailor your CV for another job." };
+  if (typeof parentDraftId !== "string" || !/^[0-9a-f-]{36}$/i.test(parentDraftId)) return { ok: false, status: 400, error: "Invalid document." };
+  const jd = typeof jobDescription === "string" ? jobDescription.trim() : "";
+  if (jd.length < 80) return { ok: false, status: 400, error: "Paste the full job description (at least a few sentences)." };
+  const { rows } = await pool.query(
+    `SELECT doc_type, input_json, status, user_id, created_at FROM write_from_scratch_drafts WHERE id = $1`, [parentDraftId]);
+  const p = rows[0];
+  if (!p || p.user_id !== userId) return { ok: false, status: 404, error: "We couldn't find that document on your account." };
+  if (p.status !== "generated") return { ok: false, status: 400, error: "That document hasn't been generated yet." };
+  if (!TAILORABLE.includes(p.doc_type)) return { ok: false, status: 400, error: "Only CVs and cover letters can be tailored." };
+  if (Date.now() - new Date(p.created_at).getTime() > 180 * 86400_000) return { ok: false, status: 400, error: "That document is more than 6 months old — please create a new one." };
+  const parentInput = typeof p.input_json === "string" ? JSON.parse(p.input_json) : p.input_json;
+  return { ok: true, docType: p.doc_type, input: { ...parentInput, jobDescription: jd.slice(0, 8000) } };
+}
+
+// Simple per-user rate limit for the free match panel (it costs a model call).
+const matchHits = new Map<string, number[]>();
+function allowMatch(key: string): boolean {
+  const now = Date.now();
+  const hits = (matchHits.get(key) ?? []).filter((t) => now - t < 3600_000);
+  if (hits.length >= 15) return false;
+  hits.push(now); matchHits.set(key, hits);
+  return true;
+}
 const VALID_DOC_TYPES: WriteFromScratchDocType[] = [
   "cv",
   "cover_letter",
@@ -205,7 +251,17 @@ export function registerWriteFromScratchRoutes(app: Express): void {
   /* ─── POST /api/write-from-scratch/init ─────────────────────────────── */
   app.post("/api/write-from-scratch/init", async (req: Request, res: Response) => {
     try {
-      const { docType, input, phone } = req.body ?? {};
+      let { docType, input, phone } = req.body ?? {};
+      let price = PRICE_KES;
+      const parentDraftId: string | null = typeof req.body?.parentDraftId === "string" ? req.body.parentDraftId : null;
+
+      // 2026-11: "Tailor for another job" (KES 100) — details come from the parent draft.
+      if (parentDraftId) {
+        const r = await resolveRetailor(currentUserId(req), parentDraftId, req.body?.jobDescription);
+        if ("error" in r) return res.status(r.status).json({ error: r.error });
+        docType = r.docType; input = r.input; price = RETAILOR_PRICE_KES;
+      }
+      if (input && typeof input === "object") input = sanitizeTailoring(input);
 
       // ── Validate ─────────────────────────────────────────────────────
       if (!VALID_DOC_TYPES.includes(docType)) {
@@ -258,7 +314,7 @@ export function registerWriteFromScratchRoutes(app: Express): void {
       // If we still have no phone, we can't charge — ask the client to collect one.
       if (!payerPhone) {
         return res.status(400).json({
-          error: "We need an M-Pesa phone number to send the KES 300 prompt.",
+          error: `We need an M-Pesa phone number to send the KES ${price} prompt.`,
           needsPhone: true,
         });
       }
@@ -266,10 +322,10 @@ export function registerWriteFromScratchRoutes(app: Express): void {
       // ── Create draft row ─────────────────────────────────────────────
       const { rows: created } = await pool.query(
         `INSERT INTO write_from_scratch_drafts
-           (user_id, doc_type, input_json, status, mpesa_amount, mpesa_phone)
-         VALUES ($1, $2, $3, 'pending_payment', $4, $5)
+           (user_id, doc_type, input_json, status, mpesa_amount, mpesa_phone, parent_draft_id)
+         VALUES ($1, $2, $3, 'pending_payment', $4, $5, $6)
          RETURNING id`,
-        [userId, docType, JSON.stringify(input), PRICE_KES, payerPhone],
+        [userId, docType, JSON.stringify(input), price, payerPhone, parentDraftId],
       );
       const draftId = created[0].id as string;
 
@@ -285,7 +341,7 @@ export function registerWriteFromScratchRoutes(app: Express): void {
       try {
         stkResponse = await stkPush(
           payerPhone,
-          PRICE_KES,
+          price,
           `WorkAbroad Hub — ${docTypeLabel(docType)}`,
           `WAH-WFS-${draftId.slice(0, 8)}`,
           // Route this STK's callback to OUR dedicated endpoint, not the
@@ -415,7 +471,15 @@ export function registerWriteFromScratchRoutes(app: Express): void {
    */
   app.post("/api/write-from-scratch/paypal-init", async (req: Request, res: Response) => {
     try {
-      const { docType, input } = req.body ?? {};
+      let { docType, input } = req.body ?? {};
+      let price = PRICE_KES;
+      const parentDraftId: string | null = typeof req.body?.parentDraftId === "string" ? req.body.parentDraftId : null;
+      if (parentDraftId) {
+        const r = await resolveRetailor(currentUserId(req), parentDraftId, req.body?.jobDescription);
+        if ("error" in r) return res.status(r.status).json({ error: r.error });
+        docType = r.docType; input = r.input; price = RETAILOR_PRICE_KES;
+      }
+      if (input && typeof input === "object") input = sanitizeTailoring(input);
 
       if (!docType || !VALID_DOC_TYPES.includes(docType as WriteFromScratchDocType)) {
         return res.status(400).json({ error: "Invalid docType" });
@@ -458,17 +522,17 @@ export function registerWriteFromScratchRoutes(app: Express): void {
       // (repurposed as generic payment_ref — schema keeps the column name for now).
       const { rows: created } = await pool.query(
         `INSERT INTO write_from_scratch_drafts
-           (user_id, doc_type, input_json, status, mpesa_amount)
-         VALUES ($1, $2, $3, 'pending_payment', $4)
+           (user_id, doc_type, input_json, status, mpesa_amount, parent_draft_id)
+         VALUES ($1, $2, $3, 'pending_payment', $4, $5)
          RETURNING id`,
-        [userId, docType, JSON.stringify(input), PRICE_KES],
+        [userId, docType, JSON.stringify(input), price, parentDraftId],
       );
       const draftId = created[0].id as string;
 
       let order;
       try {
         order = await createPayPalOrder(
-          PRICE_KES,
+          price,
           `WorkAbroad Hub — ${docTypeLabel(docType as WriteFromScratchDocType)}`,
           `WAH-WFS-${draftId.slice(0, 8)}`,
           {
@@ -680,6 +744,28 @@ export function registerWriteFromScratchRoutes(app: Express): void {
    * surface (or the tool landing page itself) can offer a one-click
    * "Resume" for any paid-but-not-downloaded row. Guests get an empty list.
    */
+  /* ─── POST /api/write-from-scratch/match ────────────────────────────────
+   * 2026-11: free "How well you match this job" panel, shown before payment.
+   * Body: { input, jobDescription } → MatchReport. Signed-in users only.
+   */
+  app.post("/api/write-from-scratch/match", async (req: Request, res: Response) => {
+    try {
+      const userId = currentUserId(req);
+      if (!userId) return res.status(401).json({ error: "Please sign in to check your match." });
+      const jd = typeof req.body?.jobDescription === "string" ? req.body.jobDescription.trim() : "";
+      if (jd.length < 80) return res.status(400).json({ error: "Paste the full job description (at least a few sentences)." });
+      const input = sanitizeTailoring(req.body?.input && typeof req.body.input === "object" ? req.body.input : {});
+      if (!input.role && !input.keySkills) return res.status(400).json({ error: "Fill in your target role and key skills first." });
+      if (!allowMatch(userId)) return res.status(429).json({ error: "You've checked a lot of jobs in the last hour. Please try again a bit later." });
+      const { matchAgainstJob } = await import("../services/writeFromScratch/job-match");
+      const report = await matchAgainstJob(input, jd);
+      return res.json(report);
+    } catch (err: any) {
+      console.error("[write-from-scratch/match] error:", err?.message);
+      return res.status(500).json({ error: "Could not compare with the job right now. You can still generate your CV." });
+    }
+  });
+
   app.get("/api/write-from-scratch/mine", async (req: Request, res: Response) => {
     try {
       const userId = currentUserId(req);
@@ -688,6 +774,8 @@ export function registerWriteFromScratchRoutes(app: Express): void {
       const { rows } = await pool.query(
         `SELECT id, doc_type, status,
                 output_body IS NOT NULL AS has_body,
+                parent_draft_id, mpesa_amount,
+                left(coalesce(input_json::jsonb->>'jobDescription',''), 80) AS job_snippet,
                 error_message,
                 mpesa_receipt,
                 created_at, paid_at, generated_at

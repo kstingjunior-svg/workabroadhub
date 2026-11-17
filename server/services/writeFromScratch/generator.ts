@@ -26,6 +26,7 @@ import {
   type RecruitmentCvInput,
   type ReferenceLetterInput,
 } from "./prompts";
+import { tailoringBlock } from "./job-match";
 
 export type WriteFromScratchDocType =
   | "cv"
@@ -108,6 +109,15 @@ export async function generateDocument(
 }
 
 function buildPromptFor(request: WriteFromScratchInput): string {
+  // 2026-11: job-description tailoring + real work history (CV, recruitment CV, cover letter).
+  if (request.docType !== "reference_letter") {
+    const extra = tailoringBlock(request.input as any);
+    if (extra) return `${basePromptFor(request)}${extra}\n\nFollow the tailoring rules above. Output the document only.`;
+  }
+  return basePromptFor(request);
+}
+
+function basePromptFor(request: WriteFromScratchInput): string {
   switch (request.docType) {
     case "cv":
       return buildCvPrompt(request.input);

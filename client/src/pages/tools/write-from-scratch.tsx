@@ -43,6 +43,9 @@ import {
   RefreshCw,
   CheckCircle2,
   AlertTriangle,
+  Target,
+  CircleDashed,
+  XCircle,
 } from "lucide-react";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -91,6 +94,15 @@ const DOC_TYPES: DocTypeMeta[] = [
 ];
 
 const PRICE_KES = 300;
+/** 2026-11: re-use a CV you already paid for, tailored to another job. */
+const RETAILOR_PRICE_KES = 100;
+const TAILORABLE: DocType[] = ["cv", "recruitment_cv", "cover_letter"];
+
+interface MatchReport {
+  jobTitle: string | null; employer: string | null; location: string | null;
+  requirements: { requirement: string; importance: "must" | "nice"; status: "met" | "partly" | "not_shown"; evidence: string | null; tip: string | null }[];
+  covered: number; partly: number; total: number; summary: string;
+}
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
@@ -209,7 +221,13 @@ export default function WriteFromScratchPage() {
           setState("generating");
           runGeneration(draftId);
         } else if (j.status === "generated" && j.hasBody) {
-          setState("result");
+          // Server auto-generated after payment — fetch THIS draft's body
+          // (important for "tailor for another job": the old CV is still on screen).
+          try {
+            const b = await fetch(`/api/write-from-scratch/${draftId}/body`).then((r) => r.json());
+            if (!stopped && b?.body) setBody(b.body);
+          } catch { /* keep polling */ return; }
+          if (!stopped) setState("result");
         } else if (j.status === "failed") {
           setErrorMsg(j.error ?? "The document could not be generated.");
           setState("error");
@@ -413,6 +431,40 @@ export default function WriteFromScratchPage() {
     }
   };
 
+  // 2026-11: "Tailor for another job" — KES 100, same details, new job description.
+  const startRetailor = async (jobDescription: string, via: "mpesa" | "paypal") => {
+    if (!draftId) return;
+    const parentDraftId = draftId;
+    try {
+      const res = await apiRequest("POST", via === "mpesa" ? "/api/write-from-scratch/init" : "/api/write-from-scratch/paypal-init", {
+        parentDraftId, jobDescription, phone: phone.trim() || undefined,
+      });
+      const j = await res.json();
+      if (!res.ok) {
+        if (j.needsPhone) setNeedsPhone(true);
+        toast({ title: "Could not start", description: j.error ?? "Please try again.", variant: "destructive" });
+        return;
+      }
+      setDraftId(j.draftId);
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.set("draftId", j.draftId);
+        window.history.replaceState({}, "", url.toString());
+      } catch { /* ignore */ }
+      if (via === "paypal") {
+        if (j.status === "paid" && !j.approvalUrl) { runGeneration(j.draftId); return; }
+        if (!j.approvalUrl) { toast({ title: "PayPal did not return a payment link", description: "Please try M-Pesa.", variant: "destructive" }); return; }
+        try { sessionStorage.setItem("wfs:paypalDraftId", j.draftId); } catch {}
+        window.location.href = j.approvalUrl;
+        return;
+      }
+      setState("paying");
+      toast({ title: "Check your phone", description: `M-Pesa prompt for KES ${RETAILOR_PRICE_KES} sent. Enter your PIN.` });
+    } catch (err: any) {
+      toast({ title: "Something went wrong", description: err?.message ?? "Please try again.", variant: "destructive" });
+    }
+  };
+
   const regenerate = async () => {
     if (!draftId) return;
     // We re-run generate; server clears the failed state before retrying.
@@ -535,6 +587,12 @@ export default function WriteFromScratchPage() {
           <ResultView
             body={body}
             meta={meta}
+            canRetailor={!!user && TAILORABLE.includes(meta.key)}
+            onRetailor={startRetailor}
+            matchInput={form.role ? buildInput(meta.key, form) : null}
+            needsPhone={needsPhone || !(user as any)?.phone}
+            phone={phone}
+            setPhone={setPhone}
             onDownloadDocx={() => downloadFile("docx")}
             onDownloadPdf={() => downloadFile("pdf")}
             onRegenerate={regenerate}
@@ -746,7 +804,7 @@ function FillView({
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            {fields.map((f) => (
+            {fields.filter((f) => f.name !== "jobDescription").map((f) => (
               <div key={f.name} className={f.wide ? "sm:col-span-2" : ""}>
                 <Label htmlFor={`field-${f.name}`}>
                   {f.label}
@@ -778,6 +836,30 @@ function FillView({
           </div>
         </CardContent>
       </Card>
+
+      {TAILORABLE.includes(meta.key) && (
+        <Card className="border-2 border-emerald-300 dark:border-emerald-800" data-testid="card-tailor">
+          <CardContent className="p-6 space-y-3">
+            <div className="flex items-start gap-3">
+              <div className="h-10 w-10 rounded-lg bg-emerald-100 dark:bg-emerald-950/40 flex items-center justify-center flex-shrink-0">
+                <Target className="h-5 w-5 text-emerald-700" />
+              </div>
+              <div>
+                <h3 className="font-semibold">Tailor it to a specific job <span className="text-xs font-normal text-muted-foreground">(optional, recommended)</span></h3>
+                <p className="text-xs text-muted-foreground">Found a job on Indeed, LinkedIn or a company site? Copy the whole job description and paste it here. Your {meta.key === "cover_letter" ? "letter" : "CV"} will be written for that job, using only your real details.</p>
+              </div>
+            </div>
+            <Textarea id="field-jobDescription" value={form.jobDescription ?? ""} onChange={(e) => set("jobDescription", e.target.value)}
+              rows={6} maxLength={8000} placeholder="Paste the job description here…" data-testid="input-jobDescription" />
+            {(form.jobDescription ?? "").trim().length >= 80 && (form.role ?? "").trim() && (
+              <MatchPanel input={buildInput(meta.key, form)} jobDescription={(form.jobDescription ?? "").trim()} />
+            )}
+            {(form.jobDescription ?? "").trim().length >= 80 && !(form.role ?? "").trim() && (
+              <p className="text-xs text-muted-foreground">Fill in your target role and skills above to see how well you match.</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Payment card — everyone pays KES 300. If we have a phone on file
           from signup we just tell the user which phone we'll charge; otherwise
@@ -916,6 +998,12 @@ function WaitView({
 function ResultView({
   body,
   meta,
+  canRetailor,
+  onRetailor,
+  matchInput,
+  needsPhone,
+  phone,
+  setPhone,
   onDownloadDocx,
   onDownloadPdf,
   onRegenerate,
@@ -923,6 +1011,12 @@ function ResultView({
 }: {
   body: string;
   meta: DocTypeMeta;
+  canRetailor: boolean;
+  onRetailor: (jobDescription: string, via: "mpesa" | "paypal") => Promise<void>;
+  matchInput: any | null;
+  needsPhone: boolean;
+  phone: string;
+  setPhone: (p: string) => void;
   onDownloadDocx: () => void;
   onDownloadPdf: () => void;
   onRegenerate: () => void;
@@ -970,6 +1064,135 @@ function ResultView({
           </pre>
         </CardContent>
       </Card>
+
+      {canRetailor && (
+        <RetailorCard onRetailor={onRetailor} matchInput={matchInput} needsPhone={needsPhone} phone={phone} setPhone={setPhone} />
+      )}
+    </div>
+  );
+}
+
+// ─── Tailor for another job (KES 100) ───────────────────────────────────────
+
+function RetailorCard({ onRetailor, matchInput, needsPhone, phone, setPhone }: {
+  onRetailor: (jobDescription: string, via: "mpesa" | "paypal") => Promise<void>;
+  matchInput: any | null;
+  needsPhone: boolean;
+  phone: string;
+  setPhone: (p: string) => void;
+}) {
+  const [jd, setJd] = useState("");
+  const [busy, setBusy] = useState(false);
+  const ok = jd.trim().length >= 80;
+  const go = async (via: "mpesa" | "paypal") => {
+    setBusy(true);
+    try { await onRetailor(jd.trim(), via); } finally { setBusy(false); }
+  };
+  return (
+    <Card className="border-2 border-emerald-300 dark:border-emerald-800" data-testid="card-retailor">
+      <CardContent className="p-5 space-y-3">
+        <div className="flex items-start gap-3">
+          <div className="h-10 w-10 rounded-lg bg-emerald-100 dark:bg-emerald-950/40 flex items-center justify-center flex-shrink-0">
+            <Target className="h-5 w-5 text-emerald-700" />
+          </div>
+          <div>
+            <h3 className="font-bold">Applying for another job? Tailor this CV for KES {RETAILOR_PRICE_KES}</h3>
+            <p className="text-sm text-muted-foreground">Paste the new job description. We use the same details you already gave us and rewrite the CV for that job. Nothing you haven't told us is added.</p>
+          </div>
+        </div>
+        <Textarea value={jd} onChange={(e) => setJd(e.target.value)} rows={6} maxLength={8000}
+          placeholder="Paste the full job description here (copy it from Indeed, LinkedIn, the company site…)"
+          data-testid="input-retailor-jd" />
+        {matchInput && ok && <MatchPanel input={matchInput} jobDescription={jd} />}
+        {needsPhone && (
+          <div>
+            <Label htmlFor="retailor-phone">M-Pesa phone number</Label>
+            <Input id="retailor-phone" type="tel" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="07XX XXX XXX" className="mt-1" />
+          </div>
+        )}
+        <div className="flex flex-col sm:flex-row gap-2">
+          <Button className="flex-1 bg-green-600 hover:bg-green-700 text-white min-h-[44px]" disabled={!ok || busy} onClick={() => go("mpesa")} data-testid="button-retailor-mpesa">
+            {busy ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null} Tailor for this job · KES {RETAILOR_PRICE_KES} M-Pesa
+          </Button>
+          <Button variant="outline" className="min-h-[44px]" disabled={!ok || busy} onClick={() => go("paypal")} data-testid="button-retailor-paypal">
+            PayPal / card
+          </Button>
+        </div>
+        {!ok && jd.trim().length > 0 && <p className="text-xs text-amber-700">Paste the whole job description — a few sentences at least.</p>}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── "How well you match this job" (free, before payment) ───────────────────
+
+function MatchPanel({ input, jobDescription }: { input: any; jobDescription: string }) {
+  const [report, setReport] = useState<MatchReport | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [checkedFor, setCheckedFor] = useState<string>("");
+  const stale = report && checkedFor !== jobDescription.trim() + "|" + JSON.stringify(input);
+
+  async function check() {
+    setLoading(true); setErr(null);
+    try {
+      const res = await apiRequest("POST", "/api/write-from-scratch/match", { input, jobDescription });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error ?? "Could not check right now.");
+      setReport(j);
+      setCheckedFor(jobDescription.trim() + "|" + JSON.stringify(input));
+    } catch (e: any) {
+      setErr(e?.message ?? "Could not check right now.");
+    } finally { setLoading(false); }
+  }
+
+  const icon = (st: string) =>
+    st === "met" ? <CheckCircle2 className="h-4 w-4 text-emerald-600 flex-shrink-0 mt-0.5" />
+      : st === "partly" ? <CircleDashed className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+        : <XCircle className="h-4 w-4 text-slate-400 flex-shrink-0 mt-0.5" />;
+
+  return (
+    <div className="rounded-lg border bg-muted/20 p-3 space-y-3" data-testid="match-panel">
+      {(!report || stale) && (
+        <Button type="button" variant="secondary" onClick={check} disabled={loading} className="w-full min-h-[44px]" data-testid="button-check-match">
+          {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Target className="h-4 w-4 mr-2" />}
+          {stale ? "Re-check my match" : "Check how well I match this job (free)"}
+        </Button>
+      )}
+      {err && <p className="text-sm text-red-600">{err}</p>}
+      {report && (
+        <div className="space-y-2">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Your match{report.jobTitle ? ` · ${report.jobTitle}` : ""}{report.location ? ` · ${report.location}` : ""}</p>
+            {report.total > 0 && (
+              <p className="text-2xl font-extrabold tabular-nums" data-testid="text-match-count">
+                {report.covered} <span className="text-base font-medium text-muted-foreground">of {report.total} requirements covered</span>
+              </p>
+            )}
+            {report.total > 0 && (
+              <div className="mt-1 flex h-2 rounded-full overflow-hidden bg-muted">
+                <div className="bg-emerald-500" style={{ width: `${(report.covered / report.total) * 100}%` }} />
+                <div className="bg-amber-400" style={{ width: `${(report.partly / report.total) * 100}%` }} />
+              </div>
+            )}
+            <p className="text-sm mt-2">{report.summary}</p>
+          </div>
+          <ul className="space-y-1.5">
+            {report.requirements.map((r, i) => (
+              <li key={i} className="flex gap-2 text-sm">
+                {icon(r.status)}
+                <div className="min-w-0">
+                  <span className={r.status === "not_shown" ? "text-muted-foreground" : ""}>{r.requirement}</span>
+                  {r.importance === "must" && <span className="ml-1 text-[10px] font-semibold uppercase text-rose-700">key</span>}
+                  {r.evidence && <p className="text-xs text-emerald-700 dark:text-emerald-400">From your details: “{r.evidence}”</p>}
+                  {r.status !== "met" && r.tip && <p className="text-xs text-muted-foreground">{r.tip}</p>}
+                </div>
+              </li>
+            ))}
+          </ul>
+          <p className="text-[11px] text-muted-foreground">Your CV will put what you match first. It will never claim a requirement you don't have — employers check, and a false CV can cost you the job or the visa.</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -1024,6 +1247,7 @@ function fieldsFor(t: DocType): Field[] {
     { name: "targetCountry",  label: "Target country",   placeholder: "e.g. Saudi Arabia, UK" },
     { name: "phone",          label: "Phone",            placeholder: "+254 7XX XXX XXX" },
     { name: "email",          label: "Email",            placeholder: "you@example.com", type: "email" },
+    { name: "workHistory",    label: "Where you've worked", placeholder: "One job per line: employer, your role, years, what you did. e.g. ABC Hotel Nairobi, Sous Chef, 2019-2023, ran the grill and pastry section", multiline: true, wide: true },
     { name: "education",      label: "Education",        placeholder: "e.g. BSc Nursing, Kenyatta University, 2018", multiline: true, wide: true },
     { name: "extras",         label: "Extras (certs, languages, awards)", placeholder: "e.g. BLS-certified 2024, fluent in Swahili + English + basic Arabic", multiline: true, wide: true },
   ];
