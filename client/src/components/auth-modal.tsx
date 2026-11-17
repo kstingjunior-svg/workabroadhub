@@ -290,20 +290,23 @@ export function AuthModal({
   }, [open, defaultTab, prefillEmail]);
 
   // 2026-11 (signup redesign): new accounts are created on the dedicated
-  // passwordless /signup page (name + email → code). Whenever this modal
-  // would show the old sign-up form — opened in signup mode, or the user
-  // tapped "Create account" — send them there instead. Sign-in (password
-  // or email code) for existing users stays in this modal unchanged.
-  useEffect(() => {
-    if (!open || tab !== "signup") return;
+  // passwordless /signup page (name + email → code). When this modal is
+  // opened in signup mode, or the user taps "Create account", we send them
+  // there. (Keyed on defaultTab + explicit clicks — NOT on the `tab` state,
+  // which can still hold a stale "signup" for one render while the modal
+  // re-syncs to "login", and would wrongly bounce sign-ins to /signup.)
+  const goToSignupPage = () => {
     const qs = new URLSearchParams();
     const dest = redirectPath || (() => { try { return localStorage.getItem("auth_redirect"); } catch { return null; } })();
     if (dest && /^\/(?![/\\])/.test(dest) && dest !== "/dashboard") qs.set("redirect", dest);
     if (email.trim().includes("@")) qs.set("email", email.trim());
     onClose();
     navigate(`/signup${qs.toString() ? `?${qs}` : ""}`);
+  };
+  useEffect(() => {
+    if (open && defaultTab === "signup") goToSignupPage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, tab]);
+  }, [open, defaultTab]);
 
   const validate = (): boolean => {
     const errs: FieldErrors = {};
@@ -1162,9 +1165,7 @@ export function AuthModal({
                   setNoAccountInfo(null);
                   setServerError("");
                   setPassword("");
-                  if (!email.includes("@")) setEmail("");
-                  setTab("signup");
-                  setStage("signup");
+                  goToSignupPage();
                 }}
                 className="w-full h-11 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
                 data-testid="button-create-from-no-account"
@@ -1468,7 +1469,7 @@ export function AuthModal({
             <p className="text-center text-sm text-muted-foreground -mt-2">
               New here?{" "}
               <button type="button" className="text-primary font-medium hover:underline"
-                onClick={() => { setTab("signup"); setStage("signup"); }}
+                onClick={() => goToSignupPage()}
                 data-testid="link-switch-to-signup">
                 Create a free account
               </button>

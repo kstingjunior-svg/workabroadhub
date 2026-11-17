@@ -543,6 +543,13 @@ const LazyAutoApply = withSuspense(AutoApply);
 const LazyForum = withSuspense(Forum);
 const LazyLoginPage = withSuspense(LoginPage);
 const LazySignupPage = withSuspense(SignupPage);
+
+/** Renders nothing on focused flows (sign-up) where floating widgets get in the way. */
+function HideOnFocusedFlows({ children }: { children: import("react").ReactNode }) {
+  const [loc] = useLocation();
+  if (loc === "/signup" || loc.startsWith("/signup/")) return null;
+  return <>{children}</>;
+}
 const LazyForgotPassword = withSuspense(ForgotPassword);
 const LazyResetPassword = withSuspense(ResetPassword);
 const LazySharedDocument = withSuspense(SharedDocument);
@@ -1194,10 +1201,15 @@ function App() {
                 <Router />
               </main>
               <UpgradeModal />
-              <LiveActivityFeed />
-              <LazyNanjilaChatWidget />
-              <InstallAppPrompt />
-              <GlobalBackButton />
+              {/* 2026-11 signup redesign: keep the sign-up page free of floating
+                  widgets (chat bubble, activity toast, install prompt, back
+                  button) that overlapped the form on phones. */}
+              <HideOnFocusedFlows>
+                <LiveActivityFeed />
+                <LazyNanjilaChatWidget />
+                <InstallAppPrompt />
+                <GlobalBackButton />
+              </HideOnFocusedFlows>
               <GlobalPlanListener />
             </AgeVerificationGate>
           </UpgradeModalProvider>
