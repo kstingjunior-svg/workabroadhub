@@ -1,14 +1,17 @@
-# auto-push.ps1 — pushes new local commits on `main` to GitHub (→ Render deploys).
+# auto-push.ps1 - pushes new local commits on `main` to GitHub (-> Render deploys).
+#
+# NOTE: keep this file pure ASCII. Windows PowerShell 5.1 reads scripts
+# without a BOM as ANSI, and a UTF-8 dash turns into a stray quote character.
 #
 # Set up by Tony on 2026-11-18 so Claude's tested commits go live without a
 # manual `git push`. Runs every 5 minutes from Windows Task Scheduler.
 #
 # Safety:
-#   • Only ever pushes branch `main`, never force-pushes.
-#   • Skips if `main` has diverged from GitHub (someone pushed elsewhere) —
+#   * Only ever pushes branch `main`, never force-pushes.
+#   * Skips if `main` has diverged from GitHub (someone pushed elsewhere) -
 #     that needs a human.
-#   • Skips while a merge/rebase is in progress or another push is running.
-#   • Logs every run to .auto-push.log (not committed).
+#   * Skips while a merge/rebase is in progress or another push is running.
+#   * Logs every run to .auto-push.log (not committed).
 #
 # Turn off:  Unregister-ScheduledTask -TaskName "WorkAbroadHub Auto Push" -Confirm:$false
 
@@ -47,7 +50,7 @@ try {
   $ahead  = [int](git rev-list --count origin/main..main)
   $behind = [int](git rev-list --count main..origin/main)
   if ($ahead -eq 0) { exit 0 }
-  if ($behind -gt 0) { Log "skip: main has diverged from GitHub (ahead $ahead, behind $behind) — needs Tony"; exit 0 }
+  if ($behind -gt 0) { Log "skip: main has diverged from GitHub (ahead $ahead, behind $behind) - needs Tony"; exit 0 }
 
   $subjects = (git log --format="%h %s" origin/main..main | ForEach-Object { $_.Substring(0, [Math]::Min(90, $_.Length)) }) -join " | "
   $out = git push origin main 2>&1
