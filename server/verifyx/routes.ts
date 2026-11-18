@@ -71,7 +71,12 @@ export function registerVerifyxRoutes(app: Express): void {
     const report = await loadReport(r.id);
     if (!report) return res.status(404).json({ message: "Report not ready." });
     await audit("report.viewed", { requestId: r.id, actorId: sessionUserId(req), actorKind: "user" });
-    res.json(report);
+    // 2026-11: show the customer the result of a manual review they asked for.
+    const { rows: [rev] } = await pool.query(
+      `SELECT decision, decision_notes, resolved_at FROM verifyx_review_cases
+        WHERE request_id = $1 AND kind IN ('dispute','manual_review') AND status = 'resolved' AND decision_notes IS NOT NULL
+        ORDER BY resolved_at DESC NULLS LAST LIMIT 1`, [r.id]).catch(() => ({ rows: [] as any[] }));
+    res.json(rev ? { ...report, manualReview: { decision: rev.decision, notes: rev.decision_notes, resolvedAt: rev.resolved_at } } : report);
   });
 
   app.post("/api/verifyx/requests/:id/corrections", async (req: any, res) => {

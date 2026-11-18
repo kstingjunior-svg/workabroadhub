@@ -47,6 +47,8 @@ export interface VxReport {
   sourcesUsed: Array<{ id: string; title: string; authority: string; url: string; retrievedAt: string | null }>;
   generalScamAwareness: string[];
   disclaimer: string;
+  /** 2026-11: result of a manual review the customer requested. */
+  manualReview?: { decision: string | null; notes: string; resolvedAt: string | null };
   _accessKey?: string;
 }
 
@@ -226,6 +228,16 @@ export function VerifyXReportView({ report, onReportChange, onReset, docNoun }: 
   return (
     <div className="space-y-4" data-testid="verifyx-report">
       {report.risk && <RiskSummary report={report} />}
+
+      {report.manualReview && (
+        <Card className="border-2 border-purple-300 dark:border-purple-800" data-testid="manual-review-result">
+          <CardContent className="pt-4 pb-4 space-y-1.5">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-purple-700 dark:text-purple-300">Manual review by our team{report.manualReview.resolvedAt ? ` · ${fmtDate(report.manualReview.resolvedAt)}` : ""}</p>
+            <p className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap">{report.manualReview.notes.replace(/^Manual review[^:]*:\s*/i, "")}</p>
+            <p className="text-[11px] text-gray-500">A WorkAbroad Hub review is not a government verification.</p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Headline */}
       <Card className={`border-2 ${OUTCOME_STYLE[report.outcome]}`}>
