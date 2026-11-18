@@ -22,6 +22,8 @@ export interface SendArgs {
   subject: string;
   html: string;
   text?: string;
+  /** 2026-11: optional sender override, e.g. "WorkAbroad Hub <support@workabroadhub.tech>". Must be on the verified domain. */
+  from?: string;
 }
 
 export interface SendOutcome {
@@ -256,7 +258,9 @@ async function sendViaResend(args: SendArgs): Promise<SendOutcome> {
   const apiKey = (process.env.RESEND_API_KEY || "").trim();
   if (!apiKey) return { success: false, error: "Resend not configured" };
 
-  const fromAddress = (process.env.RESEND_FROM || "WorkAbroad Hub <noreply@workabroadhub.tech>").trim();
+  const fromAddress = (args.from && /@workabroadhub\.tech>?\s*$/i.test(args.from)
+    ? args.from
+    : (process.env.RESEND_FROM || "WorkAbroad Hub <noreply@workabroadhub.tech>")).trim();
 
   try {
     const res = await fetch("https://api.resend.com/emails", {

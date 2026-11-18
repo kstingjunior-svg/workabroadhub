@@ -281,6 +281,13 @@ httpServer.listen(PORT, "0.0.0.0", () => {
     } catch (err: any) {
       console.error("[Server] ❌ Verification reminder sweep failed to start:", err?.message);
     }
+    // 2026-11: daily 07:00 Nairobi "needs your attention" email to Tony (ADMIN_DIGEST=off to disable).
+    try {
+      const { startAdminDigest } = await import("./lib/admin-digest");
+      startAdminDigest();
+    } catch (err: any) {
+      console.error("[Server] ❌ Admin digest failed to start:", err?.message);
+    }
     // 2026-11: one "finish your payment" email for unfinished Write from Scratch drafts (WFS_PAYMENT_REMINDERS=on).
     try {
       const { startWfsPaymentReminders } = await import("./lib/wfs-payment-reminder");

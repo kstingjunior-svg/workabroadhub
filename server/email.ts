@@ -87,6 +87,8 @@ export async function sendEmail(options: {
   subject: string;
   html: string;
   text?: string;
+  /** Optional sender on our domain (Resend only), e.g. "WorkAbroad Hub <support@workabroadhub.tech>". */
+  from?: string;
 }): Promise<EmailResult> {
   // 2026-10 (Tony — "15 bounces, mostly repeats to the same dead addresses").
   // SUPPRESSION GATE: refuse to even attempt delivery to an address that

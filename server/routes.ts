@@ -18348,6 +18348,23 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
     }
   });
 
+  // 2026-11: preview / send the daily "needs your attention" email now (admin only).
+  //   GET  /api/admin/digest/preview   → items + subject (no email)
+  //   POST /api/admin/digest/send-now  → sends it now (doesn't block the 07:00 run)
+  app.get("/api/admin/digest/preview", isAuthenticated, isAdmin, async (_req, res) => {
+    try {
+      const { collectDigest, buildDigestEmail } = await import("./lib/admin-digest");
+      const items = await collectDigest();
+      res.json({ items, subject: items.length ? buildDigestEmail(items).subject : null });
+    } catch (err: any) { res.status(500).json({ message: err?.message }); }
+  });
+  app.post("/api/admin/digest/send-now", isAuthenticated, isAdmin, async (_req, res) => {
+    try {
+      const { runAdminDigest } = await import("./lib/admin-digest");
+      res.json(await runAdminDigest(true));
+    } catch (err: any) { res.status(500).json({ message: err?.message }); }
+  });
+
   // GET /api/admin/analytics/payment-funnel — people who tried vs paid, with plain reasons (2026-11)
   app.get("/api/admin/analytics/payment-funnel", isAuthenticated, isAdmin, async (req, res) => {
     try {
