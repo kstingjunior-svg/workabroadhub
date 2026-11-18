@@ -143,7 +143,7 @@ export default function KenyaCareersEmployers() {
                 <Users className="h-7 w-7 text-emerald-600 mb-2" />
                 <h3 className="font-semibold text-sm">High-intent candidates</h3>
                 <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                  Many applicants pay KES 99 to apply — they're serious. No CV-spam from inactive accounts.
+                  Applicants are on a paid plan — they're serious. No CV-spam from inactive accounts.
                 </p>
               </CardContent>
             </Card>

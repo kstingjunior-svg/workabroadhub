@@ -2930,7 +2930,9 @@ export class DatabaseStorage implements IStorage {
         orderedAt: serviceOrders.createdAt,
       })
       .from(serviceDeliverables)
-      .innerJoin(serviceOrders, eq(serviceDeliverables.orderId, serviceOrders.id))
+      // 2026-11: service_orders.id is uuid but service_deliverables.order_id is varchar —
+      // compare as text (the plain eq() made My Documents 500 for everyone).
+      .innerJoin(serviceOrders, sql`${serviceDeliverables.orderId} = ${serviceOrders.id}::text`)
       .where(eq(serviceOrders.userId, userId))
       .orderBy(desc(serviceDeliverables.createdAt));
     return rows;

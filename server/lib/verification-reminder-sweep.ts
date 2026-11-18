@@ -186,6 +186,10 @@ export async function runVerificationLifecycleSweep(): Promise<SweepResult> {
            AND created_at >  NOW() - INTERVAL '${REMINDER_WINDOW_HOURS} hours'
            AND email IS NOT NULL AND email <> ''
            AND email NOT LIKE '%@deleted.workabroadhub.local'
+           -- 2026-11: skip hard-bounced addresses. Before this, the same 5-6
+           -- bounced users were retried at all 4 stages every 30 minutes
+           -- (20 failed sends + 20 freshly minted codes per sweep).
+           AND NOT EXISTS (SELECT 1 FROM email_suppressions s WHERE s.email_lower = LOWER(users.email))
          ORDER BY created_at ASC
          LIMIT ${BATCH_LIMIT}
       `, [tier.stage]);

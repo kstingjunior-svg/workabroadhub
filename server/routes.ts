@@ -7396,7 +7396,7 @@ Crawl-delay: 1`);
         const { rows: activeRows } = await pool.query<{
           plan_id: string; end_date: Date | null; created_at: Date; id: string;
         }>(
-          `SELECT id, plan_id, end_date, created_at
+          `SELECT id, plan AS plan_id, end_date, created_at
              FROM user_subscriptions
             WHERE user_id = $1
               AND status = 'active'
@@ -7455,6 +7455,17 @@ Crawl-delay: 1`);
         resetMode: "reset",
         extraMeta: { adminGranted: true, grantedBy: adminId, note: note || "" },
       });
+
+      // 2026-11 (overnight sweep): the upgrade can refuse (e.g. repeat-trial
+      // gate). Previously this endpoint still answered 200 "activated" with
+      // expiresAt = now, so the admin believed access had been granted.
+      if ((result as any)?.success === false) {
+        return res.status(409).json({
+          success: false,
+          blocked: !!(result as any).blocked,
+          message: (result as any).error || "The plan could not be activated for this user.",
+        });
+      }
 
       await storage.logAdminAction(adminId, "manual_plan_grant", {
         targetUserId: userId,

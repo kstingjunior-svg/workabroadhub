@@ -428,6 +428,49 @@ if (typeof window !== "undefined" && !(window as any).__wahEmailVerifiedFetchPat
       // Never let a bug in this guard break a real request — fall through.
     }
 
+    // 2026-11 (overnight sweep): ~40 call sites use raw fetch() for POST/PATCH/
+    // DELETE without an X-CSRF-Token header. Routes registered after the CSRF
+    // middleware answered them with 403 "Invalid or missing CSRF token" —
+    // e.g. /api/account/recover-plan (customers recovering a paid plan),
+    // Kazi Karibu edits, Hub journey steps, AutoApply status, heartbeat,
+    // agency clicks. Attach the session token here so every caller is covered.
+    try {
+      const method = String(init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
+      const rawUrl = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const url = new URL(rawUrl, window.location.origin);
+      const apiOrigin = API_URL ? new URL(API_URL, window.location.origin).origin : window.location.origin;
+      if (
+        ["POST", "PUT", "PATCH", "DELETE"].includes(method) &&
+        (url.origin === window.location.origin || url.origin === apiOrigin) &&
+        url.pathname.startsWith("/api/") &&
+        url.pathname !== "/api/csrf-token"
+      ) {
+        const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
+        if (!headers.has("X-CSRF-Token")) {
+          const token = await fetchCsrfToken().catch(() => "");
+          if (token) {
+            headers.set("X-CSRF-Token", token);
+            const res = await originalFetch(input, { ...init, headers });
+            if (res.status === 403) {
+              // Stale token (session rotated) → refresh once and retry.
+              const txt = await res.clone().text().catch(() => "");
+              if (/csrf/i.test(txt) && !(init?.body instanceof ReadableStream)) {
+                clearCsrfToken();
+                const fresh = await fetchCsrfToken().catch(() => "");
+                if (fresh) {
+                  headers.set("X-CSRF-Token", fresh);
+                  return originalFetch(input, { ...init, headers });
+                }
+              }
+            }
+            return res;
+          }
+        }
+      }
+    } catch {
+      // fall through to the plain request
+    }
+
     return originalFetch(input, init);
   }) as typeof window.fetch;
 }

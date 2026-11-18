@@ -1045,7 +1045,7 @@ export function registerLocalJobsRoutes(app: Express): void {
         if (!KENYA_CAREERS_PAID_TIERS.has(tier)) {
           console.log(`[kenya-careers/apply] BLOCK userId=${userId} tier=${tier} reason=not_paid jobId=${jobId}`);
           return res.status(402).json({
-            message: "Unlock applying — KES 99 trial covers both overseas AND Kenya jobs.",
+            message: "Unlock applying — Monthly (KES 1,000) covers both overseas AND Kenya jobs.",
             reason:  "upgrade",
             tier,
           });

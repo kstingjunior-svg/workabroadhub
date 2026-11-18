@@ -93,7 +93,7 @@ function WorkPermitHero({ countryCode }: { countryCode: string }) {
   if (!mapped) return null;
 
   const tiers = ["light", "mid", "pro"]
-    .map((tier) => services.find((s) => s.slug === `work_permit_${mapped.cc}_${tier}`))
+    .map((tier) => asServiceList(services).find((s) => s.slug === `work_permit_${mapped.cc}_${tier}`))
     .filter(Boolean) as LiveService[];
 
   if (tiers.length < 3) return null; // services not yet seeded — hide silently
@@ -155,6 +155,15 @@ function WorkPermitHero({ countryCode }: { countryCode: string }) {
   );
 }
 
+// 2026-11: ["/api/services"] is shared with other pages that cache a
+// different shape (an object, not an array) — /country/* crashed with
+// "t.find is not a function". Accept either shape.
+function asServiceList(v: unknown): LiveService[] {
+  if (Array.isArray(v)) return v as LiveService[];
+  const inner = (v as any)?.services ?? (v as any)?.data;
+  return Array.isArray(inner) ? inner : [];
+}
+
 function CountryServicesGrid() {
   const { data: services = [], isLoading } = useQuery<LiveService[]>({
     queryKey: ["/api/services"],
@@ -188,7 +197,7 @@ function CountryServicesGrid() {
   ];
 
   const featured = FEATURED_SLUGS
-    .map((slug) => services.find((s) => s.slug === slug))
+    .map((slug) => asServiceList(services).find((s) => s.slug === slug))
     .filter(Boolean) as LiveService[];
 
   // Fallback if seed slugs don't match (e.g. legacy DB) — show first 6 by

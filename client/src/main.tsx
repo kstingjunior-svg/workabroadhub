@@ -165,6 +165,11 @@ function determineErrorType(message: string): string {
 }
 
 async function logClientError(data: Record<string, unknown>): Promise<void> {
+  // 2026-11: errors thrown inside browser extensions (stack points at
+  // chrome-extension:// / moz-extension://) are not our bugs — one visitor's
+  // extension flooded the logs with ~60 "reading 'M_ID'" reports in 3 s.
+  const stack = String((data as any)?.stack ?? (data as any)?.errorStack ?? "");
+  if (/(chrome|moz|safari)-extension:\/\//i.test(stack)) return;
   try {
     await fetch("/api/log/client-error", {
       method: "POST",

@@ -154,8 +154,6 @@ export function DashboardVisaJobsLocked() {
               <Lock className="h-3 w-3" /> Unlock from KES 1,000
             </span>
             <span className="flex items-center gap-1 leading-tight font-normal opacity-95">
-              <span>KES 99 / day</span>
-              <span aria-hidden className="opacity-50">·</span>
               <span>1,000 / mo</span>
               <span aria-hidden className="opacity-50">·</span>
               <span>4,500 / yr</span>
