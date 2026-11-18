@@ -12,7 +12,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, MailCheck, ShieldCheck, ChevronDown, ArrowLeft } from "lucide-react";
+import { Loader2, MailCheck, ShieldCheck, ChevronDown, ArrowLeft, CheckCircle2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import OtpInput from "@/components/otp-input";
 import { useAuth } from "@/hooks/use-auth";
@@ -65,6 +65,28 @@ export default function SignupPage() {
   const [code, setCode] = useState("");
   const [cooldown, setCooldown] = useState(0);
   const verifyingRef = useRef(false);
+
+  // 2026-11 Name Guard: live feedback while typing (the server re-checks on Continue).
+  const [nameCheck, setNameCheck] = useState<{ status: "idle" | "checking" | "ok" | "warn" | "error"; message?: string | null }>({ status: "idle" });
+  useEffect(() => {
+    const n = fullName.replace(/\s+/g, " ").trim();
+    if (n.length < 2) { setNameCheck({ status: "idle" }); return; }
+    setNameCheck((c) => (c.status === "idle" ? c : { ...c, status: "checking" }));
+    const ctrl = new AbortController();
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(`${apiBase}/api/auth/name-check`, {
+          method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: n }), signal: ctrl.signal,
+        });
+        const j = await res.json().catch(() => ({}));
+        if (j.decision === "accept") setNameCheck({ status: "ok" });
+        else if (j.decision === "reject") setNameCheck({ status: j.message?.startsWith("Please check") ? "warn" : "error", message: j.message });
+        else setNameCheck({ status: "idle" }); // review / unknown: say nothing, never scare a real person
+      } catch { /* offline or aborted: the server checks again on Continue */ }
+    }, 650);
+    return () => { clearTimeout(t); ctrl.abort(); };
+  }, [fullName]);
 
   // Already signed in → straight to the dashboard.
   useEffect(() => {
@@ -181,10 +203,18 @@ export default function SignupPage() {
 
               <div className="space-y-1.5">
                 <label htmlFor="signup-name" className="block text-sm font-medium text-gray-800 dark:text-gray-200">Full name</label>
-                <input id="signup-name" className={inputCls} value={fullName} onChange={(e) => setFullName(e.target.value)}
+                <div className="relative">
+                <input id="signup-name" className={`${inputCls} pr-10 ${nameCheck.status === "error" ? "border-red-400 focus:ring-red-400" : nameCheck.status === "ok" ? "border-green-500" : ""}`} value={fullName} onChange={(e) => setFullName(e.target.value)}
                   placeholder="Enter your full name" autoComplete="name" autoCapitalize="words" enterKeyHint="next" maxLength={100}
-                  aria-invalid={err?.field === "fullName"} data-testid="input-fullname" />
-                {err?.field === "fullName" && <p className="text-sm text-red-600">{err.message}</p>}
+                  aria-invalid={err?.field === "fullName" || nameCheck.status === "error"} aria-describedby="signup-name-hint" data-testid="input-fullname" />
+                  {nameCheck.status === "ok" && <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-green-600" aria-label="Looks good" data-testid="name-ok" />}
+                  {nameCheck.status === "checking" && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-gray-400" />}
+                </div>
+                <div id="signup-name-hint" aria-live="polite">
+                  {err?.field === "fullName" ? <p className="text-sm text-red-600">{err.message}</p>
+                    : nameCheck.status === "error" ? <p className="text-sm text-red-600 flex gap-1.5" data-testid="name-error"><AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />{nameCheck.message}</p>
+                    : nameCheck.status === "warn" ? <p className="text-sm text-amber-700" data-testid="name-warn">{nameCheck.message}</p> : null}
+                </div>
               </div>
 
               <div className="space-y-1.5">

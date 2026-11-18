@@ -950,6 +950,11 @@ app.use((req, res, next) => {
         .then(({ registerVerifyxRoutes }) => registerVerifyxRoutes(app))
         .catch((err) => console.error("[Server] verifyx routes registration failed:", err?.message));
 
+      // 2026-11: Name Guard (registration name screening + admin controls).
+      import("./name-guard/routes")
+        .then(({ registerNameGuardRoutes }) => registerNameGuardRoutes(app))
+        .catch((err) => console.error("[Server] name-guard registration failed:", err?.message));
+
       import("./routes/payment-audit")
         .then(({ registerPaymentAuditRoutes }) => registerPaymentAuditRoutes(app))
         .catch((err) => console.error("[Server] payment-audit registration failed:", err?.message));

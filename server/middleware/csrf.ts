@@ -82,6 +82,8 @@ const CSRF_EXEMPT = new Set([
   // 2026-11: passwordless sign-up (name + email → code) — pre-session.
   "/api/auth/signup/start",
   "/api/auth/signup/verify",
+  // 2026-11: live name check while typing (read-only, pre-session).
+  "/api/auth/name-check",
   // 2026-11: PayPal "buyer cancelled" beacon (sendBeacon can't add headers; only marks a pending order).
   "/api/paypal/buyer-cancelled",
 ]);

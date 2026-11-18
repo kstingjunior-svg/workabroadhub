@@ -69,6 +69,7 @@ const navItems = [
   { href: "/admin/finance", label: "Finance & Reconciliation 💰", icon: CreditCard },
   { href: "/admin/verifyx", label: "VerifyX Document Checks 🛡️", icon: ShieldCheck },
   { href: "/admin/intelligence", label: "Scam Intelligence 🕸️", icon: ShieldCheck },
+  { href: "/admin/name-guard", label: "Name Guard 🛡️", icon: ShieldCheck },
   { href: "/admin/payments", label: "Payments", icon: CreditCard },
   { href: "/admin/unmatched-payments", label: "Unmatched Payments", icon: Unlink },
   { href: "/admin/manual-upgrade", label: "Manual Upgrade 🛠️", icon: ShieldCheck },

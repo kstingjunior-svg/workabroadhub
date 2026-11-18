@@ -182,6 +182,13 @@ export function registerAuthRoutes(app: Express) {
       const rawReferralCode = String(req.body?.referralCode ?? req.body?.referral_code ?? "").trim().toUpperCase().slice(0, 32);
 
       if (fullName.length < 2) return res.status(400).json({ message: "Please enter your full name.", field: "fullName" });
+
+      // 2026-11 Name Guard — authoritative check before anything is created.
+      const { checkName } = await import("../../name-guard/service");
+      const ng = await checkName(fullName, { req, context: "signup", useAi: true });
+      if (ng.decision === "reject") {
+        return res.status(ng.restricted ? 429 : 400).json({ message: ng.message, field: "fullName", code: ng.restricted ? "NAME_RESTRICTED" : "NAME_REJECTED" });
+      }
       const parts = fullName.split(" ");
       const firstName = parts[0];
       const lastName = parts.length > 1 ? parts.slice(1).join(" ") : null;
@@ -256,6 +263,14 @@ export function registerAuthRoutes(app: Express) {
           if (!user) throw insertErr;
           existing = user.email_verified === true;
         }
+      }
+
+      // Name screening status (separate from identity verification).
+      if (!existing) {
+        await pool.query(
+          `UPDATE users SET name_screen_status = $2, name_screened_at = now() WHERE id = $1 AND email_verified IS NOT TRUE`,
+          [user.id, ng.decision === "review" ? "flagged" : "screened"]).catch(() => {});
+        if (ng.eventId) await pool.query(`UPDATE name_guard_events SET user_id = $2 WHERE id = $1`, [ng.eventId, user.id]).catch(() => {});
       }
 
       const result = await sendEmailVerificationCode(user.id, user.email);
@@ -368,6 +383,13 @@ export function registerAuthRoutes(app: Express) {
       // Accepts multi-word African / European / Asian names with
       // apostrophes / hyphens / accented Latin characters — see the
       // validator for the full ruleset.
+      {
+        const { checkName } = await import("../../name-guard/service");
+        const ng = await checkName([firstName, lastName].filter(Boolean).join(" "), { req, context: "register", useAi: true });
+        if (ng.decision === "reject") {
+          return res.status(ng.restricted ? 429 : 400).json({ message: ng.message, reason: ng.restricted ? "NAME_RESTRICTED" : "NAME_REJECTED" });
+        }
+      }
       const { validateFirstAndLastName } = await import("../../utils/name-validator");
       const nameCheck = validateFirstAndLastName(firstName, lastName, cleanEmail.split("@")[0]);
       if (!nameCheck.ok) {
