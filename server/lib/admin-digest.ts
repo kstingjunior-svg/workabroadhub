@@ -52,9 +52,9 @@ export async function collectDigest(): Promise<DigestItem[]> {
 
   // 2. Money we can't attribute to a customer.
   const [un] = await q(
+    // Only real money. "unverified_receipt" = receipts Tony already confirmed don't exist — not money.
     `SELECT count(*)::int n, coalesce(sum(amount),0)::numeric kes FROM finance_ledger l
-      WHERE (l.reconciliation_status = 'unmatched' AND l.payment_status IN ('success','completed'))
-         OR l.reconciliation_status = 'unverified_receipt'`);
+      WHERE l.reconciliation_status = 'unmatched' AND l.payment_status IN ('success','completed')`);
   if (un?.n > 0) items.push({ title: `${un.n} payment${un.n === 1 ? "" : "s"} need matching (${kes(Number(un.kes))})`, detail: "Money received that isn't linked to a customer yet.", link: `${BASE}/admin/finance` });
 
   // 3. Refund requests.

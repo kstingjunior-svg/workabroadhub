@@ -18348,6 +18348,22 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
     }
   });
 
+  // 2026-11 (PayPal investigation): buyer pressed "Cancel and return" on PayPal.
+  // Only touches a still-pending PayPal payment whose order id matches the
+  // token PayPal put in the URL; never grants anything.
+  app.post("/api/paypal/buyer-cancelled", async (req, res) => {
+    try {
+      const token = String(req.body?.token ?? "");
+      if (!/^[A-Z0-9]{10,25}$/.test(token)) return res.status(204).end();
+      const { rowCount } = await pool.query(
+        `UPDATE payments SET fail_reason = 'paypal_buyer_cancelled', updated_at = now()
+          WHERE method = 'paypal' AND status = 'pending' AND checkout_request_id = $1
+            AND coalesce(fail_reason,'') = ''`, [token]);
+      if (rowCount) console.log(`[PayPal] buyer cancelled at PayPal: order=${token}`);
+      res.status(204).end();
+    } catch { res.status(204).end(); }
+  });
+
   // 2026-11: preview / send the daily "needs your attention" email now (admin only).
   //   GET  /api/admin/digest/preview   → items + subject (no email)
   //   POST /api/admin/digest/send-now  → sends it now (doesn't block the 07:00 run)

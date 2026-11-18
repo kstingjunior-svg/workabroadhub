@@ -77,9 +77,12 @@ const inFlight = new Set<string>();  // paymentIds currently being processed
 let timer: NodeJS.Timeout | null = null;
 
 async function giveUp(payment: any, reason: string): Promise<void> {
+  // 2026-11: keep "buyer pressed Cancel at PayPal" (recorded by the return
+  // beacon) instead of overwriting it with the generic give-up reason.
+  const keep = String(payment?.failReason ?? payment?.fail_reason ?? "") === "paypal_buyer_cancelled";
   await storage.updatePayment(payment.id, {
     status: "failed",
-    failReason: reason,
+    failReason: keep ? "paypal_buyer_cancelled" : reason,
     statusLastChecked: new Date(),
   } as any).catch((err: any) => {
     console.error("[PaypalRecovery] giveUp updatePayment failed:", {

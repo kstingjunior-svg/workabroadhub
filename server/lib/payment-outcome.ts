@@ -22,6 +22,7 @@ export function classifyOutcome(status: string | null | undefined, failReason: s
   if (PAID.has(st)) return { kind: "paid", label: "Paid" };
   if (st === "refunded") return { kind: "other", label: "Refunded" };
   if (st === "awaiting_paybill") return { kind: "pending", label: "Waiting for Paybill" };
+  if (r.includes("paypal_buyer_cancelled")) return { kind: "customer", label: "Cancelled at PayPal" };
   if (r.includes("paypal_recovery_exhausted") || (method === "paypal" && st === "failed" && !r)) return { kind: "abandoned", label: "PayPal not approved by buyer" };
   if (r.includes("instrument_declined")) return { kind: "customer", label: "PayPal card declined" };
   if (r.includes("cancelled by user")) return { kind: "customer", label: "Cancelled by customer" };

@@ -13,6 +13,7 @@ describe("plain-English payment outcomes", () => {
     expect(classifyOutcome("failed", "Error occurred while sending push request.", "mpesa").kind).toBe("system");
     expect(classifyOutcome("failed", "paypal_recovery_exhausted_after_30_attempts", "paypal").kind).toBe("abandoned");
     expect(classifyOutcome("completed", null, "mpesa").kind).toBe("paid");
+    expect(classifyOutcome("failed", "paypal_buyer_cancelled", "paypal").label).toBe("Cancelled at PayPal");
     expect(classifyOutcome("awaiting_paybill", null, "mpesa").label).toBe("Waiting for Paybill");
   });
 });

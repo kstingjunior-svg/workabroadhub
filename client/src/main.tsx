@@ -9,6 +9,18 @@ import { initClientSentry } from "@/lib/sentry";
 // VITE_SENTRY_DSN isn't set (local dev / preview / DSN missing).
 initClientSentry();
 
+// 2026-11 (PayPal investigation: 113 orders, 0 paid). When a buyer presses
+// "Cancel and return" on PayPal we land back here with ?paypalCancel=1&token=…
+// Record it BEFORE pages strip those params, so the admin numbers can tell
+// "cancelled at PayPal" apart from "never came back". Fire-and-forget.
+try {
+  const sp = new URLSearchParams(window.location.search);
+  const token = sp.get("token");
+  if (sp.get("paypalCancel") === "1" && token && /^[A-Z0-9]{10,25}$/.test(token)) {
+    navigator.sendBeacon?.("/api/paypal/buyer-cancelled", new Blob([JSON.stringify({ token })], { type: "application/json" }));
+  }
+} catch { /* never block app start */ }
+
 // ─── Service Worker Registration ──────────────────────────────────────────────
 // 2026-07: Registering /sw.js so Play Store's TWA reviewer and PWABuilder can
 // detect the SW (both require it for "installable" status). Previously this
