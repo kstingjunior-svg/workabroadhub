@@ -84,6 +84,7 @@ export const SEED_TERMS: Term[] = [
   { term: "kumamako", language: "sw", category: "abusive_phrase", severity: "block", mode: "contains" },
   { term: "kumanyoko", language: "sw", category: "abusive_phrase", severity: "block", mode: "contains" },
   { term: "kuma mamako", language: "sw", category: "abusive_phrase", severity: "block", mode: "phrase" },
+  { term: "kuma yako", language: "sw", category: "abusive_phrase", severity: "block", mode: "phrase" },   // added after go-live test (AI rated it plausible)
   { term: "kuma nyoko", language: "sw", category: "abusive_phrase", severity: "block", mode: "phrase" },
   { term: "nyoko", language: "sw", category: "abusive_phrase", severity: "block", mode: "word" },
   { term: "mboro", language: "sw", category: "sexual", severity: "review", mode: "word" },   // can be a surname

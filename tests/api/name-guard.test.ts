@@ -37,7 +37,7 @@ const ABUSE = [
   "Fuck You", "f u c k", "fuuuuck", "F.U.C.K", "Fvck Off", "Bitch", "B1tch Please", "Shit Head", "Motherfucker", "Asshole",
   "cunt", "Pussy Lover", "Bastard", "Kill Yourself", "Your Mother", "nigger", "n1gger", "Faggot",
   // Kiswahili
-  "Kuma Mamako", "kumamako", "kuma nyoko", "Kumanyoko", "Mkundu", "Kahaba Wewe", "Msenge", "Mjinga Sana", "Mpumbavu", "Mshenzi Wewe",
+  "Kuma Mamako", "Kuma Yako", "kumamako", "kuma nyoko", "Kumanyoko", "Mkundu", "Kahaba Wewe", "Msenge", "Mjinga Sana", "Mpumbavu", "Mshenzi Wewe",
   "Takataka", "Nguruwe", "Nakutomba",
   // Sheng
   "Bwege", "Mafala",
@@ -107,7 +107,7 @@ describe("Name Guard — AI layer", () => {
   });
   it("AI can confirm an ambiguous lexicon hit", async () => {
     const offensive = async () => ({ category: "CLEAR_PROFANITY" as const, confidence: 0.95, meaning: "vulgar", language: "sw" });
-    expect((await decide("Kuma Yako", { ai: offensive })).decision).toBe("reject");
+    expect((await decide("Kuma Wewe", { ai: offensive })).decision).toBe("reject");
     const plausible = async () => ({ category: "PLAUSIBLE_NAME" as const, confidence: 0.95, meaning: null, language: null });
     expect((await decide("Kuma Takeshi", { ai: plausible })).decision).toBe("review"); // lexicon hit keeps it flagged
   });
