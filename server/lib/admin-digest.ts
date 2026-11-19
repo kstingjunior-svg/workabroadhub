@@ -84,6 +84,12 @@ export async function collectDigest(): Promise<DigestItem[]> {
   const [wf] = await q(`SELECT count(*)::int n FROM write_from_scratch_drafts WHERE status IN ('paid','failed') AND paid_at IS NOT NULL AND paid_at < now() - interval '1 hour' AND paid_at > now() - interval '7 days'`);
   if (wf?.n > 0) items.push({ urgent: true, title: `${wf.n} paid CV/cover letter${wf.n === 1 ? "" : "s"} not generated`, detail: "Paid in Write from Scratch but the document wasn't produced.", link: `${BASE}/admin/finance` });
 
+  // 9. Silent failures — server errors, page crashes, failed self-checks (last 24 h).
+  try {
+    const { failureDigestItems } = await import("./failure-monitor");
+    items.push(...(await failureDigestItems()));
+  } catch (e: any) { console.warn("[admin-digest] failure items skipped:", e?.message); }
+
   return items;
 }
 

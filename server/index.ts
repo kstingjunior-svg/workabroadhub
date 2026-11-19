@@ -122,9 +122,12 @@ import { initSocketIO } from "./socket";
 import { initWebSocketServer } from "./websocket";
 
 import { applyDdosProtection } from "./middleware/ddos-protection";
+import { failureMiddleware } from "./lib/failure-monitor";
 
 const app = express();
 const httpServer = createServer(app);
+// 2026-11: count every API 5xx per route for the silent-failure monitor.
+app.use(failureMiddleware);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SERVER BOOT FIRST (IMPORTANT FOR RENDER)
@@ -280,6 +283,13 @@ httpServer.listen(PORT, "0.0.0.0", () => {
       startVerificationReminderSweep();
     } catch (err: any) {
       console.error("[Server] ❌ Verification reminder sweep failed to start:", err?.message);
+    }
+    // 2026-11: silent-failure monitor (5xx + page crashes + 30-min probes; FAILURE_MONITOR=off to disable).
+    try {
+      const { startFailureMonitor } = await import("./lib/failure-monitor");
+      startFailureMonitor();
+    } catch (err: any) {
+      console.error("[Server] ❌ Failure monitor failed to start:", err?.message);
     }
     // 2026-11: daily 07:00 Nairobi "needs your attention" email to Tony (ADMIN_DIGEST=off to disable).
     try {

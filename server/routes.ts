@@ -18404,6 +18404,19 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
       res.json({ items, subject: items.length ? buildDigestEmail(items).subject : null });
     } catch (err: any) { res.status(500).json({ message: err?.message }); }
   });
+  // 2026-11: silent-failure monitor — last N hours of 5xx / page crashes / probe failures.
+  app.get("/api/admin/failures", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const { recentFailures } = await import("./lib/failure-monitor");
+      res.json({ failures: await recentFailures(Number(req.query.hours ?? 24)) });
+    } catch (err: any) { res.status(500).json({ message: err?.message }); }
+  });
+  app.post("/api/admin/failures/probe-now", isAuthenticated, isAdmin, async (_req, res) => {
+    try {
+      const { runProbes } = await import("./lib/failure-monitor");
+      res.json({ results: await runProbes() });
+    } catch (err: any) { res.status(500).json({ message: err?.message }); }
+  });
   app.post("/api/admin/digest/send-now", isAuthenticated, isAdmin, async (_req, res) => {
     try {
       const { runAdminDigest } = await import("./lib/admin-digest");
@@ -23159,6 +23172,13 @@ Tone examples:
         if (stack) {
           console.error(`[CLIENT-ERROR] stack: ${String(stack).slice(0, 2000)}`);
         }
+        // 2026-11: count real page crashes for the silent-failure monitor.
+        try {
+          const fm = await import("./lib/failure-monitor");
+          if (!fm.isClientNoise(String(message), String(stack ?? ""))) {
+            fm.recordFailure("client", fm.clientKey(String(errUrl), String(message)), 0, String(stack ?? "").split("\n").slice(0, 2).join(" ").slice(0, 300));
+          }
+        } catch { /* monitoring must never break error logging */ }
 
         const { logErrorToFirebase } = await import("./services/firebaseRtdb");
         await logErrorToFirebase(
