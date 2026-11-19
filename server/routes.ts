@@ -22329,7 +22329,11 @@ Rules:
     });
 
     // ── Admin routes ──────────────────────────────────────────────────────────
-    app.get("/api/admin/scam-reports", isAuthenticated, isAdmin, async (req: any, res) => {
+    // 2026-11 (overnight sweep): this older list endpoint was registered first
+    // and shadowed the moderation-queue endpoint in routes/fraud-intelligence.ts
+    // (different shape — no risk_band), which crashed /admin/scam-reports.
+    // Kept under /legacy for anything that still wants the paged shape.
+    app.get("/api/admin/scam-reports/legacy", isAuthenticated, isAdmin, async (req: any, res) => {
       try {
         const { status, search, country, page = "1", limit = "20" } = req.query as any;
         const pageNum = Math.max(1, parseInt(page) || 1);
