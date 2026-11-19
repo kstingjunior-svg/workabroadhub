@@ -41,11 +41,14 @@ interface StuckSummary {
 async function isAdmin(userId: string | undefined): Promise<boolean> {
   if (!userId) return false;
   try {
-    const { rows } = await pool.query<{ role: string | null }>(
-      `SELECT role FROM users WHERE id = $1`,
+    // 2026-11: roles are stored as ADMIN / SUPER_ADMIN (plus is_admin) —
+    // the old lowercase "admin" check locked every real admin out.
+    const { rows } = await pool.query<{ role: string | null; is_admin: boolean | null }>(
+      `SELECT role, is_admin FROM users WHERE id = $1`,
       [userId],
     );
-    return rows[0]?.role === "admin";
+    const role = String(rows[0]?.role ?? "").toUpperCase();
+    return rows[0]?.is_admin === true || role === "ADMIN" || role === "SUPER_ADMIN";
   } catch {
     return false;
   }
