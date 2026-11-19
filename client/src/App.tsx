@@ -412,6 +412,11 @@ function withSuspense<P extends object>(Component: ComponentType<P>) {
 
 // Pre-wrapped lazy components that preserve route params
 const LazyDashboard = withSuspense(Dashboard);
+// 2026-11 (overnight sweep): these three were routed as bare lazy() components
+// with no Suspense boundary → React error #426 / "Just a small detour" page.
+const LazyWErrorRoute = withSuspense(ErrorRoute);
+const LazyWInterviewPractice = withSuspense(InterviewPractice);
+const LazyWJobMatch = withSuspense(JobMatch);
 const LazyPayment = withSuspense(Payment);
 const LazyPricing = withSuspense(Pricing);
 const LazyCountry = withSuspense(Country);
@@ -858,8 +863,8 @@ function AuthenticatedRoutes() {
       <Route path="/bulk-apply" component={LazyBulkApply} />
       <Route path="/upload-cv" component={LazyUploadCV} />
       <Route path="/tools/auto-apply" component={LazyAutoApply} />
-      <Route path="/tools/interview-practice" component={InterviewPractice} />
-      <Route path="/tools/job-match" component={JobMatch} />
+      <Route path="/tools/interview-practice" component={LazyWInterviewPractice} />
+      <Route path="/tools/job-match" component={LazyWJobMatch} />
       <Route path="/tools" component={LazyToolsHub} />
       <Route path="/tools/ats-cv-checker" component={LazyATSCVChecker} />
       <Route path="/tools/cv-ai-builder" component={LazyCvAiBuilder} />
@@ -1110,8 +1115,8 @@ function Router() {
         <Route path="/bulk-apply" component={LazyBulkApply} />
         <Route path="/upload-cv" component={LazyUploadCV} />
         <Route path="/tools/auto-apply" component={LazyAutoApply} />
-      <Route path="/tools/interview-practice" component={InterviewPractice} />
-      <Route path="/tools/job-match" component={JobMatch} />
+      <Route path="/tools/interview-practice" component={LazyWInterviewPractice} />
+      <Route path="/tools/job-match" component={LazyWJobMatch} />
         <Route path="/services" component={LazyServices} />
         {/* 2026-08 (P0 — Tony's anonymous-checkout directive): these two
             routes MUST be reachable by logged-out users so career-service
@@ -1155,7 +1160,7 @@ function Router() {
         <Route path="/forgot-password" component={LazyForgotPassword} />
         <Route path="/reset-password" component={LazyResetPassword} />
         <Route path="/shared/:id" component={LazySharedDocument} />
-        <Route path="/error" component={ErrorRoute} />
+        <Route path="/error" component={LazyWErrorRoute} />
         <Route path="/admin/:rest*" component={LazyAdminLogin} />
         <Route component={LazyNotFound} />
       </Switch>
