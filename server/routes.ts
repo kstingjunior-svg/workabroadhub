@@ -17359,6 +17359,14 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
   });
 
   // Admin: Get all job applications
+  // 2026-11: Firebase RTDB credential check (shape only, never the secret).
+  app.get("/api/admin/rtdb-diagnostics", isAuthenticated, isAdmin, async (_req: any, res) => {
+    try {
+      const { rtdbDiagnostics } = await import("./services/firebaseRtdb");
+      res.json(await rtdbDiagnostics());
+    } catch (e: any) { res.status(500).json({ message: e?.message }); }
+  });
+
   app.get("/api/admin/user-job-applications", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       // 2026-11 (overnight sweep): this used to loop over every user (17k+)

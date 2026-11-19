@@ -23,7 +23,35 @@ const DB_URL = process.env.VITE_FIREBASE_DATABASE_URL;
  * When set, the server bypasses security rules (admin write privileges).
  * When absent, writes are unauthenticated (only open paths succeed).
  */
-const DB_SECRET = process.env.FIREBASE_DATABASE_SECRET ?? "";
+// 2026-11: trim stray whitespace / surrounding quotes from a pasted value.
+const RAW_DB_SECRET = process.env.FIREBASE_DATABASE_SECRET ?? "";
+const DB_SECRET = RAW_DB_SECRET.trim().replace(/^["']+|["']+$/g, "").trim();
+
+/**
+ * Admin diagnostics — never returns the secret itself, only its shape and
+ * whether Firebase accepts it right now.
+ */
+export async function rtdbDiagnostics() {
+  const host = (() => { try { return DB_URL ? new URL(DB_URL).host : null; } catch { return "invalid-url"; } })();
+  const out: Record<string, unknown> = {
+    databaseHost: host,
+    secretSet: RAW_DB_SECRET.length > 0,
+    secretLength: DB_SECRET.length,
+    rawHadWhitespaceOrQuotes: RAW_DB_SECRET !== DB_SECRET,
+    looksLikeLegacySecret: /^[A-Za-z0-9]{40}$/.test(DB_SECRET),
+    looksLikeJsonServiceAccount: DB_SECRET.startsWith("{"),
+    pausedUntil: rtdbPausedUntil ? new Date(rtdbPausedUntil).toISOString() : null,
+  };
+  if (DB_URL) {
+    try {
+      const r = await fetch(`${DB_URL}/revenue.json?shallow=true${authParam()}`);
+      out.probeStatus = r.status;
+      out.probeOk = r.ok;
+      if (r.ok) rtdbPausedUntil = 0; // credentials work → lift the pause
+    } catch (e: any) { out.probeError = e?.message; }
+  }
+  return out;
+}
 
 /** Appends ?auth=<secret> when the database secret is configured */
 function authParam() {
