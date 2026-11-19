@@ -44,7 +44,7 @@ export async function rtdbDiagnostics() {
   };
   if (DB_URL) {
     try {
-      const r = await fetch(`${DB_URL}/revenue.json?shallow=true${authParam()}`);
+      const r = await fetch(`${DB_URL}/revenue.json${authParam()}${DB_SECRET ? "&" : "?"}shallow=true`);
       out.probeStatus = r.status;
       out.probeOk = r.ok;
       if (r.ok) rtdbPausedUntil = 0; // credentials work → lift the pause
