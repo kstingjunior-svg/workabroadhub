@@ -861,6 +861,15 @@ app.use((req, res, next) => {
       const { getSessionParser } = await import("./replit_integrations/auth/replitAuth");
       app.set("trust proxy", 1);
       app.use(getSessionParser());
+      // 2026-11 (admin sweep): routes registered here, before setupAuth(),
+      // read req.user directly. Email/code sign-ins only exist as
+      // session.customUserId, so career overview, payment audit, job match
+      // etc. answered 401/403 to signed-in people. Populate req.user now.
+      app.use((req: any, _res: any, next: any) => {
+        const cid = req.session?.customUserId;
+        if (cid && !req.user) req.user = { id: cid, claims: { sub: cid } };
+        next();
+      });
     } catch (err: any) {
       console.error("[Server] ❌ Early session parser install failed (non-fatal):", err?.message);
     }
