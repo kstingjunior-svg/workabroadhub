@@ -1,3 +1,4 @@
+import "./lib/storage-guard"; // must stay first — see file
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
