@@ -15339,6 +15339,11 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
   app.get("/api/shared/:orderId", async (req: any, res) => {
     try {
       const { orderId } = req.params;
+      // 2026-11: service_orders.id is a uuid — a malformed share link made
+      // Postgres throw and the visitor saw a 500 instead of "not found".
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(orderId))) {
+        return res.status(404).json({ message: "Document not found or not yet ready." });
+      }
       const order = await storage.getServiceOrderById(orderId);
       if (!order || order.status !== "completed") {
         return res.status(404).json({ message: "Document not found or not yet ready." });
@@ -17356,14 +17361,20 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
   // Admin: Get all job applications
   app.get("/api/admin/user-job-applications", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
-      // Get all applications (admin view)
-      const allApplications: any[] = [];
-      const users = await storage.getAllUsers();
-      for (const user of users) {
-        const apps = await storage.getUserJobApplications(user.id);
-        allApplications.push(...apps.map(app => ({ ...app, userEmail: user.email, userName: `${user.firstName || ''} ${user.lastName || ''}`.trim() })));
-      }
-      res.json(allApplications);
+      // 2026-11 (overnight sweep): this used to loop over every user (17k+)
+      // and run one query each — the request always timed out (502). One join.
+      const { userJobApplications: uja, users: usersT } = await import("@shared/schema");
+      const rows = await db
+        .select({ app: uja, email: usersT.email, firstName: usersT.firstName, lastName: usersT.lastName })
+        .from(uja)
+        .leftJoin(usersT, eq(usersT.id, uja.userId))
+        .orderBy(desc(uja.createdAt))
+        .limit(2000);
+      res.json(rows.map((r: any) => ({
+        ...r.app,
+        userEmail: r.email,
+        userName: `${r.firstName || ''} ${r.lastName || ''}`.trim(),
+      })));
     } catch (error) {
       console.error("Error fetching all job applications:", error);
       res.status(500).json({ message: "Failed to fetch applications" });

@@ -189,7 +189,7 @@ export function registerVerifyxRoutes(app: Express): void {
                          count(*) FILTER (WHERE decision='corrected')::int corrected
                     FROM verifyx_review_cases WHERE created_at > now() - make_interval(days => $1)`, [days]),
       pool.query(`SELECT count(*)::int n FROM verifyx_rejected_findings WHERE created_at > now() - make_interval(days => $1)`, [days]),
-      pool.query(`SELECT code, status, count(*)::int n FROM verifyx_findings f JOIN verifyx_requests r ON r.id=f.request_id
+      pool.query(`SELECT f.code, f.status, count(*)::int n FROM verifyx_findings f JOIN verifyx_requests r ON r.id=f.request_id
                    WHERE r.created_at > now() - make_interval(days => $1) AND f.status IN ('confirmed_discrepancy','potential_risk_indicator','manual_review_required')
                    GROUP BY 1,2 ORDER BY 3 DESC LIMIT 15`, [days]),
     ]);

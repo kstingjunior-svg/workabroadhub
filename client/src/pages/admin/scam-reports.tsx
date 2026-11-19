@@ -271,7 +271,7 @@ export default function AdminScamReportsPage() {
                           {r.agency_name}
                         </h3>
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${RISK_BADGE[r.risk_band]}`}>
-                          {r.risk_band.toUpperCase()} RISK
+                          {String(r.risk_band ?? "unrated").toUpperCase()} RISK
                         </span>
                         {r.agency_slug && (
                           <Link href={`/agencies-reported/${r.agency_slug}`}>
@@ -343,7 +343,7 @@ export default function AdminScamReportsPage() {
                   <MetaCell label="Reporter country" value={selectedReport.country} />
                   <MetaCell label="Destination country" value={selectedReport.destination_country} />
                   <MetaCell label="Amount lost" value={selectedReport.amount_lost ? `${selectedReport.currency || "KES"} ${selectedReport.amount_lost.toLocaleString()}` : "Not reported"} />
-                  <MetaCell label="Risk band" value={<Badge className={RISK_BADGE[selectedReport.risk_band]}>{selectedReport.risk_band.toUpperCase()}</Badge>} />
+                  <MetaCell label="Risk band" value={<Badge className={RISK_BADGE[selectedReport.risk_band]}>{String(selectedReport.risk_band ?? "unrated").toUpperCase()}</Badge>} />
                   <MetaCell label="Evidence" value={`${selectedReport.evidence_count} file${selectedReport.evidence_count === 1 ? "" : "s"}`} />
                   <MetaCell label="Cross-ref identifiers" value={`${selectedReport.contact_count}`} />
                 </div>
