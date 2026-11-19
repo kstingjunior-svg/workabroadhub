@@ -518,7 +518,10 @@ export function registerFraudIntelligenceRoutes(app: Express): void {
   // Requires isAdmin (checked inline via storage.isUserAdmin).
   // ═══════════════════════════════════════════════════════════════════════
   async function ensureAdmin(req: any, res: Response): Promise<string | null> {
-    const userId = req.user?.claims?.sub ?? req.user?.id;
+    // 2026-11: these routes run without isAuthenticated, so req.user is not
+    // populated for email/code sign-ins — read the session id too (the
+    // moderation queue always answered 401 "Sign in required").
+    const userId = req.user?.claims?.sub ?? req.user?.id ?? req.session?.customUserId ?? req.session?.passport?.user?.claims?.sub;
     if (!userId) { res.status(401).json({ message: "Sign in required." }); return null; }
     try {
       const { storage } = await import("../storage");

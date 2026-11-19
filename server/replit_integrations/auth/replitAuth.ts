@@ -55,6 +55,16 @@ export async function setupAuth(app: Express) {
   });
   app.use(passport.initialize());
   app.use(passport.session());
+  // 2026-11 (admin sweep): email/code sign-ins live in session.customUserId
+  // and only isAuthenticated() copied them onto req.user. Routes that check
+  // req.user themselves (scam-report moderation queue, career overview,
+  // agency follow, job match, payment-audit…) answered 401 to signed-in
+  // people. Populate req.user the same way isAuthenticated does, globally.
+  app.use((req: any, _res: any, next: any) => {
+    const cid = req.session?.customUserId;
+    if (cid && !req.user) req.user = { id: cid, claims: { sub: cid } };
+    next();
+  });
   passport.serializeUser((user: any, cb) => cb(null, user));
   passport.deserializeUser((user: any, cb) => cb(null, user));
 }
