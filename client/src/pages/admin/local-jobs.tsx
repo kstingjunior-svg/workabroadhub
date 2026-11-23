@@ -88,13 +88,16 @@ export default function AdminLocalJobs() {
       <div className="p-3 sm:p-6 space-y-4 max-w-6xl">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-bold">Kenyan Local Jobs</h1>
-            <p className="text-sm text-slate-500">Publish jobs for any employer in seconds — no employer account, no fee, no subscription.</p>
+            <h1 className="text-2xl font-bold">Kenyan Jobs Section — company jobs</h1>
+            <p className="text-sm text-slate-500">For registered companies and organisations. Jobs here appear in the Kenyan Jobs Section, not Kazi Karibu.</p>
           </div>
           <Button size="lg" className="bg-emerald-600 hover:bg-emerald-700 text-base" onClick={() => { setEditing(null); setTab("post"); }} data-testid="button-lj-post">
             <Plus className="h-5 w-5 mr-1.5" /> POST A JOB
           </Button>
         </div>
+        <a href="/admin/kazi-karibu" className="block rounded-xl border-2 border-amber-400 bg-amber-50 dark:bg-amber-950/30 p-3 text-sm text-amber-900 dark:text-amber-200 hover:bg-amber-100" data-testid="link-lj-use-kazi">
+          <b>Posting for a shop, hotel, butchery, family or individual?</b> Use <u>Kazi Karibu</u> instead — tap here. Kazi Karibu is for nearby everyday work; this page is for company jobs.
+        </a>
         <div className="flex gap-1.5 overflow-x-auto pb-1">
           {tabs.map(([t, l]) => (
             <Button key={t} size="sm" variant={tab === t ? "default" : "outline"} onClick={() => setTab(t)} className="shrink-0">{l}</Button>
