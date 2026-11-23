@@ -948,9 +948,9 @@ export function registerKaziKaribuRoutes(
           `SELECT p.poster_user_id,
                   p.poster_shows_phone,
                   p.moderation_state,
-                  COALESCE(p.contact_name,  u.first_name) AS poster_first_name,
-                  COALESCE(p.contact_phone, u.phone)      AS poster_phone,
-                  COALESCE(p.contact_email, u.email)      AS poster_email
+                  (CASE WHEN p.posted_by_admin THEN p.contact_name ELSE COALESCE(p.contact_name, u.first_name) END) AS poster_first_name,
+                  (CASE WHEN p.posted_by_admin THEN p.contact_phone ELSE COALESCE(p.contact_phone, u.phone) END)      AS poster_phone,
+                  (CASE WHEN p.posted_by_admin THEN p.contact_email ELSE COALESCE(p.contact_email, u.email) END)      AS poster_email
              FROM kazi_karibu_posts p
              JOIN users u ON u.id = p.poster_user_id
             WHERE p.id = $1 AND p.moderation_state = 'live' AND p.expires_at > NOW()
@@ -1404,11 +1404,11 @@ export function registerKaziKaribuRoutes(
                   p.budget_period,
                   p.poster_display_name,
                   CASE WHEN i.contact_revealed_at IS NOT NULL
-                       THEN COALESCE(p.contact_name,  u.first_name) ELSE NULL END AS poster_first_name,
+                       THEN (CASE WHEN p.posted_by_admin THEN p.contact_name ELSE COALESCE(p.contact_name, u.first_name) END) ELSE NULL END AS poster_first_name,
                   CASE WHEN i.contact_revealed_at IS NOT NULL
-                       THEN COALESCE(p.contact_phone, u.phone)      ELSE NULL END AS poster_phone,
+                       THEN (CASE WHEN p.posted_by_admin THEN p.contact_phone ELSE COALESCE(p.contact_phone, u.phone) END)      ELSE NULL END AS poster_phone,
                   CASE WHEN i.contact_revealed_at IS NOT NULL
-                       THEN COALESCE(p.contact_email, u.email)      ELSE NULL END AS poster_email
+                       THEN (CASE WHEN p.posted_by_admin THEN p.contact_email ELSE COALESCE(p.contact_email, u.email) END)      ELSE NULL END AS poster_email
              FROM kazi_karibu_interest i
              JOIN kazi_karibu_posts    p ON p.id = i.post_id
              JOIN users                u ON u.id = p.poster_user_id
