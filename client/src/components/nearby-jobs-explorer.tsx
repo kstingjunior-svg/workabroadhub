@@ -75,7 +75,7 @@ export function NearbyJobsExplorer<T extends { id: string }>({
       const p = await getCurrentPosition();
       let label = "your location";
       try { const r = await reverseGeocode(p.lat, p.lng); label = r.estate ?? r.town ?? r.name ?? label; } catch (e: any) { setGpsMsg(e.message); }
-      setOrigin({ lat: p.lat, lng: p.lng, label: label === "your location" ? label : `near ${label}` });
+      setOrigin({ lat: p.lat, lng: p.lng, label: label === "your location" ? label : `you (near ${label})` });
       setGps("idle");
     } catch (e: any) {
       setGps(e.code === "DENIED" ? "denied" : "error");
