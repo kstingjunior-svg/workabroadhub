@@ -455,8 +455,8 @@ export function registerLocalJobsMarketplace(app: Express): void {
             experience_level, gender_requirement, working_hours, deadline, expires_at, contact_person, contact_phone, whatsapp_phone,
             alt_contact, instructions, contact_authorized, source, posted_by_user_id, verification_status, verification_note,
             lat, lng, risk_flags, status, published_at, is_seed, application_method)
-         VALUES ($1,$2,$3,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'any',$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,
-                 $35, CASE WHEN $35 = 'open' THEN NOW() ELSE NULL END, false, 'platform')
+         VALUES ($1,$2,$3,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'any',$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,
+                 $34::varchar, CASE WHEN $34::varchar = 'open' THEN NOW() ELSE NULL END, false, 'platform')
          RETURNING id, status`,
         [emp.id, v.title, v.description, v.requirements, v.vacancies, v.employmentType, v.category, v.salaryMin, v.salaryMax, v.salaryPeriod,
          v.county, v.town, v.estate, v.workplaceLocation, v.minQualification, v.experienceText, v.genderRequirement, v.workingHours,
