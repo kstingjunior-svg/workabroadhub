@@ -177,7 +177,7 @@ const AccountVerify = lazyWithRetry(() => import("@/pages/account-verify"));
 const AccountPaymentStatus = lazyWithRetry(() => import("@/pages/account-payment-status"));
 // 2026-06: Kenya Careers Phase 1 — local-employer recruitment portal (isolated
 // from overseas-jobs / payments / subscriptions)
-const KenyaCareers    = lazyWithRetry(() => import("@/pages/kenya-careers"));
+const KenyaCareers    = lazyWithRetry(() => import("@/pages/kenya-jobs-marketplace")); // 2026-11: "Find Jobs Near You"; classic page via ?classic=1 / ?institution=school
 const KenyaCareersJob = lazyWithRetry(() => import("@/pages/kenya-careers-job"));
 const KenyaCareersMyApplications = lazyWithRetry(() => import("@/pages/kenya-careers-my-applications"));
 const KenyaCareersAdmin = lazyWithRetry(() => import("@/pages/admin/kenya-careers-admin"));
@@ -233,6 +233,7 @@ const AdminVerifyX = lazyWithRetry(() => import("@/pages/admin/verifyx"));
 const AdminIntelligence = lazyWithRetry(() => import("@/pages/admin/intelligence"));
 const AdminNameGuard = lazyWithRetry(() => import("@/pages/admin/name-guard"));
 const AdminKaziKaribu = lazyWithRetry(() => import("@/pages/admin/kazi-karibu"));
+const AdminLocalJobs = lazyWithRetry(() => import("@/pages/admin/local-jobs"));
 const JourneyPage = lazyWithRetry(() => import("@/pages/journey"));
 const SalaryPage = lazyWithRetry(() => import("@/pages/salary"));
 const InterviewPage = lazyWithRetry(() => import("@/pages/interview"));
@@ -575,6 +576,7 @@ const LazyAdminVerifyX = withSuspense(AdminVerifyX);
 const LazyAdminIntelligence = withSuspense(AdminIntelligence);
 const LazyAdminNameGuard = withSuspense(AdminNameGuard);
 const LazyAdminKaziKaribu = withSuspense(AdminKaziKaribu);
+const LazyAdminLocalJobs = withSuspense(AdminLocalJobs);
 const LazyJourneyPage = withSuspense(JourneyPage);
 const LazySalaryPage = withSuspense(SalaryPage);
 const LazyInterviewPage = withSuspense(InterviewPage);
@@ -775,6 +777,7 @@ function AuthenticatedRoutes() {
       <Route path="/admin/intelligence" component={LazyAdminIntelligence} />
       <Route path="/admin/name-guard" component={LazyAdminNameGuard} />
       <Route path="/admin/kazi-karibu" component={LazyAdminKaziKaribu} />
+      <Route path="/admin/local-jobs" component={LazyAdminLocalJobs} />
       <Route path="/journey/:country" component={LazyJourneyPage} />
       <Route path="/journey" component={LazyJourneyPage} />
       <Route path="/salary" component={LazySalaryPage} />

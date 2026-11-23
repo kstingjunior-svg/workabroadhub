@@ -227,7 +227,7 @@ export function registerLocalJobsRoutes(app: Express): void {
       // 2026-10: expired vacancies (deadline passed, Kenya time) are never listed.
       const conditions: string[] = [
         "j.status = 'open'", "c.status = 'approved'", "COALESCE(j.is_seed, false) = false",
-        "(j.deadline IS NULL OR j.deadline >= (NOW() AT TIME ZONE 'Africa/Nairobi')::date)",
+        "(j.deadline IS NULL OR j.deadline >= (NOW() AT TIME ZONE 'Africa/Nairobi')::date)", "(j.expires_at IS NULL OR j.expires_at > NOW())",
       ];
       const params: any[] = [];
       const push = (clause: string, value: any) => {
@@ -779,6 +779,7 @@ export function registerLocalJobsRoutes(app: Express): void {
            WHERE j.status = 'open' AND c.status = 'approved'
              AND COALESCE(j.is_seed, false) = false
              AND (j.deadline IS NULL OR j.deadline >= (NOW() AT TIME ZONE 'Africa/Nairobi')::date)
+             AND (j.expires_at IS NULL OR j.expires_at > NOW())
         )
         SELECT
           COUNT(*)::text                                                    AS total_jobs,
@@ -795,7 +796,7 @@ export function registerLocalJobsRoutes(app: Express): void {
           COUNT(*) FILTER (WHERE institution_type = 'school' AND NOT COALESCE(is_seed, false))::text AS school_jobs
         FROM open_jobs
       `);
-      res.setHeader("Cache-Control", "public, max-age=300");
+      res.setHeader("Cache-Control", "no-store"); // live counters (2026-11)
       res.json({
         totalJobs:         Number(stats?.total_jobs ?? "0"),
         liveJobs:          Number(stats?.live_jobs ?? "0"),
@@ -851,7 +852,7 @@ export function registerLocalJobsRoutes(app: Express): void {
             j.deadline, j.county, j.town, j.experience_level, j.category,
             j.status, j.created_at, COALESCE(j.is_seed, false) AS is_seed,
             j.subjects, j.teaching_level, j.tsc_required, j.start_date, j.accommodation,
-            j.role_category, j.credentials, j.application_method, j.application_contact, j.published_at,
+            j.role_category, j.credentials, j.application_method, j.application_contact, j.published_at, j.expires_at,
             c.logo_url AS company_logo_url, c.status AS company_status, c.town AS company_town,
             c.institution_type AS company_institution_type,
             c.school_levels AS company_school_levels, c.school_ownership AS company_school_ownership,
@@ -872,9 +873,9 @@ export function registerLocalJobsRoutes(app: Express): void {
 
       if (!job) return res.status(404).json({ message: "Job not found or no longer available." });
       // 2026-10: drafts are private to the employer.
-      if ((job as any).status === "draft" || job.is_seed) return res.status(404).json({ message: "Job not found or no longer available." });
+      if (["draft", "archived"].includes((job as any).status) || job.is_seed) return res.status(404).json({ message: "Job not found or no longer available." });
       const { isExpired } = await import("./lib/vacancy-validation");
-      const expired = isExpired(job.deadline as any);
+      const expired = isExpired(job.deadline as any) || (!!(job as any).expires_at && new Date((job as any).expires_at).getTime() <= Date.now());
       // Count a view (best-effort, non-blocking).
       pool.query(`UPDATE local_jobs SET view_count = view_count + 1 WHERE id = $1`, [id]).catch(() => {});
 

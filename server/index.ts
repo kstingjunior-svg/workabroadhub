@@ -877,6 +877,9 @@ app.use((req, res, next) => {
     try {
       const { registerLocalJobsRoutes } = await import("./local-jobs-routes");
       registerLocalJobsRoutes(app);
+      // 2026-11: Kenyan local jobs marketplace (super-admin publishing, direct contact, near me).
+      const { registerLocalJobsMarketplace } = await import("./local-jobs-marketplace");
+      registerLocalJobsMarketplace(app);
     } catch (err: any) {
       console.error("[Server] ❌ Kenya Careers route registration failed (non-fatal):", err?.message);
     }

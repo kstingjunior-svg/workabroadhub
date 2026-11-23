@@ -19,6 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { KenyaCareersApplySheet } from "@/components/kenya-careers-apply-sheet";
+import { LocalJobDirectPanel } from "@/components/local-job-direct-panel";
 import { KenyaCareersClaimSheet } from "@/components/kenya-careers-claim-sheet";
 import { KenyaCareersNotifySheet } from "@/components/kenya-careers-notify-sheet";
 import { schoolLevelLabel, ownershipLabel } from "@/lib/school-constants";
@@ -326,6 +327,9 @@ export default function KenyaCareersJob() {
                 </span>
               )}
             </div>
+
+            {/* 2026-11: direct Call / WhatsApp + marketplace details */}
+            <LocalJobDirectPanel jobId={job.id} />
 
             {/* Highlight strip — salary + category */}
             {(salary || job.category) && (
