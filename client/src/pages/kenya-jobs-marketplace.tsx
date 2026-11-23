@@ -126,9 +126,9 @@ function Marketplace({ initial }: { initial: URLSearchParams }) {
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
       {/* Hero */}
       <section className="bg-gradient-to-br from-[#062a1f] via-[#0b3b2c] to-[#0f172a] text-white">
-        <div className="max-w-6xl mx-auto px-4 pt-8 pb-10 sm:pt-12 sm:pb-14">
+        <div className="max-w-6xl mx-auto px-4 pt-20 pb-10 sm:pt-14 sm:pb-14">
           <p className="text-emerald-300 text-sm font-semibold tracking-wide">KENYAN LOCAL JOBS</p>
-          <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight mt-1">Find Jobs Near You</h1>
+          <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight mt-1 !text-white" style={{ color: "#fff" }}>Find Jobs Near You</h1>
           <p className="mt-2 text-slate-200 text-base sm:text-lg max-w-2xl">Real vacancies from shops, businesses and families across Kenya. Free to browse — call or WhatsApp the employer directly.</p>
           <form onSubmit={search} className="mt-6 grid gap-2 sm:grid-cols-[1.3fr_1fr_auto] bg-white/10 backdrop-blur rounded-2xl p-2">
             <label className="flex items-center gap-2 bg-white rounded-xl px-3 h-14 text-slate-900">

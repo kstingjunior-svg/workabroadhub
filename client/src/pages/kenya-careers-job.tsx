@@ -341,7 +341,7 @@ export default function KenyaCareersJob() {
                 )}
                 {job.category && (
                   <Badge variant="outline" className="text-xs">
-                    {CATEGORY_LABEL[job.category] ?? job.category}
+                    {CATEGORY_LABEL[job.category] ?? job.category.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase())}
                   </Badge>
                 )}
                 {job.department && (
