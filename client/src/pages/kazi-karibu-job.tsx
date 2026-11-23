@@ -35,6 +35,10 @@ interface KaziKaribuPost {
   expires_at: string | null;
   /** 2026-07: server-computed — true when the current viewer is the poster. */
   is_mine?: boolean;
+  /** 2026-11: jobs listed by the WorkAbroad Hub team on an employer's behalf. */
+  employer_name?: string | null;
+  how_to_apply?: string | null;
+  posted_by_admin?: boolean;
 }
 
 interface PosterContact {
@@ -240,7 +244,14 @@ export default function KaziKaribuJob() {
                 </span>
               )}
               {post.poster_display_name && (
-                <span className="text-slate-500">Posted by {post.poster_display_name}</span>
+                <span className="text-slate-500">
+                  {post.posted_by_admin ? `Employer: ${post.employer_name || post.poster_display_name}` : `Posted by ${post.poster_display_name}`}
+                </span>
+              )}
+              {post.posted_by_admin && (
+                <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-300 text-xs font-medium">
+                  <ShieldCheck className="h-3.5 w-3.5" /> Listed by WorkAbroad Hub
+                </span>
               )}
             </div>
 
@@ -257,6 +268,13 @@ export default function KaziKaribuJob() {
                 {post.description}
               </p>
             </div>
+
+            {post.how_to_apply && (
+              <div className="mt-6 rounded-lg border border-slate-200 dark:border-slate-700 p-4">
+                <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 uppercase mb-2">How to apply</h3>
+                <p className="whitespace-pre-line text-slate-700 dark:text-slate-200 leading-relaxed">{post.how_to_apply}</p>
+              </div>
+            )}
 
             {/* ── Owner banner: replaces contact + interest UI when the
                 current viewer is the poster (server-computed is_mine=true).

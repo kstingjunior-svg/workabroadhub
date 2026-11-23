@@ -70,6 +70,7 @@ const navItems = [
   { href: "/admin/verifyx", label: "VerifyX Document Checks 🛡️", icon: ShieldCheck },
   { href: "/admin/intelligence", label: "Scam Intelligence 🕸️", icon: ShieldCheck },
   { href: "/admin/name-guard", label: "Name Guard 🛡️", icon: ShieldCheck },
+  { href: "/admin/kazi-karibu", label: "Kazi Karibu jobs 🧰", icon: Briefcase },
   { href: "/admin/payments", label: "Payments", icon: CreditCard },
   { href: "/admin/unmatched-payments", label: "Unmatched Payments", icon: Unlink },
   { href: "/admin/manual-upgrade", label: "Manual Upgrade 🛠️", icon: ShieldCheck },

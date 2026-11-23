@@ -28,6 +28,13 @@ export const KAZI_KARIBU_CATEGORIES = [
   { id: "gardener",          label: "Gardener / shamba boy",      emoji: "🌱", suggestsRecurring: true  },
   { id: "tutor",             label: "Tutor",                      emoji: "📚", suggestsRecurring: true  },
   { id: "event_promoter",    label: "Event promoter / staff",     emoji: "🎉", suggestsRecurring: false },
+  // 2026-11: wider set so the team can list jobs they source directly.
+  { id: "hospitality",       label: "Waiter / hotel & restaurant", emoji: "🍽️", suggestsRecurring: true  },
+  { id: "sales_marketing",   label: "Sales / marketing",          emoji: "📣", suggestsRecurring: true  },
+  { id: "office_admin",      label: "Receptionist / office",      emoji: "🗂️", suggestsRecurring: true  },
+  { id: "beauty_salon",      label: "Salon / beauty / barber",    emoji: "💇", suggestsRecurring: true  },
+  { id: "farm_worker",       label: "Farm worker",                emoji: "🌾", suggestsRecurring: true  },
+  { id: "other",             label: "Other",                      emoji: "💼", suggestsRecurring: false },
 ] as const;
 
 export type KaziKaribuCategoryId = (typeof KAZI_KARIBU_CATEGORIES)[number]["id"];

@@ -190,6 +190,7 @@ export function KenyaJobsHub() {
   const [stats, setStats] = useState<HubStats | null>(null);
   const [statsError, setStatsError] = useState(false);
   const [kaziAvailable, setKaziAvailable] = useState<boolean | null>(null);
+  const [kaziLive, setKaziLive] = useState<number | null>(null);
   const [counties, setCounties] = useState<string[]>(KENYA_COUNTIES);
   const [keyword, setKeyword] = useState("");
   const [county, setCounty] = useState("");
@@ -217,6 +218,7 @@ export function KenyaJobsHub() {
       if (Array.isArray(f.data?.counties) && f.data.counties.length) setCounties(f.data.counties.map(String));
       // Kazi Karibu is feature-flagged: 404 = off (keep the old card's behaviour).
       setKaziAvailable(k.status === 404 ? false : true);
+      if (k.data && typeof k.data.total === "number") setKaziLive(k.data.total);
     })();
     return () => ac.abort();
   }, []);
@@ -384,6 +386,10 @@ export function KenyaJobsHub() {
                   <span className="text-emerald-400">Find nearby work in</span> hospitality, driving, home support, trades and more.
                 </p>
                 <div className="mt-5 flex flex-wrap gap-2">
+                  {kaziLive !== null && (
+                    <InfoChip icon={<Briefcase className="h-6 w-6 text-emerald-400" aria-hidden="true" />}
+                      title={`${kaziLive} ${kaziLive === 1 ? "job" : "jobs"}`} text={kaziLive > 0 ? "Open right now" : "New jobs added daily"} />
+                  )}
                   <InfoChip icon={<ShieldCheck className="h-6 w-6 text-emerald-400" aria-hidden="true" />} title="AI-moderated" text="Safe & trusted listings" />
                   <InfoChip icon={<Users className="h-6 w-6 text-emerald-400" aria-hidden="true" />} title="Free to apply" text="No fees to browse jobs" />
                 </div>

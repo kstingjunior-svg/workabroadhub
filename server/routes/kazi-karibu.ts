@@ -465,12 +465,12 @@ export function registerKaziKaribuRoutes(
             code: "NO_PHONE",
           });
         }
-        if (!user.phone_verified_at) {
-          return res.status(400).json({
-            error: "Please verify your phone number before posting on Kazi Karibu.",
-            code: "PHONE_NOT_VERIFIED",
-          });
-        }
+        // 2026-11: phone verification codes go by SMS, which has been down, so
+        // every poster was stuck here (17 drafts, 0 posts ever published).
+        // A phone on file is enough: paid posts prove the number via the
+        // M-Pesa prompt, and unverified FREE posts go to the admin queue
+        // instead of auto-publishing.
+        const phoneUnverified = !user.phone_verified_at;
 
         // 3. Re-run Layer 3 rules on the server — never trust the draft state
         //    to have been rules-checked client-side.
@@ -528,7 +528,22 @@ export function registerKaziKaribuRoutes(
               WHERE id = $1 AND moderation_state IN ('draft','held')`,
             [postId],
           );
-          const finalState = await runNanjilaAndTransition(postId, layer3FlagCodes);
+          let finalState: "live" | "held" | "rejected";
+          if (phoneUnverified) {
+            await pool.query(
+              `UPDATE kazi_karibu_posts SET moderation_state = 'held', updated_at = NOW()
+                WHERE id = $1 AND moderation_state = 'pending_moderation'`,
+              [postId],
+            );
+            await pool.query(
+              `INSERT INTO kazi_karibu_moderation (post_id, layer, decision, reason_codes, narrative, actor)
+               VALUES ($1, 'human', 'hold', $2, 'Free post from an unverified phone — admin review before publishing', 'system')`,
+              [postId, ["phone_unverified"]],
+            ).catch(() => {});
+            finalState = "held";
+          } else {
+            finalState = await runNanjilaAndTransition(postId, layer3FlagCodes);
+          }
           console.log(
             `[KaziKaribu] SUBMIT free postId=${postId} userId=${userId} finalState=${finalState} ` +
             `layer3Flags=${layer3FlagCodes.length} took=${Date.now() - t0}ms`,
@@ -799,6 +814,7 @@ export function registerKaziKaribuRoutes(
           SELECT id, category, county, sub_county, title, description,
                  budget_min_kes, budget_max_kes, budget_period, duration,
                  poster_display_name, is_boosted, published_at,
+                 employer_name, posted_by_admin,
                  poster_user_id
             FROM kazi_karibu_posts
            WHERE ${where.join(" AND ")}
@@ -855,6 +871,7 @@ export function registerKaziKaribuRoutes(
                   budget_min_kes, budget_max_kes, budget_period, duration,
                   poster_display_name, poster_shows_phone,
                   is_boosted, published_at, expires_at,
+                  employer_name, how_to_apply, posted_by_admin,
                   poster_user_id
              FROM kazi_karibu_posts
             WHERE id = $1 AND moderation_state = 'live' AND expires_at > NOW()
@@ -931,9 +948,9 @@ export function registerKaziKaribuRoutes(
           `SELECT p.poster_user_id,
                   p.poster_shows_phone,
                   p.moderation_state,
-                  u.first_name AS poster_first_name,
-                  u.phone      AS poster_phone,
-                  u.email      AS poster_email
+                  COALESCE(p.contact_name,  u.first_name) AS poster_first_name,
+                  COALESCE(p.contact_phone, u.phone)      AS poster_phone,
+                  COALESCE(p.contact_email, u.email)      AS poster_email
              FROM kazi_karibu_posts p
              JOIN users u ON u.id = p.poster_user_id
             WHERE p.id = $1 AND p.moderation_state = 'live' AND p.expires_at > NOW()
@@ -1387,11 +1404,11 @@ export function registerKaziKaribuRoutes(
                   p.budget_period,
                   p.poster_display_name,
                   CASE WHEN i.contact_revealed_at IS NOT NULL
-                       THEN u.first_name ELSE NULL END AS poster_first_name,
+                       THEN COALESCE(p.contact_name,  u.first_name) ELSE NULL END AS poster_first_name,
                   CASE WHEN i.contact_revealed_at IS NOT NULL
-                       THEN u.phone      ELSE NULL END AS poster_phone,
+                       THEN COALESCE(p.contact_phone, u.phone)      ELSE NULL END AS poster_phone,
                   CASE WHEN i.contact_revealed_at IS NOT NULL
-                       THEN u.email      ELSE NULL END AS poster_email
+                       THEN COALESCE(p.contact_email, u.email)      ELSE NULL END AS poster_email
              FROM kazi_karibu_interest i
              JOIN kazi_karibu_posts    p ON p.id = i.post_id
              JOIN users                u ON u.id = p.poster_user_id
@@ -1496,6 +1513,198 @@ export function registerKaziKaribuRoutes(
       } catch (err: any) {
         console.error("[POST /api/admin/kazi-karibu/posts/:id/decide]", err?.message);
         return res.status(500).json({ error: "Could not record decision." });
+      }
+    },
+  );
+
+  // ─── ADMIN: post on an employer's behalf (2026-11) ─────────────────────────
+  // Tony finds jobs (WhatsApp groups, employers who call in) and posts them
+  // himself. These go live immediately — no fee, no AI hold — and show the
+  // EMPLOYER's contact, not the admin's. They count in every listing/total
+  // exactly like poster-submitted jobs.
+
+  const normPhone = (raw: unknown): string | null => {
+    const d = String(raw ?? "").replace(/[^\d+]/g, "");
+    if (!d) return null;
+    let p = d.replace(/^\+/, "");
+    if (/^0[17]\d{8}$/.test(p)) p = "254" + p.slice(1);
+    if (/^[17]\d{8}$/.test(p)) p = "254" + p;
+    return /^\d{9,15}$/.test(p) ? p : null;
+  };
+
+  function readAdminPostBody(body: any): { ok: true; v: any } | { ok: false; error: string; field: string } {
+    const base = validateDraft(body ?? {});
+    if (base.ok === false) {
+      // Admin posts may be from any county — skip the public-posting allowlist.
+      if (base.field !== "county" || !String(body?.county ?? "").trim()) return { ok: false, error: base.error, field: base.field };
+    }
+    const category    = String(body?.category ?? "").trim();
+    const county      = String(body?.county ?? "").trim();
+    const title       = String(body?.title ?? "").trim();
+    const description = String(body?.description ?? "").trim();
+    if (!ALLOWED_KAZI_KARIBU_CATEGORY_IDS.has(category)) return { ok: false, error: "Pick a category.", field: "category" };
+    if (!county) return { ok: false, error: "County is required.", field: "county" };
+    if (title.length < 5 || title.length > 120) return { ok: false, error: "Title must be 5–120 characters.", field: "title" };
+    if (description.length < 20 || description.length > 4000) return { ok: false, error: "Description must be 20–4,000 characters.", field: "description" };
+    const contactPhone = body?.contactPhone ? normPhone(body.contactPhone) : null;
+    if (body?.contactPhone && !contactPhone) return { ok: false, error: "Contact phone doesn't look right (use 07XX… or 2547XX…).", field: "contactPhone" };
+    const contactEmail = String(body?.contactEmail ?? "").trim() || null;
+    if (contactEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail)) return { ok: false, error: "Contact email doesn't look right.", field: "contactEmail" };
+    const howToApply = String(body?.howToApply ?? "").trim() || null;
+    if (!contactPhone && !contactEmail && !howToApply) {
+      return { ok: false, error: "Add a contact phone, email, or 'how to apply' so applicants can reach the employer.", field: "contactPhone" };
+    }
+    const num = (x: any) => (x == null || x === "" || Number(x) === 0 ? null : Math.round(Number(x)));
+    const budgetMinKes = num(body?.budgetMinKes), budgetMaxKes = num(body?.budgetMaxKes);
+    if ((budgetMinKes != null && (isNaN(budgetMinKes) || budgetMinKes < 0)) || (budgetMaxKes != null && (isNaN(budgetMaxKes) || budgetMaxKes < 0))) {
+      return { ok: false, error: "Pay must be a positive number.", field: "budgetMinKes" };
+    }
+    if (budgetMinKes != null && budgetMaxKes != null && budgetMinKes > budgetMaxKes) return { ok: false, error: "Minimum pay can't be higher than maximum.", field: "budgetMinKes" };
+    const budgetPeriod = String(body?.budgetPeriod ?? "").trim() || null;
+    if (budgetPeriod && !["hour","day","month","project"].includes(budgetPeriod)) return { ok: false, error: "Pay period must be hour, day, month or project.", field: "budgetPeriod" };
+    const duration = String(body?.duration ?? "").trim() || null;
+    if (duration && !["one_off","recurring_weekly","permanent"].includes(duration)) return { ok: false, error: "Invalid duration.", field: "duration" };
+    const days = Math.min(90, Math.max(1, Number(body?.daysLive ?? 14) || 14));
+    const employerName = String(body?.employerName ?? "").trim().slice(0, 120) || null;
+    const subCounty = String(body?.subCounty ?? "").trim() || null;
+    return { ok: true, v: {
+      category, county, subCounty, title, description, budgetMinKes, budgetMaxKes, budgetPeriod, duration, days,
+      employerName,
+      contactName: String(body?.contactName ?? "").trim().slice(0, 80) || null,
+      contactPhone, contactEmail, howToApply: howToApply?.slice(0, 1000) ?? null,
+      showContact: body?.showContact !== false,
+      sourceNote: String(body?.sourceNote ?? "").trim().slice(0, 300) || null,
+      displayName: employerName ?? defaultPosterDisplayName(subCounty, county),
+    } };
+  }
+
+  app.post(
+    "/api/admin/kazi-karibu/posts",
+    requireKaziKaribuEnabled, isAuthenticated, isAdmin,
+    async (req: any, res: Response) => {
+      try {
+        const adminId = readSessionUserId(req);
+        if (!adminId) return res.status(401).json({ error: "Please sign in." });
+        const r = readAdminPostBody(req.body);
+        if (!r.ok) return res.status(400).json(r);
+        const v = r.v;
+        const { rows } = await pool.query(
+          `INSERT INTO kazi_karibu_posts
+             (poster_user_id, category, county, sub_county, title, description,
+              budget_min_kes, budget_max_kes, budget_period, duration,
+              poster_display_name, poster_shows_name, poster_shows_phone,
+              moderation_state, published_at, expires_at,
+              posted_by_admin, employer_name, contact_name, contact_phone, contact_email, how_to_apply, source_note)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,true,$12,
+                   'live', NOW(), NOW() + make_interval(days => $13),
+                   true,$14,$15,$16,$17,$18,$19)
+           RETURNING id, moderation_state, published_at, expires_at`,
+          [adminId, v.category, v.county, v.subCounty, v.title, v.description,
+           v.budgetMinKes, v.budgetMaxKes, v.budgetPeriod, v.duration,
+           v.displayName, v.showContact, v.days,
+           v.employerName, v.contactName, v.contactPhone, v.contactEmail, v.howToApply, v.sourceNote],
+        );
+        await pool.query(
+          `INSERT INTO kazi_karibu_moderation (post_id, layer, decision, reason_codes, narrative, actor)
+           VALUES ($1, 'human', 'approve', $2, 'Posted directly by admin on the employer''s behalf', $3)`,
+          [rows[0].id, ["admin_posted"], adminId],
+        ).catch(() => {});
+        console.log(`[KaziKaribu] ADMIN POST id=${rows[0].id} "${v.title}" county=${v.county} by=${adminId}`);
+        return res.status(201).json({ ok: true, post: rows[0] });
+      } catch (err: any) {
+        console.error("[POST /api/admin/kazi-karibu/posts]", err?.message);
+        return res.status(500).json({ error: "Could not publish the job." });
+      }
+    },
+  );
+
+  app.get(
+    "/api/admin/kazi-karibu/posts",
+    requireKaziKaribuEnabled, isAuthenticated, isAdmin,
+    async (req: any, res: Response) => {
+      try {
+        const state = String(req.query.state ?? "all");
+        const where = state === "all" ? "p.moderation_state <> 'draft'" : "p.moderation_state = $1";
+        const { rows } = await pool.query(
+          `SELECT p.id, p.category, p.county, p.sub_county, p.title, p.description,
+                  p.budget_min_kes, p.budget_max_kes, p.budget_period, p.duration,
+                  p.moderation_state, p.published_at, p.expires_at, p.created_at,
+                  p.posted_by_admin, p.employer_name, p.contact_name, p.contact_phone, p.contact_email,
+                  p.how_to_apply, p.poster_shows_phone, p.source_note, p.poster_display_name,
+                  (p.moderation_state = 'live' AND p.expires_at > NOW()) AS is_live,
+                  u.email AS poster_email, u.phone AS poster_phone,
+                  (SELECT count(*)::int FROM kazi_karibu_interest i WHERE i.post_id = p.id) AS interests,
+                  (SELECT count(*)::int FROM kazi_karibu_contact_views c WHERE c.post_id = p.id) AS contact_views,
+                  (SELECT m.narrative FROM kazi_karibu_moderation m WHERE m.post_id = p.id ORDER BY m.decided_at DESC LIMIT 1) AS latest_note
+             FROM kazi_karibu_posts p
+             JOIN users u ON u.id = p.poster_user_id
+            WHERE ${where}
+            ORDER BY (p.moderation_state IN ('held','pending_moderation')) DESC, p.created_at DESC
+            LIMIT 300`,
+          state === "all" ? [] : [state],
+        );
+        const { rows: [counts] } = await pool.query(
+          `SELECT count(*) FILTER (WHERE moderation_state = 'live' AND expires_at > NOW())::int AS live,
+                  count(*) FILTER (WHERE moderation_state IN ('held','pending_moderation'))::int AS waiting,
+                  count(*) FILTER (WHERE moderation_state = 'draft')::int AS drafts
+             FROM kazi_karibu_posts`);
+        return res.json({ counts, posts: rows });
+      } catch (err: any) {
+        console.error("[GET /api/admin/kazi-karibu/posts]", err?.message);
+        return res.status(500).json({ error: "Could not load posts." });
+      }
+    },
+  );
+
+  app.patch(
+    "/api/admin/kazi-karibu/posts/:id",
+    requireKaziKaribuEnabled, isAuthenticated, isAdmin,
+    async (req: any, res: Response) => {
+      try {
+        const id = String(req.params.id);
+        if (!/^[0-9a-f-]{36}$/i.test(id)) return res.status(404).json({ error: "Not found." });
+        const adminId = readSessionUserId(req) ?? "admin";
+        const action = String(req.body?.action ?? "edit");
+        if (action === "remove") {
+          await pool.query(`UPDATE kazi_karibu_posts SET moderation_state='removed', removed_reason=$2, updated_at=NOW() WHERE id=$1`,
+            [id, String(req.body?.reason ?? "Removed by admin").slice(0, 300)]);
+        } else if (action === "extend" || action === "relist") {
+          const days = Math.min(90, Math.max(1, Number(req.body?.days ?? 14) || 14));
+          await pool.query(
+            `UPDATE kazi_karibu_posts
+                SET moderation_state='live',
+                    published_at = COALESCE(published_at, NOW()),
+                    expires_at = GREATEST(COALESCE(expires_at, NOW()), NOW()) + make_interval(days => $2),
+                    updated_at = NOW()
+              WHERE id=$1`, [id, days]);
+        } else if (action === "edit") {
+          const r = readAdminPostBody(req.body);
+          if (!r.ok) return res.status(400).json(r);
+          const v = r.v;
+          await pool.query(
+            `UPDATE kazi_karibu_posts SET category=$2, county=$3, sub_county=$4, title=$5, description=$6,
+                    budget_min_kes=$7, budget_max_kes=$8, budget_period=$9, duration=$10,
+                    poster_display_name = CASE WHEN posted_by_admin THEN $11 ELSE poster_display_name END,
+                    poster_shows_phone=$12, employer_name=$13, contact_name=$14, contact_phone=$15,
+                    contact_email=$16, how_to_apply=$17, source_note=$18, updated_at=NOW()
+              WHERE id=$1`,
+            [id, v.category, v.county, v.subCounty, v.title, v.description, v.budgetMinKes, v.budgetMaxKes,
+             v.budgetPeriod, v.duration, v.displayName, v.showContact, v.employerName, v.contactName,
+             v.contactPhone, v.contactEmail, v.howToApply, v.sourceNote]);
+        } else {
+          return res.status(400).json({ error: "Unknown action." });
+        }
+        await pool.query(
+          `INSERT INTO kazi_karibu_moderation (post_id, layer, decision, reason_codes, narrative, actor)
+           VALUES ($1, 'human', $2, $3, $4, $5)`,
+          [id, action === "remove" ? "reject" : "approve", [`admin_${action}`], `Admin ${action}`, adminId],
+        ).catch(() => {});
+        const { rows } = await pool.query(`SELECT id, moderation_state, expires_at FROM kazi_karibu_posts WHERE id=$1`, [id]);
+        if (!rows.length) return res.status(404).json({ error: "Not found." });
+        return res.json({ ok: true, post: rows[0] });
+      } catch (err: any) {
+        console.error("[PATCH /api/admin/kazi-karibu/posts/:id]", err?.message);
+        return res.status(500).json({ error: "Could not update the job." });
       }
     },
   );
