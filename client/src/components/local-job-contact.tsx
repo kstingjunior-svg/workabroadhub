@@ -6,6 +6,7 @@
 import { useState } from "react";
 import { Phone, MessageCircle, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { openJobUnlock } from "@/components/job-unlock-dialog";
 
 type Contact = { phone: string | null; telUrl: string | null; whatsapp: string | null; whatsappUrl: string | null; contactPerson: string | null; altContact: string | null; instructions: string | null };
 const cache = new Map<string, Contact>();
@@ -14,7 +15,7 @@ async function loadContact(jobId: string): Promise<Contact> {
   if (cache.has(jobId)) return cache.get(jobId)!;
   const r = await fetch(`/api/lj/jobs/${jobId}/contact`, { credentials: "include", headers: { accept: "application/json" } });
   const b = await r.json().catch(() => ({}));
-  if (!r.ok) throw Object.assign(new Error(b?.message || "Could not load the employer's contact."), { code: b?.code, status: r.status });
+  if (!r.ok) throw Object.assign(new Error(b?.message || "Could not load the employer's contact."), { code: b?.code, status: r.status, body: b });
   cache.set(jobId, b);
   return b;
 }
@@ -42,6 +43,8 @@ export function LocalJobContactButtons({ jobId, canCall, canWhatsApp, size = "md
       if (e.code === "SIGNIN" || e.status === 401) {
         toast({ title: "Sign in to contact the employer", description: "It's free — it takes 30 seconds." });
         window.location.href = `/signup?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`;
+      } else if (e.status === 402 || e.code === "PAYWALL") {
+        openJobUnlock(e.body);
       } else toast({ title: "Couldn't open contact", description: e.message, variant: "destructive" });
     } finally { setBusy(null); }
   }

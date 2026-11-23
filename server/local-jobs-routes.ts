@@ -978,7 +978,9 @@ export function registerLocalJobsRoutes(app: Express): void {
           appsToday:  0,
           dailyLimit: null,
           unlimited:  false,
-          message:    "Unlock unlimited applying — KES 99 gets you 24 hours, KES 1,000 gets you 30 days, KES 4,500 gets you a full year. No per-application charges.",
+          message:    "Unlock Kenyan jobs — KES 1,000 for 30 days. Apply, call and WhatsApp employers as much as you like.",
+          payUrl:     "/payment?plan=monthly&only=1&return=%2Fkenya-careers",
+          amount:     1000,
         });
       }
 
@@ -1046,8 +1048,11 @@ export function registerLocalJobsRoutes(app: Express): void {
         if (!KENYA_CAREERS_PAID_TIERS.has(tier)) {
           console.log(`[kenya-careers/apply] BLOCK userId=${userId} tier=${tier} reason=not_paid jobId=${jobId}`);
           return res.status(402).json({
-            message: "Unlock applying — Monthly (KES 1,000) covers both overseas AND Kenya jobs.",
+            message: "Unlock Kenyan jobs — KES 1,000 for 30 days.",
             reason:  "upgrade",
+            code:    "PAYWALL",
+            payUrl:  `/payment?plan=monthly&only=1&return=${encodeURIComponent(`/kenya-careers/job/${jobId}`)}`,
+            amount:  1000,
             tier,
           });
         }
@@ -1062,8 +1067,11 @@ export function registerLocalJobsRoutes(app: Express): void {
         if (sub?.endDate && new Date(sub.endDate) < new Date()) {
           console.log(`[kenya-careers/apply] BLOCK userId=${userId} tier=${tier} reason=subscription_expired endDate=${sub.endDate} jobId=${jobId}`);
           return res.status(402).json({
-            message: "Your plan has expired. Renew to keep applying.",
+            message: "Your plan has expired. Renew for KES 1,000 (30 days) to keep applying.",
             reason:  "upgrade",
+            code:    "PAYWALL",
+            payUrl:  `/payment?plan=monthly&only=1&return=${encodeURIComponent(`/kenya-careers/job/${jobId}`)}`,
+            amount:  1000,
             tier:    "free",
           });
         }

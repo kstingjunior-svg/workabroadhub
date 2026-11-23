@@ -21,6 +21,7 @@ import crypto from "crypto";
 import { pool } from "./db";
 import { findPlace, locateJob, distanceKm, KENYA_PLACES } from "../shared/kenya-places";
 import { validatePublisherLocation, originFromBody } from "./geo";
+import { canSeeJobContacts, paywallBody, maskPhones } from "./lib/job-contact-access";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 function sessionUserId(req: any): string | null {
@@ -205,14 +206,14 @@ function shapeJob(r: any, origin?: { lat: number; lng: number } | null) {
   const badge = r.employer_verified ? "verified" : r.verification_status === "contact_confirmed" ? "contact_confirmed"
     : r.source !== "employer" ? "admin_posted" : "pending";
   return {
-    id: r.id, title: r.title, description: r.description ?? r.responsibilities ?? null, requirements: r.requirements ?? null,
+    id: r.id, title: maskPhones(r.title), description: maskPhones(r.description ?? r.responsibilities ?? null), requirements: maskPhones(r.requirements ?? null),
     vacancies: r.vacancies, employmentType: r.employment_type, category: r.category,
     salaryMin: r.salary_min, salaryMax: r.salary_max, salaryPeriod: r.salary_period,
     county: r.county, town: r.town, estate: r.estate, workplaceLocation: r.workplace_location,
     minQualification: r.min_qualification, experience: r.experience_text ?? null, genderRequirement: r.gender_requirement,
     workingHours: r.working_hours, deadline: r.deadline, expiresAt: r.expires_at,
     postedAt: r.published_at ?? r.created_at, source: r.source, badge,
-    canCall: !!r.can_call, canWhatsApp: !!r.can_whatsapp, instructions: r.instructions,
+    canCall: !!r.can_call, canWhatsApp: !!r.can_whatsapp, instructions: maskPhones(r.instructions),
     employer: { id: r.company_id, name: r.company_name, slug: r.company_slug, logoUrl: r.company_logo, verified: !!r.employer_verified },
     distanceKm: r.dist_km != null ? Math.round(Number(r.dist_km) * 10) / 10 : distance,
     lat: r.lat, lng: r.lng, formattedAddress: r.formatted_address ?? null, street: r.street ?? null,
@@ -346,7 +347,13 @@ export function registerLocalJobsMarketplace(app: Express): void {
                 c.name AS company_name, j.title
            FROM local_jobs j JOIN companies c ON c.id = j.company_id WHERE j.id = $1 AND ${VISIBLE}`, [req.params.id]);
       if (!r) return res.status(404).json({ message: "This job is no longer available." });
-      if (!r.contact_authorized) return res.status(403).json({ message: "The employer asked us not to publish their number. Follow the 'How to apply' steps instead.", code: "CONTACT_HIDDEN", instructions: r.instructions });
+      if (!r.contact_authorized) return res.status(403).json({ message: "The employer asked us not to publish their number. Follow the 'How to apply' steps instead.", code: "CONTACT_HIDDEN", instructions: maskPhones(r.instructions) });
+      // 2026-11 paywall: job seekers need an active plan (KES 1,000 / 30 days).
+      const access = await canSeeJobContacts(uid);
+      if (!access.ok) {
+        console.log(`[lj/contact] PAYWALL userId=${uid} plan=${access.plan} jobId=${req.params.id}`);
+        return res.status(402).json(paywallBody(`/kenya-careers/job/${req.params.id}`));
+      }
       const { rows: [rate] } = await pool.query(
         `SELECT count(*)::int n FROM local_job_contact_events WHERE viewer_hash = $1 AND kind = 'reveal' AND created_at > NOW() - INTERVAL '1 hour'`, [viewerHash(req)]);
       if ((rate?.n ?? 0) >= 40) return res.status(429).json({ message: "You've opened many contacts in the last hour. Please try again later." });

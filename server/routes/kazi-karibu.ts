@@ -35,6 +35,10 @@ import {
 import { evaluatePostAgainstRules, type RuleContext } from "../lib/scam-rules";
 import { kaziKaribuReviewCapability, type KaziKaribuReviewOutput } from "../nanjila/capabilities/kaziKaribuReview";
 import { validatePublisherLocation, originFromBody } from "../geo";
+import { canSeeJobContacts, paywallBody, maskPhones } from "../lib/job-contact-access";
+
+/** Public responses: hide phone numbers typed into free text (paywall). */
+const maskKk = (r: any) => (r ? { ...r, title: maskPhones(r.title), description: maskPhones(r.description), how_to_apply: maskPhones(r.how_to_apply) } : r);
 
 /** 2026-11: saves a validated map location onto a post. */
 async function saveKkLocation(postId: string, v: any) {
@@ -857,7 +861,7 @@ export function registerKaziKaribuRoutes(
         total: count.rows[0].n, vacancies: count.rows[0].v, limit, offset,
         origin: origin ? { label: origin.label, radiusKm: radius } : null,
         posts: list.rows.map(({ poster_user_id, dist_km, ...r }: any) => ({
-          ...r, distance_km: dist_km != null ? Math.round(Number(dist_km) * 10) / 10 : null,
+          ...maskKk(r), distance_km: dist_km != null ? Math.round(Number(dist_km) * 10) / 10 : null,
           is_mine: sessionUserId != null && poster_user_id === sessionUserId,
         })),
       });
@@ -941,7 +945,7 @@ export function registerKaziKaribuRoutes(
           total:  Number(count.rows[0]?.c ?? 0),
           limit,
           offset,
-          posts,
+          posts: posts.map(maskKk),
         });
       } catch (err: any) {
         console.error("[GET /api/kazi-karibu/posts]", err?.message);
@@ -986,7 +990,7 @@ export function registerKaziKaribuRoutes(
         const { poster_user_id, ...post } = rows[0] as any;
         return res.json({
           post: {
-            ...post,
+            ...(sessionUserId != null && poster_user_id === sessionUserId ? post : maskKk(post)),
             is_mine: sessionUserId != null && poster_user_id === sessionUserId,
           },
         });
@@ -1067,6 +1071,16 @@ export function registerKaziKaribuRoutes(
             error: "The poster keeps their contact private. Express interest to be shortlisted.",
             code:  "CONTACT_HIDDEN",
           });
+        }
+
+        // 2026-11 paywall: job seekers need an active plan (KES 1,000 / 30
+        // days). The poster can always see their own post's contact.
+        if (rec.poster_user_id !== userId) {
+          const access = await canSeeJobContacts(userId);
+          if (!access.ok) {
+            console.log(`[KaziKaribu] CONTACT PAYWALL userId=${userId} plan=${access.plan} post=${postId}`);
+            return res.status(402).json(paywallBody(`/kazi-karibu/job/${postId}`));
+          }
         }
 
         // Log the view (best-effort; never block on this).
@@ -1176,6 +1190,12 @@ export function registerKaziKaribuRoutes(
         }
         if (post.poster_user_id === userId) {
           return res.status(400).json({ error: "You can't apply to your own post." });
+        }
+        // 1b. 2026-11 paywall — applying is part of "accessing the job".
+        const access = await canSeeJobContacts(userId);
+        if (!access.ok) {
+          console.log(`[KaziKaribu] INTEREST PAYWALL userId=${userId} plan=${access.plan} post=${postId}`);
+          return res.status(402).json(paywallBody(`/kazi-karibu/job/${postId}`));
         }
 
         // 2. Snapshot the applicant profile. Include contactable fields so

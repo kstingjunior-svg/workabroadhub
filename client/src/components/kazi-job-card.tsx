@@ -5,6 +5,7 @@ import { MapPin, Phone, MessageCircle, Loader2, Users } from "lucide-react";
 import { KAZI_KARIBU_CATEGORIES } from "@shared/kazi-karibu";
 import type { MapPoint } from "@/components/jobs-map";
 import { formatKm } from "@/lib/geo";
+import { openJobUnlock } from "@/components/job-unlock-dialog";
 
 export interface KkPost {
   id: string; category: string; county: string; sub_county: string | null; title: string; description: string;
@@ -38,6 +39,7 @@ export function KaziJobCard({ p, distance }: { p: KkPost; distance: string | nul
       const r = await fetch(`/api/kazi-karibu/posts/${p.id}/contact`, { credentials: "include", headers: { accept: "application/json" } });
       if (r.status === 401) { window.location.href = `/signup?redirect=${encodeURIComponent(window.location.pathname)}`; return; }
       const b = await r.json().catch(() => ({}));
+      if (r.status === 402) { openJobUnlock(b); return; }
       if (!r.ok) { alert(b?.error ?? "Couldn't open the contact."); return; }
       const n = norm(b.phone);
       if (!n) { alert("This poster hasn't shared a phone number — open the job and tap “I'm interested”."); return; }

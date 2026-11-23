@@ -67,6 +67,8 @@ export function KenyaCareersApplySheet({
   open, onClose, jobId, jobTitle, companyName, companyVerified,
 }: ApplySheetProps) {
   const [, navigate] = useLocation();
+  // 2026-11: one option only — KES 1,000 / 30 days, then back to this job.
+  const unlockUrl = `/payment?plan=monthly&only=1&return=${encodeURIComponent(`/kenya-careers/job/${jobId}`)}`;
   const [status, setStatus] = useState<ApplyStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -127,7 +129,7 @@ export function KenyaCareersApplySheet({
       if (!res.ok) {
         // 402 = upgrade needed, 429 = daily limit, 400 = incomplete profile, 401 = signin
         if (body?.reason === "upgrade") {
-          navigate("/pricing");
+          window.location.href = unlockUrl;
           return;
         }
         if (body?.reason === "signin") {
@@ -240,25 +242,20 @@ export function KenyaCareersApplySheet({
               <div className="rounded-lg bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 ring-1 ring-emerald-200 dark:ring-emerald-800 p-4 mb-3">
                 <div className="flex items-center gap-1.5 mb-2">
                   <Sparkles className="h-4 w-4 text-emerald-600" />
-                  <strong className="text-sm">Unlock applying — from KES 1,000</strong>
+                  <strong className="text-sm">Unlock Kenyan jobs — KES 1,000 for 30 days</strong>
                 </div>
-                <p className="text-sm text-muted-foreground mb-2">
-                  One subscription covers <strong>both</strong> the overseas board AND Kenya Careers:
-                </p>
                 <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
-                  <li><strong>Unlimited applications</strong> — we don't charge per apply</li>
-                  <li>KES 1,000 = 30 days &nbsp;·&nbsp; KES 4,500 = 365 days</li>
-                  <li>Verified overseas jobs in 9 countries</li>
-                  <li>Salary comparison + country roadmaps</li>
-                  <li>CV check + interview practice</li>
+                  <li><strong>Apply to as many jobs as you like</strong> for 30 days</li>
+                  <li>Call and WhatsApp employers directly</li>
+                  <li>Kazi Karibu + Kenyan Jobs Section, new jobs daily</li>
                 </ul>
               </div>
               <Button
                 className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
-                onClick={() => navigate("/pricing")}
+                onClick={() => { window.location.href = unlockUrl; }}
                 data-testid="btn-upgrade-from-apply"
               >
-                See plans (from KES 1,000)
+                Pay KES 1,000 and unlock
               </Button>
             </div>
           )}

@@ -120,6 +120,10 @@ export default function Payment() {
   const [referralError, setReferralError] = useState<string | null>(null);
 
   const urlPlanId = new URLSearchParams(window.location.search).get("plan");
+  // 2026-11: job-unlock checkout (?only=1&return=/kazi-karibu/job/…) sends the
+  // user straight back to the job they wanted after paying. Same-site paths only.
+  const urlReturn = new URLSearchParams(window.location.search).get("return");
+  const successDest = urlReturn && /^\/(kazi-karibu|kenya-careers)(\/|$|\?)/.test(urlReturn) && !urlReturn.startsWith("//") ? urlReturn : "/dashboard";
   // 2026-07: honor ?method=mpesa|paypal from /pricing branded buttons
   const urlMethod = new URLSearchParams(window.location.search).get("method");
 
@@ -344,7 +348,7 @@ export default function Payment() {
   });
 
   useEffect(() => {
-    if (subscription?.status === "active") navigate("/dashboard");
+    if (subscription?.status === "active") navigate(successDest);
   }, [subscription, navigate]);
 
   const pollEndpoint = urlPlanId
@@ -433,7 +437,7 @@ export default function Payment() {
         }).then(() => localStorage.removeItem("ref")).catch(console.error);
       }
 
-      setTimeout(() => navigate("/dashboard"), 3000);
+      setTimeout(() => navigate(successDest), 3000);
     }
   }, [paymentStatus, navigate, toast, queryClient, refCode, phoneNumber]);
 
@@ -474,7 +478,7 @@ export default function Payment() {
             title: `Payment Successful ✅`,
             description: `Your ${planLabel} plan is now active. All features are unlocked.`,
           });
-          setTimeout(() => navigate("/dashboard"), 3000);
+          setTimeout(() => navigate(successDest), 3000);
         } else if (msg.type === "payment_failed") {
           // Safaricom sent back a failure — show the retry screen immediately
           // instead of waiting for the 30-second STK recovery poller.
@@ -525,7 +529,7 @@ export default function Payment() {
           queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
           const planLabel = planId ? planId.charAt(0).toUpperCase() + planId.slice(1) : "Your";
           toast({ title: "Payment Successful ✅", description: `Your ${planLabel} plan is now active. All features are unlocked.` });
-          setTimeout(() => navigate("/dashboard"), 3000);
+          setTimeout(() => navigate(successDest), 3000);
         }
       } catch { /* ignore — WS is the primary mechanism */ }
     }, 5000);
@@ -562,7 +566,7 @@ export default function Payment() {
         queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
         fireSuccessConfetti();
         toast({ title: "Payment Confirmed ✅", description: qData.receipt ? `Receipt: ${qData.receipt} — your plan is now active.` : "Your plan is now active." });
-        setTimeout(() => navigate("/dashboard"), 3000);
+        setTimeout(() => navigate(successDest), 3000);
         return; // Don't mark as failed
       }
     } catch {
@@ -789,7 +793,7 @@ export default function Payment() {
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
       const planLabel = plan ? plan.charAt(0).toUpperCase() + plan.slice(1) : "Your";
       toast({ title: "Payment Successful ✅", description: `Your ${planLabel} plan is now active. All features are unlocked.` });
-      setTimeout(() => navigate("/dashboard"), 3000);
+      setTimeout(() => navigate(successDest), 3000);
     },
     onError: (error: Error) => {
       toast({ title: "Verification Failed", description: error.message, variant: "destructive" });
@@ -855,7 +859,7 @@ export default function Payment() {
         queryClient.invalidateQueries({ queryKey: ["/api/profile"] });
         queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
         toast({ title: "Payment Confirmed ✅", description: data.receipt ? `Receipt: ${data.receipt} — your plan is now active.` : "Your plan is now active." });
-        setTimeout(() => navigate("/dashboard"), 3000);
+        setTimeout(() => navigate(successDest), 3000);
       } else if (data.status === "failed") {
         setIsPolling(false);
         setShowFailover(true);
@@ -966,7 +970,7 @@ export default function Payment() {
         ? `Your ${planLabel} plan is now active. PayPal Ref: ${result.transactionId}`
         : `Your ${planLabel} plan is now active.`,
     });
-    setTimeout(() => navigate("/dashboard"), 3000);
+    setTimeout(() => navigate(successDest), 3000);
   }, [urlPlanId, toast, navigate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Returns true when the capture response was handled (pending / error).
@@ -977,7 +981,7 @@ export default function Payment() {
     }
     if (result?.code === "PAYPAL_ALREADY_PAID") {
       toast({ title: "Already paid", description: result.message });
-      setTimeout(() => navigate("/dashboard"), 2000);
+      setTimeout(() => navigate(successDest), 2000);
       return true;
     }
     if (!res.ok) throw new Error(result?.message || "We couldn't confirm the PayPal payment yet.");
@@ -1447,7 +1451,7 @@ export default function Payment() {
 
                 {/* Manual go-to-dashboard button (in case auto-redirect is slow) */}
                 <button
-                  onClick={() => navigate("/dashboard")}
+                  onClick={() => navigate(successDest)}
                   className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl font-semibold transition-colors"
                   data-testid="button-go-to-dashboard"
                 >
