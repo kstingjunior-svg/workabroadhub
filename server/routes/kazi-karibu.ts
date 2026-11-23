@@ -34,6 +34,17 @@ import {
 } from "@shared/kazi-karibu";
 import { evaluatePostAgainstRules, type RuleContext } from "../lib/scam-rules";
 import { kaziKaribuReviewCapability, type KaziKaribuReviewOutput } from "../nanjila/capabilities/kaziKaribuReview";
+import { validatePublisherLocation, originFromBody } from "../geo";
+
+/** 2026-11: saves a validated map location onto a post. */
+async function saveKkLocation(postId: string, v: any) {
+  await pool.query(
+    `UPDATE kazi_karibu_posts SET lat=$2, lng=$3, place_id=$4, formatted_address=$5, estate=$6, town=$7, street=$8,
+            location_mode=$9, service_radius_km=$10, updated_at=NOW() WHERE id=$1`,
+    [postId, v.lat, v.lng, v.placeId, v.formattedAddress, v.estate, v.town, v.street, v.mode, v.serviceRadiusKm],
+  );
+}
+const KK_LOC_COLS = `lat, lng, formatted_address, estate, town, street, location_mode, service_radius_km, vacancies`;
 
 // ─── Feature-flag guard ─────────────────────────────────────────────────────
 
@@ -317,6 +328,10 @@ export function registerKaziKaribuRoutes(
           return res.status(400).json({ error: fail.error, field: fail.field });
         }
 
+        // 2026-11: where the work is (map pin or service area) is required.
+        const loc = await validatePublisherLocation(req.body?.location);
+        if (!loc.ok) return res.status(400).json({ error: loc.message, field: "location" });
+
         // Layer 3.
         const ruleResult = evaluatePostAgainstRules(parsed.ctx);
         if (ruleResult.hasReject) {
@@ -359,6 +374,8 @@ export function registerKaziKaribuRoutes(
             parsed.posterShowsPhone,
           ],
         );
+
+        await saveKkLocation(rows[0].id, loc.v);
 
         return res.status(201).json({
           ok:       true,
@@ -789,6 +806,90 @@ export function registerKaziKaribuRoutes(
    * GET /api/kazi-karibu/posts
    * Public browse. Live posts only. Paginated. Category + county filters.
    */
+  // ── 2026-11: location-first search (PostGIS). POST keeps coordinates out of URLs. ──
+  const KK_VISIBLE = `p.moderation_state = 'live' AND p.expires_at > NOW()`;
+  const KK_O = (i: number) => `extensions.st_setsrid(extensions.st_makepoint($${i + 1}, $${i}), 4326)::extensions.geography`;
+  const KK_REACH = (o: string, r: string) =>
+    `extensions.st_dwithin(p.geo, ${o}, (${r} + CASE WHEN p.location_mode = 'service_area' THEN COALESCE(p.service_radius_km, 0) ELSE 0 END) * 1000)`;
+
+  app.post("/api/kazi-karibu/search", requireKaziKaribuEnabled, async (req: any, res: Response) => {
+    try {
+      const b = req.body ?? {};
+      const origin = await originFromBody(b);
+      const where = [KK_VISIBLE];
+      const params: any[] = [];
+      const add = (sql: string, val: any) => { params.push(val); where.push(sql.split("$$").join(`$${params.length}`)); };
+      if (b.category && b.category !== "all") add("p.category = $$", String(b.category));
+      if (b.county && b.county !== "all") add("p.county = $$", String(b.county));
+      if (b.q && String(b.q).trim()) {
+        params.push(`%${String(b.q).trim().slice(0, 80)}%`); const i = params.length;
+        where.push(`(p.title ILIKE $${i} OR p.description ILIKE $${i} OR p.employer_name ILIKE $${i} OR p.town ILIKE $${i} OR p.estate ILIKE $${i} OR p.formatted_address ILIKE $${i})`);
+      }
+      let distSel = "NULL::float AS dist_km";
+      const radius = b.radiusKm == null || b.radiusKm === "any" ? null : Math.min(500, Math.max(0.5, Number(b.radiusKm) || 10));
+      if (origin) {
+        params.push(origin.lat, origin.lng);
+        const o = KK_O(params.length - 1);
+        distSel = `extensions.st_distance(p.geo, ${o}) / 1000.0 AS dist_km`;
+        if (radius != null) { params.push(radius); where.push(KK_REACH(o, `$${params.length}`)); }
+      }
+      const sort = String(b.sort ?? (origin ? "nearest" : "newest"));
+      const order = sort === "nearest" && origin ? "dist_km ASC NULLS LAST"
+        : sort === "vacancies" ? "p.vacancies DESC, p.published_at DESC"
+        : sort === "salary" ? "COALESCE(p.budget_max_kes, p.budget_min_kes) DESC NULLS LAST"
+        : "p.is_boosted DESC, p.published_at DESC";
+      const limit = Math.min(100, Math.max(1, Number(b.limit) || 30));
+      const offset = Math.max(0, Number(b.offset) || 0);
+      const w = where.join(" AND ");
+      const sessionUserId = readSessionUserId(req);
+      const [list, count] = await Promise.all([
+        pool.query(
+          `SELECT p.id, p.category, p.county, p.sub_county, p.title, p.description, p.budget_min_kes, p.budget_max_kes, p.budget_period,
+                  p.duration, p.poster_display_name, p.is_boosted, p.published_at, p.employer_name, p.posted_by_admin, p.poster_shows_phone,
+                  p.lat, p.lng, p.formatted_address, p.estate, p.town, p.street, p.location_mode, p.service_radius_km, p.vacancies,
+                  p.poster_user_id, ${distSel}
+             FROM kazi_karibu_posts p WHERE ${w} ORDER BY ${order} LIMIT ${limit} OFFSET ${offset}`, params),
+        pool.query(`SELECT count(*)::int n, COALESCE(sum(p.vacancies),0)::int v FROM kazi_karibu_posts p WHERE ${w}`, params),
+      ]);
+      res.setHeader("Cache-Control", "no-store");
+      return res.json({
+        total: count.rows[0].n, vacancies: count.rows[0].v, limit, offset,
+        origin: origin ? { label: origin.label, radiusKm: radius } : null,
+        posts: list.rows.map(({ poster_user_id, dist_km, ...r }: any) => ({
+          ...r, distance_km: dist_km != null ? Math.round(Number(dist_km) * 10) / 10 : null,
+          is_mine: sessionUserId != null && poster_user_id === sessionUserId,
+        })),
+      });
+    } catch (err: any) {
+      console.error("[POST /api/kazi-karibu/search]", err?.message);
+      return res.status(500).json({ error: "Could not search jobs." });
+    }
+  });
+
+  app.post("/api/kazi-karibu/stats-near", requireKaziKaribuEnabled, async (req: any, res: Response) => {
+    try {
+      const origin = await originFromBody(req.body ?? {});
+      const radius = req.body?.radiusKm == null || req.body?.radiusKm === "any" ? null : Math.min(500, Math.max(0.5, Number(req.body.radiusKm) || 10));
+      const params: any[] = [];
+      let near = "NULL::int AS sel, NULL::int AS km5, NULL::int AS km10, NULL::int AS km25";
+      if (origin) {
+        params.push(origin.lat, origin.lng, radius ?? 100000); const o = KK_O(1);
+        near = `count(*) FILTER (WHERE ${KK_REACH(o, "$3")})::int AS sel, count(*) FILTER (WHERE ${KK_REACH(o, "5")})::int AS km5,
+                count(*) FILTER (WHERE ${KK_REACH(o, "10")})::int AS km10, count(*) FILTER (WHERE ${KK_REACH(o, "25")})::int AS km25`;
+      }
+      const { rows: [s] } = await pool.query(
+        `SELECT count(*)::int total, COALESCE(sum(p.vacancies),0)::int vacancies,
+                count(*) FILTER (WHERE (p.published_at AT TIME ZONE 'Africa/Nairobi')::date = (NOW() AT TIME ZONE 'Africa/Nairobi')::date)::int today,
+                ${near}
+           FROM kazi_karibu_posts p WHERE ${KK_VISIBLE}`, params);
+      res.setHeader("Cache-Control", "no-store");
+      return res.json({ ...s, label: origin?.label ?? null, radiusKm: radius, updatedAt: new Date().toISOString() });
+    } catch (err: any) {
+      console.error("[POST /api/kazi-karibu/stats-near]", err?.message);
+      return res.status(500).json({ error: "Could not load counts." });
+    }
+  });
+
   app.get(
     "/api/kazi-karibu/posts",
     requireKaziKaribuEnabled,
@@ -814,7 +915,7 @@ export function registerKaziKaribuRoutes(
           SELECT id, category, county, sub_county, title, description,
                  budget_min_kes, budget_max_kes, budget_period, duration,
                  poster_display_name, is_boosted, published_at,
-                 employer_name, posted_by_admin,
+                 employer_name, posted_by_admin, ${KK_LOC_COLS},
                  poster_user_id
             FROM kazi_karibu_posts
            WHERE ${where.join(" AND ")}
@@ -871,7 +972,7 @@ export function registerKaziKaribuRoutes(
                   budget_min_kes, budget_max_kes, budget_period, duration,
                   poster_display_name, poster_shows_phone,
                   is_boosted, published_at, expires_at,
-                  employer_name, how_to_apply, posted_by_admin,
+                  employer_name, how_to_apply, posted_by_admin, ${KK_LOC_COLS},
                   poster_user_id
              FROM kazi_karibu_posts
             WHERE id = $1 AND moderation_state = 'live' AND expires_at > NOW()
@@ -1588,6 +1689,9 @@ export function registerKaziKaribuRoutes(
         const r = readAdminPostBody(req.body);
         if (!r.ok) return res.status(400).json(r);
         const v = r.v;
+        const loc = await validatePublisherLocation(req.body?.location);
+        if (!loc.ok) return res.status(400).json({ ok: false, error: loc.message, field: "location" });
+        v.county = loc.v.county; v.subCounty = v.subCounty ?? loc.v.estate ?? loc.v.town;
         const { rows } = await pool.query(
           `INSERT INTO kazi_karibu_posts
              (poster_user_id, category, county, sub_county, title, description,
@@ -1609,6 +1713,7 @@ export function registerKaziKaribuRoutes(
            VALUES ($1, 'human', 'approve', $2, 'Posted directly by admin on the employer''s behalf', $3)`,
           [rows[0].id, ["admin_posted"], adminId],
         ).catch(() => {});
+        await saveKkLocation(rows[0].id, loc.v);
         console.log(`[KaziKaribu] ADMIN POST id=${rows[0].id} "${v.title}" county=${v.county} by=${adminId}`);
         return res.status(201).json({ ok: true, post: rows[0] });
       } catch (err: any) {
@@ -1631,6 +1736,7 @@ export function registerKaziKaribuRoutes(
                   p.moderation_state, p.published_at, p.expires_at, p.created_at,
                   p.posted_by_admin, p.employer_name, p.contact_name, p.contact_phone, p.contact_email,
                   p.how_to_apply, p.poster_shows_phone, p.source_note, p.poster_display_name,
+                  p.lat, p.lng, p.formatted_address, p.estate, p.town, p.street, p.location_mode, p.service_radius_km, p.place_id,
                   (p.moderation_state = 'live' AND p.expires_at > NOW()) AS is_live,
                   u.email AS poster_email, u.phone AS poster_phone,
                   (SELECT count(*)::int FROM kazi_karibu_interest i WHERE i.post_id = p.id) AS interests,
@@ -1681,6 +1787,12 @@ export function registerKaziKaribuRoutes(
           const r = readAdminPostBody(req.body);
           if (!r.ok) return res.status(400).json(r);
           const v = r.v;
+          if (req.body?.location) {
+            const loc = await validatePublisherLocation(req.body.location);
+            if (!loc.ok) return res.status(400).json({ ok: false, error: loc.message, field: "location" });
+            await saveKkLocation(id, loc.v);
+            v.county = loc.v.county;
+          }
           await pool.query(
             `UPDATE kazi_karibu_posts SET category=$2, county=$3, sub_county=$4, title=$5, description=$6,
                     budget_min_kes=$7, budget_max_kes=$8, budget_period=$9, duration=$10,

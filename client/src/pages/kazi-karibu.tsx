@@ -18,6 +18,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { KAZI_KARIBU_CATEGORIES } from "@shared/kazi-karibu";
+import { NearbyJobsExplorer } from "@/components/nearby-jobs-explorer";
+import { KaziJobCard, kkToPoint, type KkPost } from "@/components/kazi-job-card";
+
+const KK_CATS = KAZI_KARIBU_CATEGORIES.map((c) => ({ id: c.id, label: `${c.emoji} ${c.label}` }));
+const renderKk = (p: KkPost, d: string | null) => <KaziJobCard p={p} distance={d} />;
 
 interface KaziKaribuPost {
   id: string;
@@ -147,7 +152,7 @@ export default function KaziKaribu() {
               Every post is phone-verified, moderated, and paid for by the poster so applicants apply free.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <Link href="/kazi-karibu/browse">
+              <Link href="/kazi-karibu#near-me" onClick={(e: any) => { e.preventDefault(); document.getElementById("near-me")?.scrollIntoView({ behavior: "smooth" }); }}>
                 <Button size="lg" className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-md" data-testid="btn-hero-browse">
                   <Briefcase className="h-5 w-5 mr-2" /> Browse jobs near you
                 </Button>
@@ -164,6 +169,13 @@ export default function KaziKaribu() {
             </p>
           </div>
         </div>
+      </section>
+
+      {/* ── 2026-11: location-first discovery — the heart of Kazi Karibu ── */}
+      <section className="max-w-6xl mx-auto px-4 -mt-6 pb-6" id="near-me">
+        <NearbyJobsExplorer<KkPost> source="kk" categories={KK_CATS} defaultRadius={10}
+          title="Work around you" subtitle="Type your estate or town, choose a distance, and see real jobs near you — with how far away they are."
+          renderCard={renderKk} toPoint={kkToPoint} />
       </section>
 
       {/* ── How it works ───────────────────────────────────────────────── */}
@@ -226,78 +238,7 @@ export default function KaziKaribu() {
         </div>
       </section>
 
-      {/* ── Latest posts preview ───────────────────────────────────────── */}
-      <section className="max-w-6xl mx-auto px-4 py-8">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Latest jobs</h2>
-          <Link href="/kazi-karibu/browse">
-            <Button variant="ghost" size="sm" className="text-emerald-700 dark:text-emerald-300">
-              See all <ChevronRight className="h-4 w-4 ml-1" />
-            </Button>
-          </Link>
-        </div>
-        {loading ? (
-          <div className="flex justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-emerald-600" />
-          </div>
-        ) : posts.length === 0 ? (
-          <Card>
-            <CardContent className="p-8 text-center text-slate-500">
-              No jobs posted yet. <Link href="/kazi-karibu/post"><span className="text-emerald-700 dark:text-emerald-300 font-medium underline">Be the first to post</span></Link> — first post is free.
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {posts.map((post) => {
-              const Icon = CATEGORY_ICONS[post.category] ?? Briefcase;
-              return (
-                <Link key={post.id} href={`/kazi-karibu/job/${post.id}`}>
-                  <Card className="cursor-pointer hover:border-emerald-400 hover:shadow-md transition h-full" data-testid={`post-${post.id}`}>
-                    <CardContent className="p-4">
-                      <div className="flex items-start gap-3 mb-2">
-                        <Icon className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
-                        <div className="flex-1 min-w-0">
-                          <div className="font-semibold text-slate-900 dark:text-white line-clamp-2">{post.title}</div>
-                          <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-1">
-                            <MapPin className="h-3 w-3" />
-                            {post.sub_county ? `${post.sub_county}, ${post.county}` : post.county}
-                          </div>
-                        </div>
-                        {post.is_boosted && (
-                          <Badge className="bg-amber-100 text-amber-800 border-amber-300 shrink-0">Boosted</Badge>
-                        )}
-                      </div>
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="text-sm text-emerald-700 dark:text-emerald-300 font-semibold">
-                          {formatBudget(post)}
-                        </div>
-                        {/* 2026-07: inline delete for the poster.
-                            Rendered only when the server flagged is_mine=true. */}
-                        {post.is_mine && (
-                          <button
-                            type="button"
-                            onClick={(e) => deletePost(e, post.id, post.title)}
-                            disabled={deletingId === post.id}
-                            className="inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded border border-rose-300 text-rose-700 hover:bg-rose-50 dark:border-rose-800 dark:text-rose-400 dark:hover:bg-rose-900/20 disabled:opacity-60"
-                            data-testid={`btn-delete-landing-${post.id}`}
-                            aria-label="I've hired — remove this post"
-                          >
-                            {deletingId === post.id ? (
-                              <><Loader2 className="h-3 w-3 animate-spin" /> Removing…</>
-                            ) : (
-                              <><Trash2 className="h-3 w-3" /> Delete</>
-                            )}
-                          </button>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                </Link>
-              );
-            })}
-          </div>
-        )}
-      </section>
+      {/* 2026-11: the old "Latest jobs" strip is replaced by the location explorer above. */}
 
       {/* ── Pricing (posters only) ────────────────────────────────────── */}
       <section className="max-w-6xl mx-auto px-4 py-12">

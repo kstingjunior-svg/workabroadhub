@@ -577,6 +577,9 @@ app.use(
           "https://*.ingest.sentry.io",
           "https://*.ingest.de.sentry.io",
           "https://*.ingest.us.sentry.io",
+          // 2026-11: Google Maps JS (tiles/metadata) for the jobs map.
+          "https://*.gstatic.com",
+          "https://maps.googleapis.com",
         ],
         frameSrc: [
           "'self'",
@@ -880,6 +883,9 @@ app.use((req, res, next) => {
       // 2026-11: Kenyan local jobs marketplace (super-admin publishing, direct contact, near me).
       const { registerLocalJobsMarketplace } = await import("./local-jobs-marketplace");
       registerLocalJobsMarketplace(app);
+      // 2026-11: location service (Google Places/Geocoding via server key, Kenya gazetteer fallback).
+      const { registerGeoRoutes } = await import("./geo");
+      registerGeoRoutes(app);
     } catch (err: any) {
       console.error("[Server] ❌ Kenya Careers route registration failed (non-fatal):", err?.message);
     }

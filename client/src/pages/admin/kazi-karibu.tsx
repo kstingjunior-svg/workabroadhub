@@ -13,6 +13,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, Plus, ExternalLink, CheckCircle2, XCircle, CalendarPlus, Pencil, Trash2 } from "lucide-react";
 import { KAZI_KARIBU_CATEGORIES, KAZI_KARIBU_DURATIONS } from "@shared/kazi-karibu";
 import { KENYA_COUNTIES } from "@/lib/school-constants";
+import { LocationPicker } from "@/components/location-picker";
+import type { PickedLocation } from "@/lib/geo";
 
 async function getJson<T = any>(url: string): Promise<T> {
   const r = await fetch(url, { credentials: "include" });
@@ -57,6 +59,7 @@ export default function AdminKaziKaribu() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [filter, setFilter] = useState<"all" | "live" | "held">("all");
+  const [loc, setLoc] = useState<PickedLocation | null>(null);
   const set = (k: keyof Form, v: any) => setForm((f) => ({ ...f, [k]: v }));
 
   const { data, isLoading, error } = useQuery<{ counts: { live: number; waiting: number; drafts: number }; posts: any[] }>({
@@ -73,6 +76,7 @@ export default function AdminKaziKaribu() {
     budgetMaxKes: form.budgetMaxKes ? Number(form.budgetMaxKes) : null,
     budgetPeriod: form.budgetMinKes || form.budgetMaxKes ? form.budgetPeriod : null,
     daysLive: Number(form.daysLive) || 14,
+    location: loc ?? undefined,
   });
 
   async function submit(e: React.FormEvent) {
@@ -88,7 +92,7 @@ export default function AdminKaziKaribu() {
         window.open(`/kazi-karibu/job/${r.post.id}`, "_blank");
       }
       setForm((f) => ({ ...EMPTY, county: f.county, category: f.category }));
-      setEditingId(null);
+      setEditingId(null); setLoc(null);
       refresh();
     } catch (err: any) {
       toast({ title: "Couldn't save", description: err.message, variant: "destructive" });
@@ -109,6 +113,9 @@ export default function AdminKaziKaribu() {
 
   function edit(p: any) {
     setEditingId(p.id);
+    setLoc(p.lat != null ? { mode: p.location_mode === "service_area" ? "service_area" : "workplace", lat: Number(p.lat), lng: Number(p.lng), placeId: p.place_id ?? null,
+      formattedAddress: p.formatted_address ?? null, county: p.county ?? null, town: p.town ?? null, estate: p.estate ?? null, street: p.street ?? null,
+      serviceRadiusKm: p.service_radius_km != null ? Number(p.service_radius_km) : null } : null);
     setForm({
       title: p.title ?? "", category: p.category ?? "", county: p.county ?? "", subCounty: p.sub_county ?? "",
       description: p.description ?? "", budgetMinKes: p.budget_min_kes ?? "", budgetMaxKes: p.budget_max_kes ?? "",
@@ -156,6 +163,10 @@ export default function AdminKaziKaribu() {
                 <label className="text-sm">Employer / business name
                   <input className={input} value={form.employerName} onChange={(e) => set("employerName", e.target.value)} placeholder="e.g. Java House Westlands (optional)" />
                 </label>
+                <div className="sm:col-span-2 text-sm">
+                  <div className="font-medium mb-1">Where is the work? * <span className="text-slate-400 font-normal">— search, then drag the pin to the exact spot</span></div>
+                  <LocationPicker value={loc} onChange={(v) => { setLoc(v); if (v) setForm((f) => ({ ...f, county: v.county ?? f.county, subCounty: f.subCounty || v.estate || v.town || "" })); }} />
+                </div>
                 <label className="text-sm">County *
                   <select className={input} value={form.county} onChange={(e) => set("county", e.target.value)} required>
                     {KENYA_COUNTIES.map((c) => <option key={c} value={c}>{c}</option>)}

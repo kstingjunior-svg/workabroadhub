@@ -13,6 +13,9 @@ import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { KENYA_COUNTIES } from "@/lib/school-constants";
+import { LocationPicker } from "@/components/location-picker";
+import { JobsMap } from "@/components/jobs-map";
+import type { PickedLocation } from "@/lib/geo";
 import {
   Loader2, Plus, Eye, Save, X, ExternalLink, Download, RefreshCw, Archive, Trash2, PauseCircle, PlayCircle,
   CalendarPlus, Pencil, ShieldAlert, Phone, MessageCircle, BadgeCheck,
@@ -64,14 +67,19 @@ const jobToForm = (j: any): F => ({
 });
 const jobState = (j: any) => (j.is_live ? "live" : j.status === "open" ? "expired" : j.status);
 
-type Tab = "dashboard" | "post" | "jobs" | "employers" | "applications" | "reports" | "categories";
+type Tab = "dashboard" | "post" | "jobs" | "map" | "employers" | "applications" | "reports" | "categories";
+const jobToLoc = (j: any): PickedLocation | null => (j?.lat == null ? null : {
+  mode: j.location_mode === "service_area" ? "service_area" : "workplace", lat: Number(j.lat), lng: Number(j.lng), placeId: j.place_id ?? null,
+  formattedAddress: j.formatted_address ?? null, county: j.county ?? null, town: j.town ?? null, estate: j.estate ?? null, street: j.street ?? null,
+  serviceRadiusKm: j.service_radius_km != null ? Number(j.service_radius_km) : null,
+});
 
 export default function AdminLocalJobs() {
   const [tab, setTab] = useState<Tab>("dashboard");
   const [editing, setEditing] = useState<any | null>(null);
   const access = useQuery({ queryKey: ["/api/admin/lj/me"], queryFn: () => getJson("/api/admin/lj/me"), retry: false });
 
-  const tabs: [Tab, string][] = [["dashboard", "Dashboard"], ["post", editing ? "Edit job" : "Post a job"], ["jobs", "Manage jobs"], ["employers", "Employers"], ["applications", "Applications"], ["reports", "Reports"], ["categories", "Categories"]];
+  const tabs: [Tab, string][] = [["dashboard", "Dashboard"], ["post", editing ? "Edit job" : "Post a job"], ["jobs", "Manage jobs"], ["map", "Jobs map"], ["employers", "Employers"], ["applications", "Applications"], ["reports", "Reports"], ["categories", "Categories"]];
   if (access.isLoading) return <AdminLayout title="Local Jobs"><div className="p-6"><Loader2 className="h-5 w-5 animate-spin" /></div></AdminLayout>;
   if (access.error) return <AdminLayout title="Local Jobs"><div className="p-6 text-rose-700">{String((access.error as Error).message)}</div></AdminLayout>;
 
@@ -96,6 +104,7 @@ export default function AdminLocalJobs() {
         {tab === "dashboard" && <Dashboard onTab={setTab} />}
         {tab === "post" && <PostForm editing={editing} onDone={() => { setEditing(null); setTab("jobs"); }} onCancel={() => { setEditing(null); setTab("jobs"); }} />}
         {tab === "jobs" && <JobsList onEdit={(j) => { setEditing(j); setTab("post"); }} />}
+        {tab === "map" && <AdminMap onEdit={(j) => { setEditing(j); setTab("post"); }} />}
         {tab === "employers" && <Employers />}
         {tab === "applications" && <Applications />}
         {tab === "reports" && <Reports />}
@@ -138,10 +147,12 @@ function PostForm({ editing, onDone, onCancel }: { editing: any | null; onDone: 
   const [preview, setPreview] = useState<any | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [errField, setErrField] = useState<string | null>(null);
-  useEffect(() => { setF(editing ? jobToForm(editing) : EMPTY); setPreview(null); }, [editing]);
+  const [loc, setLoc] = useState<PickedLocation | null>(editing ? jobToLoc(editing) : null);
+  const [locTouched, setLocTouched] = useState(false);
+  useEffect(() => { setF(editing ? jobToForm(editing) : EMPTY); setPreview(null); setLoc(editing ? jobToLoc(editing) : null); setLocTouched(false); }, [editing]);
   const set = (k: string, v: any) => { setF((p) => ({ ...p, [k]: v })); setPreview(null); };
   const cats = useQuery<any>({ queryKey: ["/api/admin/lj/categories"], queryFn: () => getJson("/api/admin/lj/categories") });
-  const body = (extra: any = {}) => ({ ...f, vacancies: Number(f.vacancies) || 1, salaryMin: f.salaryMin === "" ? null : Number(f.salaryMin), salaryMax: f.salaryMax === "" ? null : Number(f.salaryMax), ...extra });
+  const body = (extra: any = {}) => ({ ...f, location: loc ?? undefined, vacancies: Number(f.vacancies) || 1, salaryMin: f.salaryMin === "" ? null : Number(f.salaryMin), salaryMax: f.salaryMax === "" ? null : Number(f.salaryMax), ...extra });
   const fail = (e: any) => { setErrField(e?.body?.field ?? null); toast({ title: "Not saved", description: e.message, variant: "destructive" }); };
 
   async function doPreview() {
@@ -197,6 +208,14 @@ function PostForm({ editing, onDone, onCancel }: { editing: any | null; onDone: 
 
         <section className="grid sm:grid-cols-2 gap-3">
           <h3 className="sm:col-span-2 font-semibold">Where</h3>
+          <div className={`sm:col-span-2 ${errField === "location" ? "ring-2 ring-rose-400 rounded-xl p-1" : ""}`}>
+            <div className="text-sm font-medium mb-1">Workplace on the map * <span className="text-slate-400 font-normal">— search, then drag the pin to the exact spot</span></div>
+            <LocationPicker value={loc} onChange={(v) => {
+              setLoc(v); setLocTouched(true); setPreview(null);
+              if (v) setF((p) => ({ ...p, county: v.county ?? p.county, town: p.town || v.town || "", estate: p.estate || v.estate || "", workplaceLocation: p.workplaceLocation || v.street || "" }));
+            }} />
+            {!loc && <p className="text-xs text-amber-700 mt-1">You can save a draft without a pin, but you need one to publish.</p>}
+          </div>
           <Field label="County *"><select className={cls("county")} value={f.county} onChange={(e) => set("county", e.target.value)}>{KENYA_COUNTIES.map((c) => <option key={c} value={c}>{c}</option>)}</select></Field>
           <Field label="Town"><input className={input} value={f.town} onChange={(e) => set("town", e.target.value)} placeholder="e.g. Ruiru" /></Field>
           <Field label="Estate / neighbourhood"><input className={input} value={f.estate} onChange={(e) => set("estate", e.target.value)} placeholder="e.g. Kahawa Wendani" /></Field>
@@ -335,6 +354,42 @@ function JobsList({ onEdit }: { onEdit: (j: any) => void }) {
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+function AdminMap({ onEdit }: { onEdit: (j: any) => void }) {
+  const { data, isLoading } = useQuery<any>({ queryKey: ["/api/admin/lj/map"], queryFn: () => getJson("/api/admin/lj/map"), refetchInterval: 30_000 });
+  const [county, setCounty] = useState("all");
+  const [town, setTown] = useState("");
+  if (isLoading || !data) return <Loader2 className="h-5 w-5 animate-spin" />;
+  const jobs = (data.jobs ?? []).filter((j: any) => (county === "all" || j.county === county) && (!town || `${j.town ?? ""} ${j.estate ?? ""}`.toLowerCase().includes(town.toLowerCase())));
+  const points = jobs.map((j: any) => ({ id: j.id, lat: Number(j.lat), lng: Number(j.lng), title: `${j.is_live ? "" : `[${j.status}] `}${j.title}`, employer: j.company_name, place: [j.estate, j.town, j.county].filter(Boolean).join(", "), vacancies: j.vacancies, href: j.is_live ? `/kenya-careers/job/${j.id}` : `/admin/local-jobs` }));
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap gap-2">
+        <select className={`${input} w-auto`} value={county} onChange={(e) => setCounty(e.target.value)}><option value="all">All counties</option>{KENYA_COUNTIES.map((c) => <option key={c}>{c}</option>)}</select>
+        <input className={`${input} w-auto`} placeholder="Town or neighbourhood" value={town} onChange={(e) => setTown(e.target.value)} />
+        <span className="text-sm text-slate-500 self-center">{points.length} jobs on the map</span>
+      </div>
+      <JobsMap points={points} height={480} />
+      <div className="grid sm:grid-cols-2 gap-3">
+        <Card><CardContent className="p-3">
+          <div className="font-semibold mb-2">Live jobs per county</div>
+          {(data.counties ?? []).length === 0 ? <p className="text-sm text-slate-500">No live jobs yet.</p> : (
+            <div className="flex flex-wrap gap-1.5">{data.counties.map((c: any) => <button key={c.county} onClick={() => setCounty(c.county)} className="text-xs rounded-full border px-2.5 py-1">{c.county} · <b>{c.n}</b></button>)}</div>
+          )}
+        </CardContent></Card>
+        <Card><CardContent className="p-3">
+          <div className="font-semibold mb-2">Missing or approximate pins ({data.missing?.length ?? 0})</div>
+          {(data.missing ?? []).length === 0 ? <p className="text-sm text-slate-500">Every job has an exact pin.</p> : (
+            <ul className="space-y-1 max-h-60 overflow-auto">{data.missing.map((j: any) => (
+              <li key={j.id} className="text-sm flex items-center justify-between gap-2"><span className="truncate">{j.title} <span className="text-slate-400">({j.lat == null ? "no pin" : "approximate"})</span></span>
+                <Button size="sm" variant="outline" onClick={() => getJson(`/api/admin/lj/jobs/${j.id}`).then((r) => onEdit(r.job))}>Fix pin</Button></li>
+            ))}</ul>
+          )}
+        </CardContent></Card>
+      </div>
     </div>
   );
 }

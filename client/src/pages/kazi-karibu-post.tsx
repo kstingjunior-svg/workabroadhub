@@ -24,6 +24,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/use-auth";
 import { KAZI_KARIBU_CATEGORIES, KAZI_KARIBU_DURATIONS, KAZI_KARIBU_BUDGET_PERIODS } from "@shared/kazi-karibu";
+import { LocationPicker } from "@/components/location-picker";
+import type { PickedLocation } from "@/lib/geo";
 
 const KENYAN_COUNTIES = [
   "Nairobi","Mombasa","Kisumu","Nakuru","Uasin Gishu","Kiambu","Kajiado","Machakos",
@@ -59,6 +61,7 @@ export default function KaziKaribuPost() {
   const [category, setCategory] = useState("");
   const [county, setCounty] = useState("");
   const [subCounty, setSubCounty] = useState("");
+  const [loc, setLoc] = useState<PickedLocation | null>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [budgetMin, setBudgetMin] = useState("");
@@ -133,6 +136,7 @@ export default function KaziKaribuPost() {
           budgetPeriod,
           duration,
           posterShowsPhone,
+          location: loc,
         }),
       });
       const body = await r.json();
@@ -275,7 +279,7 @@ export default function KaziKaribuPost() {
 
   // ── Step: details ─────────────────────────────────────────────────────
   if (step === "details" || step === "submitting") {
-    const canSubmit = title.trim().length >= 5 && description.trim().length >= 30 && county;
+    const canSubmit = title.trim().length >= 5 && description.trim().length >= 30 && county && !!loc;
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
         <div className="max-w-3xl mx-auto px-4 py-6">
@@ -307,6 +311,11 @@ export default function KaziKaribuPost() {
                   {submitError}
                 </div>
               )}
+
+              <div>
+                <label className="text-sm font-medium block mb-1">Where is the work? <span className="text-slate-400">(search your estate, street or building, then drag the pin)</span></label>
+                <LocationPicker value={loc} onChange={(v) => { setLoc(v); if (v) { if (v.county) setCounty(v.county); if (!subCounty && (v.estate || v.town)) setSubCounty(v.estate || v.town || ""); } }} />
+              </div>
 
               <div>
                 <label className="text-sm font-medium block mb-1">County</label>

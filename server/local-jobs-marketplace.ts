@@ -20,6 +20,7 @@ import type { Express, Request, Response } from "express";
 import crypto from "crypto";
 import { pool } from "./db";
 import { findPlace, locateJob, distanceKm, KENYA_PLACES } from "../shared/kenya-places";
+import { validatePublisherLocation, originFromBody } from "./geo";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 function sessionUserId(req: any): string | null {
@@ -109,7 +110,7 @@ function slugify(s: string) {
 }
 
 /** Reads + validates the admin job form. */
-async function readJobForm(b: any): Promise<{ ok: true; v: any } | { ok: false; message: string; field?: string }> {
+async function readJobForm(b: any, opts: { requireLocation?: boolean } = {}): Promise<{ ok: true; v: any } | { ok: false; message: string; field?: string }> {
   const s = (x: any, n: number) => String(x ?? "").trim().slice(0, n);
   const v: any = {
     title: s(b.title, 200), employerName: s(b.employerName, 160), companyId: s(b.companyId, 40) || null,
@@ -131,6 +132,18 @@ async function readJobForm(b: any): Promise<{ ok: true; v: any } | { ok: false; 
   if (v.title.length < 3) return { ok: false, message: "Job title is required.", field: "title" };
   if (!v.companyId && v.employerName.length < 2) return { ok: false, message: "Employer / business name is required.", field: "employerName" };
   if (v.description.length < 20) return { ok: false, message: "Add a description of at least 20 characters.", field: "description" };
+  // 2026-11: map location (Google place + pin). Mandatory to publish.
+  if (b.location) {
+    const L = await validatePublisherLocation(b.location);
+    if (!L.ok) return { ok: false, message: L.message ?? "Invalid location.", field: "location" };
+    Object.assign(v, {
+      lat: L.v.lat, lng: L.v.lng, placeId: L.v.placeId, formattedAddress: L.v.formattedAddress, street: L.v.street,
+      locationMode: L.v.mode, serviceRadiusKm: L.v.serviceRadiusKm, locationPrecision: L.v.precision,
+      county: L.v.county, town: v.town ?? L.v.town, estate: v.estate ?? L.v.estate,
+    });
+  } else if (opts.requireLocation) {
+    return { ok: false, message: "Set the workplace location on the map (or choose 'Several places / service area').", field: "location" };
+  }
   if (!v.county) return { ok: false, message: "County is required.", field: "county" };
   if (!EMPLOYMENT.has(v.employmentType)) return { ok: false, message: "Pick an employment type.", field: "employmentType" };
   if (v.salaryPeriod && !PERIODS.has(v.salaryPeriod)) return { ok: false, message: "Invalid pay frequency.", field: "salaryPeriod" };
@@ -149,8 +162,13 @@ async function readJobForm(b: any): Promise<{ ok: true; v: any } | { ok: false; 
   if (v.expiresAt && Number.isNaN(Date.parse(v.expiresAt))) return { ok: false, message: "Expiry must be a date.", field: "expiresAt" };
   const { rows: cats } = await pool.query(`SELECT 1 FROM local_job_categories WHERE slug = $1 AND active`, [v.category]);
   if (!cats.length) return { ok: false, message: "Pick a category.", field: "category" };
-  const loc = locateJob(v.estate, v.town, v.county);
-  v.lat = loc?.lat ?? null; v.lng = loc?.lng ?? null;
+  if (v.lat == null) {
+    // Drafts without a map pin: approximate from estate → town → county.
+    const loc = locateJob(v.estate, v.town, v.county);
+    v.lat = loc?.lat ?? null; v.lng = loc?.lng ?? null;
+    v.locationPrecision = loc ? "approximate" : null;
+    v.locationMode = v.locationMode ?? "workplace";
+  }
   v.riskFlags = assessJobRisk({ title: v.title, description: v.description, instructions: v.instructions, requirements: v.requirements, contactPhone: v.contactPhoneRaw || null });
   return { ok: true, v };
 }
@@ -176,6 +194,7 @@ const JOB_COLS = `j.id, j.title, j.description, j.responsibilities, j.requiremen
   j.salary_min, j.salary_max, j.salary_period, j.county, j.town, j.estate, j.workplace_location,
   j.min_qualification, j.experience_text, j.experience_level, j.gender_requirement, j.working_hours,
   j.deadline, j.expires_at, j.status, j.source, j.verification_status, j.created_at, j.published_at, j.lat, j.lng,
+  j.formatted_address, j.street, j.location_mode, j.service_radius_km, j.location_precision,
   (j.contact_authorized AND (j.contact_phone IS NOT NULL OR c.phone IS NOT NULL)) AS can_call,
   (j.contact_authorized AND (j.whatsapp_phone IS NOT NULL OR j.contact_phone IS NOT NULL)) AS can_whatsapp,
   j.instructions, c.id AS company_id, c.name AS company_name, c.slug AS company_slug, c.logo_url AS company_logo,
@@ -195,7 +214,10 @@ function shapeJob(r: any, origin?: { lat: number; lng: number } | null) {
     postedAt: r.published_at ?? r.created_at, source: r.source, badge,
     canCall: !!r.can_call, canWhatsApp: !!r.can_whatsapp, instructions: r.instructions,
     employer: { id: r.company_id, name: r.company_name, slug: r.company_slug, logoUrl: r.company_logo, verified: !!r.employer_verified },
-    distanceKm: distance,
+    distanceKm: r.dist_km != null ? Math.round(Number(r.dist_km) * 10) / 10 : distance,
+    lat: r.lat, lng: r.lng, formattedAddress: r.formatted_address ?? null, street: r.street ?? null,
+    locationMode: r.location_mode ?? "workplace", serviceRadiusKm: r.service_radius_km != null ? Number(r.service_radius_km) : null,
+    locationPrecision: r.location_precision ?? null,
   };
 }
 
@@ -212,6 +234,13 @@ const viewerHash = (req: any) => crypto.createHash("sha256")
 function csvCell(v: any) {
   const s = v == null ? "" : v instanceof Date ? v.toISOString() : String(v);
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+async function saveLocationExtras(id: string, v: any) {
+  await pool.query(
+    `UPDATE local_jobs SET place_id=$2, formatted_address=$3, street=$4, location_mode=COALESCE($5,'workplace'), service_radius_km=$6, location_precision=$7 WHERE id=$1`,
+    [id, v.placeId ?? null, v.formattedAddress ?? null, v.street ?? null, v.locationMode ?? null, v.serviceRadiusKm ?? null, v.locationPrecision ?? null],
+  );
 }
 
 // ── Routes ─────────────────────────────────────────────────────────────────
@@ -344,6 +373,120 @@ export function registerLocalJobsMarketplace(app: Express): void {
     res.json({ ok: true });
   });
 
+  // ── Geographic search (2026-11, PostGIS) ──────────────────────────────────
+  // POST so the visitor's coordinates travel in the body, never in URLs/logs.
+  const ORIGIN_SQL = (i: number) => `extensions.st_setsrid(extensions.st_makepoint($${i + 1}, $${i}), 4326)::extensions.geography`;
+  const REACH = (o: string, r: string) =>
+    `extensions.st_dwithin(j.geo, ${o}, (${r} + CASE WHEN j.location_mode = 'service_area' THEN COALESCE(j.service_radius_km, 0) ELSE 0 END) * 1000)`;
+
+  app.post("/api/lj/search", async (req: any, res) => {
+    try {
+      const b = req.body ?? {};
+      const origin = await originFromBody(b);
+      const where = [VISIBLE];
+      const params: any[] = [];
+      const add = (sql: string, val: any) => { params.push(val); where.push(sql.split("$$").join(`$${params.length}`)); };
+      if (b.category && b.category !== "all") add("j.category = $$", String(b.category));
+      if (b.county && b.county !== "all") add("j.county = $$", String(b.county));
+      if (b.employmentType && b.employmentType !== "all") add("j.employment_type = $$", String(b.employmentType));
+      if (b.today) where.push(`(COALESCE(j.published_at, j.created_at) AT TIME ZONE 'Africa/Nairobi')::date = (NOW() AT TIME ZONE 'Africa/Nairobi')::date`);
+      if (b.q && String(b.q).trim()) {
+        params.push(`%${String(b.q).trim().slice(0, 80)}%`); const i = params.length;
+        where.push(`(j.title ILIKE $${i} OR c.name ILIKE $${i} OR j.description ILIKE $${i} OR j.town ILIKE $${i} OR j.estate ILIKE $${i} OR j.formatted_address ILIKE $${i})`);
+      }
+      let distSel = "NULL::float AS dist_km";
+      const radius = b.radiusKm == null || b.radiusKm === "any" ? null : Math.min(500, Math.max(0.5, Number(b.radiusKm) || 25));
+      if (origin) {
+        params.push(origin.lat, origin.lng);
+        const o = ORIGIN_SQL(params.length - 1);
+        distSel = `extensions.st_distance(j.geo, ${o}) / 1000.0 AS dist_km`;
+        if (radius != null) { params.push(radius); where.push(REACH(o, `$${params.length}`)); }
+      }
+      const sort = String(b.sort ?? (origin ? "nearest" : "newest"));
+      const order = sort === "nearest" && origin ? "dist_km ASC NULLS LAST"
+        : sort === "vacancies" ? "j.vacancies DESC, COALESCE(j.published_at, j.created_at) DESC"
+        : sort === "salary" ? "COALESCE(j.salary_max, j.salary_min) DESC NULLS LAST"
+        : "COALESCE(j.published_at, j.created_at) DESC";
+      const limit = Math.min(100, Math.max(1, Number(b.limit) || 30));
+      const offset = Math.max(0, Number(b.offset) || 0);
+      const w = where.join(" AND ");
+      const [list, count] = await Promise.all([
+        pool.query(`SELECT ${JOB_COLS}, ${distSel} FROM local_jobs j JOIN companies c ON c.id = j.company_id WHERE ${w} ORDER BY ${order} LIMIT ${limit} OFFSET ${offset}`, params),
+        pool.query(`SELECT count(*)::int n, COALESCE(sum(j.vacancies),0)::int v FROM local_jobs j JOIN companies c ON c.id = j.company_id WHERE ${w}`, params),
+      ]);
+      res.setHeader("Cache-Control", "no-store");
+      res.json({
+        total: count.rows[0].n, vacancies: count.rows[0].v, limit, offset,
+        origin: origin ? { label: origin.label, radiusKm: radius } : null,
+        jobs: list.rows.map((r: any) => shapeJob(r, null)),
+      });
+    } catch (e: any) {
+      console.error("[POST /api/lj/search]", e?.message);
+      res.status(500).json({ message: "Could not search jobs." });
+    }
+  });
+
+  /** Live location counters: selected area + 5/10/25 km + all of Kenya. */
+  app.post("/api/lj/stats-near", async (req: any, res) => {
+    try {
+      const origin = await originFromBody(req.body ?? {});
+      const radius = req.body?.radiusKm == null || req.body?.radiusKm === "any" ? null : Math.min(500, Math.max(0.5, Number(req.body.radiusKm) || 25));
+      const params: any[] = [];
+      let near = "NULL::int AS sel, NULL::int AS km5, NULL::int AS km10, NULL::int AS km25";
+      if (origin) {
+        params.push(origin.lat, origin.lng); const o = ORIGIN_SQL(1);
+        params.push(radius ?? 100000);
+        near = `count(*) FILTER (WHERE ${REACH(o, "$3")})::int AS sel,
+                count(*) FILTER (WHERE ${REACH(o, "5")})::int AS km5,
+                count(*) FILTER (WHERE ${REACH(o, "10")})::int AS km10,
+                count(*) FILTER (WHERE ${REACH(o, "25")})::int AS km25`;
+      }
+      const { rows: [s] } = await pool.query(
+        `SELECT count(*)::int total, COALESCE(sum(j.vacancies),0)::int vacancies,
+                count(*) FILTER (WHERE (COALESCE(j.published_at, j.created_at) AT TIME ZONE 'Africa/Nairobi')::date = (NOW() AT TIME ZONE 'Africa/Nairobi')::date)::int today,
+                count(*) FILTER (WHERE COALESCE(j.published_at, j.created_at) > NOW() - INTERVAL '7 days')::int week, ${near}
+           FROM local_jobs j JOIN companies c ON c.id = j.company_id WHERE ${VISIBLE}`, params);
+      res.setHeader("Cache-Control", "no-store");
+      res.json({ ...s, label: origin?.label ?? null, radiusKm: radius, updatedAt: new Date().toISOString() });
+    } catch (e: any) { console.error("[stats-near]", e?.message); res.status(500).json({ message: "Could not load counts." }); }
+  });
+
+  /** Admin map: every job with its pin, missing pins, per-county counts. */
+  app.get("/api/admin/lj/map", async (req, res) => {
+    const uid = await requireSuperAdmin(req, res); if (!uid) return;
+    try {
+      const { rows } = await pool.query(
+        `SELECT j.id, j.title, j.status, j.county, j.town, j.estate, j.formatted_address, j.lat, j.lng, j.location_precision, j.location_mode,
+                j.vacancies, c.name AS company_name,
+                (j.status = 'open' AND (j.expires_at IS NULL OR j.expires_at > NOW()) AND (j.deadline IS NULL OR j.deadline >= (NOW() AT TIME ZONE 'Africa/Nairobi')::date)) AS is_live
+           FROM local_jobs j JOIN companies c ON c.id = j.company_id
+          WHERE NOT COALESCE(j.is_seed,false) AND j.status <> 'archived' ORDER BY j.updated_at DESC LIMIT 2000`);
+      const counties: Record<string, number> = {};
+      for (const r of rows) if (r.is_live && r.county) counties[r.county] = (counties[r.county] ?? 0) + 1;
+      res.setHeader("Cache-Control", "no-store");
+      res.json({
+        jobs: rows.filter((r: any) => r.lat != null),
+        missing: rows.filter((r: any) => r.lat == null || r.location_precision !== "exact"),
+        counties: Object.entries(counties).sort((a, b) => b[1] - a[1]).map(([county, n]) => ({ county, n })),
+      });
+    } catch (e: any) { res.status(500).json({ message: "Could not load map." }); }
+  });
+
+  /** Fix a job's pin (validated like a new location). */
+  app.post("/api/admin/lj/jobs/:id/location", async (req, res) => {
+    const uid = await requireSuperAdmin(req, res); if (!uid) return;
+    const L = await validatePublisherLocation(req.body?.location);
+    if (!L.ok) return res.status(400).json({ message: L.message });
+    const v = L.v;
+    const { rowCount } = await pool.query(
+      `UPDATE local_jobs SET lat=$2, lng=$3, place_id=$4, formatted_address=$5, street=$6, location_mode=$7, service_radius_km=$8,
+              location_precision=$9, county=$10, town=COALESCE($11, town), estate=COALESCE($12, estate), updated_at=NOW() WHERE id=$1`,
+      [req.params.id, v.lat, v.lng, v.placeId, v.formattedAddress, v.street, v.mode, v.serviceRadiusKm, v.precision, v.county, v.town, v.estate]);
+    if (!rowCount) return res.status(404).json({ message: "Not found." });
+    await audit(req.params.id, null, uid, "SUPER_ADMIN", "location_corrected", { lat: v.lat, lng: v.lng, placeId: v.placeId });
+    res.json({ ok: true, location: v });
+  });
+
   // ── Super admin ──
   app.get("/api/admin/lj/me", async (req, res) => {
     const uid = await requireSuperAdmin(req, res); if (!uid) return;
@@ -439,10 +582,10 @@ export function registerLocalJobsMarketplace(app: Express): void {
   app.post("/api/admin/lj/jobs", async (req, res) => {
     const uid = await requireSuperAdmin(req, res); if (!uid) return;
     try {
-      const f = await readJobForm(req.body ?? {});
+      const publish = req.body?.publish === true;
+      const f = await readJobForm(req.body ?? {}, { requireLocation: publish });
       if (!f.ok) return res.status(400).json(f);
       const v = f.v;
-      const publish = req.body?.publish === true;
       const emp = await resolveEmployer(v);
       const flags = [...v.riskFlags, ...(await dbRiskFlags(null, v.title, emp.id, v.contactPhone))];
       if (publish && flags.includes("asks_for_fee") && req.body?.overrideRisk !== true) {
@@ -463,6 +606,7 @@ export function registerLocalJobsMarketplace(app: Express): void {
          v.deadline, expiresAt, v.contactPerson, v.contactPhone, v.whatsappPhone, v.altContact, v.instructions, v.contactAuthorized,
          v.source, uid, v.verificationStatus, v.verificationNote, v.lat, v.lng, flags, publish ? "open" : "draft"],
       );
+      await saveLocationExtras(job.id, v);
       if (emp.created) await audit(null, emp.id, uid, "SUPER_ADMIN", "employer_created_without_account", { name: v.employerName });
       await audit(job.id, emp.id, uid, "SUPER_ADMIN", publish ? "published" : "draft_saved", { source: v.source, flags, charged: false });
       console.log(`[lj] SUPER_ADMIN ${uid} ${publish ? "PUBLISHED" : "DRAFTED"} job=${job.id} "${v.title}" employer=${emp.id}${emp.created ? " (new, no account)" : ""}`);
@@ -504,6 +648,7 @@ export function registerLocalJobsMarketplace(app: Express): void {
          v.county, v.town, v.estate, v.workplaceLocation, v.minQualification, v.experienceText, v.genderRequirement, v.workingHours,
          v.deadline, v.expiresAt ? new Date(v.expiresAt) : null, v.contactPerson, v.contactPhone, v.whatsappPhone, v.altContact, v.instructions,
          v.contactAuthorized, v.source, v.verificationStatus, v.verificationNote, v.lat, v.lng, flags]);
+      await saveLocationExtras(req.params.id, v);
       await audit(req.params.id, cur.company_id, uid, "SUPER_ADMIN", "edited", { flags });
       res.json({ ok: true, flags });
     } catch (err: any) { console.error("[PUT lj job]", err?.message); res.status(500).json({ message: "Could not update the job." }); }
@@ -519,7 +664,10 @@ export function registerLocalJobsMarketplace(app: Express): void {
       let sql = "";
       const p: any[] = [id];
       switch (action) {
-        case "publish":
+        case "publish": {
+          const { rows: [g] } = await pool.query(`SELECT lat FROM local_jobs WHERE id = $1`, [id]);
+          if (g?.lat == null) return res.status(422).json({ message: "Set the workplace location on the map before publishing.", code: "LOCATION" });
+        }
           if ((cur.risk_flags ?? []).includes("asks_for_fee") && req.body?.overrideRisk !== true) {
             return res.status(422).json({ message: "This job asks job seekers to pay a fee. Edit it, or confirm you've checked it.", code: "RISK" });
           }

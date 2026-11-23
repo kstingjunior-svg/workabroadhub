@@ -45,3 +45,27 @@ describe("local jobs — places & near me", () => {
     expect(locateJob(null, "Unknown Place", "Nakuru")).toEqual({ lat: -0.3031, lng: 36.08 });
   });
 });
+
+import { validatePublisherLocation, inKenya, normCounty } from "../../server/geo";
+describe("geo — publisher location validation (no Google key → built-in places)", () => {
+  it("accepts a pin near the picked place and fills county/town", async () => {
+    const r = await validatePublisherLocation({ mode: "workplace", lat: -1.181, lng: 36.934, placeId: "kp:Kahawa Wendani" });
+    expect(r.ok).toBe(true);
+    expect(r.v.county).toBe("Kiambu");
+  });
+  it("rejects a pin far from the picked place", async () => {
+    const r = await validatePublisherLocation({ mode: "workplace", lat: 0.2827, lng: 34.7519, placeId: "kp:Kahawa Wendani" });
+    expect(r.ok).toBe(false);
+  });
+  it("rejects coordinates outside Kenya and accepts service areas", async () => {
+    expect((await validatePublisherLocation({ lat: 51.5, lng: -0.12 })).ok).toBe(false);
+    const s = await validatePublisherLocation({ mode: "service_area", lat: -1.2864, lng: 36.8172, serviceRadiusKm: 15, county: "Nairobi", town: "Nairobi" });
+    expect(s.ok).toBe(true); expect(s.v.serviceRadiusKm).toBe(15);
+  });
+  it("helpers", () => {
+    expect(inKenya(-1.18, 36.93)).toBe(true);
+    expect(inKenya(-6, 36)).toBe(false);
+    expect(normCounty("Nairobi County")).toBe("Nairobi");
+    expect(normCounty("Murang'a County")).toBe("Murang'a");
+  });
+});
