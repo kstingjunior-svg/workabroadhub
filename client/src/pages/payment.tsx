@@ -123,6 +123,7 @@ export default function Payment() {
   // 2026-11: job-unlock checkout (?only=1&return=/kazi-karibu/job/…) sends the
   // user straight back to the job they wanted after paying. Same-site paths only.
   const urlReturn = new URLSearchParams(window.location.search).get("return");
+  const jobUnlockOnly = new URLSearchParams(window.location.search).get("only") === "1" && urlPlanId === "monthly";
   const successDest = urlReturn && /^\/(kazi-karibu|kenya-careers)(\/|$|\?)/.test(urlReturn) && !urlReturn.startsWith("//") ? urlReturn : "/dashboard";
   // 2026-07: honor ?method=mpesa|paypal from /pricing branded buttons
   const urlMethod = new URLSearchParams(window.location.search).get("method");
@@ -938,7 +939,9 @@ export default function Payment() {
 
   const isRetrying = retryMutation.isPending;
   const isProcessing = paymentMutation.isPending || isPolling;
-  const effectiveMethod = (selectedMethod ?? paymentOptions?.recommended ?? "mpesa") as PayMethod;
+  // Job-unlock checkout is M-Pesa KES 1,000 only — PayPal here is a flat
+  // KES 4,500 full-portal fee, which is exactly the option Tony doesn't want shown.
+  const effectiveMethod = (jobUnlockOnly ? "mpesa" : (selectedMethod ?? paymentOptions?.recommended ?? "mpesa")) as PayMethod;
 
   // Update the paymentAmountRef on every render so PayPal callbacks get the fresh value
   paymentAmountRef.current = paymentAmount;
@@ -1153,7 +1156,7 @@ export default function Payment() {
   const renderMethodSelector = () => {
     const methods = paymentOptions?.available ?? ["mpesa"];
     const recommended = paymentOptions?.recommended ?? "mpesa";
-    if (methods.length <= 1) return null;
+    if (methods.length <= 1 || jobUnlockOnly) return null;
 
     return (
       <div className="space-y-2" role="radiogroup" aria-label="Choose payment method">
