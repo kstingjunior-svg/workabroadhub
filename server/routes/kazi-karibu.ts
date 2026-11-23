@@ -832,6 +832,7 @@ export function registerKaziKaribuRoutes(
         const o = KK_O(params.length - 1);
         distSel = `extensions.st_distance(p.geo, ${o}) / 1000.0 AS dist_km`;
         if (radius != null) { params.push(radius); where.push(KK_REACH(o, `$${params.length}`)); }
+        else where.push(`${o} IS NOT NULL`); // keeps $lat/$lng referenced in the count query
       }
       const sort = String(b.sort ?? (origin ? "nearest" : "newest"));
       const order = sort === "nearest" && origin ? "dist_km ASC NULLS LAST"
