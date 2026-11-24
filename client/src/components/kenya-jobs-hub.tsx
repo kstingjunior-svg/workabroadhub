@@ -381,20 +381,33 @@ export function KenyaJobsHub() {
 
                 <div className="mt-7 grid w-full max-w-[620px] grid-cols-3 gap-2.5 sm:gap-4">
                   {[
-                    { icon: Briefcase, title: kaziLive === null ? "Live jobs" : `${kaziLive} ${kaziLive === 1 ? "job" : "jobs"}`, text: kaziLive && kaziLive > 0 ? "Open now" : "New jobs added often" },
-                    { icon: ShieldCheck, title: "Moderated", text: "Checked first" },
-                    { icon: Users, title: "Free to browse", text: "Contacts KES 1,000" },
-                  ].map(({ icon: Icon, title, text }) => (
-                    <div key={title} className="rounded-2xl bg-white/[0.03] ring-1 ring-white/10 px-2 py-4 sm:px-4 sm:py-5 flex flex-col items-center">
-                      <span className="grid h-11 w-11 sm:h-14 sm:w-14 place-items-center rounded-full bg-emerald-500/15 ring-1 ring-emerald-400/40 shadow-[0_0_24px_-6px_rgba(52,211,153,0.6)]">
-                        <Icon className="h-5 w-5 sm:h-6 sm:w-6 text-emerald-300" aria-hidden="true" />
-                      </span>
-                      <div className="mt-3 text-[14px] sm:text-[17px] font-semibold text-white leading-tight">{title}</div>
-                      <div className="mt-1 flex items-center gap-1.5 text-[11px] sm:text-[14px] text-slate-400 leading-tight">
-                        <span className="hidden sm:inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" aria-hidden="true" />{text}
-                      </div>
-                    </div>
-                  ))}
+                    { icon: Briefcase, title: kaziLive === null ? "Live jobs" : `${kaziLive} ${kaziLive === 1 ? "job" : "jobs"}`, text: kaziLive && kaziLive > 0 ? "Open now →" : "New jobs added often", href: "/kazi-karibu/browse" },
+                    { icon: ShieldCheck, title: "Moderated", text: "Checked first", href: null as string | null },
+                    { icon: Users, title: "Free to browse", text: "Contacts KES 1,000", href: null as string | null },
+                  ].map(({ icon: Icon, title, text, href }) => {
+                    const inner = (
+                      <>
+                        <span className="grid h-11 w-11 sm:h-14 sm:w-14 place-items-center rounded-full bg-emerald-500/15 ring-1 ring-emerald-400/40 shadow-[0_0_24px_-6px_rgba(52,211,153,0.6)]">
+                          <Icon className="h-5 w-5 sm:h-6 sm:w-6 text-emerald-300" aria-hidden="true" />
+                        </span>
+                        <div className="mt-3 text-[14px] sm:text-[17px] font-semibold text-white leading-tight">{title}</div>
+                        <div className={`mt-1 flex items-center gap-1.5 text-[11px] sm:text-[14px] leading-tight ${href ? "text-emerald-300 font-semibold" : "text-slate-400"}`}>
+                          <span className="hidden sm:inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" aria-hidden="true" />{text}
+                        </div>
+                      </>
+                    );
+                    const base = "rounded-2xl bg-white/[0.03] ring-1 ring-white/10 px-2 py-4 sm:px-4 sm:py-5 flex flex-col items-center";
+                    // 2026-11 (Tony): the live job-count tile opens the job list.
+                    return href ? (
+                      <Link key={title} href={href} aria-label={`See ${title} open now`}
+                        className={`${base} cursor-pointer transition hover:ring-emerald-400/60 hover:bg-emerald-500/[0.08] active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300`}
+                        data-testid="kjh-kazi-jobs-tile">
+                        {inner}
+                      </Link>
+                    ) : (
+                      <div key={title} className={base}>{inner}</div>
+                    );
+                  })}
                 </div>
 
                 <Link href="/kazi-karibu"
