@@ -98,24 +98,6 @@ export function NairobiSkyline() {
   );
 }
 
-function NearbyMap() {
-  return (
-    <svg viewBox="0 0 300 220" className="absolute right-0 top-0 h-full w-[62%] max-w-[340px]" aria-hidden="true">
-      <g stroke="#10b981" strokeOpacity="0.16" strokeWidth="1.2" fill="none">
-        <path d="M0 40 L300 18" /><path d="M0 92 L300 70" /><path d="M0 150 L300 128" /><path d="M0 200 L300 182" />
-        <path d="M40 0 L70 220" /><path d="M120 0 L140 220" /><path d="M200 0 L215 220" /><path d="M265 0 L280 220" />
-        <path d="M0 120 Q90 100 160 140 T300 110" strokeOpacity="0.22" />
-      </g>
-      <path d="M40 190 C 90 170, 120 150, 150 120 S 200 70, 228 66" fill="none" stroke="#34d399" strokeWidth="2.5" strokeDasharray="5 7" strokeLinecap="round" opacity="0.8" />
-      <circle cx="40" cy="190" r="4" fill="#34d399" opacity="0.8" />
-      {/* pin with glow */}
-      <circle cx="228" cy="92" r="30" fill="#10b981" opacity="0.12" />
-      <path d="M228 34 C 246 34 258 47 258 63 C 258 84 228 112 228 112 C 228 112 198 84 198 63 C 198 47 210 34 228 34 Z" fill="#10b981" />
-      <circle cx="228" cy="63" r="10" fill="#052e1f" />
-    </svg>
-  );
-}
-
 export function BackgroundCurves() {
   return (
     <svg viewBox="0 0 1200 800" preserveAspectRatio="none" className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden="true">
@@ -366,37 +348,59 @@ export function KenyaJobsHub() {
             </div>
           </article>
 
-          {/* Kazi Karibu card */}
+          {/* Kazi Karibu card — 2026-11 "simple & clean" redesign (centred, 3 tiles, one CTA).
+              Numbers are live; "Free to apply" is NOT claimed because contacting/applying
+              needs an active plan (KES 1,000) — browsing is free. */}
           {showKazi && (
-            <article className="relative overflow-hidden rounded-[22px] ring-1 ring-emerald-500/35 bg-[#061a24] min-h-[320px]"
-              style={{ backgroundImage: "radial-gradient(500px 300px at 90% 20%, rgba(16,185,129,0.12), transparent 70%), linear-gradient(135deg,#071a2a 0%,#06201f 100%)" }}
-              data-testid="kjh-kazi-card">
-              <NearbyMap />
-              <Link href="/kazi-karibu" aria-label="Open Kazi Karibu"
-                className="absolute right-5 top-5 z-10 grid h-12 w-12 place-items-center rounded-full bg-[#0f2a3c]/90 ring-1 ring-white/10 hover:bg-[#143650] transition">
-                <ChevronRight className="h-5 w-5" aria-hidden="true" />
-              </Link>
-              <div className="relative z-[1] p-6 sm:p-8">
-                <div className="flex flex-wrap items-center gap-3 pr-14">
-                  <Home className="h-10 w-10 text-emerald-400" strokeWidth={2.4} aria-hidden="true" />
-                  <span className="rounded-full bg-emerald-500/12 ring-1 ring-emerald-400/25 px-3.5 py-1.5 text-[11px] sm:text-[13px] font-semibold tracking-[0.06em] text-emerald-300">NEARBY &amp; EVERYDAY WORK</span>
-                </div>
-                <h3 className="mt-4 text-[28px] sm:text-[38px] font-bold tracking-tight leading-tight">Kazi Karibu</h3>
-                <p className="mt-1.5 max-w-[440px] text-[16px] sm:text-[18px] leading-snug text-slate-200">
-                  <span className="text-emerald-400">Find nearby work in</span> hospitality, driving, home support, trades and more.
+            <article
+              className="relative overflow-hidden rounded-[22px] ring-1 ring-white/10 bg-[#0a1513] min-h-[320px]"
+              style={{
+                backgroundImage:
+                  "radial-gradient(520px 260px at 50% 0%, rgba(16,185,129,0.10), transparent 70%), " +
+                  "linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px)",
+                backgroundSize: "auto, 28px 28px, 28px 28px",
+              }}
+              data-testid="kjh-kazi-card"
+            >
+              {/* map pin + dotted route, top-right */}
+              <svg viewBox="0 0 160 120" className="pointer-events-none absolute right-3 top-10 h-[96px] w-[128px] sm:right-6 sm:top-12 sm:h-[120px] sm:w-[160px]" aria-hidden="true">
+                <path d="M6 112 C 40 104, 70 96, 92 78 S 120 46, 128 40" fill="none" stroke="#34d399" strokeWidth="2" strokeDasharray="2 6" strokeLinecap="round" opacity="0.7" />
+                <circle cx="128" cy="30" r="22" fill="#34d399" opacity="0.10" />
+                <path d="M128 4 C 140 4 148 13 148 24 C 148 38 128 56 128 56 C 128 56 108 38 108 24 C 108 13 116 4 128 4 Z" fill="#4ade80" />
+                <circle cx="128" cy="24" r="7" fill="#0a1513" />
+              </svg>
+
+              <div className="relative z-[1] flex flex-col items-center px-5 py-8 sm:px-10 sm:py-10 text-center">
+                <span className="inline-flex items-center gap-2 rounded-full bg-emerald-500/10 ring-1 ring-emerald-400/25 px-3.5 py-1.5 text-[11px] sm:text-[12px] font-semibold tracking-[0.12em] text-emerald-300">
+                  <Home className="h-4 w-4" aria-hidden="true" /> NEARBY &amp; EVERYDAY WORK
+                </span>
+                <h3 className="mt-4 text-[40px] sm:text-[60px] font-bold tracking-tight leading-none text-white">Kazi Karibu</h3>
+                <p className="mt-3 max-w-[460px] text-[15px] sm:text-[17px] text-slate-300 leading-snug">
+                  Discover trusted work opportunities close to you. Simple. Safe. Local.
                 </p>
-                <div className="mt-5 flex flex-wrap gap-2">
-                  {kaziLive !== null && (
-                    <InfoChip icon={<Briefcase className="h-6 w-6 text-emerald-400" aria-hidden="true" />}
-                      title={`${kaziLive} ${kaziLive === 1 ? "job" : "jobs"}`} text={kaziLive > 0 ? "Open right now" : "New jobs added daily"} />
-                  )}
-                  <InfoChip icon={<ShieldCheck className="h-6 w-6 text-emerald-400" aria-hidden="true" />} title="AI-moderated" text="Safe & trusted listings" />
-                  <InfoChip icon={<Users className="h-6 w-6 text-emerald-400" aria-hidden="true" />} title="Free to apply" text="No fees to browse jobs" />
+
+                <div className="mt-7 grid w-full max-w-[620px] grid-cols-3 gap-2.5 sm:gap-4">
+                  {[
+                    { icon: Briefcase, title: kaziLive === null ? "Live jobs" : `${kaziLive} ${kaziLive === 1 ? "job" : "jobs"}`, text: kaziLive && kaziLive > 0 ? "Open now" : "New jobs added often" },
+                    { icon: ShieldCheck, title: "Moderated", text: "Checked before going live" },
+                    { icon: Users, title: "Free to browse", text: "Contacts KES 1,000 / 30 days" },
+                  ].map(({ icon: Icon, title, text }) => (
+                    <div key={title} className="rounded-2xl bg-white/[0.03] ring-1 ring-white/10 px-2 py-4 sm:px-4 sm:py-5 flex flex-col items-center">
+                      <span className="grid h-11 w-11 sm:h-14 sm:w-14 place-items-center rounded-full bg-emerald-500/15 ring-1 ring-emerald-400/40 shadow-[0_0_24px_-6px_rgba(52,211,153,0.6)]">
+                        <Icon className="h-5 w-5 sm:h-6 sm:w-6 text-emerald-300" aria-hidden="true" />
+                      </span>
+                      <div className="mt-3 text-[14px] sm:text-[17px] font-semibold text-white leading-tight">{title}</div>
+                      <div className="mt-1 flex items-center gap-1.5 text-[11px] sm:text-[14px] text-slate-400 leading-tight">
+                        <span className="hidden sm:inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" aria-hidden="true" />{text}
+                      </div>
+                    </div>
+                  ))}
                 </div>
+
                 <Link href="/kazi-karibu"
-                  className="mt-6 inline-flex items-center gap-3 h-[52px] px-6 sm:px-11 whitespace-nowrap rounded-full ring-1 ring-emerald-400/70 bg-[#06261f]/70 hover:bg-emerald-500/15 text-[15px] sm:text-[17px] font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
+                  className="mt-7 inline-flex w-full max-w-[420px] items-center justify-center gap-3 h-[56px] sm:h-[64px] rounded-2xl bg-gradient-to-b from-[#4ade80] to-[#22c55e] hover:from-[#5ee790] hover:to-[#28cc63] text-white text-[18px] sm:text-[22px] font-bold shadow-[0_10px_34px_-8px_rgba(34,197,94,0.75)] transition active:scale-[0.99] focus:outline-none focus-visible:ring-4 focus-visible:ring-emerald-300/50"
                   data-testid="kjh-kazi">
-                  Find Nearby Work <ArrowRight className="h-5 w-5" aria-hidden="true" />
+                  Find Nearby Work <ArrowRight className="h-5 w-5 sm:h-6 sm:w-6" aria-hidden="true" />
                 </Link>
               </div>
             </article>
@@ -458,17 +462,6 @@ function StatChip({ icon, n, label }: { icon: React.ReactNode; n: number; label:
   );
 }
 
-function InfoChip({ icon, title, text }: { icon: React.ReactNode; title: string; text: string }) {
-  return (
-    <div className="flex items-center gap-3 rounded-xl bg-[#0a2a2a]/70 ring-1 ring-white/[0.06] px-4 py-3">
-      <span className="grid h-10 w-10 place-items-center rounded-full bg-emerald-500/15">{icon}</span>
-      <div className="leading-tight">
-        <p className="text-[15px] font-medium">{title}</p>
-        <p className="text-[13px] text-slate-300">{text}</p>
-      </div>
-    </div>
-  );
-}
 
 function TrustItem({ icon, title, text, href }: { icon: React.ReactNode; title: string; text: string; href: string }) {
   return (
