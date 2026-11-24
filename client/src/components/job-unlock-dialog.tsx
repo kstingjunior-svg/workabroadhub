@@ -25,6 +25,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { X, Phone, MessageCircle, Briefcase, Headphones, ShieldCheck, Smartphone, MapPin, Users, Zap } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { conv, CONV } from "@/lib/conversion-events";
 
 // ── Offer ────────────────────────────────────────────────────────────────────
 const PRICE_KES = 1000;
@@ -80,7 +81,8 @@ export function JobUnlockHost() {
     window.addEventListener(EVT, h);
     return () => window.removeEventListener(EVT, h);
   }, []);
-  return <JobUnlockModal open={!!state} payUrl={state?.payUrl ?? JOB_UNLOCK_DEFAULT_URL} job={state?.job ?? null} onClose={() => setState(null)} />;
+  return <JobUnlockModal open={!!state} payUrl={state?.payUrl ?? JOB_UNLOCK_DEFAULT_URL} job={state?.job ?? null}
+    onClose={() => { conv(CONV.JOB_UNLOCK_DISMISS, { feature: "local_job_contacts" }); setState(null); }} />;
 }
 
 /** Presentational modal — exported so it can be previewed/tested on its own. */
@@ -97,6 +99,7 @@ export function JobUnlockModal({ open, payUrl, job, onClose }: { open: boolean; 
   // Hide floating widgets (chat bubble etc.) while open so nothing covers the Pay button.
   useEffect(() => {
     window.dispatchEvent(new CustomEvent("wah:focus-flow", { detail: { open } }));
+    if (open) conv(CONV.JOB_UNLOCK_VIEW, { feature: "local_job_contacts", offer: "monthly_only" });
     return () => { if (open) window.dispatchEvent(new CustomEvent("wah:focus-flow", { detail: { open: false } })); };
   }, [open]);
   const anchor = priceAnchor(job);
@@ -199,7 +202,7 @@ export function JobUnlockModal({ open, payUrl, job, onClose }: { open: boolean; 
           <div>
             <button
               type="button" disabled={busy}
-              onClick={() => { setBusy(true); const u = payUrl; window.location.href = u; }}
+              onClick={() => { setBusy(true); conv(CONV.JOB_UNLOCK_PAY, { feature: "local_job_contacts", plan: "monthly" }); const u = payUrl; window.location.href = u; }}
               className="w-full h-14 rounded-2xl bg-[#22c55e] hover:bg-[#16a34a] active:scale-[0.99] disabled:opacity-70 text-emerald-950 text-base font-extrabold shadow-lg shadow-emerald-500/25 transition inline-flex items-center justify-center gap-2 focus:outline-none focus-visible:ring-4 focus-visible:ring-emerald-400/40"
               data-testid="btn-job-unlock-pay"
             >

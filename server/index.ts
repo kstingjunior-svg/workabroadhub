@@ -886,6 +886,9 @@ app.use((req, res, next) => {
       // 2026-11: location service (Google Places/Geocoding via server key, Kenya gazetteer fallback).
       const { registerGeoRoutes } = await import("./geo");
       registerGeoRoutes(app);
+      // 2026-11: freemium conversion funnel (admin, aggregates only).
+      const { registerFreemiumFunnel } = await import("./routes/freemium-funnel");
+      registerFreemiumFunnel(app);
     } catch (err: any) {
       console.error("[Server] ❌ Kenya Careers route registration failed (non-fatal):", err?.message);
     }

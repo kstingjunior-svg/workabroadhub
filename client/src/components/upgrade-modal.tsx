@@ -10,6 +10,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { isPaidUser } from "@/lib/plan";
+import { conv, CONV } from "@/lib/conversion-events";
 
 interface PublicStats {
   scamReportsThisMonth: number;
@@ -213,6 +214,11 @@ export function UpgradeModal() {
     }
   }, [state.open, profile?.phone]);
 
+  // Conversion analytics: one impression per opening (deliberate taps only open it).
+  useEffect(() => {
+    if (state.open) conv(CONV.UPGRADE_VIEW, { feature: state.featureName ?? null, trigger: state.trigger });
+  }, [state.open]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const stopPolling = useCallback(() => {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
   }, []);
@@ -307,6 +313,7 @@ export function UpgradeModal() {
   // activation, TRIAL_ALREADY_USED handling, PayPal, receipts — all of
   // it. This modal becomes a plan picker only.
   const handleUpgradeClick = (method: "mpesa" | "paypal" = "mpesa") => {
+    conv(CONV.UPGRADE_PLAN, { plan: selectedPlan === "pro" ? "yearly" : selectedPlan, feature: state.featureName ?? null, trigger: state.trigger, offer: method });
     const qs = new URLSearchParams({ plan: selectedPlan, method });
     // 2026-11: after paying, bring the user back to the feature they tapped.
     const here = window.location.pathname + window.location.search;
@@ -334,6 +341,7 @@ export function UpgradeModal() {
   };
 
   const handleClose = () => {
+    if (state.open) conv(CONV.UPGRADE_DISMISS, { feature: state.featureName ?? null, trigger: state.trigger });
     stopPolling();
     setStep("compare");
     setPhone("");
@@ -349,34 +357,40 @@ export function UpgradeModal() {
   const totalUsers = stats?.totalUsers ?? null;
   const recentUpgrades = stats?.recentUpgradesThisWeek ?? null;
 
+  // 2026-11 redesign (matches the KES 1,000 job-unlock prompt): dark card, green
+  // accents, feature-named headline, Monthly + Yearly side by side with prices
+  // from /api/plans, live (real) trust count, "Continue browsing" always available.
+  const contextLine = state.featureName
+    ? `You can explore WorkAbroadHub for free. ${state.featureName.charAt(0).toUpperCase() + state.featureName.slice(1)} needs an active Monthly or Yearly plan.`
+    : subheadline;
+
   return (
     <div className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center px-2 pb-2 sm:px-4 sm:pb-4">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={handleClose} />
+      <div className="absolute inset-0 bg-black/75 backdrop-blur-sm" onClick={handleClose} />
 
       <div
-        className="relative w-full max-w-3xl bg-background border border-border rounded-2xl shadow-2xl z-10 animate-in slide-in-from-bottom-4 duration-300 max-h-[95vh] overflow-y-auto"
+        className="relative w-full max-w-[460px] bg-[#0b1512] text-slate-100 border border-emerald-500/20 rounded-3xl shadow-2xl shadow-emerald-950/50 z-10 animate-in slide-in-from-bottom-4 duration-300 max-h-[94vh] overflow-y-auto"
         data-testid="upgrade-modal"
+        role="dialog" aria-modal="true" aria-labelledby="upgrade-headline"
       >
         <button
           onClick={handleClose}
-          className="absolute top-3 right-3 z-10 h-8 w-8 rounded-full bg-muted flex items-center justify-center text-muted-foreground hover:bg-muted/80 transition-colors"
+          aria-label="Close"
+          className="absolute top-3 right-3 z-10 h-9 w-9 rounded-full flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/10 active:scale-95 transition"
           data-testid="btn-close-upgrade-modal"
         >
-          <X className="h-4 w-4" />
+          <X className="h-5 w-5" />
         </button>
 
-        {/* Header — always visible */}
-        <div className="bg-gradient-to-br from-primary/10 via-background to-amber-500/10 p-6 pb-4 border-b border-border">
-          <div className="flex items-center gap-2 mb-1">
-            <div className="h-8 w-8 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
-              <Crown className="h-4 w-4 text-amber-600" />
-            </div>
-            <span className="text-xs font-bold text-amber-600 uppercase tracking-wider">WorkAbroad Hub Premium</span>
+        {/* Header */}
+        <div className="px-5 pt-5 pb-4 bg-gradient-to-b from-emerald-500/15 to-transparent">
+          <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-300">
+            <Crown className="h-3 w-3" /> Premium · free to explore
           </div>
-          <h2 className="text-xl sm:text-2xl font-bold text-foreground mb-1" data-testid="text-upgrade-headline">
+          <h2 id="upgrade-headline" className="mt-3 pr-8 text-[22px] leading-tight font-extrabold text-white" data-testid="text-upgrade-headline">
             {state.featureName ? `Unlock ${state.featureName}` : headline}
           </h2>
-          <p className="text-sm text-muted-foreground">{subheadline}</p>
+          <p className="mt-2 text-[15px] leading-relaxed text-slate-300">{contextLine}</p>
         </div>
 
         {/* ── STEP: compare (4-tier picker) ──────────────────────────────────────────────
@@ -389,156 +403,87 @@ export function UpgradeModal() {
             Supersedes the 2026-06 "Monthly is the default door" decision —
             all 4 tiers still render as clickable cards, same as before. */}
         {step === "compare" && (
-          <div className="p-4 sm:p-6">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-4">
-              {/* Free plan — informational reference point, always first */}
-              <div className="relative rounded-xl border-2 border-border overflow-hidden flex flex-col" data-testid="plan-card-free">
-                <div className="bg-muted/50 px-2 py-3 text-center">
-                  <div className="font-bold text-sm text-foreground">Free</div>
-                  <div className="text-base sm:text-lg font-black mt-1 text-foreground">KES 0</div>
-                  <div className="text-[9px] text-muted-foreground">Browse & preview</div>
-                </div>
-                <div className="p-2 flex-1 text-center text-[10px] text-muted-foreground">
-                  Limited preview
-                </div>
-                <div className="p-2 pt-0">
-                  <div className="w-full text-center text-[10px] text-muted-foreground py-1.5 font-medium">
-                    {isCurrent("free") ? "Current" : " "}
-                  </div>
-                </div>
-              </div>
-
-              {/* Yearly plan — KES 4,500 / year — RECOMMENDED DEFAULT.
-                  Moved from last to first + given the "most emphasized" card
-                  styling that Monthly used to have (scale + z-10). */}
-              <button
-                type="button"
-                onClick={() => setSelectedPlan("pro")}
-                className={`relative rounded-xl border-2 overflow-hidden flex flex-col text-left transition-all ${
-                  selectedPlan === "pro"
-                    ? "border-amber-500 shadow-xl shadow-amber-200/60 dark:shadow-amber-900/40 ring-2 ring-amber-300/40 scale-[1.03] z-10"
-                    : "border-border hover:border-amber-300"
-                }`}
-                data-testid="plan-card-pro"
-              >
-                <div className={`px-2 py-3 text-center ${selectedPlan === "pro" ? "bg-gradient-to-br from-amber-500 to-orange-500 text-white" : "bg-amber-100 dark:bg-amber-900/30 text-amber-900 dark:text-amber-200"}`}>
-                  <span className="inline-block text-[8px] font-bold px-1.5 py-0.5 rounded-full mb-1 bg-white/20 backdrop-blur-sm border border-white/30">👑 RECOMMENDED</span>
-                  <div className="font-bold text-sm">Yearly</div>
-                  <div className="text-base sm:text-lg font-black mt-1">
-                    {yearlyPrice ? `KES ${yearlyPrice.toLocaleString("en-KE")}` : "—"}
-                  </div>
-                  <div className={`text-[9px] ${selectedPlan === "pro" ? "text-white/80" : "text-amber-700/80 dark:text-amber-300/80"}`}>365 days · save 7,500</div>
-                </div>
-                <div className="p-2 flex-1 text-[10px] text-muted-foreground text-center">
-                  Pay once, done — best for a real job search
-                </div>
-                <div className="p-2 pt-0 text-center text-[10px] font-bold text-amber-700 dark:text-amber-300">
-                  {selectedPlan === "pro" ? "✓ Selected" : "Tap to pick"}
-                </div>
-              </button>
-
-              {/* Monthly plan — KES 1,000 / 30 days — flexible middle option */}
-              <button
-                type="button"
-                onClick={() => setSelectedPlan("monthly")}
-                className={`relative rounded-xl border-2 overflow-hidden flex flex-col text-left transition-all ${
-                  selectedPlan === "monthly"
-                    ? "border-blue-500 shadow-lg shadow-blue-200/60 dark:shadow-blue-900/40 ring-2 ring-blue-300/40"
-                    : "border-border hover:border-blue-300"
-                }`}
-                data-testid="plan-card-monthly"
-              >
-                <div className={`px-2 py-3 text-center ${selectedPlan === "monthly" ? "bg-gradient-to-br from-blue-600 to-indigo-600 text-white" : "bg-blue-100 dark:bg-blue-900/30 text-blue-900 dark:text-blue-200"}`}>
-                  <span className="inline-block text-[8px] font-bold px-1.5 py-0.5 rounded-full mb-1 bg-white/20 backdrop-blur-sm border border-white/30">⭐ FLEXIBLE</span>
-                  <div className="font-bold text-sm">Monthly</div>
-                  <div className="text-base sm:text-lg font-black mt-1">
-                    {monthlyPrice ? `KES ${monthlyPrice.toLocaleString("en-KE")}` : "—"}
-                  </div>
-                  <div className={`text-[9px] ${selectedPlan === "monthly" ? "text-white/80" : "text-blue-700/80 dark:text-blue-300/80"}`}>30 days · cancel anytime</div>
-                </div>
-                <div className="p-2 flex-1 text-[10px] text-muted-foreground text-center">
-                  Full Pro access
-                </div>
-                <div className="p-2 pt-0 text-center text-[10px] font-bold text-blue-700 dark:text-blue-300">
-                  {selectedPlan === "monthly" ? "✓ Selected" : "Tap to pick"}
-                </div>
-              </button>
-
-              {/* 2026-10 (Tony's bold-move directive): KES 99 trial card
-                  removed entirely from the upgrade modal. Only Yearly +
-                  Monthly are offered now. Trial PLAN remains active in
-                  the DB so existing trial subscribers aren't broken; it
-                  just can't be purchased from the UI anymore. */}
+          <div className="px-5 pb-5 space-y-4">
+            {/* ── Monthly + Yearly side by side (prices from /api/plans) ── */}
+            <div className="grid grid-cols-2 gap-3" role="radiogroup" aria-label="Choose a plan">
+              {([
+                { id: "monthly" as const, name: "Monthly", price: monthlyPrice, note: "30 days of access", badge: null as string | null },
+                { id: "pro" as const, name: "Yearly", price: yearlyPrice, note: "365 days of access", badge: "Best value" },
+              ]).map((p) => {
+                const on = selectedPlan === p.id;
+                const current = isCurrent(p.id === "pro" ? "yearly" : "monthly");
+                return (
+                  <button
+                    key={p.id} type="button" role="radio" aria-checked={on}
+                    onClick={() => setSelectedPlan(p.id)}
+                    className={`relative rounded-2xl border-2 p-3 text-left transition active:scale-[0.99] ${on ? "border-emerald-500 bg-emerald-500/[0.08]" : "border-white/10 hover:border-emerald-500/50 bg-white/[0.02]"}`}
+                    data-testid={p.id === "pro" ? "plan-card-pro" : "plan-card-monthly"}
+                  >
+                    {p.badge && <span className="absolute -top-2.5 right-3 rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-950">{p.badge}</span>}
+                    <div className="text-sm font-semibold text-slate-300">{p.name}</div>
+                    <div className="mt-1 whitespace-nowrap text-[22px] leading-none font-extrabold text-white">{p.price ? `KES ${p.price.toLocaleString("en-KE")}` : "—"}</div>
+                    <div className="mt-1 text-xs text-slate-400">{p.note}</div>
+                    {p.id === "pro" && monthlyPrice && yearlyPrice && monthlyPrice * 12 > yearlyPrice && (
+                      <div className="mt-1 text-[11px] font-semibold text-emerald-300">≈ KES {Math.round(yearlyPrice / 12).toLocaleString("en-KE")}/month</div>
+                    )}
+                    <div className={`mt-2 text-[11px] font-bold ${on ? "text-emerald-300" : "text-slate-500"}`}>{current ? "Your current plan" : on ? "✓ Selected" : "Tap to choose"}</div>
+                  </button>
+                );
+              })}
             </div>
 
-            {/* Single proceed button at full width — uses whichever tier the user picked */}
-            <button
-              onClick={() => handleUpgradeClick("mpesa")}
-              disabled={!proFinalPrice}
-              className={`w-full text-sm font-bold py-3 rounded-xl transition-all duration-200 hover:scale-[1.01] active:scale-[0.99] text-white shadow-lg disabled:opacity-50 disabled:cursor-not-allowed mb-5 ${
-                selectedPlan === "trial"   ? "bg-gradient-to-r from-green-600 to-emerald-600 shadow-green-200 dark:shadow-green-900/40" :
-                selectedPlan === "monthly" ? "bg-gradient-to-r from-blue-600 to-indigo-600 shadow-blue-200 dark:shadow-blue-900/40" :
-                                             "bg-gradient-to-r from-amber-500 to-orange-500 shadow-amber-200 dark:shadow-amber-900/40"
-              }`}
-              data-testid="btn-upgrade-proceed"
-            >
-              {proFinalPrice
-                ? `Continue with ${selectedPlan === "trial" ? "1 Day Trial" : selectedPlan === "monthly" ? "Monthly" : "Yearly"} — KES ${proFinalPrice.toLocaleString("en-KE")}`
-                : "Loading prices…"}
-            </button>
-
-            {/* 2026-10 (Tony's bold-move directive): the "Just want to
-                try first?" opt-in link is also removed. New users must
-                commit to Monthly or Yearly — no 24-hour trial exit ramp. */}
-            {false && (
-              <div className="text-center -mt-3 mb-4">
-                <button type="button" className="hidden"></button>
-              </div>
-            )}
-
-            {/* Tiny what-you-get bullets (shared across paid tiers) */}
-            <div className="mb-4 p-3 rounded-xl bg-muted/30 grid grid-cols-2 gap-1.5">
+            {/* ── What the plan includes (existing plan benefits — unchanged) ── */}
+            <ul className="space-y-2">
               {UPGRADE_MODAL_PRO.map((f) => (
-                <div key={f.label} className="flex items-start gap-1.5">
-                  <Check className="h-3 w-3 text-green-500 flex-shrink-0 mt-0.5" />
-                  <span className="text-[10px] leading-tight text-foreground">{f.label}</span>
-                </div>
+                <li key={f.label} className="flex gap-2.5 text-sm text-slate-200">
+                  <span className="mt-0.5 h-5 w-5 shrink-0 rounded-full bg-emerald-500/15 flex items-center justify-center"><Check className="h-3 w-3 text-emerald-400" /></span>
+                  <span className="leading-snug">{f.label}</span>
+                </li>
               ))}
-            </div>
+            </ul>
 
-            <div className="grid grid-cols-2 gap-2 mb-4">
-              {["Instant access after payment", "365 days full access", "M-Pesa & PayPal accepted", "No hidden fees"].map((item) => (
-                <div key={item} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <Shield className="h-3 w-3 text-green-500 flex-shrink-0" />
-                  {item}
-                </div>
-              ))}
-            </div>
-
-            <FeeBreakdown className="mb-4" total={proFinalPrice} />
-
-            {(totalUsers !== null || recentUpgrades !== null) && (
-              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-3 flex items-center gap-3">
-                <ArrowRight className="h-5 w-5 text-amber-500 flex-shrink-0" />
-                <p className="text-sm text-amber-800 dark:text-amber-300">
-                  {/* Both figures are live DB counts (/api/public/stats): distinct
-                      successful plan payments in the last 7 days, and registered accounts. */}
-                  {recentUpgrades !== null && recentUpgrades > 0 ? `${recentUpgrades} plans purchased this week · ` : ""}
-                  {totalUsers !== null && totalUsers > 0 ? `${totalUsers.toLocaleString()} registered accounts` : "Free to browse — pay only for premium services"}
-                </p>
+            {/* ── Live, real figures only (/api/public/stats) ── */}
+            {totalUsers !== null && totalUsers >= 1000 && (
+              <div className="flex items-center gap-2 rounded-xl bg-white/[0.04] px-3 py-2 text-xs text-slate-300" data-testid="upgrade-proof">
+                <Shield className="h-4 w-4 text-emerald-400 shrink-0" />
+                {`${(Math.floor(totalUsers / 1000) * 1000).toLocaleString("en-KE")}+ registered job seekers`}
+                {recentUpgrades !== null && recentUpgrades > 0 ? ` · ${recentUpgrades} plans bought this week` : ""}
               </div>
             )}
 
-            <p className="text-center text-xs text-muted-foreground mt-3">
-              🔒 Secure payment via M-Pesa or PayPal · No hidden fees
-            </p>
+            {/* ── Primary actions ── */}
+            <div className="space-y-2">
+              <button
+                onClick={() => handleUpgradeClick("mpesa")}
+                disabled={!proFinalPrice}
+                className="w-full h-14 rounded-2xl bg-[#22c55e] hover:bg-[#16a34a] active:scale-[0.99] disabled:opacity-60 text-emerald-950 text-base font-extrabold shadow-lg shadow-emerald-500/25 transition focus:outline-none focus-visible:ring-4 focus-visible:ring-emerald-400/40"
+                data-testid="btn-upgrade-proceed"
+              >
+                {proFinalPrice
+                  ? `Subscribe ${selectedPlan === "monthly" ? "Monthly" : "Yearly"} — KES ${proFinalPrice.toLocaleString("en-KE")}`
+                  : "Loading prices…"}
+              </button>
+              <p className="text-center text-xs text-slate-400">M-Pesa: confirm your number → STK push to your phone → enter your PIN.</p>
+              <button
+                type="button" onClick={() => handleUpgradeClick("paypal")}
+                className="block mx-auto text-xs text-slate-400 underline underline-offset-2 hover:text-slate-200"
+                data-testid="btn-upgrade-paypal"
+              >
+                Outside Kenya? Pay with PayPal (flat KES 4,500 — every service included)
+              </button>
+            </div>
+
+            <div className="flex gap-2 border-t border-white/10 pt-3 text-[12px] leading-snug text-slate-400">
+              <Shield className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
+              <span>Your payment goes only to WorkAbroad Hub, and your plan starts only after M-Pesa or PayPal confirms it. We don't guarantee jobs or visas, and we never ask you to pay an employer.</span>
+            </div>
             <button
               type="button"
               onClick={handleClose}
-              className="block mx-auto mt-2 text-sm text-muted-foreground underline underline-offset-2 hover:text-foreground"
+              className="w-full h-11 rounded-xl border border-white/15 text-sm font-semibold text-slate-200 hover:bg-white/5 active:scale-[0.99] transition"
               data-testid="btn-upgrade-maybe-later"
             >
-              Maybe later — keep browsing for free
+              Continue browsing for free
             </button>
           </div>
         )}

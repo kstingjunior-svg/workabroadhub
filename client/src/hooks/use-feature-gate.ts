@@ -16,6 +16,7 @@ import { useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useUpgradeModal } from "@/contexts/upgrade-modal-context";
 import { openJobUnlock } from "@/components/job-unlock-dialog";
+import { conv, CONV } from "@/lib/conversion-events";
 import { FEATURES, decideAccess, checkoutUrl, type FeatureId, type FeatureDef } from "@shared/feature-access";
 
 export function useFeatureGate() {
@@ -42,6 +43,7 @@ export function useFeatureGate() {
     // Unknown plan (still loading / failed) → don't guess; the server will enforce.
     if (user && plan == null) return action();
     const d = decideAccess(feature, { authenticated: !!user?.id, plan, isAdmin: user?.isAdmin === true });
+    conv(CONV.PREMIUM_CLICK, { feature, allowed: d.allowed, reason: d.allowed ? null : d.reason });
     if (d.allowed) return action();
     if (d.reason === "SIGNIN") return signIn();
     if (d.reason === "UPGRADE") return prompt(feature);
@@ -52,6 +54,7 @@ export function useFeatureGate() {
   const handleResponse = useCallback((feature: FeatureId, status: number, body?: any) => {
     if (status === 401) { signIn(); return true; }
     if (status === 402 || (status === 403 && (body?.upgradeRequired || body?.code === "PAYWALL"))) {
+      conv(CONV.PREMIUM_CLICK, { feature, allowed: false, reason: "UPGRADE" });
       prompt((body?.feature && body.feature in FEATURES ? body.feature : feature) as FeatureId, body);
       return true;
     }

@@ -3277,9 +3277,10 @@ Crawl-delay: 1`);
       // Use getUserPlan as the single source of truth — handles active subscriptions,
       // expired plans, and admin-promoted accounts (users.plan column fallback).
       const planId = adminAccess ? "pro" : await storage.getUserPlan(userId);
-      if (planId === "free") {
-        return res.status(403).json({ message: "Payment required to access this content" });
-      }
+      // 2026-11 FREEMIUM (docs/architecture/FREEMIUM_RULES.md): free accounts may
+      // OPEN every country page. The premium part is opening a job portal, which
+      // is enforced by /api/go/job/:id — so free users get portal names as
+      // previews (locked: true, never a URL) instead of a whole-page 403.
 
       const rawCode = String(req.params.code || "").trim();
       const codeLc  = rawCode.toLowerCase();
@@ -3411,14 +3412,12 @@ Crawl-delay: 1`);
       // wrongly hid jobs from KES 99 trial and KES 1,000 monthly customers.
       const PAID_TIERS = new Set(["trial", "basic", "monthly", "yearly", "pro", "pro_referral"]);
       const isPaidPlan = PAID_TIERS.has((planId || "").toLowerCase());
-      if (!isPaidPlan) {
-        return res.json({ ...country, jobLinks: [] });
-      }
 
-      // For PRO users: return jobLinks but NEVER expose the external URL in the API response.
-      // URLs are only served via the secure /api/go/job/:id?type=portal redirect endpoint.
-      const safeJobLinks = (country.jobLinks || []).map(({ url: _url, ...rest }: any) => rest);
-      res.json({ ...country, jobLinks: safeJobLinks });
+      // NEVER expose the external URL in the API response (any plan). URLs are only
+      // served via the secure /api/go/job/:id?type=portal endpoint, which checks the plan.
+      const safeJobLinks = (country.jobLinks || []).map(({ url: _url, ...rest }: any) =>
+        isPaidPlan ? rest : { ...rest, locked: true });
+      res.json({ ...country, jobLinks: safeJobLinks, viewerHasPremium: isPaidPlan });
     } catch (error) {
       console.error("Error fetching country:", error);
       res.status(500).json({ message: "Failed to fetch country" });
@@ -24554,15 +24553,30 @@ If your instinct says "3,500", STOP and re-read the SERVICES block above.`;
 
   // ── Client-side event tracker ────────────────────────────────────────────────
   app.post("/api/track-event", async (req: any, res) => {
-    const { userId, event, page, metadata = {} } = req.body;
+    const { userId, event, page, metadata = {} } = req.body ?? {};
 
     if (!event) return res.sendStatus(200);
 
-    await pool.query(
-      `INSERT INTO funnel_events (user_id, event, page, metadata)
-       VALUES ($1, $2, $3, $4)`,
-      [userId ?? req.user?.id ?? null, event, page ?? null, metadata]
-    );
+    // 2026-11 hardening: funnel_events.user_id is INTEGER but our user ids are
+    // UUID strings — never pass one in (it would throw). Signed-in users get a
+    // short one-way hash in metadata instead (pseudonymous, enables unique counts).
+    // Errors are swallowed: analytics must never break or crash a request.
+    try {
+      const sessionUid = req.user?.claims?.sub ?? req.user?.id ?? req.session?.customUserId ?? null;
+      const intUserId = Number.isInteger(Number(userId)) && String(userId ?? "").trim() !== "" ? Number(userId) : null;
+      const meta = (metadata && typeof metadata === "object" && !Array.isArray(metadata)) ? { ...metadata } : {};
+      if (sessionUid) {
+        const { createHash } = await import("crypto");
+        (meta as any).uh = createHash("sha256").update(`${process.env.SESSION_SECRET ?? "wah"}|${sessionUid}`).digest("hex").slice(0, 16);
+      }
+      await pool.query(
+        `INSERT INTO funnel_events (user_id, event, page, metadata)
+         VALUES ($1, $2, $3, $4)`,
+        [intUserId, String(event).slice(0, 80), page ? String(page).slice(0, 200) : null, meta]
+      );
+    } catch (err: any) {
+      console.warn("[track-event] insert failed:", err?.message);
+    }
 
     res.sendStatus(200);
   });

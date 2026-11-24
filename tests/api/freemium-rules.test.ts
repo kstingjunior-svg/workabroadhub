@@ -82,6 +82,17 @@ describe("freemium — no automatic payment prompts", () => {
     }
   });
 
+  it("country pages are browsable by free accounts (no whole-page payment wall)", () => {
+    const routes = fs.readFileSync(path.join(ROOT, "server/routes.ts"), "utf8");
+    const start = routes.indexOf('app.get("/api/countries/:code"');
+    const handler = routes.slice(start, routes.indexOf("app.get(", start + 10));
+    expect(start).toBeGreaterThan(0);
+    expect(handler).not.toMatch(/status\(403\)[^;]*Payment required/);
+    expect(handler).toMatch(/url: _url/); // portal URLs never leave the server
+    const page = fs.readFileSync(path.join(CLIENT, "pages/country.tsx"), "utf8");
+    expect(page).not.toMatch(/portals-upgrade-wall/);
+  });
+
   it("only one global upgrade modal exists (no stacked prompts)", () => {
     const app = fs.readFileSync(path.join(CLIENT, "App.tsx"), "utf8");
     expect(app.match(/<UpgradeModal\s*\/>/g)?.length).toBe(1);

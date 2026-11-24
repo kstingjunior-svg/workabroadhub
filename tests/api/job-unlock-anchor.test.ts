@@ -2,6 +2,7 @@
 import { describe, it, expect, vi } from "vitest";
 vi.mock("@/components/ui/dialog", () => ({}));
 vi.mock("@tanstack/react-query", () => ({ useQuery: () => ({ data: undefined }) }));
+vi.mock("@/lib/conversion-events", () => ({ conv: () => {}, CONV: {} }));
 import { priceAnchor } from "../../client/src/components/job-unlock-dialog";
 
 describe("job unlock — honest price anchor", () => {

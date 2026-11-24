@@ -479,22 +479,22 @@ export default function Country() {
   const errMsg = (error as any)?.message || "";
   const isPaywall = errMsg.includes("403") || errMsg.includes("Payment required");
 
+  // 2026-11: the server no longer 403s free users on country pages (freemium).
+  // This screen remains only as a safety net for an old server mid-deploy.
   if (error && isPaywall) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <Card className="max-w-md w-full">
           <CardContent className="p-8 text-center">
             <Lock className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <h2 className="text-xl font-semibold mb-2">Access Required</h2>
+            <h2 className="text-xl font-semibold mb-2">This page is updating</h2>
             <p className="text-muted-foreground mb-6">
-              Please complete payment to unlock access to country dashboards.
+              Please refresh in a minute. Country pages are free to browse.
             </p>
             <div className="space-y-3">
-              <Link href="/payment">
-                <Button className="w-full" data-testid="button-unlock-access">
-                  Talk to an Advisor
-                </Button>
-              </Link>
+              <Button className="w-full" onClick={() => window.location.reload()} data-testid="button-unlock-access">
+                Refresh
+              </Button>
               <Link href="/">
                 <Button variant="outline" className="w-full" data-testid="button-go-back">
                   Go Back
@@ -762,53 +762,26 @@ export default function Country() {
           </TabsContent>
 
           <TabsContent value="apply" className="space-y-6">
-            {!isPaidPlan ? (
-              /* ── Free-plan upgrade wall ── */
-              <Card className="border-2 border-dashed border-primary/30 bg-gradient-to-br from-primary/5 to-accent/5" data-testid="portals-upgrade-wall">
-                <CardContent className="p-8 text-center space-y-5">
-                  <div className="flex items-center justify-center w-16 h-16 mx-auto rounded-full bg-primary/10">
-                    <Lock className="h-8 w-8 text-primary" />
-                  </div>
-                  <div className="space-y-2">
-                    <Badge className="bg-primary/10 text-primary border border-primary/20 mb-2">BASIC / PRO Plan Required</Badge>
-                    <h3 className="text-xl font-bold">Job Portals Are a Paid Feature</h3>
-                    <p className="text-sm text-muted-foreground max-w-sm mx-auto leading-relaxed">
-                      Access curated, verified job portals for {countryInfo?.name || "this country"} — hand-picked official platforms where international employers actively hire. Available on BASIC and PRO plans.
-                    </p>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3 max-w-xs mx-auto text-left">
-                    {["Verified job portals per country", "Application tracker", "AI Bulk Apply", "WhatsApp consultation"].map(f => (
-                      <div key={f} className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <CheckCircle className="h-3.5 w-3.5 text-primary shrink-0" />
-                        {f}
-                      </div>
-                    ))}
-                  </div>
-                  <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
-                    <Link href="/pricing">
-                      <Button className="gap-2 w-full sm:w-auto" data-testid="button-upgrade-portals">
-                        <TrendingUp className="h-4 w-4" />
-                        Upgrade to PRO
-                      </Button>
-                    </Link>
-                    <Link href="/payment">
-                      <Button variant="outline" className="gap-2 w-full sm:w-auto" data-testid="button-pay-portals">
-                        Pay Now
-                      </Button>
-                    </Link>
-                  </div>
-                  <p className="text-xs text-muted-foreground">One-time payment. Instant access. No hidden fees.</p>
-                </CardContent>
-              </Card>
-            ) : (
-              /* ── Paid plan: show portals ── */
+            {/* 2026-11 FREEMIUM: everyone sees the portal list. Free users get a
+                "Premium" label; tapping a portal goes through /api/go/job, which
+                checks the plan server-side and, if needed, opens the upgrade
+                prompt for "premium job links". No whole-tab wall. */}
+            {(
               <>
-                <Card className="bg-muted/30">
+                <Card className={isPaidPlan ? "bg-muted/30" : "border-emerald-500/30 bg-emerald-500/5"} data-testid={isPaidPlan ? undefined : "portals-free-notice"}>
                   <CardContent className="p-4">
-                    <p className="text-sm text-muted-foreground">
-                      Click on any portal below to open it in a new tab. All links are verified official job platforms.
-                      Remember: We do not guarantee employment — these are third-party platforms where you apply directly.
-                    </p>
+                    {isPaidPlan ? (
+                      <p className="text-sm text-muted-foreground">
+                        Click on any portal below to open it in a new tab. All links are verified official job platforms.
+                        Remember: We do not guarantee employment — these are third-party platforms where you apply directly.
+                      </p>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        These are the verified job portals we've checked for {countryInfo?.name || "this country"}. Browse them for free —
+                        opening a portal is a <b>Premium</b> feature (Monthly KES 1,000 or Yearly KES 4,500). We do not guarantee
+                        employment; you apply directly on these third-party platforms.
+                      </p>
+                    )}
                   </CardContent>
                 </Card>
 
@@ -837,6 +810,11 @@ export default function Country() {
                                   <Badge variant="secondary" className="text-xs gap-1">
                                     <TrendingUp className="h-3 w-3" />
                                     Popular
+                                  </Badge>
+                                )}
+                                {!isPaidPlan && (
+                                  <Badge className="text-xs gap-1 bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/40 dark:text-amber-200" data-testid={`premium-badge-${link.id}`}>
+                                    <Lock className="h-3 w-3" /> Premium
                                   </Badge>
                                 )}
                               </div>

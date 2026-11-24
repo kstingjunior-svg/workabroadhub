@@ -16,6 +16,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
+import { useFeatureGate } from "@/hooks/use-feature-gate";
 import { usePageSeo } from "@/hooks/use-page-seo";
 import {
   Card, CardContent, CardHeader, CardTitle, CardDescription,
@@ -250,6 +251,7 @@ export default function LinkedinOptimizePage() {
   });
 
   const [, navigate]     = useLocation();
+  const gate             = useFeatureGate();
   const { user, isLoading: authLoading } = useAuth();
   const { toast }        = useToast();
 
@@ -580,14 +582,16 @@ export default function LinkedinOptimizePage() {
             <p className="text-sm text-gray-400 leading-relaxed">
               Rewrite your entire LinkedIn profile with AI in under 2 minutes.
               Live scores, achievement bullets, recruiter keywords, and a PDF
-              report. Included with Pro.
+              report. Included with Monthly (KES 1,000) and Yearly (KES 4,500) plans.
             </p>
             <Button
-              onClick={() => navigate("/pricing")}
+              onClick={() => gate.prompt("linkedin_optimizer")}
               className="bg-gradient-to-r from-blue-500 to-blue-700 text-white"
+              data-testid="btn-linkedin-unlock"
             >
-              Upgrade to Pro <ArrowRight className="h-4 w-4 ml-2" />
+              Unlock LinkedIn Optimizer <ArrowRight className="h-4 w-4 ml-2" />
             </Button>
+            <div><Button variant="ghost" className="text-gray-400" onClick={() => navigate("/dashboard")}>Continue browsing</Button></div>
           </CardContent>
         </Card>
       </div>

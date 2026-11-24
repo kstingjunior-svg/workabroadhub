@@ -6,6 +6,22 @@
 
 A free account is a real account with meaningful access, not an account waiting to pay.
 
+**WORKABROADHUB FREEMIUM PRINCIPLE**
+> Every user must be able to enter WorkAbroadHub, explore the platform, discover available opportunities
+> and understand our services without being forced to purchase a subscription.
+>
+> Subscription enforcement must occur at the level of genuinely restricted premium actions, not at
+> registration, login, dashboard initialization or ordinary navigation.
+>
+> Free users are legitimate platform users and must receive a useful, welcoming experience.
+>
+> Premium users receive additional access based on verified entitlements.
+>
+> Payment prompts must be relevant, transparent, dismissible and connected to the user's intended action.
+
+Correct journey: DISCOVER → REGISTER → EXPLORE → BUILD TRUST → SELECT A PREMIUM SERVICE → SUBSCRIBE → ACCESS.
+Never: REGISTER → LOGIN → PAYMENT POPUP → FORCED SUBSCRIPTION.
+
 ## 1. Five separate responsibilities — never mix them
 
 | Concern | Question | Where it lives | May it ask for money? |
@@ -73,7 +89,24 @@ One global `UpgradeModal` (Monthly / Yearly / "Maybe later — keep browsing for
 either never logs out, redirects or blocks free areas. After a verified payment the user returns to
 the page where they tapped the feature (`?return=`), where the server re-checks access.
 
-## 6. Guard rails
+## 6. Country / destination pages
+`GET /api/countries/:code` serves every signed-in account (2026-11 — it used to 403 free users and the
+whole page became "Access Required"). Free users receive the portal list as previews (`locked: true`,
+never a URL) with a "Premium" label; opening a portal goes through `GET /api/go/job/:id`, which checks
+the plan server-side and returns 403 → contextual prompt ("Unlock premium job links").
+
+## 7. Standalone paid services
+CV services, verification scans and Assisted Apply keep their own per-order prices and checkout
+(`/services/order/*`, tool-pay). The subscription modal refuses to open on `/services/order/*`, and a
+CV customer is never forced to buy KES 1,000 / KES 4,500 for a service sold separately.
+
+## 8. Conversion measurement (no invented numbers)
+UI events → `funnel_events` via `client/src/lib/conversion-events.ts` (`premium_click`,
+`upgrade_modal_view|dismiss|plan_select`, `job_unlock_view|dismiss|pay`; metadata = feature/plan/trigger
+only, plus a one-way user hash). Money comes only from `payments` (attempts vs verified). Report:
+`GET /api/admin/freemium-funnel?days=7`. On-screen social proof must be live DB counts with honest labels.
+
+## 9. Guard rails
 `tests/api/freemium-rules.test.ts` fails the build if anyone reintroduces an automatic prompt,
 prompts from auth flows, stacks modals, breaks the registry tiers, or opens a redirect hole.
 If it fails: move the prompt to a deliberate user action — do not loosen the test.
