@@ -48,6 +48,9 @@ const PROMPT_CALL = /\b(openUpgradeModal|openJobUnlock|gate\.prompt|prompt\(\s*[
 describe("freemium — no automatic payment prompts", () => {
   it("the old auto-popup triggers are gone for good", () => {
     expect(fs.existsSync(path.join(CLIENT, "hooks/use-page-view-funnel.ts"))).toBe(false);
+    // 2026-11: the global "Add your WhatsApp number" popup interrupted sign-out/navigation.
+    expect(fs.existsSync(path.join(CLIENT, "components/phone-completion-modal.tsx"))).toBe(false);
+    expect(fs.readFileSync(path.join(CLIENT, "App.tsx"), "utf8")).not.toMatch(/PhoneCompletionModal/);
     expect(fs.existsSync(path.join(CLIENT, "components/exit-intent-popup.tsx"))).toBe(false);
     for (const f of files) {
       const s = fs.readFileSync(f, "utf8");

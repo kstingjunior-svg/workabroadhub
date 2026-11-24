@@ -14,7 +14,6 @@ import { AgeVerificationGate } from "@/components/age-verification-gate";
 import { DataConsentBanner } from "@/components/data-consent-banner";
 import { UpgradeModalProvider } from "@/contexts/upgrade-modal-context";
 import { UpgradeModal } from "@/components/upgrade-modal";
-import { PhoneCompletionModal } from "@/components/phone-completion-modal";
 import "@/lib/i18n";
 import { AdminQuickPanel } from "@/components/admin-quick-panel";
 import { FirebaseConnectionBanner } from "@/components/firebase-connection-banner";
@@ -1221,7 +1220,9 @@ function App() {
               <FirebaseConnectionBanner />
               <SessionGuard />
               <DataConsentBanner />
-              <PhoneCompletionModal />
+              {/* 2026-11 (Tony): the "Add your WhatsApp number" popup is removed —
+                  it interrupted people (including when signing out). Phone/M-Pesa
+                  numbers are asked only where needed: on the payment screen. */}
               <main id="main-content" tabIndex={-1} className="pb-bottom-nav">
                 <Router />
               </main>
