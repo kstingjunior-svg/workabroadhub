@@ -6,7 +6,7 @@
 import { useState } from "react";
 import { Phone, MessageCircle, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { openJobUnlock } from "@/components/job-unlock-dialog";
+import { openJobUnlock, type UnlockJob } from "@/components/job-unlock-dialog";
 
 type Contact = { phone: string | null; telUrl: string | null; whatsapp: string | null; whatsappUrl: string | null; contactPerson: string | null; altContact: string | null; instructions: string | null };
 const cache = new Map<string, Contact>();
@@ -22,8 +22,21 @@ async function loadContact(jobId: string): Promise<Contact> {
 const track = (jobId: string, kind: "call" | "whatsapp") =>
   fetch(`/api/lj/jobs/${jobId}/click`, { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ kind }) }).catch(() => {});
 
-export function LocalJobContactButtons({ jobId, canCall, canWhatsApp, size = "md", showDetails = false }: {
+/** Builds the unlock-modal job details from a Kenyan Jobs API job object. */
+export function ljUnlockJob(j: any): UnlockJob {
+  const TYPE: Record<string, string> = { full_time: "Full-time", part_time: "Part-time", contract: "Contract", temporary: "Temporary", casual: "Casual", internship: "Internship" };
+  return {
+    employer: j?.employer?.name ?? null, title: j?.title ?? null,
+    place: [j?.estate, j?.town, j?.county].filter(Boolean).join(", ") || null,
+    payMin: j?.salaryMin ?? null, payMax: j?.salaryMax ?? null, period: j?.salaryPeriod ?? null,
+    type: TYPE[j?.employmentType] ?? null,
+  };
+}
+
+export function LocalJobContactButtons({ jobId, canCall, canWhatsApp, size = "md", showDetails = false, job }: {
   jobId: string; canCall: boolean; canWhatsApp: boolean; size?: "sm" | "md"; showDetails?: boolean;
+  /** Optional job details so the unlock modal can name the employer and pay. */
+  job?: UnlockJob;
 }) {
   const { toast } = useToast();
   const [busy, setBusy] = useState<string | null>(null);
@@ -44,7 +57,7 @@ export function LocalJobContactButtons({ jobId, canCall, canWhatsApp, size = "md
         toast({ title: "Sign in to contact the employer", description: "It's free — it takes 30 seconds." });
         window.location.href = `/signup?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`;
       } else if (e.status === 402 || e.code === "PAYWALL") {
-        openJobUnlock(e.body);
+        openJobUnlock(e.body, job);
       } else toast({ title: "Couldn't open contact", description: e.message, variant: "destructive" });
     } finally { setBusy(null); }
   }

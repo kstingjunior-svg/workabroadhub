@@ -6,7 +6,7 @@
  */
 import { useQuery } from "@tanstack/react-query";
 import { BadgeCheck, MapPin, Clock, GraduationCap, Info, ShieldCheck } from "lucide-react";
-import { LocalJobContactButtons } from "@/components/local-job-contact";
+import { LocalJobContactButtons, ljUnlockJob } from "@/components/local-job-contact";
 
 const BADGE: Record<string, [string, string]> = {
   verified: ["Verified employer", "bg-emerald-100 text-emerald-800"],
@@ -43,7 +43,7 @@ export function LocalJobDirectPanel({ jobId }: { jobId: string }) {
       {(j.canCall || j.canWhatsApp) ? (
         <div className="rounded-xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50/60 dark:bg-emerald-950/30 p-4 space-y-2">
           <div className="font-semibold">Contact the employer directly</div>
-          <LocalJobContactButtons jobId={j.id} canCall={j.canCall} canWhatsApp={j.canWhatsApp} showDetails />
+          <LocalJobContactButtons jobId={j.id} canCall={j.canCall} canWhatsApp={j.canWhatsApp} showDetails job={ljUnlockJob(j)} />
           {j.instructions && <p className="text-sm text-slate-700 dark:text-slate-200 whitespace-pre-line"><b>How to apply:</b> {j.instructions}</p>}
           <p className="text-xs text-muted-foreground">Free to contact. Never pay anyone for a job, interview or training — report the listing if you're asked to.</p>
         </div>

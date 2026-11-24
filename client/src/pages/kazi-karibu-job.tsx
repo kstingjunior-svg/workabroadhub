@@ -17,6 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/use-auth";
 import { KAZI_KARIBU_CATEGORIES } from "@shared/kazi-karibu";
 import { openJobUnlock } from "@/components/job-unlock-dialog";
+import { kkUnlockJob } from "@/components/kazi-job-card";
 
 interface KaziKaribuPost {
   id: string;
@@ -124,7 +125,7 @@ export default function KaziKaribuJob() {
     try {
       const r = await fetch(`/api/kazi-karibu/posts/${post.id}/contact`, { credentials: "include" });
       const body = await r.json();
-      if (r.status === 402) { openJobUnlock(body); return; }
+      if (r.status === 402) { openJobUnlock(body, kkUnlockJob(post as any)); return; }
       if (r.status === 429) { setContactError(body?.error ?? "You've viewed a lot of contacts recently."); return; }
       if (r.status === 403) { setContactError(body?.error ?? "Contact is not available for this post."); return; }
       if (!r.ok) { setContactError(body?.error ?? `Could not load contact (${r.status})`); return; }
@@ -153,7 +154,7 @@ export default function KaziKaribuJob() {
         setTimeout(() => navigate(`/login?redirect=/kazi-karibu/job/${post.id}`), 800);
         return;
       }
-      if (r.status === 402) { openJobUnlock(body); return; }
+      if (r.status === 402) { openJobUnlock(body, kkUnlockJob(post as any)); return; }
       if (!r.ok) {
         setSubmitError(body?.error ?? `Could not submit (${r.status})`);
         return;

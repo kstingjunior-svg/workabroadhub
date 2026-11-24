@@ -12,7 +12,7 @@ import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Search, MapPin, Crosshair, Loader2, BadgeCheck, Clock, Users, Briefcase, CalendarDays, ChevronRight, X, Building2, School } from "lucide-react";
-import { LocalJobContactButtons } from "@/components/local-job-contact";
+import { LocalJobContactButtons, ljUnlockJob } from "@/components/local-job-contact";
 import { NearbyJobsExplorer } from "@/components/nearby-jobs-explorer";
 import type { MapPoint } from "@/components/jobs-map";
 import { formatKm } from "@/lib/geo";
@@ -115,7 +115,7 @@ function JobCard({ j, cat, onOpen }: { j: Job; cat: string; onOpen: () => void }
         {j.deadline && <span className="rounded-full bg-amber-50 text-amber-800 px-2 py-0.5">Apply by {new Date(j.deadline).toLocaleDateString("en-KE", { day: "numeric", month: "short" })}</span>}
       </div>
       <div className="flex flex-wrap items-center gap-2 pt-1 mt-auto">
-        <LocalJobContactButtons jobId={j.id} canCall={j.canCall} canWhatsApp={j.canWhatsApp} size="sm" />
+        <LocalJobContactButtons jobId={j.id} canCall={j.canCall} canWhatsApp={j.canWhatsApp} size="sm" job={ljUnlockJob(j)} />
         <button onClick={onOpen} className="h-9 px-3 text-sm rounded-full border border-slate-300 dark:border-slate-700 hover:border-emerald-500" data-testid={`btn-view-${j.id}`}>View job details</button>
       </div>
     </article>
