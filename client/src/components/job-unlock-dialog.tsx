@@ -94,6 +94,11 @@ export function JobUnlockModal({ open, payUrl, job, onClose }: { open: boolean; 
   const usersLabel = users >= 1000 ? `${(Math.floor(users / 1000) * 1000).toLocaleString("en-KE")}+` : null;
 
   const [busy, setBusy] = useState(false);
+  // Hide floating widgets (chat bubble etc.) while open so nothing covers the Pay button.
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent("wah:focus-flow", { detail: { open } }));
+    return () => { if (open) window.dispatchEvent(new CustomEvent("wah:focus-flow", { detail: { open: false } })); };
+  }, [open]);
   const anchor = priceAnchor(job);
   const employer = job?.employer?.trim() || null;
   const role = job?.title?.trim() || null;
@@ -157,17 +162,18 @@ export function JobUnlockModal({ open, payUrl, job, onClose }: { open: boolean; 
           {/* ── Price card with "Best value" badge + salary anchor ─────────── */}
           <div className="relative rounded-2xl border-2 border-emerald-500 bg-emerald-500/[0.07] p-4">
             <span className="absolute -top-2.5 left-4 rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-950">Best value · 30 days</span>
-            <div className="flex items-end justify-between gap-3">
-              <div>
-                <div className="text-[34px] leading-none font-extrabold text-white">{kes(PRICE_KES)}</div>
-                <div className="mt-1 text-sm text-slate-400">{COPY.priceNote}</div>
-              </div>
-              {anchor && (
-                <div className="text-right text-xs font-semibold text-emerald-300 max-w-[140px]" data-testid="unlock-anchor">
-                  ≈ {anchor}
-                </div>
-              )}
+            <div className="flex items-baseline gap-2 flex-wrap">
+              <span className="whitespace-nowrap text-[34px] leading-none font-extrabold text-white">{kes(PRICE_KES)}</span>
+              <span className="text-sm text-slate-400">/ {ACCESS_DAYS} days</span>
             </div>
+            <div className="mt-1.5 text-sm text-slate-400">{COPY.priceNote}</div>
+            {pay && (
+              // Salary anchor: the job's real pay next to the price (the % is in the subhead).
+              <div className="mt-3 flex items-center justify-between rounded-lg bg-black/25 px-3 py-2 text-xs" data-testid="unlock-anchor">
+                <span className="text-slate-400">This job pays</span>
+                <span className="font-semibold text-emerald-300">{pay}</span>
+              </div>
+            )}
           </div>
 
           {/* ── Outcome-focused benefits ───────────────────────────────────── */}

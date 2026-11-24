@@ -555,6 +555,15 @@ const LazySignupPage = withSuspense(SignupPage);
 /** Renders nothing on focused flows (sign-up) where floating widgets get in the way. */
 function HideOnFocusedFlows({ children }: { children: import("react").ReactNode }) {
   const [loc] = useLocation();
+  // 2026-11: payment/unlock modals announce themselves so floating widgets
+  // (chat bubble, activity toast, install prompt) never cover their buttons.
+  const [modalOpen, setModalOpen] = useState(false);
+  useEffect(() => {
+    const h = (e: Event) => setModalOpen(!!(e as CustomEvent).detail?.open);
+    window.addEventListener("wah:focus-flow", h);
+    return () => window.removeEventListener("wah:focus-flow", h);
+  }, []);
+  if (modalOpen) return null;
   if (loc === "/signup" || loc.startsWith("/signup/")) return null;
   return <>{children}</>;
 }
