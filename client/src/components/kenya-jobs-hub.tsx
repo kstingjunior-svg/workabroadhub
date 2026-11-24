@@ -382,8 +382,8 @@ export function KenyaJobsHub() {
                 <div className="mt-7 grid w-full max-w-[620px] grid-cols-3 gap-2.5 sm:gap-4">
                   {[
                     { icon: Briefcase, title: kaziLive === null ? "Live jobs" : `${kaziLive} ${kaziLive === 1 ? "job" : "jobs"}`, text: kaziLive && kaziLive > 0 ? "Open now" : "New jobs added often" },
-                    { icon: ShieldCheck, title: "Moderated", text: "Checked before going live" },
-                    { icon: Users, title: "Free to browse", text: "Contacts KES 1,000 / 30 days" },
+                    { icon: ShieldCheck, title: "Moderated", text: "Checked first" },
+                    { icon: Users, title: "Free to browse", text: "Contacts KES 1,000" },
                   ].map(({ icon: Icon, title, text }) => (
                     <div key={title} className="rounded-2xl bg-white/[0.03] ring-1 ring-white/10 px-2 py-4 sm:px-4 sm:py-5 flex flex-col items-center">
                       <span className="grid h-11 w-11 sm:h-14 sm:w-14 place-items-center rounded-full bg-emerald-500/15 ring-1 ring-emerald-400/40 shadow-[0_0_24px_-6px_rgba(52,211,153,0.6)]">
