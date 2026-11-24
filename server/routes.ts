@@ -2102,7 +2102,9 @@ Crawl-delay: 1`);
       ]);
 
       const activeVisitors = await storage.getActiveUsers(10);
-      const countriesServed = Number(((distinctCountries as any).rows?.[0]?.c) ?? 0) || 15;
+      // 2026-11: no invented fallback (was `|| 15`). Unknown → null → UI hides it.
+      const countriesServedRaw = Number(((distinctCountries as any).rows?.[0]?.c) ?? 0);
+      const countriesServed = countriesServedRaw > 0 ? countriesServedRaw : null;
       // 2026-11 (Tony: "I need them to match"): the job-portal links users
       // actually see live in job_links (per country hub). verified_portals is
       // an unused legacy table (0 rows), so the "Verified Portals" stat read 0.
@@ -2133,12 +2135,23 @@ Crawl-delay: 1`);
       // (uplift banners, marketing) still has a path to it.
       const inMemoryActive = getActiveUserCounts();
 
+      // 2026-11 AUTHENTIC DATA POLICY: the headline numbers now come from the
+      // central, defined metrics in server/lib/platform-stats.ts (members exclude
+      // deleted/staff/test; upgrades = first verified plan payment, one per
+      // receipt; agencies = current NEA register only). Legacy keys keep their
+      // names so existing UI keeps working, but carry the corrected values.
+      const { getPublicStats, METRIC_DEFINITIONS } = await import("./lib/platform-stats");
+      const ps = await getPublicStats();
+
       res.json({
-        scamReportsThisMonth: Number(scamThisMonth[0]?.c ?? 0),
-        expiredAgencies: Number(expiredAgencies[0]?.c ?? 0),
-        totalAgencies: Number(totalAgencies[0]?.c ?? 0),
-        recentUpgradesThisWeek: Number(recentUpgrades[0]?.c ?? 0),
-        totalUsers: Number(totalUsers[0]?.c ?? 0),
+        scamReportsThisMonth: ps.scamReports30d,
+        expiredAgencies: ps.agenciesExpiredOnRegister,
+        totalAgencies: ps.agenciesOnRegister,
+        recentUpgradesThisWeek: ps.newPayingMembers7d,
+        totalUsers: ps.registeredMembers,
+        // Defined metrics (preferred names for new UI)
+        ...ps,
+        definitions: METRIC_DEFINITIONS,
         // ↓ ONE number for "online now" — same as admin Live Sessions.
         activeNow: onlineNow,
         activeAuthenticated: onlineNow,
@@ -12829,17 +12842,11 @@ Respond with ONLY a valid JSON object — no markdown, no extra text. Format:
       const code = String(req.query.code ?? "").trim();
       if (!code) return res.status(400).json({ error: "code is required" });
 
-      // 1. Live viewer estimate — total live users, proportionally spread across services
-      //    with per-service variation seeded from code hash (stable, realistic)
-      const liveRes = await pool.query(
-        `SELECT COUNT(*) AS c FROM live_users WHERE last_seen > NOW() - INTERVAL '5 minutes'`
-      );
-      const totalLive = Number(liveRes.rows[0]?.c ?? 0);
-      // Simple djb2 seed for per-service variation (1–8 fraction of total live users)
-      let hash = 5381;
-      for (let i = 0; i < code.length; i++) hash = ((hash << 5) + hash) ^ code.charCodeAt(i);
-      const fraction = ((Math.abs(hash) % 6) + 1) / 8; // 1/8 to 6/8
-      const viewing  = Math.max(2, Math.min(30, Math.round(totalLive * fraction + 3)));
+      // 1. 2026-11 AUTHENTIC DATA POLICY: the old "N people viewing this" was
+      //    FABRICATED — total site users × a hash-seeded fraction + 3, floored at 2,
+      //    so it never showed fewer than 2 viewers even with nobody there. We do
+      //    not track per-service viewers, so we report none (the UI hides it).
+      const viewing = 0;
 
       // 2. Purchases in the last hour for this service
       const purchasesRes = await pool.query(

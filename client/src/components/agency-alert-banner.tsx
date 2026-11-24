@@ -6,12 +6,17 @@ import { useLocation } from "wouter";
 
 const DISMISS_KEY = "wah_agency_alert_dismissed";
 
+// 2026-11 AUTHENTIC DATA POLICY: figures come from server/lib/platform-stats.ts.
+// Expired = agencies on the CURRENT NEA register marked expired / past expiry
+// (records NEA no longer lists are NOT counted). Shown with the check date.
 interface PublicStats {
-  scamReportsThisMonth: number;
-  expiredAgencies: number;
-  recentUpgradesThisWeek: number;
-  totalUsers: number;
+  scamReportsThisMonth: number | null;
+  expiredAgencies: number | null;
+  agenciesOnRegister?: number | null;
+  agencyDataCheckedAt?: string | null;
 }
+const shortDate = (iso?: string | null) =>
+  iso ? new Date(iso).toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric" }) : null;
 
 interface AgencyAlertBannerProps {
   className?: string;
@@ -41,8 +46,9 @@ export function AgencyAlertBanner({ className, dismissable = true, showLink = tr
   if (dismissed) return null;
   if (!stats) return null;
 
-  const expiredCount = stats.expiredAgencies;
-  const scamCount = stats.scamReportsThisMonth;
+  const expiredCount = stats.expiredAgencies ?? 0;
+  const scamCount = stats.scamReportsThisMonth ?? 0;
+  const checked = shortDate(stats.agencyDataCheckedAt);
 
   if (expiredCount === 0 && scamCount === 0) return null;
 
@@ -60,12 +66,14 @@ export function AgencyAlertBanner({ className, dismissable = true, showLink = tr
       <div className="flex-1 min-w-0">
         {scamCount > 0 && (
           <p className="text-sm font-semibold text-red-700 dark:text-red-300">
-            ⚠️ {scamCount} scam {scamCount === 1 ? "report" : "reports"} verified this month
+            ⚠️ {scamCount} community scam {scamCount === 1 ? "report" : "reports"} approved in the last 30 days
           </p>
         )}
         {expiredCount > 0 && (
-          <p className="text-xs text-red-600 dark:text-red-400 mt-0.5">
-            {expiredCount.toLocaleString()} agencies with expired licences — verify before paying
+          <p className="text-xs text-red-600 dark:text-red-400 mt-0.5" data-testid="agency-alert-expired">
+            {expiredCount.toLocaleString()}
+            {stats.agenciesOnRegister ? ` of ${stats.agenciesOnRegister.toLocaleString()}` : ""} agencies on the NEA register show an expired licence
+            {checked ? ` (checked ${checked})` : ""} — verify before paying
           </p>
         )}
       </div>

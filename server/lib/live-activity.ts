@@ -87,7 +87,9 @@ export function buildLiveActivity(payments: RawPaymentRow[], anon: RawAnonRow[],
     const prev = seen.get(key);
     if (prev !== undefined && Math.abs(prev - t) < 15 * 60_000) continue;
     seen.set(key, t);
-    items.push({ id: `p:${p.id}`, who: initialsOf(p.first_name, p.last_name), where: countryName(p.country), action: meta.action, kind: meta.kind, at: minuteIso(p.at) });
+    // 2026-11 AUTHENTIC DATA POLICY: public activity never identifies anyone —
+    // always "Someone", no initials, no location.
+    items.push({ id: `p:${p.id}`, who: "Someone", where: null, action: meta.action, kind: meta.kind, at: minuteIso(p.at) });
   }
   for (const a of anon) {
     const m = a.kind === "ats" ? { action: "checked their CV against ATS filters", kind: "cv" as const }
@@ -108,7 +110,13 @@ export async function loadLiveActivity(): Promise<{ items: LiveActivityItem[]; c
              COALESCE(u.country_iso, u.country, CASE WHEN p.phone LIKE '254%' OR p.phone LIKE '+254%' OR p.phone LIKE '07%' OR p.phone LIKE '01%' THEN 'KE' END) AS country,
              COALESCE(u.id, p.phone, p.email, p.id::text) AS payer,
              p.created_at AS at
-        FROM payments p
+        FROM (
+          -- one event per receipt: duplicate callbacks / duplicate rows collapse to the first
+          SELECT DISTINCT ON (COALESCE(receipt_norm, upper(mpesa_receipt_number), transaction_ref, id::text)) *
+            FROM payments
+           WHERE status IN ('completed','success') AND created_at > NOW() - INTERVAL '31 days'
+           ORDER BY COALESCE(receipt_norm, upper(mpesa_receipt_number), transaction_ref, id::text), created_at
+        ) p
         LEFT JOIN LATERAL (
           SELECT id, first_name, last_name, country, country_iso, show_in_activity FROM users x
            WHERE x.id = p.user_id OR (p.user_id IS NULL AND p.email IS NOT NULL AND lower(x.email) = lower(p.email))
@@ -117,6 +125,8 @@ export async function loadLiveActivity(): Promise<{ items: LiveActivityItem[]; c
        WHERE p.status IN ('completed','success')
          AND p.created_at > NOW() - INTERVAL '30 days'
          AND COALESCE(p.reconciliation_status, '') NOT IN ('duplicate','admin_grant')
+         -- never staff/test activity (one-event-per-receipt is handled in the FROM below)
+         AND NOT EXISTS (SELECT 1 FROM users s WHERE s.id = p.user_id AND (s.is_admin = true OR s.role IN ('ADMIN','SUPER_ADMIN')))
        ORDER BY p.created_at DESC LIMIT 60`),
     pool.query<{ id: string; at: Date }>(`SELECT id::text, created_at AS at FROM tool_usage WHERE tool_name = 'ats_cv_checker' ORDER BY created_at DESC LIMIT 12`),
     pool.query<{ id: string; at: Date }>(`SELECT id::text, created_at AS at FROM tool_usage WHERE tool_name = 'cv_templates' ORDER BY created_at DESC LIMIT 4`),

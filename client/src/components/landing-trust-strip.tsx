@@ -17,17 +17,18 @@ import { useQuery } from "@tanstack/react-query";
 import { Users, ShieldAlert, BadgeCheck, Globe } from "lucide-react";
 
 interface PublicStats {
-  totalUsers?: number;
-  scamReportsThisMonth?: number;
-  expiredAgencies?: number;
-  totalAgencies?: number;
-  countriesServed?: number;
+  totalUsers?: number | null;          // = registeredMembers (excl. deleted/staff/test)
+  verifiedMembers?: number | null;
+  scamReportsThisMonth?: number | null; // approved community reports, last 30 days
+  expiredAgencies?: number | null;
+  totalAgencies?: number | null;       // agencies on the current NEA register
+  countriesServed?: number | null;
   activeNow?: number;
   generatedAt?: string;
 }
 
 
-function fmt(n: number | undefined): string {
+function fmt(n: number | null | undefined): string {
   if (n == null) return "—";
   return n.toLocaleString("en-KE");
 }
@@ -49,32 +50,31 @@ export function LandingTrustStrip() {
     refetchInterval: 5 * 60 * 1000, // refresh every 5 min for the "updated X ago" line
   });
 
-  // "Scam alerts" combines two real signals: community-reported scams in
-  // the last 30 days + recruitment agencies whose licence has expired (which means
-  // they're operating illegally if they're still placing workers).
-  const scamCount =
-    (stats?.scamReportsThisMonth ?? 0) + (stats?.expiredAgencies ?? 0);
+  // 2026-11 AUTHENTIC DATA POLICY: each card is ONE defined metric from
+  // server/lib/platform-stats.ts. (The old "Scam alerts this month" card added
+  // every expired agency ever to this month's scam reports — an expired licence
+  // is not a scam report, and it wasn't "this month".)
 
   const cards = [
     {
       icon: Users,
       value: fmt(stats?.totalUsers),
-      label: "Kenyans on the platform",
-      sublabel: "verified accounts only",
+      label: "Registered members",
+      sublabel: stats?.verifiedMembers != null ? `${fmt(stats.verifiedMembers)} with a verified email` : "active accounts",
       tone: "emerald",
     },
     {
       icon: BadgeCheck,
       value: fmt(stats?.totalAgencies),
-      label: "Licensed agencies tracked",
-      sublabel: "verify any in 30 seconds",
+      label: "Agencies on the NEA register",
+      sublabel: stats?.expiredAgencies != null ? `${fmt(stats.expiredAgencies)} show an expired licence` : "verify any in 30 seconds",
       tone: "blue",
     },
     {
       icon: ShieldAlert,
-      value: fmt(scamCount),
-      label: "Scam alerts this month",
-      sublabel: "expired or community-flagged",
+      value: fmt(stats?.scamReportsThisMonth),
+      label: "Community scam reports",
+      sublabel: "approved in the last 30 days",
       tone: "amber",
     },
     {

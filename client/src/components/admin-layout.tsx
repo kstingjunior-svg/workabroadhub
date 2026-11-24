@@ -70,6 +70,7 @@ const navItems = [
   { href: "/admin/verifyx", label: "VerifyX Document Checks 🛡️", icon: ShieldCheck },
   { href: "/admin/intelligence", label: "Scam Intelligence 🕸️", icon: ShieldCheck },
   { href: "/admin/name-guard", label: "Name Guard 🛡️", icon: ShieldCheck },
+  { href: "/admin/platform-stats", label: "Platform statistics 📊 (real numbers)", icon: Briefcase },
   { href: "/admin/kazi-karibu", label: "Kazi Karibu — post shop / hotel / casual jobs ➕", icon: Briefcase },
   { href: "/admin/local-jobs", label: "Kenyan Jobs Section — company jobs 🏢", icon: Briefcase },
   { href: "/admin/payments", label: "Payments", icon: CreditCard },

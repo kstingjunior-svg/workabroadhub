@@ -447,7 +447,8 @@ export function UpgradeModal() {
               <div className="flex items-center gap-2 rounded-xl bg-white/[0.04] px-3 py-2 text-xs text-slate-300" data-testid="upgrade-proof">
                 <Shield className="h-4 w-4 text-emerald-400 shrink-0" />
                 {`${(Math.floor(totalUsers / 1000) * 1000).toLocaleString("en-KE")}+ registered job seekers`}
-                {recentUpgrades !== null && recentUpgrades > 0 ? ` · ${recentUpgrades} plans bought this week` : ""}
+                {/* newPayingMembers7d: first verified plan payment in last 7 days, one per receipt, staff/test excluded */}
+                {recentUpgrades !== null && recentUpgrades > 0 ? ` · ${recentUpgrades} new paying ${recentUpgrades === 1 ? "member" : "members"} this week` : ""}
               </div>
             )}
 

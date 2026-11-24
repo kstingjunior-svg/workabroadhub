@@ -97,7 +97,7 @@ const categories = [
     faqs: [
       {
         q: "How do I verify if a recruitment agency is licensed?",
-        a: "Go to our Recruitment Agencies page and search by agency name or license number. Our database tracks over 2,600 agencies registered with the National Employment Authority (NEA), including both active and expired licences. A valid license shows a current expiry date. If an agency is not in our database or has an expired license, be very cautious — they are operating illegally."
+        a: "Go to our Recruitment Agencies page and search by agency name or license number. Our database mirrors the National Employment Authority (NEA) public register, including both current and expired licences, and shows the date we last checked it. A valid licence shows a current expiry date. If an agency's licence has expired, or you can't find it on NEA's register, don't pay anything until you've confirmed its status directly with NEA — an expired or missing record is a warning sign, not proof of fraud."
       },
       {
         q: "An agency asked me to pay a fee to get a job abroad. Is this legal?",

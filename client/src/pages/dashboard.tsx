@@ -1114,15 +1114,9 @@ export default function Dashboard() {
 
   useEffect(() => { trackDashboardAccess(); }, []);
 
-  useEffect(() => {
-    fetch("/api/check-hot-user", { credentials: "include" })
-      .then(res => res.json())
-      .then(data => {
-        if (data.isHot) {
-          alert("⚠️ 87 users applied for this job. Upgrade now to secure your chance!");
-        }
-      });
-  }, []);
+  // 2026-11 AUTHENTIC DATA POLICY + FREEMIUM RULES: removed an automatic
+  // browser alert claiming a hard-coded number of applicants (fabricated
+  // urgency) that fired on dashboard load. See AUTHENTIC_DATA_POLICY.md.
 
   useEffect(() => {
     fetch("/api/recommendation", { credentials: "include" })

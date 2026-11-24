@@ -10,6 +10,7 @@ import {
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { checkAgencyName } from "@/lib/agency-name-check";
+import { useQuery } from "@tanstack/react-query";
 
 interface VerifyResult {
   licenseNumber: string;
@@ -42,6 +43,10 @@ RA/2025/09/45`;
 
 export default function BulkAgencyVerifyPage() {
   const { toast } = useToast();
+  // 2026-11 AUTHENTIC DATA POLICY: live register size (was a hard-coded "1,294").
+  const { data: pubStats } = useQuery<{ agenciesOnRegister?: number | null; agencyDataCheckedAt?: string | null }>({ queryKey: ["/api/public/stats"], staleTime: 5 * 60_000 });
+  const regCount = pubStats?.agenciesOnRegister ?? null;
+  const regChecked = pubStats?.agencyDataCheckedAt ? new Date(pubStats.agencyDataCheckedAt).toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric" }) : null;
   const [inputText, setInputText] = useState("");
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<VerifyResult[] | null>(null);
@@ -124,7 +129,7 @@ export default function BulkAgencyVerifyPage() {
           </div>
           <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
             Paste a list of text containing recruitment agency licence numbers (format: <span className="font-mono text-xs bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded">RA/YYYY/MM/N</span>).
-            The tool extracts all license numbers automatically and checks them against the live public licence register database of <strong>1,294 agencies</strong>.
+            The tool extracts all license numbers automatically and checks them against our copy of the NEA public licence register{regCount ? <> (<strong>{regCount.toLocaleString("en-KE")} agencies</strong>{regChecked ? `, checked ${regChecked}` : ""})</> : null}.
           </p>
         </div>
 

@@ -28,7 +28,9 @@ describe("live activity feed", () => {
       [{ id: "a", kind: "ats", at: "2026-11-15T12:00:00Z" }],
     );
     expect(items.map((i) => i.id)).toEqual(["ats:a", "p:2", "p:4"]);
-    expect(items[1]).toMatchObject({ who: "A. M.", where: "Kenya", action: "screened a visa" });
+    // 2026-11 AUTHENTIC DATA POLICY: never identify anyone — no initials, no location.
+    expect(items[1]).toMatchObject({ who: "Someone", where: null, action: "screened a visa" });
+    expect(JSON.stringify(items)).not.toMatch(/A\. M\.|Kenya/);
     expect(items[0]).toMatchObject({ who: "Someone", where: null });
     expect(JSON.stringify(items)).not.toMatch(/Anthony|McLeod|Grace/);
   });

@@ -41,12 +41,17 @@ const scamUpload = multer({
 });
 
 // ── Middleware: optional auth tracking ────────────────────────────────────────
+// 2026-11 AUTHENTIC DATA POLICY: record a tool use only once the request has
+// COMPLETED successfully (2xx), so public activity ("Someone checked their CV
+// against ATS filters") and counts never include failed or abandoned attempts.
+// `finish` fires once per response, so a request can't be counted twice.
 function maybeTrack(toolName: string) {
-  return async (req: any, _res: Response, next: any) => {
-    try {
+  return (req: any, res: Response, next: any) => {
+    res.once("finish", () => {
+      if (res.statusCode < 200 || res.statusCode >= 300) return;
       const userId = req.user?.id ?? null;
-      await storage.recordToolUsage({ userId, toolName, metadata: null });
-    } catch {}
+      storage.recordToolUsage({ userId, toolName, metadata: null }).catch(() => {});
+    });
     next();
   };
 }

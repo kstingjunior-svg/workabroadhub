@@ -42,7 +42,7 @@ function StatCard({
   label,
   sublabel,
   target,
-  suffix = "+",
+  suffix = "",
   color,
   animationEnabled,
 }: {
@@ -109,7 +109,7 @@ export function PlatformStatsSection({ stats }: { stats?: Stats }) {
       sublabel: "Kenyans on the platform",
       target: stats?.totalUsers,
       color: "bg-blue-500",
-      suffix: "+",
+      suffix: "",
     },
     {
       icon: Globe,
@@ -125,15 +125,15 @@ export function PlatformStatsSection({ stats }: { stats?: Stats }) {
       sublabel: "Curated, scam-free job sources",
       target: stats?.activePortals,
       color: "bg-indigo-500",
-      suffix: "+",
+      suffix: "",
     },
     {
       icon: Star,
       label: "Success Stories",
-      sublabel: "Verified overseas placements",
+      sublabel: "Verified member stories",
       target: stats?.successStories,
       color: "bg-amber-500",
-      suffix: "+",
+      suffix: "",
     },
     {
       icon: MessageSquare,
@@ -141,7 +141,7 @@ export function PlatformStatsSection({ stats }: { stats?: Stats }) {
       sublabel: "Community-submitted agency reports",
       target: stats?.agencyReviews,
       color: "bg-orange-500",
-      suffix: "+",
+      suffix: "",
     },
     {
       icon: CalendarCheck,
@@ -149,7 +149,7 @@ export function PlatformStatsSection({ stats }: { stats?: Stats }) {
       sublabel: "1-on-1 career guidance sessions",
       target: stats?.consultationsCompleted,
       color: "bg-emerald-500",
-      suffix: "+",
+      suffix: "",
     },
   ];
 
@@ -175,7 +175,9 @@ export function PlatformStatsSection({ stats }: { stats?: Stats }) {
 
         {/* Stats grid */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 divide-x divide-y sm:divide-y-0 divide-slate-100 dark:divide-slate-800 border border-slate-100 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
-          {metrics.map((m) => (
+          {/* 2026-11 AUTHENTIC DATA POLICY: exact live counts (no "+"), and a metric with no
+              data or a zero is omitted rather than shown as a placeholder. */}
+          {metrics.filter((m) => typeof m.target === "number" && m.target > 0).map((m) => (
             <StatCard key={m.label} {...m} animationEnabled={animationEnabled} />
           ))}
         </div>

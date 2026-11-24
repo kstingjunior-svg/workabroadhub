@@ -42,9 +42,13 @@ interface Agency {
   partnerBadgeUntil?: string | null;
 }
 
+// 2026-11 AUTHENTIC DATA POLICY: current NEA register only (records NEA no
+// longer lists are not counted as active OR expired — their status is unknown).
 interface PublicStats {
-  totalAgencies?: number;
-  expiredAgencies?: number;
+  totalAgencies?: number | null;
+  expiredAgencies?: number | null;
+  agenciesRevokedOnRegister?: number | null;
+  agencyDataCheckedAt?: string | null;
 }
 
 function statusBadge(statusOverride: string | null | undefined, expiryDate: string | null | undefined) {
@@ -299,15 +303,17 @@ export function LandingNeaSearch() {
         <div className="flex items-center gap-3 flex-wrap">
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 font-semibold">
             <CheckCircle2 className="h-3 w-3" />
-            {stats ? `${(stats.totalAgencies ?? 0) - (stats.expiredAgencies ?? 0)}` : "—"} active
+            {stats?.totalAgencies != null && stats?.expiredAgencies != null
+              ? `${(stats.totalAgencies - stats.expiredAgencies - (stats.agenciesRevokedOnRegister ?? 0)).toLocaleString("en-KE")}` : "—"} licence current
           </span>
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-100 dark:bg-rose-950/40 text-rose-800 dark:text-rose-300 font-semibold">
             <AlertTriangle className="h-3 w-3" />
-            {stats?.expiredAgencies ?? "—"} expired
+            {stats?.expiredAgencies?.toLocaleString("en-KE") ?? "—"} expired
           </span>
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold">
             <Database className="h-3 w-3" />
-            {stats?.totalAgencies ?? "—"} tracked
+            {stats?.totalAgencies?.toLocaleString("en-KE") ?? "—"} on NEA register
+            {stats?.agencyDataCheckedAt ? ` · checked ${new Date(stats.agencyDataCheckedAt).toLocaleDateString("en-KE", { day: "numeric", month: "short" })}` : ""}
           </span>
         </div>
         <Link href="/nea-agencies" className="font-bold text-emerald-700 dark:text-emerald-400 hover:underline whitespace-nowrap"

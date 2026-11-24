@@ -233,6 +233,7 @@ const AdminIntelligence = lazyWithRetry(() => import("@/pages/admin/intelligence
 const AdminNameGuard = lazyWithRetry(() => import("@/pages/admin/name-guard"));
 const AdminKaziKaribu = lazyWithRetry(() => import("@/pages/admin/kazi-karibu"));
 const AdminLocalJobs = lazyWithRetry(() => import("@/pages/admin/local-jobs"));
+const AdminPlatformStats = lazyWithRetry(() => import("@/pages/admin/platform-stats"));
 const JourneyPage = lazyWithRetry(() => import("@/pages/journey"));
 const SalaryPage = lazyWithRetry(() => import("@/pages/salary"));
 const InterviewPage = lazyWithRetry(() => import("@/pages/interview"));
@@ -585,6 +586,7 @@ const LazyAdminIntelligence = withSuspense(AdminIntelligence);
 const LazyAdminNameGuard = withSuspense(AdminNameGuard);
 const LazyAdminKaziKaribu = withSuspense(AdminKaziKaribu);
 const LazyAdminLocalJobs = withSuspense(AdminLocalJobs);
+const LazyAdminPlatformStats = withSuspense(AdminPlatformStats);
 const LazyJourneyPage = withSuspense(JourneyPage);
 const LazySalaryPage = withSuspense(SalaryPage);
 const LazyInterviewPage = withSuspense(InterviewPage);
@@ -786,6 +788,7 @@ function AuthenticatedRoutes() {
       <Route path="/admin/name-guard" component={LazyAdminNameGuard} />
       <Route path="/admin/kazi-karibu" component={LazyAdminKaziKaribu} />
       <Route path="/admin/local-jobs" component={LazyAdminLocalJobs} />
+      <Route path="/admin/platform-stats" component={LazyAdminPlatformStats} />
       <Route path="/journey/:country" component={LazyJourneyPage} />
       <Route path="/journey" component={LazyJourneyPage} />
       <Route path="/salary" component={LazySalaryPage} />

@@ -66,8 +66,11 @@ export function UrgencyStrip({ serviceCode, saleEndsAt }: UrgencyStripProps) {
   const remaining = useCountdown(saleEndsAt ?? null);
   const showCountdown = remaining !== null && remaining > 0;
 
+  // 2026-11 AUTHENTIC DATA POLICY: "N people viewing this" removed — the server
+  // number was fabricated and per-service viewers are not tracked. Only the real
+  // purchase count (last hour) and an admin-set sale end time remain.
+  void viewing;
   const items = [
-    viewing > 0          && { icon: "⚡", text: `${viewing} ${viewing === 1 ? "person" : "people"} viewing this`, color: "text-blue-600 dark:text-blue-400" },
     recentPurchases > 0  && { icon: "🔥", text: `${recentPurchases} purchase${recentPurchases === 1 ? "" : "s"} in the last hour`, color: "text-orange-600 dark:text-orange-400" },
     showCountdown        && { icon: "⏳", text: `Offer ends in ${formatCountdown(remaining!)}`, color: "text-red-600 dark:text-red-400" },
   ].filter(Boolean) as { icon: string; text: string; color: string }[];

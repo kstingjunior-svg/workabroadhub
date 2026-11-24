@@ -39,23 +39,26 @@ const team = [
   {
     name: "WorkAbroad Hub Team",
     role: "Career Consultants",
-    desc: "Our team has helped hundreds of Kenyans navigate overseas employment in the UAE, Saudi Arabia, Canada, the UK, and beyond.",
+    desc: "Our team helps Kenyans navigate overseas employment in the UAE, Saudi Arabia, Canada, the UK, and beyond.",
     icon: Briefcase,
   },
 ];
 
+// 2026-11 AUTHENTIC DATA POLICY: numeric claims we could not trace to records
+// (consultation, user and member totals) were removed. Re-add a figure only
+// with a verifiable source — see docs/architecture/AUTHENTIC_DATA_POLICY.md.
 const milestones = [
   { year: "2019", event: "Founded in Nairobi with a mission to protect Kenyans from overseas job scams" },
   { year: "2021", event: "Launched recruitment agency verification database" },
-  { year: "2023", event: "Reached 1,000+ consultations completed" },
+  { year: "2023", event: "Launched 1-on-1 career consultations" },
   { year: "2024", event: "Launched AI-powered CV checker and Job Scam Detector" },
-  { year: "2025", event: "Over 4,200 users served across 6 destination countries" },
+  { year: "2025", event: "Expanded destination-country guides and verified job portals" },
 ];
 
 export default function AboutPage() {
   usePageSeo({
     title:       "About WorkAbroad Hub — Kenya's Trusted Overseas Employment Platform | Founded by Antony Macloud",
-    description: "WorkAbroad Hub is Kenya's leading platform for verified overseas jobs, NEA agency verification, and career guidance. Built and operated by Antony Macloud from Nairobi. 7,000+ members served.",
+    description: "WorkAbroad Hub is Kenya's leading platform for verified overseas jobs, NEA agency verification, and career guidance. Built and operated by Antony Macloud from Nairobi.",
     path:        "/about",
     keywords:    ["about workabroad hub", "antony macloud", "kenya overseas jobs platform", "workabroadhub founder"],
   });

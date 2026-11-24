@@ -14,7 +14,45 @@ import { resolveEntitlement } from "../lib/feature-access";
 
 const EVENTS = ["premium_click", "upgrade_modal_view", "upgrade_modal_dismiss", "upgrade_plan_select", "job_unlock_view", "job_unlock_dismiss", "job_unlock_pay"];
 
+/** Date range from ?range=today|7d|30d|90d or ?from=YYYY-MM-DD&to=YYYY-MM-DD (Nairobi days). */
+export function parseRange(q: any): { from: Date; to: Date; label: string } {
+  const now = new Date();
+  const dayStartNairobi = (d: Date) => new Date(new Date(d.getTime() + 3 * 3600e3).toISOString().slice(0, 10) + "T00:00:00+03:00");
+  if (q?.from && /^\d{4}-\d{2}-\d{2}$/.test(String(q.from))) {
+    const from = new Date(`${q.from}T00:00:00+03:00`);
+    const toDay = q?.to && /^\d{4}-\d{2}-\d{2}$/.test(String(q.to)) ? String(q.to) : now.toISOString().slice(0, 10);
+    const to = new Date(new Date(`${toDay}T00:00:00+03:00`).getTime() + 86400e3);
+    if (!isNaN(+from) && !isNaN(+to) && to > from && to.getTime() - from.getTime() <= 400 * 86400e3) return { from, to, label: `${q.from} → ${toDay}` };
+  }
+  const r = String(q?.range ?? "7d");
+  if (r === "today") return { from: dayStartNairobi(now), to: now, label: "Today" };
+  const days = r === "30d" ? 30 : r === "90d" ? 90 : 7;
+  return { from: new Date(now.getTime() - days * 86400e3), to: now, label: `Last ${days} days` };
+}
+
 export function registerFreemiumFunnel(app: Express) {
+  // ── Admin platform statistics (defined metrics, date-ranged) + integrity ──
+  const requireAdmin = async (req: any, res: any) => {
+    const uid = req.user?.claims?.sub ?? req.user?.id ?? req.session?.customUserId;
+    if (!uid) { res.status(401).json({ message: "Sign in" }); return false; }
+    if (!(await resolveEntitlement(uid)).isAdmin) { res.status(403).json({ message: "Admins only" }); return false; }
+    return true;
+  };
+  app.get("/api/admin/platform-stats", async (req: any, res) => {
+    if (!(await requireAdmin(req, res))) return;
+    const { getAdminStats, getPublicStats } = await import("../lib/platform-stats");
+    const range = parseRange(req.query);
+    const [stats, pub] = await Promise.all([getAdminStats(range), getPublicStats(true)]);
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ label: range.label, ...stats, publicNow: pub });
+  });
+  app.get("/api/admin/data-integrity", async (req: any, res) => {
+    if (!(await requireAdmin(req, res))) return;
+    const { getIntegrityChecks } = await import("../lib/platform-stats");
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ checkedAt: new Date().toISOString(), checks: await getIntegrityChecks() });
+  });
+
   app.get("/api/admin/freemium-funnel", async (req: any, res) => {
     const uid = req.user?.claims?.sub ?? req.user?.id ?? req.session?.customUserId;
     if (!uid) return res.status(401).json({ message: "Sign in" });
