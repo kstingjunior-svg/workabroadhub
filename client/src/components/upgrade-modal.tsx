@@ -22,8 +22,8 @@ interface PublicStats {
 // (advisor, consultation, personal review) rather than "unlock digital
 // content." Same product, safer framing for Play Store's payment reviewer.
 const TRIGGER_HEADLINES: Record<UpgradeModalTrigger, string> = {
-  locked_feature: "Talk to a Career Advisor 💬",
-  limit_hit: "⚠️ Don't Risk Paying Fake Agents",
+  locked_feature: "Unlock This Premium Feature",
+  limit_hit: "Unlock Premium Services",
   country_locked: "Get Advisor Support for This Country 🌍",
   jobs_locked: "Get a Personal Career Advisor 💼",
   tracker_locked: "Your Advisor Follows Up on Applications 📊",
@@ -33,8 +33,8 @@ const TRIGGER_HEADLINES: Record<UpgradeModalTrigger, string> = {
 };
 
 const TRIGGER_SUBHEADLINES: Record<UpgradeModalTrigger, string> = {
-  locked_feature: "This is available on the Career Consultation package. Talk to your personal advisor for personalised help.",
-  limit_hit: "Fake agents cost Kenyans millions yearly. With a Consultation package, your personal advisor verifies every recruiter before you pay them.",
+  locked_feature: "This is one of WorkAbroadHub's premium services. Choose Monthly or Yearly to continue — or close this and keep exploring for free.",
+  limit_hit: "You're exploring one of WorkAbroadHub's premium services. Choose a plan to continue — or close this and keep browsing for free.",
   country_locked: "Your personal advisor guides you through the visa, agency, and application process for your target country.",
   jobs_locked: "Your Career Consultation package includes a WhatsApp advisor who curates job-portal shortlists for your target country and reviews your CV before you apply.",
   tracker_locked: "Your personal advisor tracks every application and follows up with you on deadlines and status changes.",
@@ -374,7 +374,7 @@ export function UpgradeModal() {
             <span className="text-xs font-bold text-amber-600 uppercase tracking-wider">WorkAbroad Hub Premium</span>
           </div>
           <h2 className="text-xl sm:text-2xl font-bold text-foreground mb-1" data-testid="text-upgrade-headline">
-            {state.featureName ? `Unlock: ${state.featureName}` : headline}
+            {state.featureName ? `Unlock ${state.featureName}` : headline}
           </h2>
           <p className="text-sm text-muted-foreground">{subheadline}</p>
         </div>
@@ -521,8 +521,10 @@ export function UpgradeModal() {
               <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-3 flex items-center gap-3">
                 <ArrowRight className="h-5 w-5 text-amber-500 flex-shrink-0" />
                 <p className="text-sm text-amber-800 dark:text-amber-300">
-                  {recentUpgrades !== null && recentUpgrades > 0 ? `${recentUpgrades} people upgraded this week · ` : ""}
-                  {totalUsers !== null && totalUsers > 0 ? `${totalUsers.toLocaleString()} members on the platform` : "Join other Kenyans working abroad"}
+                  {/* Both figures are live DB counts (/api/public/stats): distinct
+                      successful plan payments in the last 7 days, and registered accounts. */}
+                  {recentUpgrades !== null && recentUpgrades > 0 ? `${recentUpgrades} plans purchased this week · ` : ""}
+                  {totalUsers !== null && totalUsers > 0 ? `${totalUsers.toLocaleString()} registered accounts` : "Free to browse — pay only for premium services"}
                 </p>
               </div>
             )}

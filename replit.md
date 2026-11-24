@@ -8,6 +8,7 @@ WorkAbroad Hub is a mobile-first career consultation service that assists indivi
 - Mobile-first design
 - Prominent legal disclaimers required
 - WCAG 2.1 AA accessibility compliance
+- **Permanent business rule — EXPLORE FIRST. PAY WHEN NECESSARY.** Free sign-up = free entry. Never ask for payment on login, registration, dashboard load, refresh or browsing; only when a user deliberately taps a premium action. Gate premium features through `shared/feature-access.ts` (server `requireFeature`, client `useFeatureGate`). Rules: `docs/architecture/FREEMIUM_RULES.md`; guard tests: `tests/api/freemium-rules.test.ts`.
 
 ## System Architecture
 

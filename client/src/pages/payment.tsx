@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { safeReturnPath } from "@shared/feature-access";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
@@ -124,8 +125,10 @@ export default function Payment() {
   // user straight back to the job they wanted after paying. Same-site paths only.
   const urlReturn = new URLSearchParams(window.location.search).get("return");
   const jobUnlockOnly = new URLSearchParams(window.location.search).get("only") === "1" && urlPlanId === "monthly";
-  // Any same-site page except auth/payment pages themselves.
-  const successDest = urlReturn && /^\/[A-Za-z0-9]/.test(urlReturn) && !/^\/(payment|pricing|login|signup|logout|api\/)/.test(urlReturn) ? urlReturn : "/dashboard";
+  // Any same-site page except auth/payment pages (shared rule — no open redirects).
+  // Navigation only: access on return is re-checked by the server, and the plan is
+  // activated solely by the verified M-Pesa/PayPal callback, never by this page.
+  const successDest = safeReturnPath(urlReturn) ?? "/dashboard";
   // 2026-07: honor ?method=mpesa|paypal from /pricing branded buttons
   const urlMethod = new URLSearchParams(window.location.search).get("method");
 
@@ -716,7 +719,8 @@ export default function Payment() {
           duration: 6000,
         });
         // Hard nav so the /api/price query re-fires with the new plan.
-        setTimeout(() => { window.location.href = "/payment?plan=monthly"; }, 800);
+        // freemium-ok: user already tapped Pay on this checkout; keep their return link.
+        setTimeout(() => { const u = new URL(window.location.href); u.searchParams.set("plan", "monthly"); window.location.href = u.pathname + u.search; }, 800);
         return;
       }
       // 2026-06: surface the structured Kenyan-friendly M-Pesa error from

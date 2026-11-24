@@ -1,31 +1,30 @@
-import { useUpgradeModal } from "@/contexts/upgrade-modal-context";
 import { useToast } from "@/hooks/use-toast";
+import { useFeatureGate } from "@/hooks/use-feature-gate";
 
 export type JobType = "visa" | "agency" | "portal";
 
+/**
+ * Opens a job's external link. The SERVER decides access (GET /api/go/job/:id);
+ * a 401/402/403-upgrade reply turns into the contextual prompt for
+ * "premium job links" via the central feature gate. Called only from a tap.
+ */
 export function useJobRedirect() {
-  const { openUpgradeModal } = useUpgradeModal();
   const { toast } = useToast();
+  const gate = useFeatureGate();
 
   const openJob = async (jobId: string, type: JobType) => {
     try {
       const res = await fetch(`/api/go/job/${encodeURIComponent(jobId)}?type=${type}`, {
         credentials: "include",
       });
+      const body = await res.clone().json().catch(() => null);
 
-      if (res.status === 401) {
-        toast({
-          title: "Sign in required",
-          description: "Please sign in to access job links.",
-          variant: "destructive",
-        });
+      if (res.status === 403 && !body?.code && !body?.upgradeRequired) {
+        // Legacy 403 from /api/go/job means "plan required".
+        gate.prompt("premium_job_links", body);
         return;
       }
-
-      if (res.status === 403) {
-        openUpgradeModal("jobs_locked");
-        return;
-      }
+      if (gate.handleResponse("premium_job_links", res.status, body)) return;
 
       if (!res.ok) {
         toast({
@@ -36,7 +35,7 @@ export function useJobRedirect() {
         return;
       }
 
-      const { url } = await res.json();
+      const url = body?.url;
       if (url) {
         window.open(url, "_blank", "noopener,noreferrer");
       }

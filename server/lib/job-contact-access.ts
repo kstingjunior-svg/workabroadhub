@@ -1,44 +1,29 @@
 /**
  * Job-contact paywall (2026-11, Tony): jobs are posted free, job seekers pay.
- *
- * Employer Call / WhatsApp / phone for Kazi Karibu AND the Kenyan Jobs
- * Section unlock only for users with an active paid plan (trial, monthly,
- * yearly…) or admins. Everyone else is offered ONE option: Monthly,
- * KES 1,000 for 30 days. No yearly / KES 4,500 choice on this path.
+ * Thin wrapper over the central feature-access check (server/lib/feature-access.ts,
+ * registry entry `local_job_contacts` in shared/feature-access.ts):
+ *   - any active plan (trial / monthly / yearly …) or admin → allowed
+ *   - otherwise one option only: Monthly, KES 1,000 / 30 days
  *
  * Job lists and detail pages stay public; phone numbers typed into free text
  * (description, how-to-apply) are masked so the paywall can't be bypassed.
  */
-import { pool } from "../db";
+import { checkFeature, upgradeRequiredBody } from "./feature-access";
+import { PAID_PLAN_IDS, safeReturnPath } from "../../shared/feature-access";
 
-export const JOB_CONTACT_PAID_PLANS = new Set(["trial", "basic", "monthly", "yearly", "pro", "pro_referral"]);
+export const JOB_CONTACT_PAID_PLANS = new Set<string>(PAID_PLAN_IDS);
 export const JOB_UNLOCK_PLAN = "monthly";
 export const JOB_UNLOCK_PRICE_KES = 1000;
 
 export async function canSeeJobContacts(userId: string): Promise<{ ok: boolean; plan: string; admin: boolean }> {
-  try {
-    const { rows: [u] } = await pool.query(`SELECT role, is_admin FROM users WHERE id = $1`, [userId]);
-    const admin = !!u && (u.is_admin === true || ["ADMIN", "SUPER_ADMIN", "admin", "super_admin"].includes(String(u.role ?? "")));
-    if (admin) return { ok: true, plan: "admin", admin: true };
-    const { storage } = await import("../storage");
-    const plan = String(await storage.getUserPlan(userId)).toLowerCase();
-    return { ok: JOB_CONTACT_PAID_PLANS.has(plan), plan, admin: false };
-  } catch (e: any) {
-    console.warn("[job-contact-access] plan check failed:", e?.message);
-    return { ok: false, plan: "unknown", admin: false }; // deny by default
-  }
+  const r = await checkFeature("local_job_contacts", userId);
+  return { ok: r.allowed, plan: r.plan, admin: r.plan === "admin" };
 }
 
 export function paywallBody(returnTo?: string) {
-  const ret = returnTo && returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : "/kazi-karibu/browse";
-  return {
-    code: "PAYWALL",
-    error: "Unlock employer contacts — KES 1,000 for 30 days.",
-    message: "Unlock employer contacts — KES 1,000 for 30 days.",
-    amount: JOB_UNLOCK_PRICE_KES,
-    plan: JOB_UNLOCK_PLAN,
-    payUrl: `/payment?plan=${JOB_UNLOCK_PLAN}&only=1&return=${encodeURIComponent(ret)}`,
-  };
+  const b = upgradeRequiredBody("local_job_contacts", safeReturnPath(returnTo) ?? "/kazi-karibu/browse");
+  const message = "Unlock employer contacts — KES 1,000 for 30 days.";
+  return { ...b, error: message, message, amount: JOB_UNLOCK_PRICE_KES, plan: JOB_UNLOCK_PLAN };
 }
 
 /** Hide Kenyan phone numbers inside free text shown to the public. */
