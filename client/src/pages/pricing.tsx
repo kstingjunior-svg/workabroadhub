@@ -6,7 +6,6 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ExitIntentPopup } from "@/components/exit-intent-popup";
 import { LiveActivityFeed } from "@/components/live-activity-feed";
 import { AgencyAlertBanner } from "@/components/agency-alert-banner";
 import {
@@ -265,7 +264,8 @@ export default function PricingPage() {
 
   return (
     <div className="min-h-screen bg-background pb-32 md:pb-24">
-      <ExitIntentPopup enabled={!user || !isActive} />
+      {/* 2026-11 (Tony): exit-intent popup removed — it fired on mouse-leave /
+          scroll-up, i.e. without the user asking. No automatic payment prompts. */}
 
       {/* ── HERO ── */}
       <div

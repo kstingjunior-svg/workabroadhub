@@ -24,7 +24,6 @@ import { lazy, Suspense, ComponentType, useEffect, useRef, useState } from "reac
 import { lazyWithRetry } from "@/lib/lazy-with-retry";
 import { prefetchCriticalData } from "./lib/queryClient";
 import { startServicesPriceWatcher } from "@/lib/services";
-import { usePageViewFunnel } from "@/hooks/use-page-view-funnel";
 import { useHeartbeat } from "@/hooks/use-heartbeat";
 import { useBehaviorTracker } from "@/hooks/use-behavior-tracker";
 import { useNanjilaIdleNudge } from "@/hooks/use-nanjila-idle-nudge";
@@ -964,8 +963,9 @@ function Router() {
     import("@/lib/referral").then((m) => m.captureRefFromUrl()).catch(() => {});
   }, []);
 
-  // Conversion funnel: trigger upgrade modal after 2 page views for free users
-  usePageViewFunnel();
+  // 2026-11 (Tony): NO automatic upgrade popups. The old page-view funnel
+  // opened the upgrade modal ~1s after login (login = 2 page views). Payment
+  // prompts now appear only when a user taps a locked/premium action.
 
   if (isLoading && !loadingTimedOut) {
     return <LoadingScreen />;

@@ -124,7 +124,8 @@ export default function Payment() {
   // user straight back to the job they wanted after paying. Same-site paths only.
   const urlReturn = new URLSearchParams(window.location.search).get("return");
   const jobUnlockOnly = new URLSearchParams(window.location.search).get("only") === "1" && urlPlanId === "monthly";
-  const successDest = urlReturn && /^\/(kazi-karibu|kenya-careers)(\/|$|\?)/.test(urlReturn) && !urlReturn.startsWith("//") ? urlReturn : "/dashboard";
+  // Any same-site page except auth/payment pages themselves.
+  const successDest = urlReturn && /^\/[A-Za-z0-9]/.test(urlReturn) && !/^\/(payment|pricing|login|signup|logout|api\/)/.test(urlReturn) ? urlReturn : "/dashboard";
   // 2026-07: honor ?method=mpesa|paypal from /pricing branded buttons
   const urlMethod = new URLSearchParams(window.location.search).get("method");
 

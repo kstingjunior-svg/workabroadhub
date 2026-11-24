@@ -308,6 +308,9 @@ export function UpgradeModal() {
   // it. This modal becomes a plan picker only.
   const handleUpgradeClick = (method: "mpesa" | "paypal" = "mpesa") => {
     const qs = new URLSearchParams({ plan: selectedPlan, method });
+    // 2026-11: after paying, bring the user back to the feature they tapped.
+    const here = window.location.pathname + window.location.search;
+    if (!/^\/(payment|pricing|login|signup)/.test(here)) qs.set("return", here);
     closeUpgradeModal();
     setStep("compare");
     setPhone("");
@@ -527,6 +530,14 @@ export function UpgradeModal() {
             <p className="text-center text-xs text-muted-foreground mt-3">
               🔒 Secure payment via M-Pesa or PayPal · No hidden fees
             </p>
+            <button
+              type="button"
+              onClick={handleClose}
+              className="block mx-auto mt-2 text-sm text-muted-foreground underline underline-offset-2 hover:text-foreground"
+              data-testid="btn-upgrade-maybe-later"
+            >
+              Maybe later — keep browsing for free
+            </button>
           </div>
         )}
 
