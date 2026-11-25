@@ -349,8 +349,7 @@ export function KenyaJobsHub() {
           </article>
 
           {/* Kazi Karibu card — 2026-11 "simple & clean" redesign (centred, 3 tiles, one CTA).
-              Numbers are live; "Free to apply" is NOT claimed because contacting/applying
-              needs an active plan (KES 1,000) — browsing is free. */}
+              Numbers are live. 2026-11-25: contacting/applying is FREE for signed-in accounts. */}
           {showKazi && (
             <article
               className="relative overflow-hidden rounded-[22px] ring-1 ring-white/10 bg-[#0a1513] min-h-[320px]"
@@ -383,7 +382,7 @@ export function KenyaJobsHub() {
                   {[
                     { icon: Briefcase, title: kaziLive === null ? "Live jobs" : `${kaziLive} ${kaziLive === 1 ? "job" : "jobs"}`, text: kaziLive && kaziLive > 0 ? "Open now →" : "New jobs added often", href: "/kazi-karibu/browse" },
                     { icon: ShieldCheck, title: "Moderated", text: "Checked first", href: null as string | null },
-                    { icon: Users, title: "Free to browse", text: "Contacts KES 1,000", href: null as string | null },
+                    { icon: Users, title: "Free to apply", text: "Free sign-in", href: null as string | null },
                   ].map(({ icon: Icon, title, text, href }) => {
                     const inner = (
                       <>

@@ -962,26 +962,18 @@ export function registerLocalJobsRoutes(app: Express): void {
           appsToday:   0,
           dailyLimit:  null,
           unlimited:   false,
-          message:     "Sign in or sign up first — unlimited applying with the KES 99 24-hour pass.",
+          message:     "Sign in or create a free account to apply — it's free.",
         });
       }
 
-      const { storage } = await import("./storage");
-      const tier = await storage.getUserPlan(userId);
-
-      if (!KENYA_CAREERS_PAID_TIERS.has(tier)) {
-        console.log(`[kenya-careers/gate] BLOCK userId=${userId} tier=${tier} reason=not_paid`);
-        return res.json({
-          canApply:   false,
-          reason:     "upgrade",
-          tier,
-          appsToday:  0,
-          dailyLimit: null,
-          unlimited:  false,
-          message:    "Unlock Kenyan jobs — KES 1,000 for 30 days. Apply, call and WhatsApp employers as much as you like.",
-          payUrl:     "/payment?plan=monthly&only=1&return=%2Fkenya-careers",
-          amount:     1000,
-        });
+      // 2026-11-25 (Tony): applying to Kenyan jobs is FREE for any signed-in
+      // account (growth strategy). Access decided by the shared registry
+      // (shared/feature-access.ts → kenya_jobs_apply: FREE).
+      const { checkFeature } = await import("./lib/feature-access");
+      const access = await checkFeature("kenya_jobs_apply", userId);
+      const tier = access.plan;
+      if (!access.allowed) {
+        return res.json({ canApply: false, reason: "signin", tier, appsToday: 0, dailyLimit: null, unlimited: false, message: "Please sign in to apply — it's free." });
       }
 
       // Paid tier — unlimited applications inside the paid window.
@@ -1037,44 +1029,15 @@ export function registerLocalJobsRoutes(app: Express): void {
           return res.status(400).json({ message: "Invalid job id." });
         }
 
-        // ── 1. Tier check — primary paywall ────────────────────────────────
-        // getUserPlan() is the single source of truth used by every paid
-        // feature in WAH. It does a live DB read of users.plan + the active
-        // subscription's end_date, and auto-downgrades expired users to
-        // "free" on the spot. So a trial user 25 hours after payment is
-        // already "free" by the time this check runs.
+        // ── 1. Access — 2026-11-25: FREE for any signed-in account (Tony's
+        //    growth strategy). Same registry rule as the status endpoint.
+        const { checkFeature } = await import("./lib/feature-access");
+        const access = await checkFeature("kenya_jobs_apply", userId);
+        if (!access.allowed) {
+          return res.status(401).json({ message: "Please sign in to apply — it's free.", reason: "signin" });
+        }
+        const tier = access.plan;
         const { storage } = await import("./storage");
-        const tier = await storage.getUserPlan(userId);
-        if (!KENYA_CAREERS_PAID_TIERS.has(tier)) {
-          console.log(`[kenya-careers/apply] BLOCK userId=${userId} tier=${tier} reason=not_paid jobId=${jobId}`);
-          return res.status(402).json({
-            message: "Unlock Kenyan jobs — KES 1,000 for 30 days.",
-            reason:  "upgrade",
-            code:    "PAYWALL",
-            payUrl:  `/payment?plan=monthly&only=1&return=${encodeURIComponent(`/kenya-careers/job/${jobId}`)}`,
-            amount:  1000,
-            tier,
-          });
-        }
-
-        // ── 1b. Defensive subscription expiry double-check ─────────────────
-        // Belt-and-braces: even though getUserPlan() auto-downgrades expired
-        // users, do an independent end_date read here. If the subscription
-        // record exists but is in the past, treat the user as free. Catches
-        // any edge case where getUserPlan's lazy-sync hasn't run yet
-        // (database trigger lag, missed sweep, etc).
-        const sub = await storage.getUserSubscription(userId).catch(() => null);
-        if (sub?.endDate && new Date(sub.endDate) < new Date()) {
-          console.log(`[kenya-careers/apply] BLOCK userId=${userId} tier=${tier} reason=subscription_expired endDate=${sub.endDate} jobId=${jobId}`);
-          return res.status(402).json({
-            message: "Your plan has expired. Renew for KES 1,000 (30 days) to keep applying.",
-            reason:  "upgrade",
-            code:    "PAYWALL",
-            payUrl:  `/payment?plan=monthly&only=1&return=${encodeURIComponent(`/kenya-careers/job/${jobId}`)}`,
-            amount:  1000,
-            tier:    "free",
-          });
-        }
 
         // ── 2. Per-minute bot brake (NOT a paywall) ────────────────────────
         // Applications are unlimited inside your paid window. This only

@@ -222,7 +222,7 @@ export function KenyaCareersApplySheet({
             <div className="py-2" data-testid="apply-signin">
               <div className="flex items-start gap-2 p-3 mb-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 ring-1 ring-amber-200 dark:ring-amber-800 text-sm">
                 <Lock className="h-4 w-4 text-amber-700 dark:text-amber-300 shrink-0 mt-0.5" />
-                <span>Sign in or sign up first — applying is included with the <strong>KES 1,000 Monthly plan</strong> that also unlocks overseas jobs.</span>
+                <span>Sign in or create a free account first — <strong>applying to Kenyan jobs is free</strong>.</span>
               </div>
               <Button
                 className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
@@ -290,8 +290,9 @@ export function KenyaCareersApplySheet({
                     {status.tier === "pro"     && "Your Pro plan is active"}
                     {status.tier === "pro_referral" && "Your Pro (referral) plan is active"}
                   </strong>
+                  {!["trial","basic","monthly","yearly","pro","pro_referral"].includes(String(status.tier)) && "Applying to Kenyan jobs is free"}
                   {" — "}
-                  {"unlimited applications inside your paid window."}
+                  {"apply to as many jobs as you like."}
                   {status.appsToday > 0 && ` You've applied to ${status.appsToday} in the last 24h.`}
                 </span>
               </div>

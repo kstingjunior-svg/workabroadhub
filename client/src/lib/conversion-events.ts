@@ -17,7 +17,9 @@ export const CONV = {
   UPGRADE_PLAN: "upgrade_plan_select",       // chose monthly | yearly → checkout
   JOB_UNLOCK_VIEW: "job_unlock_view",        // KES 1,000 local-jobs modal shown
   JOB_UNLOCK_DISMISS: "job_unlock_dismiss",
-  JOB_UNLOCK_PAY: "job_unlock_pay",          // tapped "Pay KES 1,000 with M-Pesa"
+  JOB_UNLOCK_PAY: "job_unlock_pay",          // tapped "Pay KES 1,000 with M-Pesa" (retired 2026-11-25: local jobs free)
+  LOCAL_CONTACT: "local_contact",            // free employer contact revealed (Kazi / Kenyan Jobs)
+  AFTER_CONTACT_CV_CLICK: "after_contact_cv_click", // tapped the CV-help suggestion shown after a contact
 } as const;
 export type ConvEvent = (typeof CONV)[keyof typeof CONV];
 

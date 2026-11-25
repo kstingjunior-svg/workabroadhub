@@ -40,10 +40,12 @@ prompt or redirect to `/pricing` or `/payment`.
 
 * **PUBLIC** — anyone: home, pricing (voluntary), job destinations / country guides, service
   descriptions, Scam Wall, agency licence search, Kenyan Jobs Section and Kazi Karibu listings.
-* **FREE** — any signed-in account: dashboard, profile & settings, application tracker view.
+* **FREE** — any signed-in account: dashboard, profile & settings, application tracker view, and
+  (since 2026-11-25, Tony's growth strategy) **employer contacts (Call/WhatsApp) and applying on
+  Kazi Karibu and the Kenyan Jobs Section**. After a contact, one dismissible CV-help suggestion is shown.
 * **PREMIUM** — active plan. Two existing tiers, kept exactly as they were:
-  * `any_paid` (trial, monthly, yearly): employer contacts & applying on local jobs (KES 1,000-only
-    offer), premium job links, Visa Sponsorship applying.
+  * `any_paid` (trial, monthly, yearly): premium job links, Visa Sponsorship applying.
+    (Local-job contacts were KES 1,000-only for one day, 24 Nov 2026: 12 prompts, 0 payments → made free.)
   * `full_plan` (monthly, yearly — trial excluded, the old `requireProPlan` rule): AI Auto-Apply,
     CV matching, LinkedIn Optimizer, WhatsApp consultation.
 * **ONE_TIME_PAID** — own per-order checkout, never the subscription wall: CV services, verification

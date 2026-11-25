@@ -18,6 +18,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { KAZI_KARIBU_CATEGORIES } from "@shared/kazi-karibu";
 import { openJobUnlock } from "@/components/job-unlock-dialog";
 import { kkUnlockJob } from "@/components/kazi-job-card";
+import { showAfterContactTip } from "@/lib/after-contact-tip";
 
 interface KaziKaribuPost {
   id: string;
@@ -130,6 +131,7 @@ export default function KaziKaribuJob() {
       if (r.status === 403) { setContactError(body?.error ?? "Contact is not available for this post."); return; }
       if (!r.ok) { setContactError(body?.error ?? `Could not load contact (${r.status})`); return; }
       setContact({ firstName: body.firstName ?? null, phone: body.phone ?? null, email: body.email ?? null });
+      showAfterContactTip("kazi");
     } catch (err: any) {
       setContactError(err?.message ?? "Network error");
     } finally {

@@ -1,3 +1,6 @@
+// Local-job contacts & applying — 2026-11-25: FREE for any signed-in account
+// (growth strategy). Sign-in still required; numbers typed into job text stay
+// masked so contacts can't be scraped without signing in.
 import { describe, it, expect, vi } from "vitest";
 
 const q = vi.fn();
@@ -5,19 +8,28 @@ vi.mock("../../server/db", () => ({ pool: { query: (...a: any[]) => q(...a) } })
 const getUserPlan = vi.fn();
 vi.mock("../../server/storage", () => ({ storage: { getUserPlan: (...a: any[]) => getUserPlan(...a) } }));
 
-import { maskPhones, paywallBody, canSeeJobContacts, JOB_UNLOCK_PRICE_KES } from "../../server/lib/job-contact-access";
+import { maskPhones, canSeeJobContacts } from "../../server/lib/job-contact-access";
+import { checkFeature } from "../../server/lib/feature-access";
+import { FEATURES, decideAccess } from "../../shared/feature-access";
 
-describe("job contact paywall", () => {
-  it("offers exactly one option: monthly, KES 1,000, back to the job", () => {
-    const b = paywallBody("/kazi-karibu/job/abc");
-    expect(b.code).toBe("PAYWALL");
-    expect(b.amount).toBe(1000);
-    expect(JOB_UNLOCK_PRICE_KES).toBe(1000);
-    expect(b.plan).toBe("monthly");
-    expect(b.payUrl).toBe("/payment?plan=monthly&only=1&return=%2Fkazi-karibu%2Fjob%2Fabc");
-    expect(b.payUrl).not.toMatch(/yearly|pro|4500/);
-    expect(paywallBody("https://evil.example").payUrl).toContain("return=%2Fkazi-karibu%2Fbrowse");
-    expect(paywallBody("//evil.example").payUrl).toContain("return=%2Fkazi-karibu%2Fbrowse");
+describe("local jobs are free for signed-in accounts", () => {
+  it("registry: contacts + applying are FREE (account needed, no plan)", () => {
+    expect(FEATURES.local_job_contacts.access).toBe("FREE");
+    expect(FEATURES.kenya_jobs_apply.access).toBe("FREE");
+    expect(decideAccess("local_job_contacts", { authenticated: true, plan: "free" })).toEqual({ allowed: true });
+    expect(decideAccess("kenya_jobs_apply", { authenticated: true, plan: "free" })).toEqual({ allowed: true });
+    expect(decideAccess("local_job_contacts", { authenticated: false })).toEqual({ allowed: false, reason: "SIGNIN" });
+  });
+
+  it("free, paid and admin accounts can all see contacts; signed-out cannot", async () => {
+    for (const plan of ["free", "trial", "monthly", "yearly"]) {
+      q.mockResolvedValueOnce({ rows: [{ role: "user", is_admin: false }] });
+      getUserPlan.mockResolvedValueOnce(plan);
+      expect((await canSeeJobContacts("u")).ok, plan).toBe(true);
+    }
+    q.mockResolvedValueOnce({ rows: [{ role: "SUPER_ADMIN", is_admin: true }] });
+    expect((await canSeeJobContacts("a")).ok).toBe(true);
+    expect((await checkFeature("kenya_jobs_apply", null)).allowed).toBe(false);
   });
 
   it("hides phone numbers typed into job text", () => {
@@ -27,22 +39,5 @@ describe("job contact paywall", () => {
     }
     expect(maskPhones("Pay KES 12,000 per month, 8am-9pm, 2 vacancies")).toBe("Pay KES 12,000 per month, 8am-9pm, 2 vacancies");
     expect(maskPhones(null)).toBeNull();
-  });
-
-  it("admins and active plans get in; free users don't", async () => {
-    q.mockResolvedValueOnce({ rows: [{ role: "SUPER_ADMIN", is_admin: true }] });
-    expect((await canSeeJobContacts("a")).ok).toBe(true);
-
-    for (const plan of ["trial", "monthly", "yearly", "pro"]) {
-      q.mockResolvedValueOnce({ rows: [{ role: "user", is_admin: false }] });
-      getUserPlan.mockResolvedValueOnce(plan);
-      expect((await canSeeJobContacts("u")).ok).toBe(true);
-    }
-    q.mockResolvedValueOnce({ rows: [{ role: "user", is_admin: false }] });
-    getUserPlan.mockResolvedValueOnce("free");
-    expect((await canSeeJobContacts("u")).ok).toBe(false);
-
-    q.mockRejectedValueOnce(new Error("db down"));
-    expect((await canSeeJobContacts("u")).ok).toBe(false); // deny by default
   });
 });

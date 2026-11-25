@@ -6,6 +6,7 @@ import { KAZI_KARIBU_CATEGORIES } from "@shared/kazi-karibu";
 import type { MapPoint } from "@/components/jobs-map";
 import { formatKm } from "@/lib/geo";
 import { openJobUnlock, type UnlockJob } from "@/components/job-unlock-dialog";
+import { showAfterContactTip } from "@/lib/after-contact-tip";
 
 export interface KkPost {
   id: string; category: string; county: string; sub_county: string | null; title: string; description: string;
@@ -49,6 +50,7 @@ export function KaziJobCard({ p, distance }: { p: KkPost; distance: string | nul
       if (!r.ok) { alert(b?.error ?? "Couldn't open the contact."); return; }
       const n = norm(b.phone);
       if (!n) { alert("This poster hasn't shared a phone number — open the job and tap “I'm interested”."); return; }
+      showAfterContactTip("kazi");
       if (kind === "call") window.location.href = `tel:+${n}`;
       else window.open(`https://wa.me/${n}?text=${encodeURIComponent("Hello, I saw your job on WorkAbroadHub Kazi Karibu and I am interested. Kindly share more information.")}`, "_blank", "noopener");
     } finally { setBusy(null); }

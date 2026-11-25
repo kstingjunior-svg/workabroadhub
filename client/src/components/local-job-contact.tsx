@@ -7,6 +7,7 @@ import { useState } from "react";
 import { Phone, MessageCircle, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { openJobUnlock, type UnlockJob } from "@/components/job-unlock-dialog";
+import { showAfterContactTip } from "@/lib/after-contact-tip";
 
 type Contact = { phone: string | null; telUrl: string | null; whatsapp: string | null; whatsappUrl: string | null; contactPerson: string | null; altContact: string | null; instructions: string | null };
 const cache = new Map<string, Contact>();
@@ -51,6 +52,7 @@ export function LocalJobContactButtons({ jobId, canCall, canWhatsApp, size = "md
       const url = kind === "call" ? c.telUrl : c.whatsappUrl;
       if (!url) { toast({ title: "Not available", description: kind === "call" ? "No phone number for this job." : "No WhatsApp number for this job." }); return; }
       track(jobId, kind);
+      showAfterContactTip("kenyan_jobs");
       if (kind === "whatsapp") window.open(url, "_blank", "noopener"); else window.location.href = url;
     } catch (e: any) {
       if (e.code === "SIGNIN" || e.status === 401) {

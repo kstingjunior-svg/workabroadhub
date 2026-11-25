@@ -134,7 +134,6 @@ describe("freemium — central feature-access registry", () => {
   it("checkout links keep prices/plans and return safely (no open redirect)", () => {
     expect(checkoutUrl("premium_job_links", "monthly", "/countries/canada")).toBe("/payment?plan=monthly&return=%2Fcountries%2Fcanada");
     expect(checkoutUrl("premium_job_links", "yearly", "/countries/canada")).toBe("/payment?plan=pro&return=%2Fcountries%2Fcanada");
-    expect(checkoutUrl("local_job_contacts", "yearly", "/kazi-karibu/job/x")).toBe("/payment?plan=monthly&only=1&return=%2Fkazi-karibu%2Fjob%2Fx");
     for (const bad of ["//evil.com", "https://evil.com", "/\\evil.com", "/pricing", "/payment?x", "/api/x", "javascript:alert(1)", "/a\nb", ""]) {
       expect(safeReturnPath(bad), bad).toBeNull();
     }

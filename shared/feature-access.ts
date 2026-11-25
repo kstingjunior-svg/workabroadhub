@@ -56,9 +56,12 @@ export const FEATURES = {
   application_tracker_view: { access: "FREE", label: "Application tracker" },
 
   // ── Premium (subscription) — prompt only on a deliberate tap ────────────────
-  local_job_contacts:   { access: "PREMIUM", tier: "any_paid", offer: "monthly_only", label: "employer contacts",
+  // 2026-11-25 (Tony): local jobs are FREE for any signed-in account — a growth
+  // strategy (build job-seeker audience → attract employers). Sign-in still required.
+  // Was PREMIUM (KES 1,000, monthly_only) for one day; 12 prompts, 0 payments.
+  local_job_contacts:   { access: "FREE", label: "employer contacts",
                           enforcedBy: "server/lib/job-contact-access.ts (lj/kazi contact + interest)" },
-  kenya_jobs_apply:     { access: "PREMIUM", tier: "any_paid", offer: "monthly_only", label: "Kenyan jobs applications",
+  kenya_jobs_apply:     { access: "FREE", label: "Kenyan jobs applications",
                           enforcedBy: "server/local-jobs-routes.ts POST /api/local-jobs/jobs/:id/apply" },
   premium_job_links:    { access: "PREMIUM", tier: "any_paid", offer: "monthly_or_yearly", label: "premium job links",
                           enforcedBy: "GET /api/go/job/:id (403 → prompt)" },
