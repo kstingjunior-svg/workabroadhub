@@ -14,6 +14,7 @@
  * The page is intentionally minimal and mobile-first — most Kenyan users
  * will land here from an email on their phone.
  */
+import { neutralDocName } from "@/lib/doc-filename";
 import { useEffect, useState } from "react";
 import { useRoute, Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -118,7 +119,7 @@ export default function DownloadMagic() {
     try {
       const slug = (order.serviceName || "document").toLowerCase().replace(/\s+/g, "-");
       const url = `/api/services/order/${order.orderId}/download/${format}?token=${encodeURIComponent(token)}`;
-      await triggerDownload(url, `workabroadhub-${slug}.${format}`);
+      await triggerDownload(url, neutralDocName(slug, format));
     } catch (e: any) {
       setDownloadErr(e?.message || "Download failed. Please try again.");
     } finally {

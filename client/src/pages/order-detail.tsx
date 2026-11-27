@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { neutralDocName } from "@/lib/doc-filename";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams } from "wouter";
 import { triggerDownload } from "@/components/delivery-banner";
@@ -297,8 +298,8 @@ export default function OrderDetail() {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 gap-3 max-w-md">
-                <FallbackDownloadButton orderId={order.id} kind="pdf" label="PDF" color="red" />
-                <FallbackDownloadButton orderId={order.id} kind="docx" label="Word" color="blue" />
+                <FallbackDownloadButton orderId={order.id} kind="pdf" label="PDF" color="red" serviceSlug={(order as any).serviceSlug ?? (order as any).serviceId ?? (order as any).serviceName} />
+                <FallbackDownloadButton orderId={order.id} kind="docx" label="Word" color="blue" serviceSlug={(order as any).serviceSlug ?? (order as any).serviceId ?? (order as any).serviceName} />
               </div>
               <p className="text-xs text-muted-foreground mt-3">
                 Trouble downloading? Also available on your{" "}
@@ -389,8 +390,8 @@ export default function OrderDetail() {
  * silently fail to do).
  */
 function FallbackDownloadButton({
-  orderId, kind, label, color,
-}: { orderId: string; kind: "pdf" | "docx"; label: string; color: "red" | "blue" }) {
+  orderId, kind, label, color, serviceSlug,
+}: { orderId: string; kind: "pdf" | "docx"; label: string; color: "red" | "blue"; serviceSlug?: string }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const bg = color === "red"
@@ -407,7 +408,7 @@ function FallbackDownloadButton({
           try {
             await triggerDownload(
               `/api/services/order/${orderId}/download/${kind}`,
-              `workabroadhub-${orderId.slice(0, 8)}.${kind}`,
+              neutralDocName(serviceSlug, kind),
             );
           } catch (e: any) {
             setErr(e?.message || "Download failed. Please refresh.");

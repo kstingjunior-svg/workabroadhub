@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { neutralDocName } from "@/lib/doc-filename";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation, useRoute } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
@@ -1815,7 +1816,7 @@ function ApplicationDownloadButtons({ appId }: { appId: string }) {
     try {
       await triggerDownload(
         `/api/user-job-applications/${appId}/download/${docType}`,
-        `workabroadhub-${docType}-${appId.slice(0, 8)}.docx`,
+        neutralDocName(docType, "docx"),
       );
     } catch (e: any) {
       toast({

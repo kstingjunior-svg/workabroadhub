@@ -48,7 +48,7 @@ function TemplateCard({ template }: { template: Template }) {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `${template.id}-workabroadhub.txt`;
+      a.download = `${template.id}.txt`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);

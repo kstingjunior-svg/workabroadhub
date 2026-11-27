@@ -8,6 +8,7 @@
  *   2. PROCESSING — AI is generating; polls /status every 2.5s
  *   3. DONE       — download buttons (PDF + Word)
  */
+import { neutralDocName } from "@/lib/doc-filename";
 import { CvRevampResult, type AtsCompare } from "@/components/cv-revamp-result";
 import { useEffect, useRef, useState } from "react";
 import { useRoute, useLocation, Link } from "wouter";
@@ -1325,7 +1326,7 @@ export default function ServiceOrderFlow() {
                   try {
                     const slug = (serviceName || meta.name || "document").toLowerCase().replace(/\s+/g, "-");
                     const tokenQ = downloadToken ? `?token=${encodeURIComponent(downloadToken)}` : "";
-                    await triggerDownload(`/api/services/order/${orderId}/download/${format}${tokenQ}`, `workabroadhub-${slug}.${format}`);
+                    await triggerDownload(`/api/services/order/${orderId}/download/${format}${tokenQ}`, neutralDocName(slug, format));
                     setDownloadedOnce(true);
                   } catch (e: any) {
                     setDownloadErrorMsg(e?.message || "Download failed. Please refresh and try again.");
@@ -1367,7 +1368,7 @@ export default function ServiceOrderFlow() {
                       const slug = (serviceName || meta.name || "document").toLowerCase().replace(/\s+/g, "-");
                       // 2026-08 (guest orders): append ?token=xxx for anon downloads
                       const tokenQ = downloadToken ? `?token=${encodeURIComponent(downloadToken)}` : "";
-                      await triggerDownload(`/api/services/order/${orderId}/download/pdf${tokenQ}`, `workabroadhub-${slug}.pdf`);
+                      await triggerDownload(`/api/services/order/${orderId}/download/pdf${tokenQ}`, neutralDocName(slug, "pdf"));
                       setDownloadedOnce(true);
                     } catch (e: any) {
                       setDownloadErrorMsg(e?.message || "Download failed. Please refresh and try again.");
@@ -1389,7 +1390,7 @@ export default function ServiceOrderFlow() {
                     try {
                       const slug = (serviceName || meta.name || "document").toLowerCase().replace(/\s+/g, "-");
                       const tokenQ = downloadToken ? `?token=${encodeURIComponent(downloadToken)}` : "";
-                      await triggerDownload(`/api/services/order/${orderId}/download/docx${tokenQ}`, `workabroadhub-${slug}.docx`);
+                      await triggerDownload(`/api/services/order/${orderId}/download/docx${tokenQ}`, neutralDocName(slug, "docx"));
                       setDownloadedOnce(true);
                     } catch (e: any) {
                       setDownloadErrorMsg(e?.message || "Download failed. Please refresh and try again.");

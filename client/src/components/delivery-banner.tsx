@@ -31,6 +31,7 @@
  *   they can dismiss. This prevents the banner haunting them forever.
  */
 
+import { neutralDocName } from "@/lib/doc-filename";
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Download, CheckCircle2, X, Loader2 } from "lucide-react";
 import { Link } from "wouter";
@@ -231,7 +232,7 @@ export function DeliveryBanner({ stage, orderId, serviceName, errorMessage }: De
                   const svcSlug = service.replace(/\s+/g, "-");
                   await triggerDownload(
                     `/api/services/order/${orderId}/download/pdf`,
-                    `workabroadhub-${svcSlug}.pdf`,
+                    neutralDocName(svcSlug, "pdf"),
                   );
                   setDownloadedPdf(true);
                   persistState({ pdf: true });
@@ -261,7 +262,7 @@ export function DeliveryBanner({ stage, orderId, serviceName, errorMessage }: De
                   const svcSlug = service.replace(/\s+/g, "-");
                   await triggerDownload(
                     `/api/services/order/${orderId}/download/docx`,
-                    `workabroadhub-${svcSlug}.docx`,
+                    neutralDocName(svcSlug, "docx"),
                   );
                   setDownloadedDocx(true);
                   persistState({ docx: true });

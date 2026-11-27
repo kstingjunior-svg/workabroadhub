@@ -1,4 +1,5 @@
 import { useState, useRef } from "react";
+import { neutralDocName } from "@/lib/doc-filename";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import {
@@ -161,7 +162,7 @@ export default function JobApplicationAssistant() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `workabroadhub-${toolLabel.toLowerCase().replace(/ /g, "-")}.txt`;
+    a.download = neutralDocName(toolLabel, "txt");
     a.click();
     URL.revokeObjectURL(url);
     toast({ title: "Downloaded!", description: "Your file has been saved." });
