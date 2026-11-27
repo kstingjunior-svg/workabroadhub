@@ -64,6 +64,23 @@ export const EMAIL_VERIFICATION_ALLOWED_PREFIXES: readonly string[] = [
   "/api/paypal/webhook",
   // ── PWA / uptime bits ───────────────────────────────────────────────────
   "/api/pwa/event",
+  // ── Document services: NO email verification needed (Tony, 2026-11-27) ──
+  // People fixing/writing documents can pay and download without verifying
+  // (or even having) an account. Plan purchases through /api/payments/initiate,
+  // /api/mpesa/stk and /api/paypal/create-order are still checked by
+  // requireVerifiedForPayment (isPlanPurchase) on those routes.
+  "/api/write-from-scratch",
+  "/api/services",
+  "/api/service-orders",
+  "/api/tools/pay",
+  "/api/tools/offer-verify",
+  "/api/price",
+  "/api/payments/initiate",
+  "/api/mpesa/stk",
+  "/api/mpesa/status",
+  "/api/paypal/config",
+  "/api/paypal/create-order",
+  "/api/paypal/capture-order",
 ];
 
 export function isEmailVerificationExempt(path: string): boolean {

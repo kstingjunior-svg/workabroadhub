@@ -121,8 +121,11 @@ export function CvFixLiteInstantPayModal({ open, onOpenChange, cvFile, score }: 
       });
       const data = await res.json();
       if (res.status === 401) {
-        setErrMsg("Please sign in first.");
-        setStage("error");
+        // 2026-11-27 (Tony): no account needed for documents. Visitors without
+        // a session go to the guest checkout page for the same service
+        // (name + email for delivery + M-Pesa number; no verification).
+        onOpenChange(false);
+        navigate("/services/order/cv_fix_lite");
         return;
       }
       if (!res.ok) throw new Error(data?.message ?? "Could not create order");

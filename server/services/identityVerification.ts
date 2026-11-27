@@ -403,9 +403,36 @@ export async function verifyCode(
  * Express middleware — block payment endpoints for unverified users.
  * Admins always bypass (their accounts are auto-verified by the migration).
  */
+/**
+ * 2026-11-27 (Tony): documents (CV revamp, cover letters, SOPs, scans …) must be
+ * payable WITHOUT email verification — the M-Pesa PIN / PayPal approval is the
+ * proof. Only subscription PLAN purchases keep the verified-email rule
+ * (2026-08 anti-fake-account decision).
+ */
+export function isPlanPurchase(body: any): boolean {
+  const b = body ?? {};
+  if (b.plan_id || b.planId) return true;
+  const sid = String(b.serviceId ?? b.service_id ?? "").toLowerCase();
+  if (!sid) return true; // /api/payments/initiate defaults to "main_subscription" when no serviceId
+  return sid.startsWith("plan_") || ["main_subscription", "monthly", "yearly", "pro", "trial", "basic", "pro_referral"].includes(sid);
+}
+
 export async function requireVerifiedForPayment(req: any, res: any, next: any) {
   const userId: string | undefined = req.user?.claims?.sub ?? req.user?.id;
   if (!userId) return res.status(401).json({ message: "Unauthorized" });
+  // Document/service purchases: no email verification (see isPlanPurchase).
+  // Calls that only carry a checkout id (e.g. /api/mpesa/stk re-check) are
+  // classified by the payment they refer to.
+  let body = req.body ?? {};
+  const ref = body.checkoutRequestId ?? body.paymentId;
+  if (!body.serviceId && !body.service_id && !body.plan_id && !body.planId && typeof ref === "string" && ref) {
+    try {
+      const { rows } = await pool.query<{ service_id: string | null }>(
+        `SELECT service_id FROM payments WHERE checkout_request_id = $1 OR id::text = $1 LIMIT 1`, [ref]);
+      if (rows[0]?.service_id) body = { serviceId: rows[0].service_id };
+    } catch { /* fall through to the plan rule */ }
+  }
+  if (!isPlanPurchase(body)) return next();
 
   try {
     const { rows } = await pool.query<{

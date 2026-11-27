@@ -42,36 +42,52 @@ import { createPayPalOrder, capturePayPalOrder, isPayPalConfigured, safePayPalUr
 import { renderDocx, renderPdf } from "../services/document-renderer";
 import { safaricomIpGuard } from "../middleware/safaricomIpGuard";
 
-// 2026-08 SECURITY (Tony's fake-email report): every payment initiator
-// must confirm the caller's users.email_verified = true. Signed-in users
-// with fake unverified emails now get 403; guest (unauthenticated) users
-// were already blocked upstream.
-async function assertEmailVerified(res: Response, userId: string | null): Promise<boolean> {
-  if (!userId) {
-    res.status(401).json({ error: "Please sign in and verify your email first." });
-    return false;
-  }
+// 2026-11-27 (Tony): document services must work WITHOUT an account and WITHOUT
+// email verification. "If they put a fake email, that is their own business —
+// ours is to process." The payment itself (M-Pesa PIN / PayPal) is the real
+// proof of intent. The 2026-08 verified-email wall that lived here is removed.
+// The email typed on the form (optional) is kept only to send a copy.
+function contactEmailFrom(input: any, fallback?: string | null): string | null {
+  const e = String(input?.email ?? fallback ?? "").trim().toLowerCase();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e) && e.length <= 200 ? e : null;
+}
+async function accountEmail(userId: string | null): Promise<string | null> {
+  if (!userId) return null;
+  try { const { rows } = await pool.query(`SELECT email FROM users WHERE id = $1`, [userId]); return rows[0]?.email ?? null; }
+  catch { return null; }
+}
+const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || "https://workabroadhub.tech").replace(/\/$/, "");
+
+/** Email the customer a copy (links to their document) once, after generation. Best-effort. */
+async function emailCopyOnce(draftId: string): Promise<void> {
   try {
-    const { rows } = await pool.query<{ email_verified: boolean; is_admin: boolean; role: string }>(
-      `SELECT email_verified, is_admin, role FROM users WHERE id = $1`,
-      [userId],
-    );
-    const u = rows[0];
-    if (!u) { res.status(401).json({ error: "User not found" }); return false; }
-    if (u.is_admin || u.role === "ADMIN" || u.role === "SUPER_ADMIN") return true;
-    if (!u.email_verified) {
-      res.status(403).json({
-        error: "Please verify your email before paying.",
-        verificationRequired: true,
-        verificationStep: "email",
-      });
-      return false;
-    }
-    return true;
+    const { rows } = await pool.query(
+      `UPDATE write_from_scratch_drafts SET copy_emailed_at = NOW()
+        WHERE id = $1 AND copy_emailed_at IS NULL AND contact_email IS NOT NULL AND status = 'generated'
+        RETURNING contact_email, doc_type`, [draftId]);
+    const r = rows[0];
+    if (!r) return;
+    const label = docTypeLabel(r.doc_type);
+    const view = `${PUBLIC_BASE_URL}/tools/write-from-scratch?draftId=${draftId}`;
+    const docx = `${PUBLIC_BASE_URL}/api/write-from-scratch/${draftId}/download.docx`;
+    const pdf = `${PUBLIC_BASE_URL}/api/write-from-scratch/${draftId}/download.pdf`;
+    const { sendEmail } = await import("../email");
+    await sendEmail({
+      to: r.contact_email,
+      from: "WorkAbroad Hub <support@workabroadhub.tech>",
+      subject: `Your ${label} is ready — WorkAbroad Hub`,
+      html: `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.55;color:#111;max-width:600px">
+<p>Hello,</p><p>Your <b>${label}</b> is ready. Keep this email — the links below are your copy.</p>
+<p><a href="${docx}" style="display:inline-block;background:#16a34a;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:bold">Download Word (.docx)</a>
+&nbsp; <a href="${pdf}" style="display:inline-block;background:#1e40af;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:bold">Download PDF</a></p>
+<p>Or view it online: <a href="${view}">${view}</a></p>
+<p style="color:#555;font-size:13px">Anyone with these links can open the document, so don't share them publicly. Questions? Reply to this email or WhatsApp +254 111 467 601.</p>
+<p style="color:#555;font-size:13px">WorkAbroad Hub — we never ask you to pay an employer to get a job.</p></div>`,
+      text: `Your ${label} is ready.\n\nWord: ${docx}\nPDF: ${pdf}\nView online: ${view}\n\nKeep these links private. Questions? WhatsApp +254 111 467 601.`,
+    } as any);
+    console.log(`[write-from-scratch] copy emailed draftId=${draftId}`);
   } catch (err: any) {
-    console.error("[write-from-scratch] verify check failed:", err?.message);
-    res.status(500).json({ error: "Verification check failed." });
-    return false;
+    console.warn(`[write-from-scratch] copy email failed for ${draftId}:`, err?.message);
   }
 }
 import {
@@ -240,6 +256,8 @@ async function runGenerationForDraft(draftId: string): Promise<GenerationOutcome
     [result.body, row.id],
   );
 
+  emailCopyOnce(row.id).catch(() => {});
+
   return {
     status: "generated",
     body: result.body,
@@ -278,7 +296,8 @@ export function registerWriteFromScratchRoutes(app: Express): void {
       }
 
       const userId = currentUserId(req);
-      if (!(await assertEmailVerified(res, userId))) return;
+      // No sign-in or email verification needed (2026-11-27). Optional email → copy.
+      const contactEmail = contactEmailFrom(input, await accountEmail(userId));
 
       // Everyone pays KES 300 — no Pro bypass. Kept the isPro helper around in
       // case we want to add it back later, but the current policy is: uniform
@@ -322,10 +341,10 @@ export function registerWriteFromScratchRoutes(app: Express): void {
       // ── Create draft row ─────────────────────────────────────────────
       const { rows: created } = await pool.query(
         `INSERT INTO write_from_scratch_drafts
-           (user_id, doc_type, input_json, status, mpesa_amount, mpesa_phone, parent_draft_id)
-         VALUES ($1, $2, $3, 'pending_payment', $4, $5, $6)
+           (user_id, doc_type, input_json, status, mpesa_amount, mpesa_phone, parent_draft_id, contact_email)
+         VALUES ($1, $2, $3, 'pending_payment', $4, $5, $6, $7)
          RETURNING id`,
-        [userId, docType, JSON.stringify(input), price, payerPhone, parentDraftId],
+        [userId, docType, JSON.stringify(input), price, payerPhone, parentDraftId, contactEmail],
       );
       const draftId = created[0].id as string;
 
@@ -495,7 +514,7 @@ export function registerWriteFromScratchRoutes(app: Express): void {
       }
 
       const userId = currentUserId(req);
-      if (!(await assertEmailVerified(res, userId))) return;
+      const contactEmail = contactEmailFrom(input, await accountEmail(userId)); // no verification (2026-11-27)
 
       // Pro users get the tool for free — reuse the same fast path as /init.
       if (userId) {
@@ -503,10 +522,10 @@ export function registerWriteFromScratchRoutes(app: Express): void {
         if (isProTier(plan)) {
           const { rows } = await pool.query(
             `INSERT INTO write_from_scratch_drafts
-               (user_id, doc_type, input_json, status)
-             VALUES ($1, $2, $3, 'paid')
+               (user_id, doc_type, input_json, status, contact_email)
+             VALUES ($1, $2, $3, 'paid', $4)
              RETURNING id`,
-            [userId, docType, JSON.stringify(input)],
+            [userId, docType, JSON.stringify(input), contactEmail],
           );
           return res.json({
             draftId: rows[0].id,
@@ -522,10 +541,10 @@ export function registerWriteFromScratchRoutes(app: Express): void {
       // (repurposed as generic payment_ref — schema keeps the column name for now).
       const { rows: created } = await pool.query(
         `INSERT INTO write_from_scratch_drafts
-           (user_id, doc_type, input_json, status, mpesa_amount, parent_draft_id)
-         VALUES ($1, $2, $3, 'pending_payment', $4, $5)
+           (user_id, doc_type, input_json, status, mpesa_amount, parent_draft_id, contact_email)
+         VALUES ($1, $2, $3, 'pending_payment', $4, $5, $6)
          RETURNING id`,
-        [userId, docType, JSON.stringify(input), price, parentDraftId],
+        [userId, docType, JSON.stringify(input), price, parentDraftId, contactEmail],
       );
       const draftId = created[0].id as string;
 
@@ -752,18 +771,17 @@ export function registerWriteFromScratchRoutes(app: Express): void {
   app.post("/api/write-from-scratch/:id/repay", async (req: Request, res: Response) => {
     try {
       const userId = currentUserId(req);
-      if (!userId) return res.status(401).json({ error: "Please sign in to finish this payment." });
       const id = String(req.params.id);
       if (!/^[0-9a-f-]{36}$/i.test(id)) return res.status(404).json({ error: "Document not found." });
       const { rows } = await pool.query(
         `SELECT id, user_id, doc_type, status, mpesa_amount, mpesa_phone FROM write_from_scratch_drafts WHERE id = $1`, [id]);
       const d = rows[0];
-      if (!d || d.user_id !== userId) return res.status(404).json({ error: "Document not found." });
+      // Signed-in drafts: owner only. Guest drafts: the unguessable draft id is the capability.
+      if (!d || (d.user_id && d.user_id !== userId)) return res.status(404).json({ error: "Document not found." });
       if (d.status !== "pending_payment") return res.json({ draftId: id, status: d.status });
-      if (!(await assertEmailVerified(res, userId))) return;
 
       let payerPhone: string | null = typeof req.body?.phone === "string" && req.body.phone.trim().length >= 9 ? req.body.phone.trim() : (d.mpesa_phone ?? null);
-      if (!payerPhone) {
+      if (!payerPhone && userId) {
         const { rows: u } = await pool.query(`SELECT phone FROM users WHERE id = $1`, [userId]);
         payerPhone = u[0]?.phone ?? null;
       }
@@ -804,13 +822,14 @@ export function registerWriteFromScratchRoutes(app: Express): void {
    */
   app.post("/api/write-from-scratch/match", async (req: Request, res: Response) => {
     try {
+      // 2026-11-27: open to guests too (rate-limited per user, or per IP for guests).
       const userId = currentUserId(req);
-      if (!userId) return res.status(401).json({ error: "Please sign in to check your match." });
+      const rateKey = userId ?? `ip:${String(req.headers["x-forwarded-for"] ?? req.ip ?? "").split(",")[0].trim() || "unknown"}`;
       const jd = typeof req.body?.jobDescription === "string" ? req.body.jobDescription.trim() : "";
       if (jd.length < 80) return res.status(400).json({ error: "Paste the full job description (at least a few sentences)." });
       const input = sanitizeTailoring(req.body?.input && typeof req.body.input === "object" ? req.body.input : {});
       if (!input.role && !input.keySkills) return res.status(400).json({ error: "Fill in your target role and key skills first." });
-      if (!allowMatch(userId)) return res.status(429).json({ error: "You've checked a lot of jobs in the last hour. Please try again a bit later." });
+      if (!allowMatch(rateKey)) return res.status(429).json({ error: "You've checked a lot of jobs in the last hour. Please try again a bit later." });
       const { matchAgainstJob } = await import("../services/writeFromScratch/job-match");
       const report = await matchAgainstJob(input, jd);
       return res.json(report);
