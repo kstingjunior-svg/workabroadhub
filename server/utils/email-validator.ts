@@ -9,6 +9,7 @@
  * Returns a structured result so callers can give the user a specific reason.
  */
 
+import { suggestEmailDomain } from "../../shared/email-typo";
 import { promises as dns } from "dns";
 import { isEmailSuppressed } from "../lib/email-suppressions";
 
@@ -242,8 +243,11 @@ export async function validateEmail(rawEmail: string): Promise<EmailValidationRe
   // actually resolve (gnail.com is a squatter with MX), so MX alone won't
   // save us. Low false-positive risk since we only reject very narrow
   // misspellings of 5-6 major providers.
-  if (COMMON_TYPO_DOMAINS[domain]) {
-    const corrected = COMMON_TYPO_DOMAINS[domain];
+  // 2026-11-28: plus the shared fuzzy checker (caught gmai.com, gmaim.com,
+  // 1gmail.com that the fixed list missed).
+  const typoFix = COMMON_TYPO_DOMAINS[domain] || suggestEmailDomain(domain);
+  if (typoFix) {
+    const corrected = typoFix;
     return {
       valid: false,
       reason: "typo",

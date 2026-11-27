@@ -9,6 +9,7 @@
  * reuse the existing verification-code system (no second OTP system).
  * Existing password users still sign in from the normal Login screen.
  */
+import { suggestEmailFix } from "@shared/email-typo";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
@@ -60,6 +61,7 @@ export default function SignupPage() {
   const [showReferral, setShowReferral] = useState(() => !!referral);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<{ field?: string; message: string; suggestion?: string } | null>(null);
+  const liveFix = /@[^@]+\.[a-z]{2,}$/i.test(email.trim()) ? suggestEmailFix(email) : null;
 
   const [sentTo, setSentTo] = useState<{ email: string; masked: string; existing: boolean; hint?: string } | null>(null);
   const [code, setCode] = useState("");
@@ -229,6 +231,12 @@ export default function SignupPage() {
                       <> <button type="button" className="underline font-semibold" onClick={() => { setEmail(err.suggestion!); setErr(null); }}>Use {err.suggestion}</button></>
                     )}
                   </p>
+                )}
+                {/* 2026-11-28: live "Did you mean" while typing, before any code is sent */}
+                {err?.field !== "email" && liveFix && (
+                  <button type="button" onClick={() => setEmail(liveFix)} className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 w-full text-left" data-testid="email-typo-hint">
+                    Did you mean <strong>{liveFix}</strong>? Tap to fix
+                  </button>
                 )}
               </div>
 

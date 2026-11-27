@@ -57,10 +57,10 @@ const TIERS: ReadonlyArray<{
   subject: string;
   urgency: "gentle" | "reminder" | "warning" | "final";
 }> = [
+  // 2026-11-28 (Tony): ONE reminder only. Repeat reminders to people who had
+  // not verified were the emails Gmail kept delaying (~1 in 3 sends), which
+  // hurts how Gmail treats ALL our mail — including sign-in codes.
   { stage: 1, minAgeHours: 6,   hoursLeftLabel: "", subject: "One step left to open your WorkAbroadHub account",   urgency: "gentle"   },
-  { stage: 2, minAgeHours: 24,  hoursLeftLabel: "", subject: "Your WorkAbroadHub account is waiting for you",      urgency: "reminder" },
-  { stage: 3, minAgeHours: 72,  hoursLeftLabel: "", subject: "Here's a fresh code to finish signing up",          urgency: "warning"  },
-  { stage: 4, minAgeHours: 168, hoursLeftLabel: "", subject: "Still planning to work abroad? Your account is saved", urgency: "final"    },
 ];
 
 let _timer: NodeJS.Timeout | null = null;
