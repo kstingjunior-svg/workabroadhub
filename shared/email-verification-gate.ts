@@ -81,6 +81,10 @@ export const EMAIL_VERIFICATION_ALLOWED_PREFIXES: readonly string[] = [
   "/api/paypal/config",
   "/api/paypal/create-order",
   "/api/paypal/capture-order",
+  // Getting the finished document: download, revise, "my documents" (2026-11-27)
+  "/api/document",
+  "/api/deliverables",
+  "/api/user/services",
 ];
 
 export function isEmailVerificationExempt(path: string): boolean {

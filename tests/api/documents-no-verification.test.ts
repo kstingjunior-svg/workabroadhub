@@ -14,7 +14,8 @@ describe("documents: no sign-in or email verification required", () => {
   it("document endpoints pass the global verified-email gate", () => {
     for (const p of ["/api/write-from-scratch/init", "/api/write-from-scratch/paypal-init", "/api/write-from-scratch/abc/download.pdf",
       "/api/services/order/cv_fix_lite", "/api/services/order/123/pay-guest", "/api/service-orders/1",
-      "/api/tools/pay", "/api/payments/initiate", "/api/mpesa/stk", "/api/mpesa/status/x", "/api/paypal/create-order"]) {
+      "/api/tools/pay", "/api/payments/initiate", "/api/mpesa/stk", "/api/mpesa/status/x", "/api/paypal/create-order",
+      "/api/document/abc/pdf", "/api/document/revise", "/api/deliverables/x", "/api/user/services"]) {
       expect(isEmailVerificationExempt(p), p).toBe(true);
     }
     // Everything else stays behind the gate for unverified accounts
