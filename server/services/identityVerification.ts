@@ -161,6 +161,12 @@ export async function sendEmailVerificationCode(
           <tr><td style="padding:16px 32px 8px;">
             <table role="presentation" cellpadding="0" cellspacing="0"><tr>${codeDigits}</tr></table>
           </td></tr>
+          <tr><td style="padding:8px 32px 0;color:#374151;font-size:15px;">
+            <!-- 2026-11-27: the boxed digits are 6 separate cells, so on a phone a
+                 long-press copied ONE digit. This line holds the whole code as
+                 one word so it copies in one go. -->
+            To copy: <span style="font-family:'Courier New',monospace;font-size:20px;font-weight:700;letter-spacing:2px;color:#111827;background:#f3f4f6;padding:2px 8px;border-radius:4px;">${code}</span>
+          </td></tr>
           <tr><td style="padding:16px 32px 0;color:#374151;font-size:15px;line-height:1.55;">
             Enter the code above on WorkAbroadHub to finish signing in. This code expires in ${CODE_TTL_MINUTES} minutes.
           </td></tr>

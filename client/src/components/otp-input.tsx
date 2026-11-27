@@ -25,6 +25,22 @@
  */
 import { useEffect, useRef, useCallback } from "react";
 
+/**
+ * Pull the code out of whatever was copied (2026-11-27, Tony: "copied and
+ * pasted but it was problematic"). Order: a stand-alone run of exactly
+ * `length` digits ("Your code is 482913, expires in 10 minutes" -> 482913);
+ * then the digits with spaces removed ("4 8 2 9 1 3" from the boxed email);
+ * then simply the first `length` digits.
+ */
+export function extractOtp(text: string, length = 6): string {
+  const raw = String(text ?? "");
+  const alone = raw.match(new RegExp(`(?:^|\\D)(\\d{${length}})(?!\\d)`));
+  if (alone) return alone[1];
+  const spaced = raw.replace(/[\s\u00a0]+/g, "").match(new RegExp(`(?:^|\\D)(\\d{${length}})(?!\\d)`));
+  if (spaced) return spaced[1];
+  return raw.replace(/\D/g, "").slice(0, length);
+}
+
 interface OtpInputProps {
   value: string;
   onChange: (next: string) => void;
@@ -51,10 +67,10 @@ export default function OtpInput({
   while (digits.length < length) digits.push("");
 
   const setDigits = useCallback(
-    (next: string[]) => {
+    (next: string[], autoSubmit = true) => {
       const joined = next.join("").replace(/\D/g, "").slice(0, length);
       onChange(joined);
-      if (joined.length === length && lastCompleteFor.current !== joined) {
+      if (autoSubmit && joined.length === length && lastCompleteFor.current !== joined) {
         lastCompleteFor.current = joined;
         onComplete?.(joined);
       }
@@ -125,8 +141,11 @@ export default function OtpInput({
         const match = stripped.match(new RegExp(`(?:^|\\D)(\\d{${length}})(?:$|\\D)`));
         if (!match) return;
         if (value.replace(/\D/g, "").length > 0) return; // re-check after await
-        setDigits(match[1].split(""));
-        setTimeout(() => focusBox(length - 1), 0);
+        // 2026-11-27: fill but DO NOT auto-submit. The clipboard often still
+        // holds the code from a previous sign-in; auto-submitting it burned
+        // a try and showed "doesn't match" before the user did anything.
+        setDigits(match[1].split(""), false);
+        setTimeout(() => focusBox(0), 0);
       } catch {
         // Clipboard permission denied / not available — fine, user
         // will paste manually with Ctrl+V and the paste handler
@@ -161,6 +180,11 @@ export default function OtpInput({
     // If the user pasted into one box (or iOS OTP autofill dropped the
     // whole 6-digit code into box 0), distribute across the remaining
     // boxes.
+    if (d.length >= length) {
+      setDigits(extractOtp(raw, length).split(""));
+      focusBox(length - 1);
+      return;
+    }
     if (d.length > 1) {
       const next = [...digits];
       for (let k = 0; k < d.length && i + k < length; k++) {
@@ -206,11 +230,19 @@ export default function OtpInput({
 
   const handlePaste = (i: number, e: React.ClipboardEvent<HTMLInputElement>) => {
     const text = e.clipboardData.getData("text") || "";
-    // Strip ALL non-digits — tolerates "1 2 3 4 5 6", "1-2-3-4-5-6",
-    // "Your code: 123456", "123 456", etc. First `length` digits win.
-    const d = text.replace(/\D/g, "").slice(0, length);
+    const d = extractOtp(text, length);
     if (!d) return;
     e.preventDefault();
+    // 2026-11-27 fix: a full code ALWAYS replaces every box, starting at
+    // the first — whichever box has focus and whatever is already there.
+    // Before, pasting while the cursor sat in the last box (where it lands
+    // after an autofill) only placed the first digit there, so the code
+    // sent was wrong even though the user pasted the right one.
+    if (d.length === length) {
+      setDigits(d.split(""));
+      focusBox(length - 1);
+      return;
+    }
     const next = [...digits];
     for (let k = 0; k < d.length && i + k < length; k++) {
       next[i + k] = d[k];
